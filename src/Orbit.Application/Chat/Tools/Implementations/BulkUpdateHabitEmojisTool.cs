@@ -20,13 +20,14 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     public string Name => "bulk_update_habit_emojis";
 
     public string Description =>
-        "Update emojis for the complete server-side set of habits matching a filter. Infer distinct sensible emojis in bounded AI batches, or apply one explicitly requested emoji. Reports applied, matched, skipped, and partial counts.";
+        "Infer distinct habit emojis, set a requested emoji, or clear icons for all matches.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            emoji_mode = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = new[] { "infer", "set", "clear" }, description = "Defaults to infer. Use set with emoji, or clear to remove icons." },
             filter = BulkHabitToolArguments.FilterSchema(),
             habit_ids = new
             {
@@ -36,18 +37,17 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             },
             emoji = new
             {
-                type = JsonSchemaTypes.String,
-                description = "Optional emoji to apply to every selected habit. Set to null to clear. Omit when infer_from_title is true.",
-                nullable = true
+                type = new[] { JsonSchemaTypes.String, "null" },
+                description = "Requested icon. Null uses the default mode; clear via emoji_mode."
             },
             infer_from_title = new
             {
-                type = JsonSchemaTypes.Boolean,
+                type = new[] { JsonSchemaTypes.Boolean, "null" },
                 description = "Infer one sensible emoji from each title and description. Defaults to true when emoji is omitted."
             },
             include_completed = new
             {
-                type = JsonSchemaTypes.Boolean,
+                type = new[] { JsonSchemaTypes.Boolean, "null" },
                 description = "Legacy selection option. Include completed habits when filter is omitted. Defaults to false."
             }
         },
@@ -56,16 +56,19 @@ public sealed partial class BulkUpdateHabitEmojisTool(
 
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (!args.TryGetProperty("revised_items", out _))
+            args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var overrides = new Dictionary<Guid, string?>();
         var (filter, error) = args.TryGetProperty("revised_items", out var items)
             ? ParseRevisedItems(items, overrides) : BulkHabitToolArguments.ParseEmojiFilter(args);
         if (error is not null)
             return Result.Failure(error);
-        var hasEmoji = JsonArgumentParser.PropertyExists(args, "emoji");
+        var (hasEmoji, infer, modeError) = ResolveEmojiOperation(args);
+        if (modeError is not null)
+            return Result.Failure(modeError);
         var emoji = JsonArgumentParser.GetNullableString(args, "emoji");
-        var infer = JsonArgumentParser.GetOptionalBool(args, "infer_from_title") ?? !hasEmoji;
-        if (infer || (!hasEmoji && overrides.Count != filter!.HabitIds.Count))
-            return Result.Failure("An edited emoji must be explicit.");
+        if (!infer && !hasEmoji && overrides.Count != filter!.HabitIds.Count)
+            return Result.Failure("Provide emoji or set infer_from_title to true.");
         if (emoji is not null && !IsSingleEmojiGrapheme(emoji))
             return Result.Failure("Invalid emoji.");
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
@@ -75,6 +78,8 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             return ownership;
         foreach (var habit in habits)
         {
+            if (infer && !overrides.ContainsKey(habit.Id))
+                continue;
             var validation = habit.ValidateUpdate(EmojiUpdate(habit, overrides.GetValueOrDefault(habit.Id, emoji)));
             if (validation.IsFailure)
                 return validation;
@@ -82,8 +87,46 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         return habits.Count == 0 ? Result.Failure("No matching habits found.") : Result.Success();
     }
 
+    internal async Task<Result<JsonElement>> PreparePreviewArgumentsAsync(
+        JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var emojis = new Dictionary<Guid, string?>();
+        var (filter, error) = args.TryGetProperty("revised_items", out var items)
+            ? ParseRevisedItems(items, emojis) : BulkHabitToolArguments.ParseEmojiFilter(args);
+        if (error is not null)
+            return Result.Failure<JsonElement>(error);
+        var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
+        if (habits.Count == 0)
+            return Result.Failure<JsonElement>("No matching habits found.");
+        var ownership = Orbit.Application.Common.OwnershipValidation.AllResolved(filter!.HabitIds, habits,
+            habit => habit.Id, Orbit.Application.Common.ErrorMessages.HabitNotFound);
+        if (ownership.IsFailure)
+            return Result.Failure<JsonElement>(ownership.Error);
+        var inputs = habits.Where(habit => !emojis.ContainsKey(habit.Id))
+            .Select(habit => new HabitEmojiInferenceInput(habit.Id, habit.Title, habit.Description));
+        foreach (var chunk in inputs.Chunk(InferenceChunkSize))
+        {
+            var inferred = await inferenceService.InferAsync(userId, chunk, ct);
+            if (inferred.IsFailure)
+                return Result.Failure<JsonElement>(inferred.Error);
+            foreach (var input in chunk)
+            {
+                if (!inferred.Value.TryGetValue(input.HabitId, out var emoji) || !IsSingleEmojiGrapheme(emoji))
+                    return Result.Failure<JsonElement>("preview_unavailable");
+                emojis[input.HabitId] = emoji;
+            }
+        }
+        return Result.Success(JsonSerializer.SerializeToElement(new
+        {
+            infer_from_title = false,
+            revised_items = habits.Select(habit => new { habit_id = habit.Id, emoji = emojis[habit.Id] }).ToArray()
+        }));
+    }
+
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        if (!args.TryGetProperty("revised_items", out _))
+            args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var overrides = new Dictionary<Guid, string?>();
         var (filter, filterError) = args.TryGetProperty("revised_items", out var revisedItems)
             ? ParseRevisedItems(revisedItems, overrides)
@@ -91,9 +134,10 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);
 
-        var hasEmojiArgument = JsonArgumentParser.PropertyExists(args, "emoji");
-        var requestedEmoji = hasEmojiArgument ? JsonArgumentParser.GetNullableString(args, "emoji") : null;
-        var inferFromTitle = JsonArgumentParser.GetOptionalBool(args, "infer_from_title") ?? !hasEmojiArgument;
+        var (hasEmojiArgument, inferFromTitle, modeError) = ResolveEmojiOperation(args);
+        if (modeError is not null)
+            return new ToolResult(false, Error: modeError);
+        var requestedEmoji = JsonArgumentParser.GetNullableString(args, "emoji");
         if (!inferFromTitle && !hasEmojiArgument
             && (filter is null || overrides.Count != filter.HabitIds.Count))
             return new ToolResult(false, Error: "Provide emoji or set infer_from_title to true.");
@@ -180,6 +224,19 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             new BulkHabitMutationResult(appliedCount, totalMatched, skippedCount, partial),
             "Updated emojis for",
             includeUpdatedCount: true);
+    }
+
+    internal static (bool HasEmoji, bool Infer, string? Error) ResolveEmojiOperation(JsonElement args)
+    {
+        var hasEmoji = JsonArgumentParser.PropertyExists(args, "emoji");
+        return JsonArgumentParser.GetOptionalString(args, "emoji_mode") switch
+        {
+            "infer" => (false, true, null),
+            "clear" when !hasEmoji => (true, false, null),
+            "set" when hasEmoji => (true, false, null),
+            null => (hasEmoji, JsonArgumentParser.GetOptionalBool(args, "infer_from_title") ?? !hasEmoji, null),
+            _ => (false, false, "Invalid emoji_mode or conflicting emoji value.")
+        };
     }
 
     private static (BulkHabitFilter? Filter, string? Error) ParseRevisedItems(

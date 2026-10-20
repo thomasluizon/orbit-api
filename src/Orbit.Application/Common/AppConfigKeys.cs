@@ -9,6 +9,15 @@ public static class AppConfigKeys
     public const string FreeMaxHabits = "FreeMaxHabits";
     public const string FreeAiMessagesPerDay = "FreeAiMessagesPerDay";
     public const string ProAiMessagesPerDay = "ProAiMessagesPerDay";
+    public const string FreeAiCallsPerDay = "FreeAiCallsPerDay";
+    public const string ProAiCallsPerDay = "ProAiCallsPerDay";
+    public const string FreeAiMicroDollarsPerDay = "FreeAiMicroDollarsPerDay";
+    public const string ProAiMicroDollarsPerDay = "ProAiMicroDollarsPerDay";
+    /// <summary>Calls allow tool iterations; the spend backstop is denominated in millionths of a US dollar.</summary>
+    public const int DefaultFreeAiCallsPerDay = 45;
+    public const int DefaultProAiCallsPerDay = 450;
+    public const long DefaultFreeAiMicroDollarsPerDay = 20_000;
+    public const long DefaultProAiMicroDollarsPerDay = 120_000;
     public const string DailySummaryProOnly = "DailySummaryProOnly";
     public const string SmartRescheduleProOnly = "SmartRescheduleProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Common;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
@@ -42,10 +43,22 @@ public static class AgentArgumentPreview
         if (arguments.ValueKind != JsonValueKind.Object)
             return null;
 
+        if (editableSchema.ValueKind == JsonValueKind.Object)
+            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, editableSchema);
+        if (operationId is "update_habit" or "update_goal")
+        {
+            var (prepared, error) = OptionalToolArguments.ResolveClears(arguments, OptionalToolArguments.ClearableFields(operationId));
+            if (error is not null)
+                return null;
+            arguments = prepared;
+        }
+
         var itemId = target is null ? "0" : target.EntityId.ToString();
         var entityId = target?.EntityId ?? Guid.Empty;
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
         var fields = arguments.EnumerateObject()
+            .OrderBy(property => property.Name != "title")
+            .ThenBy(property => property.Name, StringComparer.Ordinal)
             .Select(property => new PendingOperationChange(
                 entityId,
                 entityName,
@@ -62,7 +75,7 @@ public static class AgentArgumentPreview
 
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,
             target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId),
-            RemovesData: operationId is "create_habit" or "log_habit" or "skip_habit" or "update_habit"
+            RemovesData: operationId is "create_habit" or "log_habit" or "unlog_habit" or "skip_habit" or "update_habit"
                 ? false : null);
         var fingerprint = AgentOperationFingerprint.Compute(
             operationId, JsonSerializer.Serialize<IReadOnlyList<PendingOperationItem>>([item]));
@@ -77,6 +90,7 @@ public static class AgentArgumentPreview
     {
         JsonValueKind.Null or JsonValueKind.Undefined => null,
         JsonValueKind.String => value.GetString(),
+        JsonValueKind.Object or JsonValueKind.Array => AgentOperationFingerprint.Canonicalize(value.GetRawText()),
         _ => value.ToString()
     };
 

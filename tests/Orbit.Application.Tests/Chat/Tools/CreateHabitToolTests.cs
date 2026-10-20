@@ -13,7 +13,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
-public class CreateHabitToolTests
+public partial class CreateHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
@@ -40,6 +40,117 @@ public class CreateHabitToolTests
                 var operation = call.ArgAt<Func<CancellationToken, Task<ToolResult>>>(0);
                 return operation(call.ArgAt<CancellationToken>(1));
             });
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateHabitTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_CreatesSameHabitAsAbsent(string field)
+    {
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        (await Execute("""{"title":"Read","due_date":"2027-01-01"}""")).Success.Should().BeTrue();
+        var baseline = OptionalParameterCases.HabitState(saved.Single());
+        saved.Clear();
+        var body = new Dictionary<string, object?> { ["title"] = "Read", ["due_date"] = "2027-01-01", [field] = null };
+        if (field == "due_date") body.Remove("due_date");
+        if (field == "due_date")
+        {
+            saved.Clear();
+            (await Execute("""{"title":"Read"}""")).Success.Should().BeTrue();
+            baseline = OptionalParameterCases.HabitState(saved.Single());
+            saved.Clear();
+            body[field] = null;
+        }
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(saved.Single()).Should().Be(baseline);
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateHabitTool), "sub_habits.items", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_ChildInheritsLikeAbsent(string field)
+    {
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        var child = new Dictionary<string, object?> { ["title"] = "Child" };
+        object Body() => new
+        {
+            title = "Parent",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            days = new[] { "Monday" },
+            interval_weeks = 2,
+            sub_habits = new[] { child }
+        };
+        (await Execute(JsonSerializer.Serialize(Body()))).Success.Should().BeTrue();
+        var baseline = OptionalParameterCases.HabitState(saved.Single(habit => habit.ParentHabitId is not null));
+        saved.Clear();
+        child[field] = null;
+        (await Execute(JsonSerializer.Serialize(Body()))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(saved.Single(habit => habit.ParentHabitId is not null)).Should().Be(baseline);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidRelativeReminders_FailBeforeCreatingParentOrChild(bool onChild)
+    {
+        const string fields = "\"relative_reminders\":[{\"minutes_before\":30,\"when\":\"same_day\",\"time\":\"08:00\"}]";
+        var json = onChild
+            ? $$"""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child",{{fields}}}]}"""
+            : $$"""{"title":"Parent","frequency_unit":"Day",{{fields}}}""";
+        var result = await Execute(json);
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("relative_reminders");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InlineChildTags_AreStoredOnChild()
+    {
+        var result = await Execute("""{"title":"Read","sub_habits":[{"title":"Book","tag_names":["Health"]}]}""");
+        result.Success.Should().BeTrue();
+        AddedHabits().Single(h => h.ParentHabitId != null).Tags.Should().ContainSingle().Which.Name.Should().Be("Health");
+    }
+
+    [Fact]
+    public async Task IsGeneral_IsStoredAndInheritedByInlineChildren()
+    {
+        var result = await Execute("""{"title":"Read","is_general":true,"sub_habits":[{"title":"Book"}]}""");
+        result.Success.Should().BeTrue();
+        var habits = _habitRepo.ReceivedCalls().Where(c => c.GetMethodInfo().Name == "AddAsync")
+            .Select(c => (Habit)c.GetArguments()[0]!).ToList();
+        habits.Should().HaveCount(2).And.OnlyContain(h => h.IsGeneral);
+    }
+
+    [Theory]
+    [InlineData("due_time", "\"09:00\"")]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("reminder_enabled", "true")]
+    [InlineData("reminder_times", "[30]")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("end_date", "\"2026-12-31\"")]
+    [InlineData("is_flexible", "true")]
+    [InlineData("scheduled_reminders", "[{\"when\":\"same_day\",\"time\":\"08:00\"}]")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    public async Task InlineChildren_StoreDomainFields(string field, string value)
+    {
+        var extraTime = field == "relative_reminders" ? ",\"due_time\":\"09:00\"" : "";
+        var result = await Execute($$"""{"title":"Read","frequency_unit":"Week","frequency_quantity":3,"sub_habits":[{"title":"Book","{{field}}":{{value}}{{extraTime}}}]}""");
+        result.Success.Should().BeTrue();
+        var child = _habitRepo.ReceivedCalls().Where(c => c.GetMethodInfo().Name == "AddAsync")
+            .Select(c => (Habit)c.GetArguments()[0]!).Single(h => h.ParentHabitId != null);
+        switch (field)
+        {
+            case "due_time": child.DueTime.Should().Be(new TimeOnly(9, 0)); break;
+            case "due_end_time": child.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
+            case "reminder_enabled": child.ReminderEnabled.Should().BeTrue(); break;
+            case "reminder_times": child.ReminderTimes.Should().Equal(30); break;
+            case "slip_alert_enabled": child.SlipAlertEnabled.Should().BeTrue(); break;
+            case "end_date": child.EndDate.Should().Be(new DateOnly(2026, 12, 31)); break;
+            case "is_flexible": child.IsFlexible.Should().BeTrue(); break;
+            case "scheduled_reminders": child.ScheduledReminders.Should().ContainSingle(); break;
+            case "relative_reminders": child.RelativeReminders.Should().ContainSingle(); break;
+        }
     }
 
     [Fact]
@@ -197,13 +308,35 @@ public class CreateHabitToolTests
             .IntervalWeeks.Should().Be(1);
     }
 
-    [Fact]
-    public async Task InvalidFrequencyUnit_CreatesOneTimeTask()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("OneTime", false)]
+    public async Task HabitRecurrence_ExplicitOneTimeCreatesWhileNullRequestsClarification(string? frequency, bool clarifies)
     {
-        var result = await Execute("""{"title": "Task", "frequency_unit": "InvalidUnit"}""");
+        var result = await Execute(JsonSerializer.Serialize(new { title = "Exercise habit", frequency_unit = frequency }));
+        result.Success.Should().BeTrue(result.Error);
+        if (clarifies)
+        {
+            result.Payload.Should().NotBeNull();
+            await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            result.EntityId.Should().NotBeNull();
+            await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.FrequencyUnit == null), Arg.Any<CancellationToken>());
+        }
+    }
 
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Task");
+    [Theory]
+    [InlineData("InvalidUnit")]
+    [InlineData("99")]
+    [InlineData("0")]
+    public async Task InvalidFrequencyUnit_ReturnsCorrectableToolError(string value)
+    {
+        var result = await Execute(JsonSerializer.Serialize(new { title = "Task", frequency_unit = value }));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("frequency_unit");
     }
 
     [Fact]
@@ -739,6 +872,8 @@ public class CreateHabitToolTests
         {
             "title": "Project",
             "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "days": ["Wednesday"],
             "sub_habits": [
                 {"title": "Phase 1", "due_date": "2026-06-01"}
             ]
@@ -746,7 +881,16 @@ public class CreateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        var habits = AddedHabits();
+        habits.Should().HaveCount(2);
+        var parent = habits.Single(habit => habit.ParentHabitId is null);
+        parent.Days.Should().Equal(DayOfWeek.Wednesday);
+        var child = habits.Single(habit => habit.ParentHabitId == parent.Id);
+        child.DueDate.Should().Be(new DateOnly(2026, 6, 1));
+        child.Schedule.Should().Be(HabitSchedule.Recurring);
+        child.FrequencyUnit.Should().Be(parent.FrequencyUnit).And.Be(FrequencyUnit.Day);
+        child.FrequencyQuantity.Should().Be(parent.FrequencyQuantity).And.Be(1);
+        child.Days.Should().BeEmpty();
     }
 
     [Fact]

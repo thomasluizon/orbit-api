@@ -14,22 +14,23 @@ public class CreateSubHabitTool(
     public int Order => 1;
 
     public string Description =>
-        "Create a sub-habit under an existing parent habit. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user.";
+        "Create a sub-habit under an existing parent, with a requested or relevant emoji.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            parent_habit_id = new { type = JsonSchemaTypes.String, description = "ID of the existing parent habit" },
-            title = new { type = JsonSchemaTypes.String, description = "Name of the new sub-habit" },
-            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
-            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the sub-habit icon. Pick a relevant emoji when clear, or use the exact emoji requested by the user.", nullable = true },
+            parent_habit_id = new { type = JsonSchemaTypes.String },
+            title = new { type = JsonSchemaTypes.String },
+            description = new { type = JsonSchemaTypes.String },
+            emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Requested or relevant icon emoji." },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
-                description = "Override parent frequency",
-                @enum = JsonSchemaTypes.FrequencyUnitEnum
+                description = "Override parent frequency. Use OneTime for a one-time child; null inherits.",
+                nullable = true,
+                @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "Override parent frequency quantity" },
             interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Override parent repeat interval in weeks. Minimum 1." },
@@ -37,31 +38,21 @@ public class CreateSubHabitTool(
             {
                 type = JsonSchemaTypes.Array,
                 description = "Specific weekdays, only when frequency_quantity is 1",
-                items = new { type = JsonSchemaTypes.String }
+                items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
-            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
-            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time" },
+            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm" },
+            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm end time" },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "True for habits the user wants to AVOID" },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Set true for reminder notifications" },
             reminder_times = new { type = JsonSchemaTypes.Array, description = "Minutes before dueTime to send reminders", items = new { type = JsonSchemaTypes.Integer } },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alert notifications" },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for flexible frequency" },
+            end_date = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD)", nullable = true },
+            relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
+            checklist_items = BulkHabitToolArguments.ChecklistItemsSchema(),
+            tag_ids = new { type = JsonSchemaTypes.Array, description = "Existing tag IDs", items = new { type = JsonSchemaTypes.String } },
             due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD override for due date" },
-            scheduled_reminders = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Absolute-time reminders for habits WITHOUT a due_time",
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
-                    },
-                    required = new[] { "when", "time" }
-                }
-            }
+            scheduled_reminders = BulkHabitToolArguments.ScheduledRemindersSchema()
         },
         required = new[] { "parent_habit_id", "title" }
     };
@@ -82,6 +73,12 @@ public class CreateSubHabitTool(
             return new ToolResult(false, Error: "title is required.");
 
         var title = titleEl.GetString() ?? string.Empty;
+        if (args.TryGetProperty("tag_ids", out var tagIds) && (tagIds.ValueKind != JsonValueKind.Array
+            || tagIds.EnumerateArray().Any(id => id.ValueKind != JsonValueKind.String || !Guid.TryParse(id.GetString(), out _))))
+            return new ToolResult(false, Error: "tag_ids must contain valid GUIDs.");
+        var fieldError = BulkHabitToolArguments.CheckHabitFields(args);
+        if (fieldError is not null)
+            return new ToolResult(false, Error: fieldError);
 
         var (frequencyUnit, frequencyQuantity, intervalWeeks) = ParseScheduleOptions(args);
         var days = JsonArgumentParser.ParseDays(args);
@@ -103,7 +100,9 @@ public class CreateSubHabitTool(
                 IsBadHabit: isBadHabit,
                 DueDate: dueDate,
                 Emoji: emoji,
-                InheritParentFrequency: true,
+                TagIds: JsonArgumentParser.ParseGuidArray(args, "tag_ids"),
+                InheritParentFrequency: !args.TryGetProperty("frequency_unit", out var frequencyValue)
+                    || frequencyValue.ValueKind != JsonValueKind.Null && frequencyValue.GetString() != "OneTime",
                 IntervalWeeks: intervalWeeks,
                 Options: new Orbit.Application.Habits.Commands.HabitCommandOptions(
                     Days: days,
@@ -113,7 +112,10 @@ public class CreateSubHabitTool(
                     ReminderTimes: reminderTimes,
                     SlipAlertEnabled: slipAlertEnabled,
                     IsFlexible: isFlexible,
-                    ScheduledReminders: scheduledReminders));
+                    ScheduledReminders: scheduledReminders,
+                    RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
+                    ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
+                    EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date")));
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
 

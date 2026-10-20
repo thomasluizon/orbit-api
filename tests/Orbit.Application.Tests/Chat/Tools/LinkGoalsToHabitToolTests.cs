@@ -73,8 +73,8 @@ public class LinkGoalsToHabitToolTests
         LinkGoalsToHabitCommand? captured = null;
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => { captured = callInfo.Arg<LinkGoalsToHabitCommand>(); return Result.Success(); });
-        var habit = CreateHabit("Run 5K");
-        SetupHabitFound(habit);
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Run 5K");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
         var goalId = Guid.NewGuid();
 
         var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "goal_ids": ["{{goalId}}"]}""");
@@ -91,8 +91,8 @@ public class LinkGoalsToHabitToolTests
         LinkGoalsToHabitCommand? captured = null;
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => { captured = callInfo.Arg<LinkGoalsToHabitCommand>(); return Result.Success(); });
-        var habit = CreateHabit("Run 5K");
-        SetupHabitFound(habit);
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Run 5K");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
 
         var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "goal_ids": []}""");
 
@@ -103,8 +103,8 @@ public class LinkGoalsToHabitToolTests
     [Fact]
     public async Task CommandFails_PropagatesError()
     {
-        var habit = CreateHabit("Run 5K");
-        SetupHabitFound(habit);
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Run 5K");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure(ErrorMessages.HabitNotFound));
 
@@ -115,15 +115,28 @@ public class LinkGoalsToHabitToolTests
         result.EntityName.Should().BeNull();
     }
 
-    private void SetupHabitFound(Habit habit) =>
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-        .Returns(habit);
+    [Fact]
+    public async Task ForeignHabit_LookupRejectsCallerAndDoesNotExposeName()
+    {
+        var foreign = HabitToolTestFactory.CreateHabit(Guid.NewGuid(), "Private title");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, foreign);
 
-    private static Habit CreateHabit(string title) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 8, 6))).Value;
+        var result = await Execute($$"""{"habit_id": "{{foreign.Id}}", "goal_ids": []}""");
+
+        result.EntityName.Should().BeNull();
+        result.Success.Should().BeFalse();
+        await _mediator.DidNotReceive().Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MissingHabit_ReturnsNotFoundWithoutDispatch()
+    {
+        var id = Guid.NewGuid();
+        var result = await Execute($$"""{"habit_id":"{{id}}","goal_ids":[]}""");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be($"Habit {id} not found.");
+        await _mediator.DidNotReceive().Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>());
+    }
 
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);

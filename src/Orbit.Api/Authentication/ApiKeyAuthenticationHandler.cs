@@ -1,9 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -33,27 +31,27 @@ public class ApiKeyAuthenticationHandler(
         using var scope = serviceProvider.CreateScope();
         var apiKeyRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<ApiKey>>();
         var payGate = scope.ServiceProvider.GetRequiredService<IPayGateService>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
+        var usageTracker = scope.ServiceProvider.GetRequiredService<IApiKeyUsageTracker>();
 
         var candidates = await apiKeyRepository.FindTrackedAsync(
             k => k.KeyPrefix == keyPrefix && !k.IsRevoked);
 
-        var candidate = candidates.FirstOrDefault(candidate => BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash));
+        var candidate = candidates.Count == 1 ? candidates[0] : null;
         if (candidate is null)
             return AuthenticateResult.Fail("Invalid API key.");
 
         if (candidate.HasExpired())
             return AuthenticateResult.Fail("API key expired.");
 
+        if (!candidate.Verify(rawKey))
+            return AuthenticateResult.Fail("Invalid API key.");
+
         var gateCheck = await payGate.CanReadApiKeys(candidate.UserId, Context.RequestAborted);
         if (gateCheck.IsFailure)
             return AuthenticateResult.Fail("API keys are not available for this plan.");
 
-        candidate.MarkUsed();
-        await unitOfWork.SaveChangesAsync();
-
-        cache.Remove(ReferenceCacheKeys.ApiKeys(candidate.UserId));
+        if (candidate.LastUsedAtUtc is null || candidate.LastUsedAtUtc <= TimeProvider.GetUtcNow().UtcDateTime.AddMinutes(-1))
+            await usageTracker.MarkUsedAsync(candidate.Id, Context.RequestAborted);
 
         var claims = new List<Claim>
         {

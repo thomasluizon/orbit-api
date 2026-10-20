@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiTagSuggestionService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiTagSuggestionService> logger) : ITagSuggestionService
 {
     private sealed record TagSuggestionResult(List<string> Tags);
@@ -46,6 +46,10 @@ public sealed partial class AiTagSuggestionService(
                 LogTagSuggestionsGenerated(logger, cleaned.Count);
 
             return Result.Success<IReadOnlyList<string>>(cleaned);
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<IReadOnlyList<string>>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

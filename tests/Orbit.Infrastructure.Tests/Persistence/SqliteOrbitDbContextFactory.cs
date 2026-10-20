@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -11,30 +12,38 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<OrbitDbContext> _options;
+    private readonly IEncryptionService? _encryption;
     private readonly string? _databasePath;
 
     internal SqliteOrbitDbContextFactory(params IInterceptor[] interceptors)
-        : this(null, null, interceptors)
+        : this(null, null, null, interceptors)
     {
     }
 
     internal SqliteOrbitDbContextFactory(
         Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
         params IInterceptor[] interceptors)
-        : this(executionStrategyFactory, null, interceptors)
+        : this(executionStrategyFactory, null, null, interceptors)
+    {
+    }
+
+    internal SqliteOrbitDbContextFactory(IEncryptionService encryption, params IInterceptor[] interceptors)
+        : this(null, encryption, null, interceptors)
     {
     }
 
     internal SqliteOrbitDbContextFactory(string databasePath, params IInterceptor[] interceptors)
-        : this(null, databasePath, interceptors)
+        : this(null, null, databasePath, interceptors)
     {
     }
 
     private SqliteOrbitDbContextFactory(
         Func<ExecutionStrategyDependencies, IExecutionStrategy>? executionStrategyFactory,
+        IEncryptionService? encryption,
         string? databasePath,
         IInterceptor[] interceptors)
     {
+        _encryption = encryption;
         _databasePath = databasePath;
         var connectionString = new SqliteConnectionStringBuilder
         {
@@ -55,7 +64,9 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
             options.UseSqlite(_connection, Configure);
         else
             options.UseSqlite(connectionString, Configure);
-        _options = options.AddInterceptors(interceptors).Options;
+        _options = options.AddInterceptors(interceptors)
+            .ReplaceService<IModelCacheKeyFactory, EncryptionModelCacheKeyFactory>()
+            .Options;
 
         Context = CreateContext();
         Context.Database.EnsureCreated();
@@ -63,7 +74,7 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
 
     internal OrbitDbContext Context { get; }
 
-    internal OrbitDbContext CreateContext() => new SqliteCompatOrbitDbContext(_options);
+    internal OrbitDbContext CreateContext() => new SqliteCompatOrbitDbContext(_options, _encryption);
 
     public void Dispose()
     {
@@ -73,8 +84,14 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
             File.Delete(_databasePath);
     }
 
-    private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)
-        : OrbitDbContext(options)
+    private sealed class EncryptionModelCacheKeyFactory : IModelCacheKeyFactory
+    {
+        public object Create(DbContext context, bool designTime) =>
+            (context.GetType(), context is OrbitDbContext orbit && orbit.HasEncryptionService, designTime);
+    }
+
+    private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options, IEncryptionService? encryption)
+        : OrbitDbContext(options, encryption)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -90,7 +107,7 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
                 }
 
                 foreach (var index in entityType.GetIndexes())
-                    index.SetFilter(null);
+                    if (index.GetFilter() != "\"PushedAtUtc\" IS NOT NULL") index.SetFilter(null);
             }
         }
     }

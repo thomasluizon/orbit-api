@@ -19,7 +19,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
-        builder.Services.AddSingleton<IAiUsageRecorder, AiUsageRecorder>();
+        builder.Services.AddSingleton<IAiRequestCostEstimator, AiRequestCostEstimator>();
+        builder.Services.AddSingleton<AiUsageRecorder>();
+        builder.Services.AddSingleton<IAiUsageRecorder, BudgetAwareAiUsageRecorder>();
+        builder.Services.AddSingleton<IAiDailyBudget, AiDailyBudget>();
+        builder.Services.AddScoped<BudgetedAiCompletionClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
         builder.Services.AddScoped<IHabitEmojiInferenceService, AiHabitEmojiInferenceService>();
@@ -34,12 +38,16 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
+        builder.Services.AddScoped<IIssuedAstraBlockStore, IssuedAstraBlockStore>();
+        builder.Services.AddScoped<IAiTool, AskTool>();
         builder.Services.AddScoped<Orbit.Api.Controllers.AgentPendingStores>();
         builder.Services.AddScoped<IAgentStepUpService, AgentStepUpService>();
         builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
-        builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
+        builder.Services.AddScoped<AgentOperationExecutor>();
+        builder.Services.AddScoped<Orbit.Application.Chat.Commands.IAgentMutationRunner>(sp => sp.GetRequiredService<AgentOperationExecutor>());
+        builder.Services.AddScoped<IAgentOperationExecutor, IdempotentAgentOperationExecutor>();
         builder.Services.AddScoped<IPendingOperationChangePreviewer, PendingOperationChangePreviewer>();
         builder.Services.AddScoped<IDestructiveOperationPreviewer, DestructiveOperationPreviewer>();
         builder.Services.AddScoped<PendingOperationRevisionService>();
@@ -49,6 +57,7 @@ public static partial class ServiceCollectionExtensions
     private static void AddAiChatTools(WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
+        builder.Services.AddScoped<IAiTool, UnlogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
         builder.Services.AddScoped<IAiTool, UndoSkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();
@@ -63,8 +72,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, BulkRescheduleHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkUpdateHabitEmojisTool>();
         builder.Services.AddScoped<BulkHabitReplayPlanner>();
-        builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
-        builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
+        builder.Services.AddScoped<BulkLogHabitsTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<BulkLogHabitsTool>());
+        builder.Services.AddScoped<BulkSkipHabitsTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<BulkSkipHabitsTool>());
         builder.Services.AddScoped<IAiTool, QueryHabitsTool>();
         builder.Services.AddScoped<IAiTool, CreateGoalTool>();
         builder.Services.AddScoped<IAiTool, QueryGoalsTool>();
@@ -77,13 +88,17 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetProfileTool>();
         builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
         builder.Services.AddScoped<IAiTool, SetAiSummaryTool>();
+        builder.Services.AddScoped<IAiTool, SetProactiveAstraTool>();
         builder.Services.AddScoped<IAiTool, GetNotificationsTool>();
         builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
         builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
         builder.Services.AddScoped<IAiTool, GetCalendarOverviewTool>();
+        builder.Services.AddScoped<GetNotionTasksTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<GetNotionTasksTool>());
         builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();
         builder.Services.AddScoped<IAiTool, GetChecklistTemplatesTool>();
         builder.Services.AddScoped<IAiTool, CreateChecklistTemplateTool>();
+        builder.Services.AddScoped<IAiTool, UpdateChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, DeleteChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, GetGamificationOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetReferralOverviewTool>();
@@ -97,7 +112,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, ReorderHabitsTool>();
         builder.Services.AddScoped<IAiTool, MoveHabitParentTool>();
         builder.Services.AddScoped<IAiTool, LinkGoalsToHabitTool>();
-        builder.Services.AddScoped<IAiTool, BulkCreateHabitsTool>();
+        builder.Services.AddScoped<BulkCreateHabitsTool>();
+        builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<BulkCreateHabitsTool>());
         builder.Services.AddScoped<IAiTool, BulkDeleteHabitsTool>();
         builder.Services.AddScoped<IAiTool, GetDailySummaryTool>();
         builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
@@ -186,6 +202,12 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGamificationService>(),
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IProductAnalytics>(),
-                sp.GetRequiredService<IHabitScheduleLogReader>()));
+                sp.GetRequiredService<IHabitScheduleLogReader>(),
+                sp.GetRequiredService<IIssuedAstraBlockStore>(),
+                sp.GetRequiredService<IPendingAgentOperationStore>(),
+                sp.GetRequiredService<IPendingOperationChangePreviewer>(),
+                ChatTurnLimits.BlockAnswerTimeout(
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiSettings>>().Value.CompletionTimeout,
+                    TimeSpan.FromSeconds(DatabaseConnectionSettings.From(builder.Configuration).TransactionTimeoutSeconds))));
     }
 }

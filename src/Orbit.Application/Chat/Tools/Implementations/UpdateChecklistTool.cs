@@ -14,14 +14,14 @@ public class UpdateChecklistTool(
     public string Name => "update_checklist";
 
     public string Description =>
-        "Replace the checklist items on a habit. Pass the full desired list - existing items are overwritten.";
+        "Replace a habit checklist with the full desired list.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit whose checklist to replace" },
+            habit_id = new { type = JsonSchemaTypes.String },
             checklist_items = new
             {
                 type = JsonSchemaTypes.Array,
@@ -31,8 +31,8 @@ public class UpdateChecklistTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
-                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
+                        text = new { type = JsonSchemaTypes.String },
+                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Default: false." }
                     },
                     required = new[] { "text" }
                 }

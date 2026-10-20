@@ -51,6 +51,35 @@ public class PendingAgentOperationStoreTests : IDisposable
     }
 
     [Theory]
+    [InlineData("update_goal", "{\"goal_id\":\"11111111-1111-1111-1111-111111111111\",\"deadline\":null}")]
+    [InlineData("update_habit", "{\"habit_id\":\"11111111-1111-1111-1111-111111111111\",\"description\":null}")]
+    [InlineData("bulk_update_habits", "{\"filter\":{\"all\":true},\"updates\":{\"due_time\":null}}")]
+    public void LegacyNullClear_RequiresReproposalAndCannotConfirmOrConsume(string operation, string arguments)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool(operation)!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var fingerprint = AgentOperationFingerprint.Compute(operation, arguments);
+        var pending = _store.Create(_userId, capability, operation, arguments, "Clear field", fingerprint, AgentExecutionSurface.Chat);
+        var entity = _dbContext.PendingAgentOperations.Single(item => item.Id == pending.Id);
+        entity.ArgumentSchemaVersion.Should().Be(PendingAgentOperationState.CurrentArgumentSchemaVersion);
+        _store.GetExecution(_userId, pending.Id)!.RequiresReproposal.Should().BeFalse();
+        var confirmation = _store.Confirm(_userId, pending.Id)!;
+        _dbContext.Entry(entity).Property(item => item.ArgumentSchemaVersion).CurrentValue = 0;
+        _dbContext.SaveChanges();
+
+        _store.GetExecution(_userId, pending.Id)!.RequiresReproposal.Should().BeTrue();
+        _store.GetConfirmedExecution(_userId, capability.Id, fingerprint, confirmation.ConfirmationToken)!
+            .RequiresReproposal.Should().BeTrue();
+        _store.Confirm(_userId, pending.Id).Should().BeNull();
+        _store.TryConsumeFreshConfirmation(_userId, capability.Id, fingerprint, confirmation.ConfirmationToken, false).Should().BeFalse();
+        _store.Revise(_userId, pending.Id, fingerprint, arguments, fingerprint, "preview").Should().BeFalse();
+        entity.ConsumedAtUtc.Should().BeNull();
+        var replacement = _store.Create(_userId, capability, operation, arguments, "Reproposed", fingerprint, AgentExecutionSurface.Chat);
+        replacement.Id.Should().NotBe(pending.Id);
+    }
+
+    [Theory]
     [InlineData("bulk_update_habits", "updateHabits")]
     [InlineData("bulk_reschedule_habits", "rescheduleHabits")]
     [InlineData("bulk_log_habits", "logHabits")]
@@ -69,6 +98,47 @@ public class PendingAgentOperationStoreTests : IDisposable
         pending.ActionKey.Should().Be(expectedKey);
         pending.RiskClass.Should().Be(AgentRiskClass.Low);
         pending.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.FreshConfirmation);
+    }
+
+    [Theory]
+    [InlineData("confirmed")]
+    [InlineData("rejected")]
+    [InlineData("consumed")]
+    [InlineData("expired")]
+    public void IsAwaitingConfirmation_ExcludesForeignMissingAndClosedOperations(string terminalState)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var now = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var entity = PendingAgentOperationState.Create(new()
+        {
+            UserId = _userId,
+            Capability = capability,
+            OperationId = "bulk_create_habits",
+            ArgumentsJson = "{}",
+            Summary = "Preview",
+            OperationFingerprint = "fingerprint",
+            Surface = AgentExecutionSurface.Chat,
+            ExpiresAtUtc = terminalState == "expired" ? now.AddMinutes(-1) : now.AddMinutes(5)
+        });
+        _dbContext.PendingAgentOperations.Add(entity);
+        _dbContext.SaveChanges();
+        _store.IsAwaitingConfirmation(Guid.NewGuid(), entity.Id).Should().BeFalse();
+        _store.IsAwaitingConfirmation(_userId, Guid.NewGuid()).Should().BeFalse();
+        _store.IsAwaitingConfirmation(_userId, entity.Id).Should().Be(terminalState != "expired");
+
+        if (terminalState == "confirmed")
+            _store.Confirm(_userId, entity.Id).Should().NotBeNull();
+        else if (terminalState == "rejected")
+            _store.Cancel(_userId, entity.Id, entity.OperationFingerprint).Should().BeTrue();
+        else if (terminalState == "consumed")
+        {
+            entity.MarkConsumed();
+            _dbContext.SaveChanges();
+        }
+
+        _store.IsAwaitingConfirmation(_userId, entity.Id).Should().BeFalse();
     }
 
     public void Dispose()
@@ -344,6 +414,53 @@ public class PendingAgentOperationStoreTests : IDisposable
 
         _store.Confirm(_userId, pending.Id).Should().BeNull();
         _store.GetExecution(_userId, pending.Id).Should().BeNull();
+    }
+
+    [Fact]
+    public void RoundFour_SupersedeOneChild_PreservesTheMultiItemOperation()
+    {
+        var parentId = Guid.NewGuid();
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var json = JsonSerializer.Serialize(new
+        {
+            parent_habit_id = parentId,
+            habits = new[] { new { title = "Aquecimento" }, new { title = "Treino" }, new { title = "Alongamento" } }
+        });
+        var pending = _store.Create(_userId, capability, "bulk_create_habits", json, "Create children",
+            AgentOperationFingerprint.Compute("bulk_create_habits", json), AgentExecutionSurface.Chat);
+
+        _store.SupersedeHabitCreation(_userId, "TREINO", parentId).Should().BeFalse();
+
+        _dbContext.ChangeTracker.Clear();
+        var remaining = _store.GetExecution(_userId, pending.Id);
+        remaining.Should().NotBeNull();
+        remaining!.Arguments.GetProperty("habits").EnumerateArray().Select(item => item.GetProperty("title").GetString())
+            .Should().Equal("Aquecimento", "Treino", "Alongamento");
+        _store.GetPendingHabitCreations(_userId).Should().HaveCount(3);
+        _store.Confirm(_userId, pending.Id).Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("create_habit", "{\"title\":\"Meditação\"}")]
+    [InlineData("bulk_create_habits", "{\"habits\":[{\"title\":\"Meditação\"}]}")]
+    public void RoundFour_SupersedeSingleItem_CancelsOnlyMatchingProposal(string operationId, string json)
+    {
+        var capability = _catalogService.GetCapabilityByChatTool(operationId)!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var pending = _store.Create(_userId, capability, operationId, json, "Create",
+            AgentOperationFingerprint.Compute(operationId, json), AgentExecutionSurface.Chat);
+
+        _store.SupersedeHabitCreation(Guid.NewGuid(), "MEDITACAO", null).Should().BeFalse();
+        _store.SupersedeHabitCreation(_userId, "MEDITACAO", Guid.NewGuid()).Should().BeFalse();
+        _store.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
+        _store.SupersedeHabitCreation(_userId, "MEDITACAO", null).Should().BeTrue();
+
+        _dbContext.ChangeTracker.Clear();
+        _store.GetExecution(_userId, pending.Id).Should().BeNull();
+        _store.Confirm(_userId, pending.Id).Should().BeNull();
     }
 
     [Fact]

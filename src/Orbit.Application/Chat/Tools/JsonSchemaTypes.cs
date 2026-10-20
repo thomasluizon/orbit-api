@@ -13,6 +13,8 @@ internal static class JsonSchemaTypes
     internal const string Integer = "integer";
 
     internal static readonly string[] FrequencyUnitEnum = ["Day", "Week", "Month", "Year"];
+    internal static readonly string[] FrequencyOrOneTimeEnum = ["Day", "Week", "Month", "Year", "OneTime"];
+    internal static readonly string[] WeekdayEnum = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     internal static readonly string[] ScheduledReminderWhenEnum = ["day_before", "same_day"];
     internal static readonly string[] FeatureKeyEnum = ["freezes", "frequencies", "gamification", "notifications", "paygate", "schedule-math", "streaks"];
 }

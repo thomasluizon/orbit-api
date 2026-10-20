@@ -21,6 +21,8 @@ public class AgentPolicyEvaluator(
 
     public AgentPolicyDecision Evaluate(AgentPolicyEvaluationContext context)
     {
+        if (context.PreviewOnly)
+            return EvaluateInternal(context, createPendingOperations: true);
         var evaluated = EvaluateInternal(context, createPendingOperations: !_settings.ShadowModeEnabled);
         if (!_settings.ShadowModeEnabled)
             return evaluated;

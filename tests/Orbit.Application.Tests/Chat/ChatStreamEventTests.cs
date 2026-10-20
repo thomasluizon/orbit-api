@@ -83,4 +83,19 @@ public class ChatStreamEventTests
             "correlationId":"trace-1"
             """.Trim());
     }
+    [Fact]
+    public void Final_PartsSerializeWithTwoOuterTypesAndExistingCardPayload()
+    {
+        var response = new ChatResponse("A", [], Parts:
+        [
+            new ChatTextPart("A"),
+            new ChatBlockPart("habitList", new Orbit.Application.Chat.HabitListCard("today", []))
+        ]);
+
+        var json = ChatStreamEvent.Final(response).ToJson();
+
+        json.Should().Contain("""
+            "parts":[{"type":"text","text":"A"},{"type":"block","kind":"habitList","block":{"scope":"today","items":[]}}]
+            """.Trim());
+    }
 }

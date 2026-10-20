@@ -44,7 +44,9 @@ public record ProcessUserChatCommand(
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
     string? CorrelationId = null,
-    Func<ChatStreamEvent, Task>? StreamSink = null) : IRequest<Result<ChatResponse>>;
+    Func<ChatStreamEvent, Task>? StreamSink = null,
+    AstraBlockAnswer? BlockAnswer = null,
+    bool EvalTraceRequested = false) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
@@ -63,11 +65,22 @@ public record ChatResponse(
     CalendarCard? Calendar = null,
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
-    IReadOnlyList<string>? FollowUps = null)
+    IReadOnlyList<string>? FollowUps = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
 }
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(ChatTextPart), "text")]
+[JsonDerivedType(typeof(ChatBlockPart), "block")]
+public abstract record ChatResponsePart;
+
+public sealed record ChatTextPart(string Text) : ChatResponsePart;
+
+public sealed record ChatBlockPart(string Kind, object Block) : ChatResponsePart;
 
 public record ResponseCards(
     string? AiMessage,
@@ -79,12 +92,13 @@ public record ResponseCards(
     StreakCard? Streak = null,
     CalendarCard? Calendar = null,
     IReadOnlyList<RecordListCard>? RecordLists = null,
-    AccountRowsCard? AccountRows = null)
+    AccountRowsCard? AccountRows = null,
+    IReadOnlyList<ChatResponsePart>? Parts = null)
 {
     public bool HasAnyCard => HabitList is not null || GoalList is not null
         || MetricsCard is not null || PeriodInsight is not null || DaySummary is not null
         || Streak is not null || Calendar is not null || RecordLists is { Count: > 0 }
-        || AccountRows is not null;
+        || AccountRows is not null || Parts?.OfType<ChatBlockPart>().Any() == true;
 }
 
 public record ActionResult(
@@ -95,7 +109,9 @@ public record ActionResult(
     string? Error = null,
     string? Field = null,
     IReadOnlyList<AiAction>? SuggestedSubHabits = null,
-    ClarificationRequest? ClarificationRequest = null);
+    ClarificationRequest? ClarificationRequest = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MessageKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToolResultMessageParams? Params = null);
 
 public enum ActionStatus { Success, Failed, Suggestion, NeedsClarification }
 
@@ -134,16 +150,34 @@ public record ChatExecutionDependencies(
     IGamificationService GamificationService,
     IMediator Mediator,
     IProductAnalytics ProductAnalytics,
-    IHabitScheduleLogReader ScheduleLogReader);
+    IHabitScheduleLogReader ScheduleLogReader,
+    IIssuedAstraBlockStore BlockStore,
+    IPendingAgentOperationStore PendingOperationStore,
+    IPendingOperationChangePreviewer? PendingOperationPreviewer = null,
+    TimeSpan? BlockAnswerTimeout = null);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
     ChatAiDependencies ai,
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger,
-    IAppConfigService appConfig) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IAppConfigService appConfig,
+    IContentModerationService moderation,
+    IConversationTurnRecorder? conversationRecorder = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
-    private const int MaxToolIterations = 5;
+    private static class PartKinds
+    {
+        public const string HabitList = "habitList";
+        public const string GoalList = "goalList";
+        public const string Metrics = "metrics";
+        public const string PeriodInsight = "periodInsight";
+        public const string DaySummary = "daySummary";
+        public const string Streak = "streak";
+        public const string Calendar = "calendar";
+        public const string RecordList = "recordList";
+        public const string AccountRows = "accountRows";
+    }
+
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
     private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
@@ -157,16 +191,123 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        ChatEvalTraceCollector? evalTrace = null;
+        if (request.EvalTraceRequested)
+        {
+            var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+            if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
+                evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
+        }
+
+        var recording = new ConversationRecordingState();
+        Result<ChatResponse>? response = null;
+        try
+        {
+            response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
+            return response.IsSuccess && evalTrace is not null
+                ? Result.Success(response.Value with { EvalTrace = evalTrace.Build() })
+                : response;
+        }
+        finally
+        {
+            RecordConversationSafely(request, recording, response);
+        }
+    }
+
+    private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
+        ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken)
+    {
+        if (request.BlockAnswer is not null)
+        {
+            recording.Enabled = true;
+            var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
+                execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
+                data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
+                prepared =>
+                {
+                    recording.UserContent = prepared.Message;
+                    recording.Enabled = !prepared.IsReplay;
+                }, recording.ToolCalls.Add);
+            return await answerService.ExecuteAsync(request, prepared =>
+                prepared.Crisis != CrisisLocales.None
+                    ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
+                (_, token) => ModerateInputAsync(request, token));
+        }
+        var crisis = CrisisSupportGuard.Detect(request.Message);
+        if (crisis != CrisisLocales.None)
+        {
+            var enabledFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+            if (CrisisSupportGuard.IsEnabled(crisis, enabledFlags))
+            {
+                recording.Enabled = enabledFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
+                return await HandleCrisisTurnAsync(request, crisis, captureMessage: true);
+            }
+        }
+        var inputCheck = await ModerateInputAsync(request, cancellationToken);
+        if (inputCheck.IsFailure)
+            return inputCheck.PropagateError<ChatResponse>();
+        await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+            await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
+        }, cancellationToken);
+        return await HandleTurnAsync(request, recording, evalTrace, cancellationToken);
+    }
+
+    private async Task<Result> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
+    {
+        var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
+        var check = await moderation.CheckTextAsync(input, cancellationToken);
+        if (check.Unavailable)
+            return Result.Failure(ErrorMessages.AiUnavailable);
+        return check.Flagged ? Result.Failure("This input was refused by content moderation.") : Result.Success();
+    }
+
+    private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
+    {
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        if (answeredAtUtc is { } claim && execution.BlockAnswerTimeout is { } timeout)
+        {
+            var remaining = claim + timeout - TimeProvider.System.GetUtcNow().UtcDateTime;
+            cancellation.CancelAfter(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
+        }
+        return cancellation;
+    }
+
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ConversationRecordingState recording,
+        ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
+        DateTime? answeredAtUtc = null)
+    {
+        using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
+        cancellationToken = turnCancellation.Token;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
-        var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
 
         var contextResult = await LoadChatContextAsync(request, cancellationToken);
         if (contextResult.IsFailure)
             return contextResult.PropagateError<ChatResponse>();
 
         var context = contextResult.Value;
-        var crisisTurn = IsCrisisTurn(detectedCrisisLocales, context.EnabledFeatureFlags);
+        recording.Enabled = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
+        var plan = GetAnalyticsPlan(context.User);
+        var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
+        try
+        {
+            return await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+        }
+        finally
+        {
+            CaptureMessageAnalytics(request.UserId, plan, telemetry);
+        }
+    }
+
+    private async Task<Result<ChatResponse>> HandleLoadedTurnAsync(
+        ProcessUserChatCommand request, ChatContext context, ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, AiTurnTelemetry telemetry,
+        System.Diagnostics.Stopwatch totalStopwatch, DateTime? answeredAtUtc, CancellationToken cancellationToken)
+    {
+        var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
+        var crisisTurn = CrisisSupportGuard.IsEnabled(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);
 
@@ -181,26 +322,30 @@ public partial class ProcessUserChatCommandHandler(
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request.StreamSink);
+        var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request);
         if (cachedFaqAnswer is not null)
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
-        var skipTools = request.ImageData is null
-            && request.ConfirmationToken is null
-            && (request.History is null || request.History.Count == 0)
-            && ChatIntentRouter.IsNoToolTurn(
-                request.Message,
-                ChatToolGroups.IsKnownEntryPointIntent(GetEntryPointIntent(request)));
-
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
-        var executionResults = new ToolExecutionAccumulator();
+        recording.UsedModel = true;
+        var executionResults = new ToolExecutionAccumulator
+        {
+            AnsweredAtUtc = answeredAtUtc,
+            Recording = recording,
+            EvalTrace = evalTrace,
+            Habits = context.ActiveHabits,
+            AllHabits = context.UserHabits,
+            IsTaggingIntent = IsTagOnlyIntent(request.Message),
+            RequiresExistingParent = RequestsExistingParent(request.Message, context.ActiveHabits)
+        };
+        SeedProposedHabitNames(request, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,
@@ -211,6 +356,8 @@ public partial class ProcessUserChatCommandHandler(
             cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
+        if (MustFailToolTurn(request, toolLoopResult))
+            return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
@@ -234,11 +381,18 @@ public partial class ProcessUserChatCommandHandler(
         var responseText = parsedResponse.CardText;
         if (aiResponse.IsTruncated)
             responseText = AppendTruncationNotice(responseText, userLanguage);
-        var cards = await TryBuildResponseCardsAsync(
-            responseText, request, context, executionResults, cancellationToken);
+        var cards = request.ClientContext?.SupportsParts == true
+            ? await BuildResponsePartsAsync(parsedResponse, aiResponse.IsTruncated, userLanguage,
+                request, context, executionResults, cancellationToken)
+            : await TryBuildResponseCardsAsync(
+                responseText, request, context, executionResults, cancellationToken);
+        cards = ApplyResolutionToCards(cards, executionResults, userLanguage);
         var groundedReply = await ApplyGroundingAsync(cards.AiMessage, followUps, executionResults, request, groundingTurn);
         var aiMessage = groundedReply.Message;
         followUps = groundedReply.FollowUps;
+        cards = ApplyGroundingToCards(cards, aiMessage);
+        if (executionResults.AskBlock is { } askBlock)
+            cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
         {
@@ -274,9 +428,26 @@ public partial class ProcessUserChatCommandHandler(
             cards.Calendar,
             cards.RecordLists,
             cards.AccountRows,
-            followUps)
+            followUps,
+            cards.Parts)
         { GroundingFacts = groundedReply.Facts });
     }
+
+    private void CaptureMessageAnalytics(Guid userId, string? plan, AiTurnTelemetry telemetry)
+    {
+        var properties = new Dictionary<string, object>
+        {
+            ["round_count"] = telemetry.RoundCount,
+            ["tool_call_count"] = telemetry.ToolCallCount
+        };
+        if (plan is not null)
+            properties["plan"] = plan;
+        AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, userId, plan,
+            "astra_message_sent", properties);
+    }
+
+    private static string GetAnalyticsPlan(User? user) =>
+        user?.Plan.ToString() ?? nameof(UserPlan.Free);
 
     private static string? GetUserLanguage(User? user) => user?.Language;
 
@@ -295,6 +466,8 @@ public partial class ProcessUserChatCommandHandler(
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraChangePreviewDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsToolSteps = clientContext.SupportsToolSteps == true
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraToolStepsDisabled, StringComparer.OrdinalIgnoreCase),
+                SupportsParts = clientContext.SupportsParts == true
+                    && !enabledFlags.Contains(FeatureFlagKeys.AstraPartsDisabled, StringComparer.OrdinalIgnoreCase),
                 SupportsFollowUps = clientContext.SupportsFollowUps == true
                     && !enabledFlags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled, StringComparer.OrdinalIgnoreCase)
             }
@@ -310,6 +483,7 @@ public partial class ProcessUserChatCommandHandler(
         && !aiResponse.IsTruncated
         && !toolLoopResult.TokenBudgetExceeded
         && !toolLoopResult.HadToolFailure
+        && results.AskBlock is null
         && results.PendingOperations.Count == 0
         && !results.ActionResults.Any(action => action.Status == ActionStatus.NeedsClarification);
 
@@ -369,10 +543,6 @@ public partial class ProcessUserChatCommandHandler(
         }
     }
 
-    private static bool IsCrisisTurn(CrisisLocales locales, IReadOnlyList<string> enabledFlags) =>
-        locales != CrisisLocales.None
-        && !enabledFlags.Contains(FeatureFlagKeys.AstraCrisisResourcesDisabled, StringComparer.OrdinalIgnoreCase);
-
     private static string? TryGetCachedFaqAnswer((string Key, string Locale)? match) =>
         match is { } faq && ChatFaqCache.TryGetAnswer(faq.Key, faq.Locale, out var answer)
             ? answer
@@ -395,7 +565,8 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private void CaptureCardEvent(
-        ProcessUserChatCommand request, ChatContext context, string eventName, string kind)
+        ProcessUserChatCommand request, ChatContext context, string eventName, string kind,
+        IReadOnlyList<ChatResponsePart>? parts)
     {
         if (context.User is null)
             return;
@@ -405,33 +576,62 @@ public partial class ProcessUserChatCommandHandler(
             eventName, new Dictionary<string, object>
             {
                 ["platform"] = request.ClientContext?.Platform ?? "unknown",
-                ["kind"] = kind
+                ["kind"] = kind,
+                ["part_count"] = parts?.Count ?? 0,
+                ["block_kinds"] = parts?.OfType<ChatBlockPart>().Select(part => part.Kind).ToArray() ?? []
             });
     }
 
     private void CaptureResponseCardEvents(
         ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
     {
+        void Capture(string eventName, string kind) =>
+            CaptureCardEvent(request, context, eventName, kind, cards.Parts);
+
+        if (cards.Parts is not null)
+        {
+            var events = cards.Parts.OfType<ChatBlockPart>().Select(part => part.Block switch
+            {
+                MetricsCard => ("chat_metrics_card_emitted", PartKinds.Metrics),
+                PeriodInsightCard => ("chat_period_insight_card_emitted", "period"),
+                DaySummaryCard => ("chat_day_summary_card_emitted", "day"),
+                StreakCard => ("chat_streak_card_emitted", PartKinds.Streak),
+                CalendarCard => ("chat_calendar_card_emitted", PartKinds.Calendar),
+                RecordListCard recordList => ("chat_record_list_card_emitted", recordList.Kind),
+                AccountRowsCard accountRows => ("chat_account_rows_card_emitted", accountRows.Kind),
+                _ => (string.Empty, string.Empty)
+            }).Distinct();
+            foreach (var (eventName, kind) in events)
+            {
+                if (eventName.Length > 0)
+                    Capture(eventName, kind);
+            }
+            return;
+        }
+
         if (cards.MetricsCard is not null)
-            CaptureCardEvent(request, context, "chat_metrics_card_emitted", "metrics");
+            Capture("chat_metrics_card_emitted", PartKinds.Metrics);
         if (cards.PeriodInsight is not null)
-            CaptureCardEvent(request, context, "chat_period_insight_card_emitted", "period");
+            Capture("chat_period_insight_card_emitted", "period");
         if (cards.DaySummary is not null)
-            CaptureCardEvent(request, context, "chat_day_summary_card_emitted", "day");
+            Capture("chat_day_summary_card_emitted", "day");
         if (cards.Streak is not null)
-            CaptureCardEvent(request, context, "chat_streak_card_emitted", "streak");
+            Capture("chat_streak_card_emitted", PartKinds.Streak);
         if (cards.Calendar is not null)
-            CaptureCardEvent(request, context, "chat_calendar_card_emitted", "calendar");
+            Capture("chat_calendar_card_emitted", PartKinds.Calendar);
         foreach (var recordList in cards.RecordLists ?? [])
-            CaptureCardEvent(request, context, "chat_record_list_card_emitted", recordList.Kind);
+            Capture("chat_record_list_card_emitted", recordList.Kind);
         if (cards.AccountRows is not null)
-            CaptureCardEvent(request, context, "chat_account_rows_card_emitted", cards.AccountRows.Kind);
+            Capture("chat_account_rows_card_emitted", cards.AccountRows.Kind);
     }
 
     private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
         ProcessUserChatCommand request,
-        CrisisLocales locales)
+        CrisisLocales locales,
+        bool captureMessage = false)
     {
+        if (captureMessage)
+            CaptureMessageAnalytics(request.UserId, null, new AiTurnTelemetry(request.CorrelationId));
         var message = await CompleteCrisisReplyAsync(
             request, CrisisSupportGuard.FallbackMessage(locales), locales,
             request.StreamSink is null ? "batch" : "stream");
@@ -476,6 +676,72 @@ public partial class ProcessUserChatCommandHandler(
             : EnglishTruncationMessage;
         return string.IsNullOrWhiteSpace(text) ? notice : $"{text}\n\n{notice}";
     }
+
+    private async Task<ResponseCards> BuildResponsePartsAsync(
+        ParsedResponseDirectives parsed, bool isTruncated, string? language,
+        ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, CancellationToken cancellationToken)
+    {
+        var parts = new List<ChatResponsePart>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var blockCount = 0;
+        foreach (var segment in parsed.Segments)
+        {
+            if (segment.Text is { } text)
+            {
+                parts.Add(new ChatTextPart(text));
+                continue;
+            }
+
+            if (segment.Directive is not { } directive || blockCount >= 3 || !seen.Add(directive))
+                continue;
+
+            var kind = DirectivePartKind(directive);
+            if (kind is null || request.ClientContext?.PartKinds?.Contains(kind, StringComparer.Ordinal) != true)
+                continue;
+
+            var cards = await TryBuildResponseCardsAsync(directive, request, context, results, cancellationToken);
+            object? block = kind switch
+            {
+                PartKinds.HabitList => cards.HabitList,
+                PartKinds.GoalList => cards.GoalList,
+                PartKinds.Metrics => cards.MetricsCard,
+                PartKinds.PeriodInsight => cards.PeriodInsight,
+                PartKinds.DaySummary => cards.DaySummary,
+                PartKinds.Streak => cards.Streak,
+                PartKinds.Calendar => cards.Calendar,
+                PartKinds.RecordList => cards.RecordLists is { Count: > 0 } lists ? lists[0] : null,
+                PartKinds.AccountRows => cards.AccountRows,
+                _ => null
+            };
+            if (block is null)
+                continue;
+
+            parts.Add(new ChatBlockPart(kind, block));
+            blockCount++;
+        }
+
+        if (isTruncated)
+            parts.Add(new ChatTextPart(AppendTruncationNotice(null, language)));
+
+        return new ResponseCards(string.Join("\n\n", parts.OfType<ChatTextPart>().Select(part => part.Text)),
+            Parts: parts);
+    }
+
+    private static string? DirectivePartKind(string directive) => directive.ToLowerInvariant() switch
+    {
+        "[[orbit:habits:today]]" or "[[orbit:habits:remaining]]" or "[[orbit:habits:all]]" => PartKinds.HabitList,
+        "[[orbit:goals]]" => PartKinds.GoalList,
+        "[[orbit:metrics]]" => PartKinds.Metrics,
+        "[[orbit:insight]]" => PartKinds.PeriodInsight,
+        "[[orbit:day]]" => PartKinds.DaySummary,
+        "[[orbit:streak]]" => PartKinds.Streak,
+        "[[orbit:calendar]]" => PartKinds.Calendar,
+        "[[orbit:records:notifications]]" or "[[orbit:records:tags]]"
+            or "[[orbit:records:templates]]" or "[[orbit:records:keys]]" => PartKinds.RecordList,
+        "[[orbit:account:profile]]" or "[[orbit:account:plan]]" or "[[orbit:account:referral]]" => PartKinds.AccountRows,
+        _ => null
+    };
 
     private async Task<ResponseCards> TryBuildResponseCardsAsync(
         string? aiMessage, ProcessUserChatCommand request, ChatContext context,
@@ -654,7 +920,11 @@ public partial class ProcessUserChatCommandHandler(
             && executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary") is not null)
         {
             day = await TryBuildDaySummaryCardAsync(request.UserId, context.UserToday,
-                context.User?.CurrentStreak ?? 0, context.User?.TimeZone, cancellationToken);
+                context.User?.CurrentStreak ?? 0, context.User?.TimeZone,
+                HabitListCardBuilder.Build(context.TodayHabits, context.UserToday,
+                    HabitListCardBuilder.ScopeToday, context.TodayFacts,
+                    request.ClientContext.SupportsHabitListDoneStatus == true).Items,
+                cancellationToken);
         }
 
         var streak = request.ClientContext?.SupportsStreakCard == true
@@ -672,7 +942,8 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<DaySummaryCard?> TryBuildDaySummaryCardAsync(
-        Guid userId, DateOnly userToday, int currentStreak, string? timeZone, CancellationToken cancellationToken)
+        Guid userId, DateOnly userToday, int currentStreak, string? timeZone,
+        IReadOnlyList<HabitListCardItem> rows, CancellationToken cancellationToken)
     {
         try
         {
@@ -684,7 +955,7 @@ public partial class ProcessUserChatCommandHandler(
                 habits.ToList(), userToday, userToday, currentStreak, currentStreak,
                 TimeZoneHelper.FindTimeZone(timeZone), weekStartDay);
             var overdue = habits.Count(h => !h.IsGeneral && !h.IsCompleted && h.DueDate < userToday);
-            return StatusCardBuilder.BuildDay(userToday, metrics, overdue);
+            return StatusCardBuilder.BuildDay(userToday, metrics, overdue, rows);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -760,6 +1031,7 @@ public partial class ProcessUserChatCommandHandler(
         ToolExecutionAccumulator results,
         ResponseCards? cards = null) =>
         (cards is null || !cards.HasAnyCard)
+        && results.AskBlock is null
         && results.PendingOperations.Count == 0
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);

@@ -1,9 +1,9 @@
 {
   "provenance": {
-    "generatedFrom": "fd5f278f328b",
+    "generatedFrom": "486f263a2bb0",
     "baselineRef": null,
     "baselineSha": null,
-    "inputFiles": 1212,
+    "inputFiles": 1328,
     "generatorVersion": 2
   },
   "note": "A live AppConfigs row overrides its compiled default at runtime. This offline artifact does not claim live values.",
@@ -11,6 +11,14 @@
     {
       "capability": "CanAccessCalendar",
       "enforcingMethod": "PayGateService.CanAccessCalendar",
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "appConfigs": [],
+      "featureFlags": []
+    },
+    {
+      "capability": "CanAccessNotion",
+      "enforcingMethod": "PayGateService.CanAccessNotion",
       "planRequirement": "Pro",
       "quotaLiftedByPlan": null,
       "appConfigs": [],
@@ -351,7 +359,7 @@
       "enabled": true,
       "planRequirement": "Pro",
       "quotaLiftedByPlan": null,
-      "declaredInCode": false
+      "declaredInCode": true
     },
     {
       "key": "checklist_templates",
@@ -382,6 +390,13 @@
       "declaredInCode": false
     },
     {
+      "key": "notion_integration",
+      "enabled": false,
+      "planRequirement": "Pro",
+      "quotaLiftedByPlan": null,
+      "declaredInCode": true
+    },
+    {
       "key": "offline_mode",
       "enabled": true,
       "planRequirement": null,
@@ -391,6 +406,13 @@
     {
       "key": "push_notifications",
       "enabled": true,
+      "planRequirement": null,
+      "quotaLiftedByPlan": null,
+      "declaredInCode": false
+    },
+    {
+      "key": "redesign",
+      "enabled": false,
       "planRequirement": null,
       "quotaLiftedByPlan": null,
       "declaredInCode": false

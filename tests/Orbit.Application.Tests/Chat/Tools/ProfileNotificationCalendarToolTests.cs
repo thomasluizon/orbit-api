@@ -23,6 +23,11 @@ public class ProfileNotificationCalendarToolTests
     public void ToolMetadata_ExposesNamesAndSchemas()
     {
         var mediator = Substitute.For<IMediator>();
+        typeof(IAiTool).Assembly.GetTypes()
+            .Where(type => type is { IsAbstract: false, IsInterface: false }
+                && typeof(ToggleProfileSettingTool).IsAssignableFrom(type))
+            .Select(type => ((IAiTool)Activator.CreateInstance(type, mediator)!).Name)
+            .Should().Contain("set_proactive_astra");
         var profileTool = new GetProfileTool(mediator);
         var preferencesTool = new UpdateProfilePreferencesTool(mediator);
         var aiSummaryTool = new SetAiSummaryTool(mediator);
@@ -65,14 +70,21 @@ public class ProfileNotificationCalendarToolTests
     public async Task GetProfileTool_ReturnsSuccessPayload()
     {
         var mediator = Substitute.For<IMediator>();
+        var profile = new ProfileResponse(
+            UserId, "Alex", "alex@example.com", "America/Sao_Paulo",
+            false, true, true, true, true, true, true, true, "pt-BR", "Pro", true, false, null, null,
+            5, 100, false, false, false, null, null, false, 1, 500, 5, "Achiever",
+            0, 10, 12, 2, null, null,
+            false, GoogleCalendarAutoSyncStatus.Idle, null, true, null, false);
         mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success<ProfileResponse>(null!));
+            .Returns(Result.Success(profile));
         var tool = new GetProfileTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Error.Should().BeNull();
+        result.Payload.Should().BeOfType<ProfileResponse>().Which.Name.Should().Be("Alex");
     }
 
     [Fact]
@@ -447,7 +459,7 @@ public class ProfileNotificationCalendarToolTests
             Arg.Any<CancellationToken>());
         using var schema = JsonDocument.Parse(JsonSerializer.Serialize(tool.GetParameterSchema()));
         schema.RootElement.GetProperty("properties").GetProperty("release_other_account")
-            .GetProperty("type").GetString().Should().Be("boolean");
+            .GetProperty("type").EnumerateArray().Select(type => type.GetString()).Should().BeEquivalentTo("boolean", "null");
         schema.RootElement.GetProperty("required").EnumerateArray().Select(x => x.GetString())
             .Should().NotContain("release_other_account");
     }
@@ -596,6 +608,8 @@ public class ProfileNotificationCalendarToolTests
             .Returns(Result.Success(new CalendarAutoSyncStateResponse(true, GoogleCalendarAutoSyncStatus.Idle, null, true)));
         mediator.Send(Arg.Any<GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new List<CalendarSyncSuggestionItem>()));
+        mediator.Send(Arg.Any<GetUserCalendarsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<UserCalendarItem>()));
         var tool = new GetCalendarOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
@@ -658,7 +672,7 @@ public class ProfileNotificationCalendarToolTests
         var tool = new GetCalendarOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(
-            Parse("""{"include_events":false,"include_auto_sync_state":false,"include_suggestions":false}"""),
+            Parse("""{"include_events":false,"include_auto_sync_state":false,"include_suggestions":false,"include_calendars":false}"""),
             UserId,
             CancellationToken.None);
 

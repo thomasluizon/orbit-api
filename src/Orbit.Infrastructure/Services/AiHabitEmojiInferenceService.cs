@@ -7,7 +7,7 @@ using Orbit.Infrastructure.AI;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiHabitEmojiInferenceService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiHabitEmojiInferenceService> logger) : IHabitEmojiInferenceService
 {
     private sealed record EmojiInferenceResponse(Dictionary<string, string>? Emojis);
@@ -49,6 +49,10 @@ public sealed partial class AiHabitEmojiInferenceService(
             }
 
             return Result.Success<IReadOnlyDictionary<Guid, string>>(mappings);
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<IReadOnlyDictionary<Guid, string>>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

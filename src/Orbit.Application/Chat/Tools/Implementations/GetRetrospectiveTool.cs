@@ -11,7 +11,7 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Generate the user's AI retrospective over a period (week, month, quarter, semester, or year). Use this when the user asks to look back on their habits over a span of time, e.g. \"how did last month go?\". Default period is week.";
+        "Generate an AI retrospective, defaulting to week.";
 
     public object GetParameterSchema() => new
     {
@@ -24,7 +24,7 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
                 description = "Time span to look back over. Default: 'week'.",
                 @enum = new[] { "week", "month", "quarter", "semester", "year" }
             },
-            language = new { type = JsonSchemaTypes.String, description = "Language code for the retrospective text. Default: 'en'." }
+            language = new { type = JsonSchemaTypes.String, @enum = Orbit.Application.Common.AppConstants.SupportedLanguages, description = "Language code for the retrospective text. Default: 'en'." }
         },
         required = Array.Empty<string>()
     };

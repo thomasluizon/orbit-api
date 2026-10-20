@@ -14,14 +14,14 @@ derived_from:
 
 # Streak Freezes
 
-A streak freeze protects your streak on a day you couldn't complete a habit. **Streak freezes are a Pro feature.**
+A streak freeze protects your streak on a day you couldn't complete a habit. Streak freezes are part of Orbit Pro. Some free accounts have them too.
 
 ## Earning freezes
 
-You earn **1 freeze for every 7 streak-days** (`StreakDaysPerFreeze` = 7). You can bank up to **3** freezes at once (`MaxStreakFreezesAccumulated` = 3); once you're at the cap, new milestones don't add more until one is spent.
+You earn **1 freeze for every 7 streak-days**. You can bank up to **3** freezes at once; once you're at the cap, new milestones don't add more until one is spent.
 
 ## How freezes are used
 
 Orbit automatically spends one banked freeze when an eligible scheduled day is missed. The covered date and remaining bank are reported so the spend is visible. A freeze only **preserves** the streak across the missed day; it does not extend or increase it.
 
-If automatic coverage did not cover a gap, a manual repair can be offered for local yesterday when it was scheduled, remains incomplete and unfrozen, and covering it restores a streak that would otherwise be broken. At most **one** freeze is spent per day, and at most **3** are spent per calendar month (`MaxStreakFreezesPerMonth` = 3). Logging the covered day later does not refund the freeze.
+If automatic coverage did not cover a gap, a manual repair can be offered for local yesterday when it was scheduled, remains incomplete and unfrozen, and covering it restores a streak that would otherwise be broken. At most **one** freeze is spent per day, and at most **3** are spent per calendar month. Logging the covered day later does not refund the freeze.

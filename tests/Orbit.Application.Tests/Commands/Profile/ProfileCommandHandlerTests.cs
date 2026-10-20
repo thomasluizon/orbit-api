@@ -157,7 +157,7 @@ public class ProfileCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        user.ProactiveAstraEnabled.Should().BeFalse();
+        user.ProactiveAstraEnabled.Should().BeTrue();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

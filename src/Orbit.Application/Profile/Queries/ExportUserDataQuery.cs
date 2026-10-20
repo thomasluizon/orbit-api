@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Connections;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Profile.Models;
 using Orbit.Domain.Common;
@@ -28,7 +29,11 @@ public record ExportUserDataRepositories(
     IGenericRepository<Cheer> Cheers,
     IGenericRepository<BlockedUser> BlockedUsers,
     IGenericRepository<Report> Reports,
-    IGenericRepository<FriendFeedEvent> FriendFeedEvents);
+    IGenericRepository<FriendFeedEvent> FriendFeedEvents,
+    IGenericRepository<ProactiveItem> ProactiveItems,
+    IGenericRepository<NotionConnection> NotionConnections,
+    IGenericRepository<NotionTask> NotionTasks,
+    IGenericRepository<ConversationTurn> ConversationTurns);
 
 public class ExportUserDataQueryHandler(
     ExportUserDataRepositories repos,
@@ -78,7 +83,15 @@ public class ExportUserDataQueryHandler(
         var friendFeedEvents = await repos.FriendFeedEvents.FindAsync(
             e => e.ActorUserId == request.UserId, cancellationToken);
 
+        var proactiveItems = await repos.ProactiveItems.FindAsync(i => i.UserId == request.UserId, cancellationToken);
+        var notionConnections = await repos.NotionConnections.FindAsync(c => c.UserId == request.UserId, cancellationToken);
+        var notionTasks = await repos.NotionTasks.FindAsync(t => t.UserId == request.UserId, cancellationToken);
+        var notion = notionConnections.SingleOrDefault();
+
         var exportedAtUtc = DateTime.UtcNow;
+        var retentionCutoffAtUtc = exportedAtUtc.AddDays(-ConversationTurn.RetentionDays);
+        var conversations = await repos.ConversationTurns.FindAsync(
+            turn => turn.UserId == request.UserId && turn.CreatedAtUtc >= retentionCutoffAtUtc, cancellationToken);
         var export = new UserDataExport(
             exportedAtUtc,
             new ExportedAccount(user.Name, user.Email, user.CreatedAtUtc, user.HasProAccess ? "pro" : "free"),
@@ -89,8 +102,9 @@ public class ExportUserDataQueryHandler(
                 user.ThemePreference,
                 user.ColorScheme,
                 user.AiSummaryEnabled,
-                user.ProactiveAstraEnabled,
-                user.Uses24HourClockPreference),
+                user.EffectiveProactivePushEnabled,
+                user.Uses24HourClockPreference,
+                user.ProactiveAstraEnabled),
             new ExportedSubscription(
                 user.Plan.ToString(),
                 user.IsLifetimePro,
@@ -144,7 +158,17 @@ public class ExportUserDataQueryHandler(
             friendFeedEvents
                 .OrderBy(e => e.CreatedAtUtc)
                 .Select(e => new ExportedFriendFeedEvent(e.Type.ToString(), e.Value, e.AchievementId, e.CreatedAtUtc))
-                .ToList());
+                .ToList(),
+            proactiveItems.OrderBy(i => i.CreatedAtUtc).Select(i => new ExportedProactiveItem(
+                i.Id, i.Trigger.ToString(), i.LocalDate, i.Text, i.ActionLabel, i.ActionPrompt,
+                i.CreatedAtUtc, i.ShownAtUtc, i.PushedAtUtc, i.OpenedAtUtc, i.ActedAtUtc,
+                i.EndedAtUtc, i.EndReason?.ToString())).ToList(),
+            notion is null ? null : new ExportedNotionConnection(notion.WorkspaceName, notion.Status.ToString(), notion.CreatedAtUtc, notion.LastPollAtUtc),
+            notionTasks.Select(NotionTaskResponse.FromEntity).ToArray(),
+            conversations.OrderBy(turn => turn.CreatedAtUtc).ThenBy(turn => turn.Role == "user" ? 0 : 1)
+                .Select(turn => new ExportedConversationTurn(turn.TurnId, turn.Role, turn.CreatedAtUtc,
+                    turn.Model, turn.Content, System.Text.Json.JsonSerializer.Deserialize<
+                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [])).ToArray());
 
         return Result.Success(export);
     }

@@ -1,0 +1,9 @@
+{
+  "Name": {
+    "id": "title",
+    "name": "Name",
+    "description": null,
+    "type": "title",
+    "title": {}
+  }
+}

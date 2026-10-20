@@ -3,6 +3,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Npgsql;
@@ -107,7 +108,12 @@ public class AuthSessionServiceConcurrentRefreshTests
         context.ChangeTracker.Entries<UserSession>()
             .Should().NotContain(entry => entry.State == EntityState.Modified);
 
-        var auditService = new AgentAuditService(context);
+        using var services = new ServiceCollection()
+            .AddScoped(_ => CreateContext(dbName))
+            .AddScoped<IAgentAuditService, AgentAuditService>()
+            .BuildServiceProvider();
+        using var scope = services.CreateScope();
+        var auditService = scope.ServiceProvider.GetRequiredService<IAgentAuditService>();
         var writeAuditLog = async () =>
             await auditService.RecordAsync(BuildRefreshAuditEntry(userId), CancellationToken.None);
 

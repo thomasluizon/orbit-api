@@ -14,14 +14,14 @@ public class LinkHabitsToGoalTool(
     public string Name => "link_habits_to_goal";
 
     public string Description =>
-        "Link one or more habits to a goal. Replaces all existing habit links for the goal. Use when user wants to associate habits with a goal.";
+        "Replace a goal's habit links. Pass the full desired habit list.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to link habits to" },
+            goal_id = new { type = JsonSchemaTypes.String },
             habit_ids = new
             {
                 type = JsonSchemaTypes.Array,

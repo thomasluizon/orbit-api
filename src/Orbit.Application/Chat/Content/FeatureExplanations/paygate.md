@@ -6,14 +6,14 @@ related_surfaces: [subscriptions]
 version: 1
 derived_from:
   - src/Orbit.Application/Common/PayGateService.cs CanCreateHabits
-  - src/Orbit.Application/Common/PayGateService.cs CanSendAiMessage
+  - src/Orbit.Application/Common/PayGateService.cs TryConsumeAiMessage
   - src/Orbit.Application/Common/PayGateService.cs CanUseRetrospective
   - src/Orbit.Application/Common/AppConstants.cs DefaultFreeMaxHabits
 ---
 
 # Free vs Pro
 
-Orbit has a free plan and a Pro plan. The free plan is fully usable for daily habit tracking; Pro raises the AI message limit and unlocks advanced features.
+Orbit has a free plan and a Pro plan. The free plan is fully usable for daily habit tracking; Pro raises the AI message limit and unlocks advanced features. Sub-habits are available on every plan.
 
 ## Limits on the free plan
 
@@ -24,10 +24,6 @@ Orbit has a free plan and a Pro plan. The free plan is fully usable for daily ha
 
 Upgrading to Pro unlocks:
 
-- AI goal reviews
-- Sub-habits
 - The daily AI summary
 - Calendar integration
-- Streak freezes
-- Gamification: XP, levels, and achievements
 - Retrospectives

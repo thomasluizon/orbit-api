@@ -148,4 +148,3 @@ public partial class AgentCatalogService : IAgentCatalogService
         return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(name.Replace('_', ' '));
     }
 }
-

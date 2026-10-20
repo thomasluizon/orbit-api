@@ -7,19 +7,19 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DuplicateHabitTool(
     IMediator mediator,
-    IGenericRepository<Habit>? habitRepository = null) : IAiTool, IArgumentCheckTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
 {
     public string Name => "duplicate_habit";
 
     public string Description =>
-        "Duplicate an existing habit, creating an exact copy with all its properties.";
+        "Duplicate a habit with all its properties.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to duplicate" }
+            habit_id = new { type = JsonSchemaTypes.String }
         },
         required = new[] { "habit_id" }
     };
@@ -45,9 +45,7 @@ public class DuplicateHabitTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        var duplicate = habitRepository is null
-            ? null
-            : await HabitToolHelpers.FindHabitAsync(habitRepository, result.Value, userId, ct);
+        var duplicate = await HabitToolHelpers.FindHabitAsync(habitRepository, result.Value, userId, ct);
 
         return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: duplicate?.Title);
     }

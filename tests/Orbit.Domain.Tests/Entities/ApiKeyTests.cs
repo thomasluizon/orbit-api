@@ -8,6 +8,14 @@ public class ApiKeyTests
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
     [Fact]
+    public void Create_ValidatesAndPreservesOAuthFamily()
+    {
+        var family = Guid.NewGuid();
+        ApiKey.Create(Guid.NewGuid(), "OAuth", oauthFamilyId: Guid.Empty).IsFailure.Should().BeTrue();
+        ApiKey.Create(Guid.NewGuid(), "OAuth", oauthFamilyId: family).Value.Entity.OAuthFamilyId.Should().Be(family);
+    }
+
+    [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
         var result = ApiKey.Create(ValidUserId, "My API Key");
@@ -58,6 +66,17 @@ public class ApiKeyTests
         var result = ApiKey.Create(ValidUserId, "Test Key");
 
         result.Value.Entity.KeyHash.Should().NotBe(result.Value.RawKey);
+    }
+
+    [Fact]
+    public void Create_KeyHashRemainsReadableByRollbackVerifier()
+    {
+        var (key, rawKey) = ApiKey.Create(ValidUserId, "Rollback compatible").Value;
+
+        BCrypt.Net.BCrypt.Verify(rawKey, key.KeyHash).Should().BeTrue();
+        key.KeyHash.Should().StartWith("$2a$11$");
+        key.Verify(rawKey).Should().BeTrue();
+        key.Verify($"{rawKey[..^1]}!").Should().BeFalse();
     }
 
     [Fact]

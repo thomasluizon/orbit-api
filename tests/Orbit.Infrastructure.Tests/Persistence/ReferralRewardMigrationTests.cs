@@ -12,6 +12,21 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class ReferralRewardMigrationTests
 {
+    internal static void AssertRewardColumns(IReadOnlyList<MigrationOperation> operations)
+    {
+        var columns = operations.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Referrals" || column.Name == "BonusProExpiresAtUtc").ToArray();
+        columns.Should().HaveCount(5);
+        columns.Should().ContainSingle(column => column.Table == "Users" && column.Name == "BonusProExpiresAtUtc"
+            && column.ClrType == typeof(DateTime) && column.IsNullable);
+        foreach (var name in new[] { "ReferrerReward", "ReferredReward" })
+            columns.Should().ContainSingle(column => column.Table == "Referrals" && column.Name == name
+                && column.ClrType == typeof(int) && !column.IsNullable && Equals(column.DefaultValue, 0));
+        foreach (var name in new[] { "ReferrerRewardDeliveredAtUtc", "ReferredRewardDeliveredAtUtc" })
+            columns.Should().ContainSingle(column => column.Table == "Referrals" && column.Name == name
+                && column.ClrType == typeof(DateTime) && column.IsNullable);
+    }
+
     [Fact]
     public void Migration_IsAdditiveWithSafeDefaultsAndIdempotentHistoryGuard()
     {

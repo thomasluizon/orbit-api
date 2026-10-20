@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -73,6 +74,10 @@ public sealed class SubHabitPlanAccessTests : IDisposable
     [InlineData("duplicate", true)]
     [InlineData("astra", false)]
     [InlineData("astra", true)]
+    [InlineData("astra-dedicated", false)]
+    [InlineData("astra-dedicated", true)]
+    [InlineData("astra-existing-parent-bulk", false)]
+    [InlineData("astra-existing-parent-bulk", true)]
     public async Task CreateSubHabits_AllPathsPersistChildren_ForBothPlans(string path, bool pro)
     {
         if (pro)
@@ -128,6 +133,30 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                     .Be(_added.Single(habit => habit.Title == "Child").Id);
                 _added.Should().OnlyContain(habit => habit.Id != original.Id && habit.Id != originalChild.Id);
                 originalChild.SlipAlertEnabled.Should().BeTrue();
+                break;
+            case "astra-dedicated":
+            case "astra-existing-parent-bulk":
+                var parent = AddExisting("Parent");
+                var mediator = Substitute.For<IMediator>();
+                mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+                    .Returns(call => CreateDedicatedHandler().Handle(call.Arg<CreateSubHabitCommand>(), call.Arg<CancellationToken>()));
+                IAiTool tool = path == "astra-dedicated"
+                    ? new CreateSubHabitTool(mediator)
+                    : new BulkCreateHabitsTool(mediator);
+                var arguments = path == "astra-dedicated"
+                    ? JsonSerializer.SerializeToElement(new { parent_habit_id = parent.Id, title = "Child" })
+                    : JsonSerializer.SerializeToElement(new { parent_habit_id = parent.Id, habits = new[] { new { title = "Child" } } });
+                var modelArguments = arguments.EnumerateObject().ToDictionary(field => field.Name, field => field.Value.Clone());
+                var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+                var required = schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()).ToHashSet();
+                foreach (var field in schema.GetProperty("properties").EnumerateObject())
+                    if (!required.Contains(field.Name) && !modelArguments.ContainsKey(field.Name))
+                        modelArguments[field.Name] = JsonSerializer.SerializeToElement<object?>(null);
+                var normalized = OptionalToolArguments.OmitOptionalNulls(JsonSerializer.SerializeToElement(modelArguments), tool.GetParameterSchema());
+                var created = await tool.ExecuteAsync(normalized, _user.Id, CancellationToken.None);
+                created.Success.Should().BeTrue("{0}", created.Error);
+                _added.Should().ContainSingle();
+                parentId = parent.Id;
                 break;
             case "astra":
                 using (var args = JsonDocument.Parse("""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child","is_bad_habit":true},{"title":"Second child"}]}"""))

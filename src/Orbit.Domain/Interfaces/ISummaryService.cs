@@ -22,7 +22,8 @@ public record DailySummaryContext(
     int StreakFreezesAccumulated,
     IReadOnlyDictionary<Guid, DateOnly> LastBadHabitSlipDates,
     int WeekStartDay = 1,
-    IReadOnlySet<Guid>? ResolvedDueDateHabitIds = null);
+    IReadOnlySet<Guid>? ResolvedDueDateHabitIds = null,
+    Guid? UserId = null);
 
 public interface ISummaryService
 {

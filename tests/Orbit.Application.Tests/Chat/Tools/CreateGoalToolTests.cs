@@ -1,8 +1,10 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -11,6 +13,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class CreateGoalToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly CreateGoalTool _tool;
 
@@ -18,7 +21,20 @@ public class CreateGoalToolTests
 
     public CreateGoalToolTests()
     {
-        _tool = new CreateGoalTool(_goalRepo, _unitOfWork);
+        _tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateGoalTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_CreatesSameGoalAsAbsent(string field)
+    {
+        var saved = new List<Goal>();
+        await _goalRepo.AddAsync(Arg.Do<Goal>(saved.Add), Arg.Any<CancellationToken>());
+        (await Execute("""{"title":"Read"}""")).Success.Should().BeTrue();
+        (await Execute($$"""{"title":"Read","{{field}}":null}""")).Success.Should().BeTrue();
+        saved.Should().HaveCount(2);
+        saved[1].Should().BeEquivalentTo(saved[0], options => options.ComparingByMembers<Goal>()
+            .Excluding(goal => goal.Id).Excluding(goal => goal.CreatedAtUtc).Excluding(goal => goal.UpdatedAtUtc));
     }
 
     [Fact]
@@ -85,6 +101,59 @@ public class CreateGoalToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Save money");
+    }
+
+    [Fact]
+    public async Task HabitIds_AboveCap_ReturnsExistingErrorWithoutWritingGoalOrLinks()
+    {
+        var habits = SetUpHabits(AppConstants.MaxHabitsPerGoal + 1);
+
+        var result = await Execute(JsonSerializer.Serialize(new
+        {
+            title = "Read books",
+            habit_ids = habits.Select(habit => habit.Id)
+        }));
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal).Message);
+        result.ErrorCode.Should().Be(ErrorMessages.MaxHabitsPerGoal.Code);
+        result.EntityId.Should().BeNull();
+        await _goalRepo.DidNotReceive().AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        habits.Should().OnlyContain(habit => habit.Goals.Count == 0);
+    }
+
+    [Fact]
+    public async Task HabitIds_AtCap_CreatesGoalWithEveryHabitLinked()
+    {
+        var habits = SetUpHabits(AppConstants.MaxHabitsPerGoal);
+
+        var result = await Execute(JsonSerializer.Serialize(new
+        {
+            title = "Read books",
+            habit_ids = habits.Select(habit => habit.Id)
+        }));
+
+        result.Success.Should().BeTrue();
+        result.Error.Should().BeNull();
+        await _goalRepo.Received(1).AddAsync(
+            Arg.Is<Goal>(goal => goal.Id.ToString() == result.EntityId && goal.Habits.Count == habits.Count
+                && goal.Habits.All(habit => habits.Contains(habit))),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        foreach (var habit in habits)
+            habit.Goals.Should().ContainSingle().Which.Id.ToString().Should().Be(result.EntityId);
+    }
+
+    private List<Habit> SetUpHabits(int count)
+    {
+        var habits = Enumerable.Range(0, count)
+            .Select(index => Habit.Create(new HabitCreateParams(
+                UserId, $"Read habit {index}", null, null, new DateOnly(2026, 4, 3))).Value)
+            .ToList();
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(habits);
+        return habits;
     }
 
     private async Task<ToolResult> Execute(string json)

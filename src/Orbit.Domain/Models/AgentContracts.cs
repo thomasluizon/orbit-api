@@ -118,7 +118,8 @@ public record AgentPolicyEvaluationContext(
     string? ConfirmationToken = null,
     bool StepUpSatisfied = false,
     bool IsReadOnlyCredential = false,
-    AgentConfirmationRequirement? ConfirmationRequirementOverride = null);
+    AgentConfirmationRequirement? ConfirmationRequirementOverride = null,
+    bool PreviewOnly = false);
 
 public record AgentPolicyDecision(
     AgentPolicyDecisionStatus Status,
@@ -169,7 +170,11 @@ public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
     int ChangeTargetCount,
     IReadOnlyList<PendingOperationItem>? Items = null,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null)
+{
+    [JsonIgnore]
+    public JsonElement? ExecutionArguments { get; init; }
+}
 
 public record PendingAgentOperationConfirmation(
     Guid PendingOperationId,
@@ -183,7 +188,11 @@ public record PendingAgentOperationExecution(
     JsonElement Arguments,
     AgentExecutionSurface Surface,
     AgentConfirmationRequirement ConfirmationRequirement,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null,
+    int ArgumentSchemaVersion = Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion)
+{
+    public bool RequiresReproposal => ArgumentSchemaVersion != Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion;
+}
 
 public record AgentStepUpChallenge(
     Guid ChallengeId,
@@ -201,7 +210,8 @@ public record AgentExecuteOperationRequest(
     string? ConfirmationToken = null,
     string? CorrelationId = null,
     bool IncludeChangePreview = false,
-    Func<Task>? OnExecutionStarted = null);
+    Func<Task>? OnExecutionStarted = null,
+    bool PreviewOnly = false);
 
 public record AgentOperationResult(
     string OperationId,
@@ -229,6 +239,12 @@ public record AgentPolicyDenial(
     string Reason,
     Guid? PendingOperationId = null);
 
+public static class AstraBlockKinds
+{
+    public const string Choice = "choice";
+    public const string PickList = "pickList";
+}
+
 public record AgentClientContext(
     string? Platform = null,
     string? Locale = null,
@@ -249,7 +265,9 @@ public record AgentClientContext(
     bool? SupportsCalendarCard = null,
     bool? SupportsRecordListCard = null,
     bool? SupportsAccountRowsCard = null,
-    bool? SupportsHabitListDoneStatus = null);
+    bool? SupportsHabitListDoneStatus = null,
+    bool? SupportsParts = null,
+    IReadOnlyList<string>? PartKinds = null);
 
 public record AgentContextSnapshot(
     string Plan,
@@ -317,10 +335,14 @@ public static class AgentCapabilityIds
     public const string ProfileAiSettingsWrite = "profile.ai-settings.write";
     public const string ProfileAiSummaryWrite = "profile.ai-summary.write";
     public const string ProfileProactiveAstraWrite = "profile.proactive-astra.write";
+    public const string ProactiveItemsRead = "proactive.items.read";
+    public const string ProactiveItemsWrite = "proactive.items.write";
     public const string NotificationsRead = "notifications.read";
     public const string NotificationsWrite = "notifications.write";
     public const string NotificationsDelete = "notifications.delete";
     public const string CalendarRead = "calendar.read";
+    public const string NotionRead = "notion.read";
+    public const string NotionManage = "notion.manage";
     public const string CalendarSyncManage = "calendar.sync.manage";
     public const string GamificationRead = "gamification.read";
     public const string GamificationRepair = "gamification.repair";
@@ -370,6 +392,8 @@ public static class AgentScopes
     public const string WriteNotifications = "write_notifications";
     public const string DeleteNotifications = "delete_notifications";
     public const string ReadCalendar = "read_calendar";
+    public const string ReadNotion = "read_notion";
+    public const string ManageNotion = "manage_notion";
     public const string ManageCalendarSync = "manage_calendar_sync";
     public const string ReadGamification = "read_gamification";
     public const string WriteGamification = "write_gamification";
@@ -413,6 +437,8 @@ public static class AgentScopes
         DeleteNotifications,
         ReadCalendar,
         ManageCalendarSync,
+        ReadNotion,
+        ManageNotion,
         ReadGamification,
         WriteGamification,
         ReadChecklistTemplates,
@@ -463,3 +489,5 @@ public static class AgentScopes
         ReadSubscriptions
     ];
 }
+
+public sealed record PendingHabitCreation(string Title, Guid? ParentHabitId = null);

@@ -195,7 +195,7 @@ public class ScheduledJobRegistryTests
         new GoalDeadlineNotificationService(ScopeFactory(), NullLogger<GoalDeadlineNotificationService>.Instance, EmptyConfiguration),
         new PeriodCloseNotificationService(ScopeFactory(), NullLogger<PeriodCloseNotificationService>.Instance, EmptyConfiguration),
         new SlipAlertSchedulerService(ScopeFactory(), NullLogger<SlipAlertSchedulerService>.Instance, EmptyConfiguration),
-        new ProactiveCheckinSchedulerService(ScopeFactory(), NullLogger<ProactiveCheckinSchedulerService>.Instance, EmptyConfiguration),
+        new ProactiveEngineSchedulerService(ScopeFactory(), NullLogger<ProactiveEngineSchedulerService>.Instance),
         new AccountDeletionService(AccountDeletionScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
         new OwedSubscriptionCancellationService(ScopeFactory(), NullLogger<OwedSubscriptionCancellationService>.Instance, TimeProvider.System),
         new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),

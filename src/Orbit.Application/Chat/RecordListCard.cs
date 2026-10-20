@@ -24,6 +24,8 @@ public record RecordListCard(
 public static class RecordListCardBuilder
 {
     public const int PageSize = 10;
+    public const string PartsPromptInstruction = "After a record list tool succeeds, place its directive on its own line where the list belongs: [[orbit:records:notifications]], [[orbit:records:tags]], [[orbit:records:templates]], or [[orbit:records:keys]]. Never repeat the records or figures in text.";
+
     public const string PromptInstruction = "For a successful record list tool, write one short line without listing records. Then emit the matching directive before optional follow-ups: [[orbit:records:notifications]], [[orbit:records:tags]], [[orbit:records:templates]], or [[orbit:records:keys]].";
 
     public static RecordListCard BuildNotifications(GetNotificationsResponse response, Guid userId = default) =>

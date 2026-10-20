@@ -55,18 +55,20 @@ public class AccountDeletionServiceDbTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteAllUserDataAsync_RemovesSentProactiveCheckins()
+    public async Task DeleteAllUserDataAsync_RemovesProactiveItems()
     {
         var userId = Guid.NewGuid();
         SeedUser(userId, "proactive@example.com");
-        _dbContext.SentProactiveCheckins.Add(
-            SentProactiveCheckin.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
+        _dbContext.ProactiveItems.Add(
+            ProactiveItem.Create(userId, Orbit.Domain.Enums.ProactiveTrigger.MorningPlan, DateOnly.FromDateTime(DateTime.UtcNow), "{}", "Text.", "Action", "Prompt", DateTime.UtcNow));
+        _dbContext.ProactiveCalendarDays.Add(ProactiveCalendarDay.Claim(userId, new(2030, 10, 14)));
         await _dbContext.SaveChangesAsync();
 
         await new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()).DeleteAllUserDataAsync(userId);
 
-        (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId))
+        (await _dbContext.ProactiveItems.AnyAsync(p => p.UserId == userId))
             .Should().BeFalse();
+        (await _dbContext.ProactiveCalendarDays.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
     }
 
     [Fact]
@@ -76,8 +78,8 @@ public class AccountDeletionServiceDbTests : IDisposable
         SeedDeactivatedUser(userId, "owned@example.com", DateTime.UtcNow.AddDays(-1));
         _dbContext.Tags.Add(Tag.Create(userId, "Fitness", "#ff0000").Value);
         _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand", 0));
-        _dbContext.SentProactiveCheckins.Add(
-            SentProactiveCheckin.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
+        _dbContext.ProactiveItems.Add(
+            ProactiveItem.Create(userId, Orbit.Domain.Enums.ProactiveTrigger.MorningPlan, DateOnly.FromDateTime(DateTime.UtcNow), "{}", "Text.", "Action", "Prompt", DateTime.UtcNow));
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
 
@@ -86,7 +88,7 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Users.AnyAsync(u => u.Id == userId)).Should().BeFalse();
         (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();
         (await _dbContext.ProcessedRequests.AnyAsync(r => r.UserId == userId)).Should().BeFalse();
-        (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
+        (await _dbContext.ProactiveItems.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
     }
 
     [Fact]

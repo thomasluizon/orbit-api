@@ -32,8 +32,10 @@ public partial class AgentCatalogService
             .. GoalCapabilities(),
             .. TagCapabilities(),
             .. ProfileCapabilities(),
+            .. ProactiveCapabilities(),
             .. NotificationCapabilities(),
             .. CalendarCapabilities(),
+            .. NotionCapabilities(),
             .. GamificationCapabilities(),
             .. ChecklistTemplateCapabilities(),
             .. ReferralCapabilities(),
@@ -191,12 +193,14 @@ public partial class AgentCatalogService
                 IsMutation: true,
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                ChatToolNames: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
+                ChatToolNames: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "unlog_habit", "skip_habit", "undo_skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
                 McpToolNames:
                 [
                     "create_habit",
                     "update_habit",
+                    "bulk_update_habit_emojis",
                     "log_habit",
+                    "unlog_habit",
                     "skip_habit", "undo_skip_habit",
                     "update_checklist",
                     "create_sub_habit",
@@ -460,7 +464,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 ChatToolNames: ["update_profile_preferences"],
-                McpToolNames: ["set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
+                McpToolNames: ["set_name", "set_timezone", "set_language", "set_week_start_day", "set_clock_format"],
                 ControllerActionKeys:
                 [
                     "ProfileController.SetName",
@@ -508,7 +512,7 @@ public partial class AgentCatalogService
             new AgentCapability(
                 AgentCapabilityIds.ProfileProactiveAstraWrite,
                 "Write Proactive Astra Settings",
-                "Updates whether Astra sends proactive check-in pushes when the user falls behind.",
+                "Stores an explicit preference for proactive Astra pushes; in-app items remain available.",
                 ProfileDomain,
                 AgentScopes.WriteAiSettings,
                 AgentRiskClass.Low,
@@ -516,7 +520,41 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 PlanRequirement: "Pro",
+                ChatToolNames: ["set_proactive_astra"],
+                McpToolNames: ["set_proactive_astra"],
                 ControllerActionKeys: ["ProfileController.SetProactiveAstra"])
+        ];
+    }
+
+    private static AgentCapability[] ProactiveCapabilities()
+    {
+        return
+        [
+            new AgentCapability(
+                AgentCapabilityIds.ProactiveItemsRead,
+                "Read Proactive Astra Item",
+                "Returns the current item and records its first display, or reads an owned item's lifecycle status without recording outcomes.",
+                "proactive",
+                AgentScopes.ReadNotifications,
+                AgentRiskClass.Low,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                PlanRequirement: "Pro",
+                ControllerActionKeys: ["ProactiveAstraController.Current", "ProactiveAstraController.GetById"]),
+
+            new AgentCapability(
+                AgentCapabilityIds.ProactiveItemsWrite,
+                "Record Proactive Astra Outcome",
+                "Records the first opening or action for a proactive item owned by the person.",
+                "proactive",
+                AgentScopes.WriteNotifications,
+                AgentRiskClass.Low,
+                IsMutation: true,
+                IsPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                PlanRequirement: "Pro",
+                ControllerActionKeys: ["ProactiveAstraController.Opened", "ProactiveAstraController.Acted"])
         ];
     }
 
@@ -591,7 +629,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 FeatureFlagKeys: ["calendar_integration"],
                 ChatToolNames: ["get_calendar_overview"],
-                McpToolNames: ["get_calendar_events"],
+                McpToolNames: ["get_calendar_events", "get_calendar_overview"],
                 ControllerActionKeys:
                 [
                     "CalendarController.GetEvents",
@@ -611,7 +649,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 FeatureFlagKeys: ["calendar_integration"],
                 ChatToolNames: ["manage_calendar_sync"],
-                McpToolNames: ["manage_calendar_sync"],
+                McpToolNames: ["manage_calendar_sync", "set_selected_calendars"],
                 ControllerActionKeys:
                 [
                     "CalendarController.GetAutoSyncState",
@@ -623,6 +661,19 @@ public partial class AgentCatalogService
                 ])
         ];
     }
+
+    private static AgentCapability[] NotionCapabilities() =>
+    [
+        new AgentCapability(AgentCapabilityIds.NotionRead, "Read Notion Tasks", "Reads stored shared Notion tasks.",
+            "notion", AgentScopes.ReadNotion, AgentRiskClass.Low, false, false, AgentConfirmationRequirement.None,
+            PlanRequirement: "Pro", FeatureFlagKeys: ["notion_integration"], ChatToolNames: ["get_notion_tasks"],
+            McpToolNames: ["get_notion_tasks"],
+            ControllerActionKeys: ["ConnectionsController.GetNotion"]),
+        new AgentCapability(AgentCapabilityIds.NotionManage, "Manage Notion Connection", "Connects or disconnects Notion through the person's OAuth flow.",
+            "notion", AgentScopes.ManageNotion, AgentRiskClass.Destructive, true, false, AgentConfirmationRequirement.None,
+            PlanRequirement: "Pro", FeatureFlagKeys: ["notion_integration"],
+            ControllerActionKeys: ["ConnectionsController.AuthorizeNotion", "ConnectionsController.CompleteNotion", "ConnectionsController.DisconnectNotion"])
+    ];
 
     private static AgentCapability[] GamificationCapabilities()
     {
@@ -702,7 +753,7 @@ public partial class AgentCatalogService
             new AgentCapability(
                 AgentCapabilityIds.ChecklistTemplatesWrite,
                 "Write Checklist Templates",
-                "Creates and deletes checklist templates.",
+                "Creates, updates, and deletes checklist templates.",
                 "checklists",
                 AgentScopes.WriteChecklistTemplates,
                 AgentRiskClass.Low,
@@ -710,8 +761,8 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 FeatureFlagKeys: ["checklist_templates"],
-                ChatToolNames: ["create_checklist_template", "delete_checklist_template"],
-                McpToolNames: ["create_checklist_template", "delete_checklist_template"],
+                ChatToolNames: ["create_checklist_template", "update_checklist_template", "delete_checklist_template"],
+                McpToolNames: ["create_checklist_template", "update_checklist_template", "delete_checklist_template"],
                 ControllerActionKeys: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
         ];
     }
@@ -952,6 +1003,8 @@ public partial class AgentCatalogService
                     "OAuthController.GoogleStart",
                     "OAuthController.GoogleCallback",
                     "OAuthController.Token",
+                    "OAuthController.Consent",
+                    "OAuthController.GrantConsent",
                     "WaitlistController.Join",
                     "WaitlistController.Confirm"
                 ]),
@@ -988,4 +1041,3 @@ public partial class AgentCatalogService
         ];
     }
 }
-

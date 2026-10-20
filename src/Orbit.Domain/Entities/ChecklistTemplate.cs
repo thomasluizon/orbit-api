@@ -25,8 +25,9 @@ public class ChecklistTemplate : Entity, ITimestamped, ISoftDeletable
         if (name.Trim().Length > 100)
             return Result.Failure<ChecklistTemplate>(DomainErrors.TemplateNameTooLong);
 
-        if (items.Count == 0)
-            return Result.Failure<ChecklistTemplate>(DomainErrors.TemplateItemsRequired);
+        var itemsCheck = ValidateItems(items);
+        if (itemsCheck.IsFailure)
+            return Result.Failure<ChecklistTemplate>(itemsCheck.Error, itemsCheck.ErrorCode!);
 
         return Result.Success(new ChecklistTemplate
         {
@@ -46,12 +47,24 @@ public class ChecklistTemplate : Entity, ITimestamped, ISoftDeletable
         if (name.Trim().Length > 100)
             return Result.Failure(DomainErrors.TemplateNameTooLong);
 
-        if (items.Count == 0)
-            return Result.Failure(DomainErrors.TemplateItemsRequired);
+        var itemsCheck = ValidateItems(items);
+        if (itemsCheck.IsFailure)
+            return itemsCheck;
 
         Name = name.Trim();
         Items = items.Select(i => i.Trim()).Where(i => !string.IsNullOrEmpty(i)).ToList();
         UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
+    }
+
+    private static Result ValidateItems(IReadOnlyList<string> items)
+    {
+        if (items.Count == 0 || items.All(string.IsNullOrWhiteSpace))
+            return Result.Failure(DomainErrors.TemplateItemsRequired);
+        if (items.Count > DomainConstants.MaxChecklistItems)
+            return Result.Failure("Too many checklist items.", "TEMPLATE_ITEM_LIMIT");
+        if (items.Any(item => item.Length > DomainConstants.MaxChecklistItemTextLength))
+            return Result.Failure("Checklist item text is too long.", "TEMPLATE_ITEM_LENGTH");
         return Result.Success();
     }
 

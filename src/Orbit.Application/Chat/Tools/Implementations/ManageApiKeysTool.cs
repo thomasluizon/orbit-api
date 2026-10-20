@@ -10,22 +10,30 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool, IArgumentCheckTool
     public string Name => "manage_api_keys";
     public string Description => "Create or revoke scoped API keys.";
 
+    public object GetResultSchema() => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
+        {
+            key = new { type = JsonSchemaTypes.String, sensitive = true }
+        }
+    };
+
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
             action = new { type = JsonSchemaTypes.String, @enum = new[] { "create", "revoke" } },
-            key_id = new { type = JsonSchemaTypes.String, nullable = true },
-            name = new { type = JsonSchemaTypes.String, nullable = true },
+            key_id = new { type = new[] { JsonSchemaTypes.String, "null" } },
+            name = new { type = new[] { JsonSchemaTypes.String, "null" } },
             scopes = new
             {
-                type = JsonSchemaTypes.Array,
-                nullable = true,
-                items = new { type = JsonSchemaTypes.String }
+                type = new[] { JsonSchemaTypes.Array, "null" },
+                items = new { type = JsonSchemaTypes.String, @enum = Orbit.Domain.Models.AgentScopes.All.Order(StringComparer.Ordinal).ToArray() }
             },
-            is_read_only = new { type = JsonSchemaTypes.Boolean, nullable = true },
-            expires_at_utc = new { type = JsonSchemaTypes.String, nullable = true, description = "ISO-8601 UTC timestamp." }
+            is_read_only = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            expires_at_utc = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "ISO-8601 UTC timestamp." }
         },
         required = new[] { "action" }
     };

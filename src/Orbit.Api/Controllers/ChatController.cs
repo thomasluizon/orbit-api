@@ -29,6 +29,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private const long MaxChatRequestBytes = 10 * 1024 * 1024;
+    private const string EvalTraceHeaderName = "X-Orbit-Eval-Trace";
 
     [HttpGet("records/{kind}")]
     [ProducesResponseType<RecordListCard>(StatusCodes.Status200OK)]
@@ -47,12 +48,16 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
     [HttpPost]
     [ConcurrentChatLimit]
+    [DistributedRateLimit("ai-resolve", blockAnswersOnly: true)]
     [RequestSizeLimit(MaxChatRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
     [ProducesResponseType<ChatResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ProcessChat(
         [FromForm] string message,
@@ -60,7 +65,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         IFormFile? image,
         CancellationToken cancellationToken,
         [FromForm] string? clientContext = null,
-        [FromForm] string? confirmationToken = null)
+        [FromForm] string? confirmationToken = null,
+        [FromForm] string? blockAnswer = null,
+        [FromHeader(Name = EvalTraceHeaderName)] string? evalTrace = null)
     {
         if (!CanAccessChat())
             return Forbid();
@@ -68,6 +75,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         var parsed = await ParseChatInputsAsync(message, history, image, clientContext, cancellationToken);
         if (parsed.Error is not null)
             return parsed.Error;
+
+        var (answer, answerError) = ParseBlockAnswer(blockAnswer);
+        if (answerError is not null)
+            return answerError;
 
         var command = new ProcessUserChatCommand(
             HttpContext.GetUserId(),
@@ -80,7 +91,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
-            HttpContext.TraceIdentifier);
+            HttpContext.TraceIdentifier, BlockAnswer: answer,
+            EvalTraceRequested: evalTrace == "1");
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -89,12 +101,16 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
     [HttpPost("stream")]
     [ConcurrentChatLimit]
+    [DistributedRateLimit("ai-resolve", blockAnswersOnly: true)]
     [RequestSizeLimit(MaxChatRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ProcessChatStream(
         [FromForm] string message,
@@ -102,7 +118,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         IFormFile? image,
         CancellationToken cancellationToken,
         [FromForm] string? clientContext = null,
-        [FromForm] string? confirmationToken = null)
+        [FromForm] string? confirmationToken = null,
+        [FromForm] string? blockAnswer = null,
+        [FromHeader(Name = EvalTraceHeaderName)] string? evalTrace = null)
     {
         if (!CanAccessChat())
             return Forbid();
@@ -111,7 +129,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         if (parsed.Error is not null)
             return parsed.Error;
 
-        await StartEventStreamAsync(cancellationToken);
+        var (answer, answerError) = ParseBlockAnswer(blockAnswer);
+        if (answerError is not null)
+            return answerError;
 
         var command = new ProcessUserChatCommand(
             HttpContext.GetUserId(),
@@ -125,7 +145,20 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
             HttpContext.TraceIdentifier,
-            streamEvent => WriteEventAsync(streamEvent, cancellationToken));
+            answer is null ? streamEvent => WriteEventAsync(streamEvent, cancellationToken) : null,
+            answer,
+            EvalTraceRequested: evalTrace == "1");
+
+        if (answer is not null)
+        {
+            var result = await mediator.Send(command, cancellationToken);
+            if (result.IsFailure)
+                return result.ToErrorResult();
+            await StartEventStreamAsync(cancellationToken);
+            await WriteEventAsync(ChatStreamEvent.Final(result.Value), cancellationToken);
+            return new EmptyResult();
+        }
+        await StartEventStreamAsync(cancellationToken);
 
         await StreamCommandResultAsync(command, cancellationToken);
         return new EmptyResult();
@@ -153,6 +186,22 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
     }
 
+    private (AstraBlockAnswer? Answer, IActionResult? Error) ParseBlockAnswer(string? json)
+    {
+        if (json is null)
+            return (null, null);
+        try
+        {
+            var answer = JsonSerializer.Deserialize<AstraBlockAnswer>(json, ChatHistoryJsonOptions);
+            if (answer is not null)
+                return (answer, null);
+        }
+        catch (JsonException)
+        {
+            return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
+        }
+        return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
+    }
     private bool CanAccessChat() =>
         HttpContext.User.GetAgentAuthMethod() != AgentAuthMethod.ApiKey ||
         HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ChatInteract, StringComparer.OrdinalIgnoreCase);

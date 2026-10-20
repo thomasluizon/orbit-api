@@ -1,10 +1,12 @@
+#pragma warning disable OPENAI001
+
 using System.Text;
+using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Orbit.Application.Common;
 using Microsoft.Extensions.Logging;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -14,7 +16,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     IAiUsageRecorder usageRecorder,
     ILogger<AiIntentService> logger) : IAiIntentService
 {
@@ -31,48 +33,41 @@ public sealed partial class AiIntentService(
     {
         var (userMessage, systemPrompt, toolDeclarations, userId, imageData, imageMimeType, history) = request;
 
-        var messages = new List<ChatMessage>
+        var messages = new List<ResponseItem>
         {
-            new SystemChatMessage(systemPrompt)
+            ResponseItem.CreateSystemMessageItem(systemPrompt)
         };
+
+        if (!string.IsNullOrWhiteSpace(request.DynamicContext))
+            messages.Add(ResponseItem.CreateSystemMessageItem(request.DynamicContext));
 
         if (history is { Count: > 0 })
         {
             var historyTranscript = BuildHistoryTranscript(history, logger);
             if (!string.IsNullOrWhiteSpace(historyTranscript))
-                messages.Add(new SystemChatMessage(historyTranscript));
+                messages.Add(ResponseItem.CreateSystemMessageItem(historyTranscript));
         }
 
         if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
         {
-            messages.Add(new UserChatMessage(
-                ChatMessageContentPart.CreateTextPart(userMessage),
-                ChatMessageContentPart.CreateImagePart(
-                    BinaryData.FromBytes(imageData), imageMimeType)));
+            messages.Add(ResponseItem.CreateUserMessageItem(
+                [ResponseContentPart.CreateInputTextPart(userMessage),
+                ResponseContentPart.CreateInputImagePart(
+                    new Uri($"data:{imageMimeType};base64,{Convert.ToBase64String(imageData)}"))]));
         }
         else
         {
-            messages.Add(new UserChatMessage(userMessage));
-        }
-
-        var options = new ChatCompletionOptions
-        {
-            Temperature = 0.1f,
-            MaxOutputTokenCount = 8192
-        };
-
-        if (userId != Guid.Empty)
-            options.EndUserId = userId.ToString("N");
-
-        foreach (var decl in toolDeclarations)
-        {
-            var tool = ConvertToSdkTool(decl);
-            if (tool is not null)
-                options.Tools.Add(tool);
+            messages.Add(ResponseItem.CreateUserMessageItem(userMessage));
         }
 
         var usageUserId = userId == Guid.Empty ? (Guid?)null : userId;
-        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken);
+        var options = aiClient.Inner.CreateOptions(maxOutputTokens: 8192, userId: usageUserId);
+
+        var tools = BuildToolCatalog(toolDeclarations);
+        foreach (var tool in tools.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            options.Tools.Add(tool.Value);
+        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken,
+            telemetry: request.Telemetry);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
@@ -81,8 +76,8 @@ public sealed partial class AiIntentService(
         Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default)
     {
-        if (conversationContext?.Messages is not List<ChatMessage> messages ||
-            conversationContext.Options is not ChatCompletionOptions options)
+        if (conversationContext?.Messages is not List<ResponseItem> messages ||
+            conversationContext.Options is not CreateResponseOptions options)
             return Result.Failure<AiResponse>(ErrorMessages.AiNoActiveConversation);
 
         foreach (var result in results)
@@ -99,7 +94,7 @@ public sealed partial class AiIntentService(
                 payload["error"] = PromptDataSanitizer.SanitizeInline(result.Error, AppConstants.MaxChatMessageLength);
             AddToolPayload(payload, result);
 
-            messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
+            messages.Add(ResponseItem.CreateFunctionCallOutputItem(result.Id, JsonSerializer.Serialize(payload)));
         }
 
         return await CallWithToolsAsync(
@@ -107,7 +102,8 @@ public sealed partial class AiIntentService(
             options,
             conversationContext.UserId,
             streamSink,
-            cancellationToken);
+            cancellationToken,
+            telemetry: conversationContext.Telemetry);
     }
 
     private void AddToolPayload(Dictionary<string, object> payload, AiToolCallResult result)
@@ -134,25 +130,37 @@ public sealed partial class AiIntentService(
     }
 
     private async Task<Result<AiResponse>> CallWithToolsAsync(
-        List<ChatMessage> messages,
-        ChatCompletionOptions options,
+        List<ResponseItem> messages,
+        CreateResponseOptions options,
         Guid? userId,
         Func<AiStreamEvent, Task>? streamSink,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AiTurnTelemetry? telemetry = null)
     {
+        using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
+        cancellationToken = completionCancellation.Token;
+        telemetry ??= new AiTurnTelemetry();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             if (logger.IsEnabled(LogLevel.Debug))
                 LogCallingAiWithTools(logger);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var round = streamSink is null
-                ? await CompleteBufferedRoundAsync(messages, options, userId, cancellationToken)
-                : await CompleteStreamingRoundAsync(messages, options, userId, streamSink, stopwatch, cancellationToken);
+            SetInputItems(options, messages);
+            var round = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
+                messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken),
+                cancellationToken, ModelReaderWriter.Write(options).ToString());
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
                 LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
+
+            if (round.IsTruncated)
+                return Result.Success(new AiResponse
+                {
+                    TextMessage = round.Text,
+                    ReportedTokenCount = round.ReportedTokenCount,
+                    IsTruncated = true
+                });
 
             if (round.ToolCalls.Count > 0)
             {
@@ -168,7 +176,8 @@ public sealed partial class AiIntentService(
                 {
                     Messages = messages,
                     Options = options,
-                    UserId = userId
+                    UserId = userId,
+                    Telemetry = telemetry
                 };
                 return Result.Success(new AiResponse
                 {
@@ -191,6 +200,10 @@ public sealed partial class AiIntentService(
                 IsTruncated = round.IsTruncated
             });
         }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<AiResponse>(AiBudgetExceededException.Error);
+        }
         catch (JsonException ex)
         {
             if (logger.IsEnabled(LogLevel.Error))
@@ -205,172 +218,161 @@ public sealed partial class AiIntentService(
         }
     }
 
-    private async Task<CompletedRound> CompleteBufferedRoundAsync(
-        List<ChatMessage> messages,
-        ChatCompletionOptions options,
-        Guid? userId,
+    private async Task<CompletedRound> CompleteObservedRoundAsync(
+        AiCompletionClient client, List<ResponseItem> messages, CreateResponseOptions options, Guid? userId,
+        AiTurnTelemetry telemetry,
+        Func<AiStreamEvent, Task>? streamSink, System.Diagnostics.Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
-        var completion = await aiClient.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
-        var result = completion.Value;
+        var observation = new ModelCallObservation();
+        try
+        {
+            return streamSink is null
+                ? await CompleteBufferedRoundAsync(client, messages, options, observation, cancellationToken)
+                : await CompleteStreamingRoundAsync(client, messages, options, observation, streamSink, stopwatch, cancellationToken);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            var declaredNames = options.Tools.OfType<FunctionTool>().Select(tool => tool.FunctionName).ToHashSet(StringComparer.Ordinal);
+            var toolNames = observation.Response?.OutputItems.OfType<FunctionCallResponseItem>()
+                .Select(call => call.FunctionName)
+                .Where(declaredNames.Contains)
+                .ToArray() ?? [];
+            telemetry.RecordRound(toolNames.Length);
+            await RecordChatUsageAsync(observation.Response?.Usage, streamSink is null ? "buffered" : "streaming",
+                userId, new AiCallTelemetry(telemetry.TraceId, stopwatch.Elapsed.TotalSeconds,
+                    observation.Response is null || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
+                    toolNames, telemetry.Plan, observation.Response?.Usage is not null), cancellationToken);
+        }
+    }
 
-        LogChatUsage(result.Usage, "buffered");
-        await RecordChatUsageAsync(result.Usage, "buffered", userId, cancellationToken);
-        var reportedTokenCount = GetReportedTokenCount(result.Usage);
+    private sealed class ModelCallObservation
+    {
+        public ResponseResult? Response { get; set; }
+    }
 
-        messages.Add(new AssistantChatMessage(result));
-
-        if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
-            return new CompletedRound(null, result.ToolCalls, reportedTokenCount, IsTruncated: false);
-
-        if (result.FinishReason == ChatFinishReason.Length && logger.IsEnabled(LogLevel.Warning))
-            LogResponseTruncated(logger);
-
-        return new CompletedRound(
-            result.Content.FirstOrDefault()?.Text,
-            [],
-            reportedTokenCount,
-            result.FinishReason == ChatFinishReason.Length);
+    private async Task<CompletedRound> CompleteBufferedRoundAsync(
+        AiCompletionClient client,
+        List<ResponseItem> messages,
+        CreateResponseOptions options,
+        ModelCallObservation observation,
+        CancellationToken cancellationToken)
+    {
+        SetInputItems(options, messages);
+        options.StreamingEnabled = false;
+        var completion = await client.ResponsesClient.CreateResponseAsync(options, cancellationToken);
+        observation.Response = completion.Value;
+        return FinishRound(completion.Value, messages, "buffered");
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
-        List<ChatMessage> messages,
-        ChatCompletionOptions options,
-        Guid? userId,
+        AiCompletionClient client,
+        List<ResponseItem> messages,
+        CreateResponseOptions options,
+        ModelCallObservation observation,
         Func<AiStreamEvent, Task> streamSink,
         System.Diagnostics.Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
-        var contentBuilder = new StringBuilder();
-        var toolCallBuilders = new SortedDictionary<int, StreamingToolCallBuilder>();
-        ChatFinishReason? finishReason = null;
+        SetInputItems(options, messages);
+        options.StreamingEnabled = true;
         var firstTokenLogged = false;
-        ChatTokenUsage? streamedUsage = null;
+        var contentEmitted = false;
+        int? lastTextOutputIndex = null;
+        ResponseResult? response = null;
 
-        await foreach (var update in aiClient.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
+        await foreach (var update in client.StreamingResponsesClient.CreateResponseStreamingAsync(options, cancellationToken))
         {
-            if (update.Usage is not null)
-                streamedUsage = update.Usage;
-
-            firstTokenLogged = await AppendContentDeltasAsync(
-                update, contentBuilder, streamSink, stopwatch, firstTokenLogged);
-
-            ApplyToolCallUpdates(update, toolCallBuilders);
-
-            if (update.FinishReason is { } reason)
-                finishReason = reason;
+            switch (update)
+            {
+                case StreamingResponseOutputTextDeltaUpdate delta when !string.IsNullOrEmpty(delta.Delta):
+                    if (!firstTokenLogged)
+                    {
+                        firstTokenLogged = true;
+                        if (logger.IsEnabled(LogLevel.Debug))
+                            LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
+                    }
+                    if (lastTextOutputIndex is not null && lastTextOutputIndex != delta.OutputIndex)
+                        await streamSink(AiStreamEvent.Delta("\n\n"));
+                    lastTextOutputIndex = delta.OutputIndex;
+                    contentEmitted = true;
+                    await streamSink(AiStreamEvent.Delta(delta.Delta));
+                    break;
+                case StreamingResponseCompletedUpdate completed:
+                    response = completed.Response;
+                    break;
+                case StreamingResponseIncompleteUpdate incomplete:
+                    response = incomplete.Response;
+                    break;
+                case StreamingResponseFailedUpdate failed:
+                    response = failed.Response;
+                    break;
+                case StreamingResponseErrorUpdate:
+                    throw new InvalidOperationException("AI response stream reported an error.");
+            }
         }
 
-        LogChatUsage(streamedUsage, "streaming");
-        await RecordChatUsageAsync(streamedUsage, "streaming", userId, cancellationToken);
-        var reportedTokenCount = GetReportedTokenCount(streamedUsage);
+        if (response is null)
+            throw new IOException("AI response stream ended before a terminal event.");
 
-        if (finishReason == ChatFinishReason.ToolCalls && toolCallBuilders.Count > 0)
-        {
-            if (contentBuilder.Length > 0)
-                await streamSink(AiStreamEvent.Reset());
+        observation.Response = response;
+        var round = FinishRound(response, messages, "streaming");
+        if (round.ToolCalls.Count > 0 && contentEmitted)
+            await streamSink(AiStreamEvent.Reset());
+        return round;
+    }
 
-            var toolCalls = toolCallBuilders.Values.Select(builder => builder.Build()).ToList();
-            messages.Add(new AssistantChatMessage(toolCalls));
-            return new CompletedRound(null, toolCalls, reportedTokenCount, IsTruncated: false);
-        }
+    private static void SetInputItems(CreateResponseOptions options, List<ResponseItem> messages)
+    {
+        options.InputItems.Clear();
+        foreach (var message in messages)
+            options.InputItems.Add(message);
+    }
 
-        if (finishReason == ChatFinishReason.Length && logger.IsEnabled(LogLevel.Warning))
+    private CompletedRound FinishRound(
+        ResponseResult response,
+        List<ResponseItem> messages,
+        string phase)
+    {
+        LogChatUsage(response.Usage, phase);
+        AiCompletionClient.EnsureSuccessful(response);
+
+        foreach (var item in response.OutputItems)
+            if (item is not ReasoningResponseItem || AiCompletionClient.IsReasoningModel(aiClient.ChatModel))
+                messages.Add(item);
+
+        var truncated = response.IncompleteStatusDetails?.Reason == ResponseIncompleteStatusReason.MaxOutputTokens;
+        if (truncated && logger.IsEnabled(LogLevel.Warning))
             LogResponseTruncated(logger);
 
-        var text = contentBuilder.ToString();
-        if (!string.IsNullOrWhiteSpace(text))
-            messages.Add(new AssistantChatMessage(text));
+        var toolCalls = response.OutputItems.OfType<FunctionCallResponseItem>().ToList();
+        if (response.Status == ResponseStatus.Incomplete && !truncated && toolCalls.Count > 0)
+            throw new InvalidOperationException("AI returned incomplete tool calls.");
 
-        return new CompletedRound(text, [], reportedTokenCount, finishReason == ChatFinishReason.Length);
+        return new CompletedRound(AiCompletionClient.GetAssistantOutputText(response), toolCalls, GetReportedTokenCount(response.Usage), truncated);
     }
 
-    private async Task<bool> AppendContentDeltasAsync(
-        StreamingChatCompletionUpdate update,
-        StringBuilder contentBuilder,
-        Func<AiStreamEvent, Task> streamSink,
-        System.Diagnostics.Stopwatch stopwatch,
-        bool firstTokenLogged)
+    private static List<AiToolCall> ToAiToolCalls(IReadOnlyList<FunctionCallResponseItem> toolCalls)
     {
-        foreach (var text in update.ContentUpdate.Select(part => part.Text).Where(text => !string.IsNullOrEmpty(text)))
+        return toolCalls.Select(tc =>
         {
-            if (!firstTokenLogged)
-            {
-                firstTokenLogged = true;
-                if (logger.IsEnabled(LogLevel.Debug))
-                    LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
-            }
-
-            contentBuilder.Append(text);
-            await streamSink(AiStreamEvent.Delta(text));
-        }
-
-        return firstTokenLogged;
-    }
-
-    private static void ApplyToolCallUpdates(
-        StreamingChatCompletionUpdate update, SortedDictionary<int, StreamingToolCallBuilder> toolCallBuilders)
-    {
-        foreach (var toolCallUpdate in update.ToolCallUpdates)
-        {
-            if (!toolCallBuilders.TryGetValue(toolCallUpdate.Index, out var builder))
-            {
-                builder = new StreamingToolCallBuilder();
-                toolCallBuilders[toolCallUpdate.Index] = builder;
-            }
-
-            builder.Apply(toolCallUpdate);
-        }
-    }
-
-    private static List<AiToolCall> ToAiToolCalls(IReadOnlyList<ChatToolCall> toolCalls)
-    {
-        return toolCalls
-            .Select(tc =>
-            {
-                using var argsDoc = JsonDocument.Parse(tc.FunctionArguments);
-                if (argsDoc.RootElement.ValueKind != JsonValueKind.Object)
-                    throw new JsonException("Tool call arguments must be a JSON object.");
-
-                var args = argsDoc.RootElement.Clone();
-                return new AiToolCall(tc.FunctionName, tc.Id, args);
-            })
-            .ToList();
+            using var argsDoc = JsonDocument.Parse(tc.FunctionArguments);
+            if (argsDoc.RootElement.ValueKind != JsonValueKind.Object)
+                throw new JsonException("Tool call arguments must be a JSON object.");
+            return new AiToolCall(tc.FunctionName, tc.CallId, argsDoc.RootElement.Clone());
+        }).ToList();
     }
 
     private sealed record CompletedRound(
         string? Text,
-        IReadOnlyList<ChatToolCall> ToolCalls,
+        IReadOnlyList<FunctionCallResponseItem> ToolCalls,
         int ReportedTokenCount,
         bool IsTruncated);
 
-    private sealed class StreamingToolCallBuilder
-    {
-        private string _id = "";
-        private string _name = "";
-        private readonly StringBuilder _args = new();
-
-        public void Apply(StreamingChatToolCallUpdate update)
-        {
-            if (!string.IsNullOrEmpty(update.ToolCallId))
-                _id = update.ToolCallId;
-            if (!string.IsNullOrEmpty(update.FunctionName))
-                _name = update.FunctionName;
-            if (update.FunctionArgumentsUpdate is { } argsChunk)
-                _args.Append(argsChunk.ToString());
-        }
-
-        public ChatToolCall Build()
-        {
-            var argsJson = _args.Length > 0 ? _args.ToString() : "{}";
-            return ChatToolCall.CreateFunctionToolCall(_id, _name, BinaryData.FromString(argsJson));
-        }
-    }
-
-    private static ChatTool? ConvertToSdkTool(object declaration)
+    private static ResponseTool? ConvertToSdkTool(object declaration)
     {
         var json = JsonSerializer.Serialize(declaration, SerializeOptions);
-        json = NormalizeSchemaTypes(json);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -382,13 +384,10 @@ public sealed partial class AiIntentService(
 
         BinaryData? parameters = null;
         if (root.TryGetProperty("parameters", out var paramsEl))
-            parameters = BinaryData.FromString(paramsEl.GetRawText());
+            parameters = StrictToolSchema.Create(paramsEl.GetRawText());
 
-        return ChatTool.CreateFunctionTool(name, description, parameters);
+        return ResponseTool.CreateFunctionTool(name, parameters, strictModeEnabled: true, functionDescription: description);
     }
-
-    [GeneratedRegex(@"""type""\s*:\s*""(OBJECT|STRING|ARRAY|NUMBER|BOOLEAN|INTEGER)""")]
-    private static partial Regex SchemaTypeRegex();
 
     internal static string? BuildHistoryTranscript(
         IReadOnlyList<ChatHistoryMessage> history,
@@ -419,7 +418,7 @@ public sealed partial class AiIntentService(
         var retainedEntries = new List<string>();
         var retainedCharacters = 0;
 
-        foreach (var entry in sanitizedEntries.TakeLast(AppConstants.MaxChatHistoryMessages).Reverse())
+        foreach (var entry in sanitizedEntries.TakeLast(AppConstants.MaxAiModelHistoryMessages).Reverse())
         {
             var line = $"{entry.Role!.ToUpperInvariant()}: {entry.Content}{Environment.NewLine}";
             if (retainedCharacters + line.Length > availableEntryCharacters)
@@ -441,13 +440,7 @@ public sealed partial class AiIntentService(
         return string.Concat(prefix, string.Concat(retainedEntries), suffix);
     }
 
-    private static string NormalizeSchemaTypes(string json)
-    {
-        return SchemaTypeRegex().Replace(json,
-            m => $@"""type"":""{m.Groups[1].Value.ToLowerInvariant()}""");
-    }
-
-    private void LogChatUsage(ChatTokenUsage? usage, string phase)
+    private void LogChatUsage(ResponseTokenUsage? usage, string phase)
     {
         if (usage is null)
             return;
@@ -462,20 +455,20 @@ public sealed partial class AiIntentService(
                 usage.TotalTokenCount);
     }
 
-    private static int GetReportedTokenCount(ChatTokenUsage? usage) =>
+    private static int GetReportedTokenCount(ResponseTokenUsage? usage) =>
         usage is null ? 0 : usage.InputTokenCount + usage.OutputTokenCount;
 
     private async Task RecordChatUsageAsync(
-        ChatTokenUsage? usage,
+        ResponseTokenUsage? usage,
         string phase,
         Guid? userId,
+        AiCallTelemetry telemetry,
         CancellationToken cancellationToken)
     {
         if (usage is null)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatUsageMissing(logger, phase);
-            return;
         }
 
         try
@@ -483,14 +476,16 @@ public sealed partial class AiIntentService(
             await usageRecorder.RecordAsync(
                 "chat",
                 aiClient.ChatModel,
-                usage.InputTokenDetails?.CachedTokenCount ?? 0,
-                usage.InputTokenCount,
-                usage.OutputTokenCount,
-                usage.TotalTokenCount,
+                usage?.InputTokenDetails?.CachedTokenCount ?? 0,
+                usage?.InputTokenCount ?? 0,
+                usage?.OutputTokenCount ?? 0,
+                usage?.TotalTokenCount ?? 0,
                 cancellationToken,
-                userId);
+                userId,
+                telemetry,
+                cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (telemetry.IsError || ex is not OperationCanceledException)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatUsageRecordFailed(logger, aiClient.ChatModel, phase, ex);
@@ -518,7 +513,7 @@ public sealed partial class AiIntentService(
     [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "First content token after {ElapsedMs}ms")]
     private static partial void LogFirstContentToken(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (finish_reason=length); output may be incomplete")]
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); output may be incomplete")]
     private static partial void LogResponseTruncated(ILogger logger);
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "AI token usage ({Phase}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
@@ -544,5 +539,19 @@ public sealed partial class AiIntentService(
         string toolName,
         int originalLength,
         int maxLength);
+
+    private static Dictionary<string, ResponseTool> BuildToolCatalog(IReadOnlyList<object> declarations)
+    {
+        var tools = new Dictionary<string, ResponseTool>(StringComparer.Ordinal);
+        foreach (var declaration in declarations)
+        {
+            var tool = ConvertToSdkTool(declaration);
+            if (tool is null)
+                continue;
+            using var document = JsonDocument.Parse(JsonSerializer.Serialize(declaration, SerializeOptions));
+            tools.Add(document.RootElement.GetProperty("name").GetString()!, tool);
+        }
+        return tools;
+    }
 
 }

@@ -10,12 +10,13 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public record CalendarOverviewPayload(
     IReadOnlyList<CalendarEventItem> Events,
     CalendarAutoSyncStateResponse? AutoSyncState,
-    IReadOnlyList<CalendarSyncSuggestionItem> Suggestions);
+    IReadOnlyList<CalendarSyncSuggestionItem> Suggestions,
+    IReadOnlyList<UserCalendarItem>? Calendars = null);
 
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_calendar_overview";
-    public string Description => "Read calendar events, auto-sync state, and sync suggestions in one payload.";
+    public string Description => "Read calendar events, selected calendars, auto-sync state, and sync suggestions in one payload.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
@@ -23,14 +24,16 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            include_events = new { type = JsonSchemaTypes.Boolean },
-            include_auto_sync_state = new { type = JsonSchemaTypes.Boolean },
-            include_suggestions = new { type = JsonSchemaTypes.Boolean }
+            include_calendars = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            include_events = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            include_auto_sync_state = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            include_suggestions = new { type = new[] { JsonSchemaTypes.Boolean, "null" } }
         }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var includeCalendars = JsonArgumentParser.GetOptionalBool(args, "include_calendars") ?? true;
         var includeEvents = JsonArgumentParser.GetOptionalBool(args, "include_events") ?? true;
         var includeAutoSyncState = JsonArgumentParser.GetOptionalBool(args, "include_auto_sync_state") ?? true;
         var includeSuggestions = JsonArgumentParser.GetOptionalBool(args, "include_suggestions") ?? true;
@@ -57,16 +60,23 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         if (suggestions.IsFailure && suggestions.ErrorCode != Result.PayGateErrorCode)
             return ToolResult.FromFailure(suggestions);
 
+        var calendars = includeCalendars
+            ? await mediator.Send(new GetUserCalendarsQuery(userId), ct)
+            : Result.Success(new List<UserCalendarItem>());
+        if (calendars.IsFailure && calendars.ErrorCode != Result.PayGateErrorCode)
+            return ToolResult.FromFailure(calendars);
+
         return new ToolResult(true, Payload: new CalendarOverviewPayload(
             events.Value, autoSyncState,
-            suggestions.IsSuccess ? suggestions.Value : []));
+            suggestions.IsSuccess ? suggestions.Value : [],
+            includeCalendars && calendars.IsSuccess ? calendars.Value : null));
     }
 }
 
 public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "manage_calendar_sync";
-    public string Description => "Enable or disable calendar auto-sync, dismiss imports or suggestions, or trigger a sync run.";
+    public string Description => "Select calendars (an empty list resets to all owned calendars), enable or disable calendar auto-sync, dismiss imports or suggestions, or trigger a sync run.";
 
     public object GetParameterSchema() => new
     {
@@ -76,10 +86,11 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentChec
             action = new
             {
                 type = JsonSchemaTypes.String,
-                @enum = new[] { "set_auto_sync", "dismiss_import", "dismiss_suggestion", "run_sync" }
+                @enum = new[] { "set_selected_calendars", "set_auto_sync", "dismiss_import", "dismiss_suggestion", "run_sync" }
             },
-            enabled = new { type = JsonSchemaTypes.Boolean, nullable = true },
-            suggestion_id = new { type = JsonSchemaTypes.String, nullable = true }
+            calendar_ids = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } },
+            enabled = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
+            suggestion_id = new { type = new[] { JsonSchemaTypes.String, "null" } }
         },
         required = new[] { "action" }
     };
@@ -98,12 +109,24 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentChec
 
         return action switch
         {
+            "set_selected_calendars" => await SetSelectedCalendarsAsync(args, userId, ct, checkOnly),
             "set_auto_sync" => await SetAutoSyncAsync(args, userId, ct, checkOnly),
             "dismiss_import" => await ChatToolMediator.RunAsync(mediator, new DismissCalendarImportCommand(userId), userId, "Dismissed calendar import prompt", new { action }, ct, checkOnly),
             "dismiss_suggestion" => await DismissSuggestionAsync(args, userId, ct, checkOnly),
             "run_sync" => await RunSyncAsync(userId, ct, checkOnly),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
+    }
+
+    private async Task<ToolResult> SetSelectedCalendarsAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
+    {
+        if (!args.TryGetProperty("calendar_ids", out var ids) || ids.ValueKind != JsonValueKind.Array
+            || ids.EnumerateArray().Any(id => id.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(id.GetString())))
+            return new ToolResult(false, Error: "calendar_ids is required; use an empty list for all owned calendars.");
+        var calendarIds = ids.EnumerateArray().Select(id => id.GetString()!).ToList();
+        return await ChatToolMediator.RunAsync(mediator,
+            new SetSelectedCalendarsCommand(userId, calendarIds), userId,
+            "Calendar selection updated", new { action = "set_selected_calendars", calendar_ids = calendarIds }, ct, checkOnly);
     }
 
     private async Task<ToolResult> SetAutoSyncAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)

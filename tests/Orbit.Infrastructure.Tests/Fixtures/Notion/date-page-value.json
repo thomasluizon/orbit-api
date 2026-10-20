@@ -1,0 +1,11 @@
+{
+  "Due date": {
+    "id": "dueD",
+    "type": "date",
+    "date": {
+      "start": "2026-09-15",
+      "end": null,
+      "time_zone": null
+    }
+  }
+}

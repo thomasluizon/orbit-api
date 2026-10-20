@@ -34,15 +34,15 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
     }
 
     public string Name => "create_goal";
-    public string Description => "Create a new goal to track progress toward a target. Pass habit_ids inline in this call rather than following up with link_habits_to_goal. Goals can have a target value and unit (e.g., 'read 12 books', 'lose 5 kg'). If the user doesn't specify a target, use target_value=1 and unit='goal'. Use when user wants to track measurable long-term progress. Use goal_type='Streak' to create a streak goal that tracks the habit's consecutive day streak.";
+    public string Description => "Create a measurable goal with habit_ids inline. Defaults: target 1, unit goal. Streak goals track consecutive habit days.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = JsonSchemaTypes.String, description = "Name of the goal" },
-            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            title = new { type = JsonSchemaTypes.String },
+            description = new { type = JsonSchemaTypes.String },
             target_value = new { type = "number", description = "Target number to reach (default: 1)" },
             unit = new { type = JsonSchemaTypes.String, description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
             deadline = new { type = JsonSchemaTypes.String, description = "Optional deadline in YYYY-MM-DD format" },
@@ -87,7 +87,7 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
             return habitIdsFailure;
 
         if (habitIds.Count > AppConstants.MaxHabitsPerGoal)
-            return new ToolResult(false, Error: ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal).Message);
+            return ToolResult.FromFailure(Orbit.Domain.Common.Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal)));
 
         var goalResult = Goal.Create(new Goal.CreateGoalParams(
             userId,
@@ -139,7 +139,7 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
     private static ToolResult? TryParseHabitIds(JsonElement args, out List<Guid> habitIds)
     {
         habitIds = [];
-        if (!args.TryGetProperty("habit_ids", out var habitIdsElement))
+        if (!args.TryGetProperty("habit_ids", out var habitIdsElement) || habitIdsElement.ValueKind == JsonValueKind.Null)
             return null;
 
         if (habitIdsElement.ValueKind != JsonValueKind.Array)

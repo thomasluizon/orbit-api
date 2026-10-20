@@ -10,12 +10,17 @@ public static class ResultActionResultExtensions
 {
     private static readonly Dictionary<string, int> StatusByErrorCode = new()
     {
+        [ErrorCodes.AstraBlockNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.AstraBlockInvalidated] = StatusCodes.Status410Gone,
+        [ErrorCodes.AstraBlockExpired] = StatusCodes.Status410Gone,
+        [ErrorCodes.AstraBlockAnswered] = StatusCodes.Status409Conflict,
         [FeatureFlagActions.NotFound] = StatusCodes.Status404NotFound,
         [FeatureFlagActions.AlreadyExists] = StatusCodes.Status409Conflict,
         [Result.PayGateErrorCode] = StatusCodes.Status403Forbidden,
         [ErrorCodes.NoPermission] = StatusCodes.Status403Forbidden,
         [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,
 
+        [ErrorCodes.ProactiveItemNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.UserNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.SkipNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.HabitNotFound] = StatusCodes.Status404NotFound,

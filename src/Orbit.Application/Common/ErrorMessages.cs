@@ -8,6 +8,7 @@ public static class ErrorMessages
 
     private static AppError FromCounted(string code) => new(code, ErrorCopy.EnglishWithCount(code));
 
+    public static readonly AppError ProactiveItemNotFound = From(ErrorCodes.ProactiveItemNotFound);
     public static readonly AppError UserNotFound = From(ErrorCodes.UserNotFound);
     public static readonly AppError HabitNotFound = From(ErrorCodes.HabitNotFound);
     public static readonly AppError HabitLimitReached = From(ErrorCodes.HabitLimitReached);

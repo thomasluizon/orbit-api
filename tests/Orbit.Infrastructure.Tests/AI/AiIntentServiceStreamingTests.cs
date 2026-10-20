@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -6,13 +8,14 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
@@ -20,9 +23,70 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiIntentServiceStreamingTests
 {
     [Fact]
+    public async Task SendWithToolsAsync_AllChatToolsHaveStrictWireDeclarations()
+    {
+        var registry = new Orbit.Application.Chat.Tools.AiToolRegistry(StrictChatToolSchemaTests.AllTools());
+        var tools = registry.GetAll().Select(tool => (object)new
+        {
+            name = tool.Name,
+            description = tool.Description,
+            parameters = tool.GetParameterSchema()
+        }).ToList();
+        var handler = new SequenceSseHandler(ResponsesTestData.Text("Done"));
+        var (service, _) = BuildService(handler);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("Review my tools", "system", tools));
+        result.IsSuccess.Should().BeTrue();
+        using var request = JsonDocument.Parse(handler.RequestBodies.Single());
+        var wireTools = request.RootElement.GetProperty("tools");
+        wireTools.EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().BeEquivalentTo(registry.GetAll().Select(tool => tool.Name));
+        foreach (var tool in wireTools.EnumerateArray())
+        {
+            tool.GetProperty("strict").GetBoolean().Should().BeTrue();
+            StrictChatToolSchemaTests.AssertStrict(tool.GetProperty("parameters"));
+        }
+        var capturePath = Environment.GetEnvironmentVariable("ORBIT_STRICT_TOOLS_CAPTURE_PATH");
+        if (!string.IsNullOrWhiteSpace(capturePath))
+            await File.WriteAllTextAsync(capturePath, wireTools.GetRawText());
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_StreamFailure_RecordsErrorWithoutUsage()
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var (service, sink) = BuildService(new DroppingHandler(""), usage);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("private text", "private context", [])
+        { Telemetry = new AiTurnTelemetry("failure-trace") }, sink.Handle);
+
+        result.IsFailure.Should().BeTrue();
+        await usage.Received(1).RecordAsync("chat", "gpt-6-luna", 0, 0, 0, 0, Arg.Any<CancellationToken>(), null,
+            Arg.Is<AiCallTelemetry>(call => call.TraceId == "failure-trace" && call.IsError && !call.HasUsage
+                && call.ToolNames.Count == 0 && call.LatencySeconds >= 0));
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_UsageTelemetry_ContainsOnlyDeclaredToolNames()
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var response = ResponsesTestData.Response("private completion with private habit name");
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("known", "log_habit",
+            BinaryData.FromString("{\"habit_name\":\"private habit name\"}")));
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("unknown", "private tool name", BinaryData.FromString("{}")));
+        var (service, _) = BuildService(new JsonHandler(ModelReaderWriter.Write(response).ToString()), usage);
+
+        await service.SendWithToolsAsync(new AiToolRequest("private user message", "private user facts",
+            [new { name = "log_habit" }]));
+
+        var metadata = (AiCallTelemetry)usage.ReceivedCalls().Single().GetArguments()[8]!;
+        metadata.ToolNames.Should().Equal("log_habit");
+        JsonSerializer.Serialize(metadata).Should().NotContain("private");
+    }
+
+    [Fact]
     public async Task SendWithToolsAsync_StreamingTextRound_EmitsDeltasAndReturnsFullText()
     {
-        var body = RoleChunk() + ContentChunk("Hel") + ContentChunk("lo!") + FinishChunk("stop") + Done();
+        var body = TextStream("Hello!", "Hel", "lo!");
         var (service, sink) = BuildService(new SseHandler(body));
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
@@ -38,12 +102,7 @@ public class AiIntentServiceStreamingTests
     [Fact]
     public async Task SendWithToolsAsync_StreamingToolRound_AccumulatesToolCallAcrossChunks()
     {
-        var body = RoleChunk()
-            + ToolCallStartChunk(0, "call_1", "create_habit")
-            + ToolCallArgsChunk(0, """{"title":""")
-            + ToolCallArgsChunk(0, """ "Read more"}""")
-            + FinishChunk("tool_calls")
-            + Done();
+        var body = ToolStream("create_habit", "{\"title\":\"Read more\"}");
         var (service, sink) = BuildService(new SseHandler(body));
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("create it", "system", []), streamSink: sink.Handle);
@@ -61,12 +120,7 @@ public class AiIntentServiceStreamingTests
     [Fact]
     public async Task SendWithToolsAsync_ContentBeforeToolCalls_EmitsResetAfterDeltas()
     {
-        var body = RoleChunk()
-            + ContentChunk("Checking that for you")
-            + ToolCallStartChunk(0, "call_1", "query_goals")
-            + ToolCallArgsChunk(0, "{}")
-            + FinishChunk("tool_calls")
-            + Done();
+        var body = ToolStream("query_goals", "{}", "Checking that for you");
         var (service, sink) = BuildService(new SseHandler(body));
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("check goals", "system", []), streamSink: sink.Handle);
@@ -81,7 +135,7 @@ public class AiIntentServiceStreamingTests
     [Fact]
     public async Task SendWithToolsAsync_MidStreamDrop_ReturnsFailure()
     {
-        var prefix = RoleChunk() + ContentChunk("Hel");
+        var prefix = ResponsesTestData.Event(new StreamingResponseOutputTextDeltaUpdate { Delta = "Hel" });
         var (service, sink) = BuildService(new DroppingHandler(prefix));
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
@@ -93,11 +147,7 @@ public class AiIntentServiceStreamingTests
     [Fact]
     public async Task SendWithToolsAsync_NullSink_UsesBufferedCompletion()
     {
-        const string completion = """
-            {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
-             "choices":[{"index":0,"message":{"role":"assistant","content":"Hi there"},"finish_reason":"stop"}],
-             "usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
-            """;
+        var completion = ResponsesTestData.Text("Hi there");
         var handler = new JsonHandler(completion);
         var (service, sink) = BuildService(handler);
 
@@ -122,7 +172,7 @@ public class AiIntentServiceStreamingTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ReportedTokenCount.Should().Be(18);
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
@@ -131,7 +181,7 @@ public class AiIntentServiceStreamingTests
         var userId = Guid.NewGuid();
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var handler = new SseHandler(
-            RoleChunk() + ContentChunk("Hello") + FinishChunk("stop") + UsageChunk() + Done());
+            TextStream("Hello", "Hello"));
         var (service, sink) = BuildService(handler, usageRecorder);
 
         var result = await service.SendWithToolsAsync(
@@ -140,16 +190,18 @@ public class AiIntentServiceStreamingTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ReportedTokenCount.Should().Be(18);
-        handler.LastRequestBody.Should().Contain("\"stream_options\":{\"include_usage\":true}");
+        handler.LastRequestBody.Should().Contain("\"stream\":true");
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
-    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndDoesNotRecord()
+    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndEmitsTelemetryOnly()
     {
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
-        var body = RoleChunk() + ContentChunk("Hello") + FinishChunk("stop") + Done();
+        var response = ResponsesTestData.Response("Hello");
+        response.Usage = null;
+        var body = ResponsesTestData.Stream(response, "Hello");
         var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body), usageRecorder);
         var sink = new CollectingSink();
 
@@ -159,8 +211,8 @@ public class AiIntentServiceStreamingTests
 
         result.IsSuccess.Should().BeTrue();
         logger.WarningEventIds.Should().Contain(11);
-        await usageRecorder.DidNotReceiveWithAnyArgs().RecordAsync(
-            default!, default!, default, default, default, default, default, default);
+        await usageRecorder.Received(1).RecordAsync("chat", "gpt-6-luna", 0, 0, 0, 0,
+            Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Is<AiCallTelemetry>(call => !call.HasUsage && !call.IsError));
     }
 
     [Fact]
@@ -169,9 +221,9 @@ public class AiIntentServiceStreamingTests
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         usageRecorder.RecordAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>())
             .Returns(Task.FromException(new InvalidOperationException("recorder failed")));
-        var body = RoleChunk() + ContentChunk("Hello") + FinishChunk("stop") + UsageChunk() + Done();
+        var body = TextStream("Hello", "Hello");
         var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body), usageRecorder);
         var sink = new CollectingSink();
 
@@ -191,17 +243,13 @@ public class AiIntentServiceStreamingTests
         var userId = Guid.NewGuid();
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var handler = new SequenceSseHandler(
-            RoleChunk()
-                + ToolCallStartChunk(0, "call_1", "create_habit")
-                + ToolCallArgsChunk(0, "{}")
-                + FinishChunk("tool_calls")
-                + UsageChunk()
-                + Done(),
-            RoleChunk() + ContentChunk("Done") + FinishChunk("stop") + UsageChunk() + Done());
+            ToolStream("create_habit", "{}"),
+            TextStream("Done", "Done"));
         var (service, sink) = BuildService(handler, usageRecorder);
 
         var first = await service.SendWithToolsAsync(
-            new AiToolRequest("create it", "system", [], userId),
+            new AiToolRequest("create it", "system", [new { name = "create_habit" }], userId)
+            { Telemetry = new AiTurnTelemetry("chat-trace", "trial") },
             streamSink: sink.Handle);
         var second = await service.ContinueWithToolResultsAsync(
             first.Value.ConversationContext!,
@@ -211,20 +259,23 @@ public class AiIntentServiceStreamingTests
         second.IsSuccess.Should().BeTrue();
         second.Value.TextMessage.Should().Be("Done");
         await usageRecorder.Received(2).RecordAsync(
-            "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
+        var calls = usageRecorder.ReceivedCalls().Select(call => (AiCallTelemetry)call.GetArguments()[8]!).ToList();
+        calls.Should().HaveCount(2);
+        calls.Should().OnlyContain(call => call.TraceId == "chat-trace" && call.Plan == "trial"
+            && call.LatencySeconds >= 0 && !call.IsError && call.HasUsage);
+        calls[0].ToolNames.Should().Equal("create_habit");
+        calls[1].ToolNames.Should().BeEmpty();
+        first.Value.ConversationContext!.Telemetry.RoundCount.Should().Be(2);
+        first.Value.ConversationContext.Telemetry.ToolCallCount.Should().Be(1);
     }
 
     [Fact]
     public async Task ContinueWithToolResultsAsync_OversizedPayload_SendsValidDropMarker()
     {
         var handler = new SequenceSseHandler(
-            RoleChunk()
-                + ToolCallStartChunk(0, "call_1", "list_tags")
-                + ToolCallArgsChunk(0, "{}")
-                + FinishChunk("tool_calls")
-                + UsageChunk()
-                + Done(),
-            RoleChunk() + ContentChunk("Use a narrower filter") + FinishChunk("stop") + UsageChunk() + Done());
+            ToolStream("list_tags", "{}"),
+            TextStream("Use a narrower filter", "Use a narrower filter"));
         var (service, sink) = BuildService(handler);
         var first = await service.SendWithToolsAsync(
             new AiToolRequest("list tags", "system", [], Guid.NewGuid()),
@@ -242,10 +293,10 @@ public class AiIntentServiceStreamingTests
         handler.RequestBodies.Should().HaveCount(2);
         using var requestDocument = JsonDocument.Parse(handler.RequestBodies[1]);
         var toolMessage = requestDocument.RootElement
-            .GetProperty("messages")
+            .GetProperty("input")
             .EnumerateArray()
-            .Single(message => message.GetProperty("role").GetString() == "tool");
-        var toolContent = toolMessage.GetProperty("content").GetString();
+            .Single(message => message.GetProperty("type").GetString() == "function_call_output");
+        var toolContent = toolMessage.GetProperty("output").GetString();
         toolContent.Should().NotBeNull();
         toolContent!.Length.Should().BeLessThan(AppConstants.MaxAiToolPayloadJsonLength);
         using var toolDocument = JsonDocument.Parse(toolContent);
@@ -259,11 +310,10 @@ public class AiIntentServiceStreamingTests
     [Fact]
     public async Task SendWithToolsAsync_BufferedLengthFinish_LogsTruncationWarningAndKeepsText()
     {
-        const string completion = """
-            {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
-             "choices":[{"index":0,"message":{"role":"assistant","content":"partial list"},"finish_reason":"length"}],
-             "usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
-            """;
+        var response = ResponsesTestData.Response("partial list");
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new ResponseIncompleteStatusDetails { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        var completion = ModelReaderWriter.Write(response).ToString();
         var (service, logger) = BuildServiceWithRecordingLogger(new JsonHandler(completion));
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []));
@@ -277,7 +327,10 @@ public class AiIntentServiceStreamingTests
     [Fact]
     public async Task SendWithToolsAsync_StreamingLengthFinish_LogsTruncationWarningAndKeepsText()
     {
-        var body = RoleChunk() + ContentChunk("partial") + FinishChunk("length") + Done();
+        var response = ResponsesTestData.Response("partial");
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new ResponseIncompleteStatusDetails { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        var body = ResponsesTestData.Stream(response, "partial");
         var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body));
         var sink = new CollectingSink();
 
@@ -289,18 +342,49 @@ public class AiIntentServiceStreamingTests
         logger.WarningEventIds.Should().Contain(8);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SendWithToolsAsync_LengthFinishWithUnfinishedTool_PreservesPartialStatusWithoutParsingArguments(
+        bool streaming, bool hasText)
+    {
+        var response = ResponsesTestData.Response(hasText ? "Partial reply" : null);
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new ResponseIncompleteStatusDetails { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("cut_off", "bulk_update_habits", BinaryData.FromString("{\"filter\":")));
+        HttpMessageHandler handler = streaming
+            ? new SseHandler(ResponsesTestData.Stream(response))
+            : new JsonHandler(ModelReaderWriter.Write(response).ToString());
+        var (service, sink) = BuildService(handler);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("change all descriptions", "system", []),
+            streamSink: streaming ? sink.Handle : null);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsTruncated.Should().BeTrue();
+        result.Value.TextMessage.Should().Be(hasText ? "Partial reply" : string.Empty);
+        result.Value.HasToolCalls.Should().BeFalse();
+        result.Value.ReportedTokenCount.Should().Be(3);
+    }
+
     [Fact]
-    public async Task SendWithToolsAsync_WithUserId_SetsEndUserIdForCacheRouting()
+    public async Task SendWithToolsAsync_WithUserId_SetsSafetyIdentifierAndCacheKey()
     {
         var handler = new JsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
 
         handler.LastRequestBody.Should().Contain(userId.ToString("N"));
+        using var requestDocument = JsonDocument.Parse(handler.LastRequestBody!);
+        requestDocument.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        requestDocument.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
+        requestDocument.RootElement.TryGetProperty("user", out _).Should().BeFalse();
     }
 
     [Fact]
@@ -308,8 +392,8 @@ public class AiIntentServiceStreamingTests
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(40)));
 
@@ -321,19 +405,217 @@ public class AiIntentServiceStreamingTests
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
         handler.RequestCount.Should().Be(1);
     }
 
-    private const string BufferedCompletion = """
-        {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
-         "choices":[{"index":0,"message":{"role":"assistant","content":"Hi there"},"finish_reason":"stop"}],
-         "usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18,"prompt_tokens_details":{"cached_tokens":3}}}
-        """;
+    [Fact]
+    public async Task SendWithToolsAsync_CacheKey_IsStableForOneUserAndDiffersBetweenUsers()
+    {
+        var handler = new JsonHandler(BufferedCompletion);
+        var (service, _) = BuildService(handler);
+        var userId = Guid.NewGuid();
+        var keys = new List<string?>();
+        foreach (var id in new[] { userId, userId, Guid.NewGuid() })
+        {
+            await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], id));
+            using var document = JsonDocument.Parse(handler.LastRequestBody!);
+            keys.Add(document.RootElement.GetProperty("prompt_cache_key").GetString());
+        }
+        keys[0].Should().Be(userId.ToString("N"));
+        keys[1].Should().Be(keys[0]);
+        keys[2].Should().NotBe(keys[0]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ContinueWithToolResultsAsync_PreservesReasoningEveryCallAndCallIds(bool streaming)
+    {
+        var firstResponse = ResponsesTestData.Response(inputTokens: 11, outputTokens: 7, cachedTokens: 3);
+        var reasoning = ResponseItem.CreateReasoningItem(Array.Empty<ReasoningSummaryPart>());
+        reasoning.Id = "rs_1";
+        reasoning.EncryptedContent = "encrypted-reasoning";
+        firstResponse.OutputItems.Add(reasoning);
+        var firstCall = ResponseItem.CreateFunctionCallItem("call_1", "query_habits", BinaryData.FromString("{}"));
+        firstCall.Id = "fc_1";
+        var secondCall = ResponseItem.CreateFunctionCallItem("call_2", "query_goals", BinaryData.FromString("{}"));
+        secondCall.Id = "fc_2";
+        firstResponse.OutputItems.Add(firstCall);
+        firstResponse.OutputItems.Add(secondCall);
+        var handler = new SequenceSseHandler(
+            streaming ? ResponsesTestData.Stream(firstResponse) : ModelReaderWriter.Write(firstResponse).ToString(),
+            streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            usage);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
+        var userId = Guid.NewGuid();
+        var declaration = new { name = "query_habits", description = "Read habits", parameters = new { type = "object", properties = new { } } };
+
+        var first = await service.SendWithToolsAsync(new AiToolRequest("look up my habits and goals", "system", [declaration], userId), sink);
+        first.IsSuccess.Should().BeTrue();
+        first.Value.ToolCalls!.Select(call => call.Id).Should().Equal("call_1", "call_2");
+        var second = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new AiToolCallResult("query_habits", "call_1", true, null, null, null),
+             new AiToolCallResult("query_goals", "call_2", true, null, null, null)], sink);
+
+        second.IsSuccess.Should().BeTrue();
+        foreach (var body in handler.RequestBodies)
+        {
+            using var request = JsonDocument.Parse(body);
+            request.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+            request.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        }
+        using var document = JsonDocument.Parse(handler.RequestBodies[1]);
+        var root = document.RootElement;
+        root.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        root.TryGetProperty("temperature", out _).Should().BeFalse();
+        root.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        root.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
+        root.TryGetProperty("user", out _).Should().BeFalse();
+        root.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");
+        var items = root.GetProperty("input").EnumerateArray().ToArray();
+        items.Single(item => item.GetProperty("type").GetString() == "reasoning")
+            .GetProperty("encrypted_content").GetString().Should().Be("encrypted-reasoning");
+        items.Where(item => item.GetProperty("type").GetString() == "function_call_output")
+            .Select(item => item.GetProperty("call_id").GetString()).Should().Equal("call_1", "call_2");
+        items.Count(item => item.GetProperty("type").GetString() == "function_call").Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendWithToolsAsync_DefaultModels_UseShippedPrimary(bool streaming)
+    {
+        var handler = new SequenceSseHandler(streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var settings = new AiSettings { ApiKey = "test-key", BaseUrl = "https://orbit.test/v1" };
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("look up my habits", "system", [declaration]),
+            streaming ? _ => Task.CompletedTask : null);
+
+        result.IsSuccess.Should().BeTrue();
+        using var document = JsonDocument.Parse(handler.RequestBodies.Single());
+        document.RootElement.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+        document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ContinueWithToolResultsAsync_LegacyModel_OmitsReasoningAndKeepsTools(bool streaming)
+    {
+        var firstResponse = ResponsesTestData.Response();
+        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", "query_habits", BinaryData.FromString("{}")));
+        var handler = new SequenceSseHandler(
+            streaming ? ResponsesTestData.Stream(firstResponse) : ModelReaderWriter.Write(firstResponse).ToString(),
+            streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            usage, primaryModel: "gpt-4.1-mini");
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
+        Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
+
+        var first = await service.SendWithToolsAsync(new AiToolRequest("look up my habits", "system", [declaration]), sink);
+        first.IsSuccess.Should().BeTrue();
+        var second = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new AiToolCallResult("query_habits", "call_1", true, null, null, null)], sink);
+
+        second.IsSuccess.Should().BeTrue();
+        foreach (var body in handler.RequestBodies)
+        {
+            using var document = JsonDocument.Parse(body);
+            document.RootElement.GetProperty("model").GetString().Should().Be("gpt-4.1-mini");
+            document.RootElement.GetProperty("temperature").GetDouble().Should().BeApproximately(0.1, 0.00001);
+            document.RootElement.TryGetProperty("include", out _).Should().BeFalse();
+            document.RootElement.TryGetProperty("reasoning", out _).Should().BeFalse();
+            document.RootElement.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");
+            document.RootElement.GetProperty("input").EnumerateArray()
+                .Should().NotContain(item => item.GetProperty("type").GetString() == "reasoning");
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendWithToolsAsync_MultipleAssistantMessages_PreservesBoundariesInReplyAndDeltas(bool streaming)
+    {
+        var response = ResponsesTestData.Response("Checking.");
+        response.OutputItems.Add(ResponseItem.CreateAssistantMessageItem("Done."));
+        var body = streaming
+            ? ResponsesTestData.Event(new StreamingResponseOutputTextDeltaUpdate { Delta = "Checking.", ItemId = "msg_1", OutputIndex = 0 })
+                + ResponsesTestData.Event(new StreamingResponseOutputTextDeltaUpdate { Delta = "Done.", ItemId = "msg_2", OutputIndex = 1 })
+                + ResponsesTestData.Stream(response)
+            : ModelReaderWriter.Write(response).ToString();
+        var (service, sink) = BuildService(streaming ? new SseHandler(body) : new JsonHandler(body));
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streaming ? sink.Handle : null);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TextMessage.Should().Be("Checking.\n\nDone.");
+        if (streaming)
+            string.Concat(sink.Events.Select(update => update.Text)).Should().Be(result.Value.TextMessage);
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_StreamEndsWithoutTerminalEvent_ReturnsFailure()
+    {
+        var body = ResponsesTestData.Event(new StreamingResponseOutputTextDeltaUpdate { Delta = "partial" });
+        var (service, sink) = BuildService(new SseHandler(body));
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), sink.Handle);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendWithToolsAsync_FailedResponse_DoesNotAcceptPartialText(bool streaming)
+    {
+        var response = ResponsesTestData.Response("partial");
+        response.Status = ResponseStatus.Failed;
+        var body = streaming
+            ? ResponsesTestData.Event(new StreamingResponseFailedUpdate { Response = response })
+            : ModelReaderWriter.Write(response).ToString();
+        var (service, sink) = BuildService(streaming ? new SseHandler(body) : new JsonHandler(body));
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streaming ? sink.Handle : null);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_Image_SendsResponsesImageContent()
+    {
+        var handler = new JsonHandler(BufferedCompletion);
+        var (service, _) = BuildService(handler);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("describe", "system", [],
+            ImageData: [1, 2, 3], ImageMimeType: "image/png"));
+
+        result.IsSuccess.Should().BeTrue();
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        var parts = document.RootElement.GetProperty("input")[1].GetProperty("content");
+        parts[0].GetProperty("text").GetString().Should().Be("describe");
+        parts[1].GetProperty("type").GetString().Should().Be("input_image");
+        parts[1].GetProperty("image_url").GetString().Should().Be("data:image/png;base64,AQID");
+    }
+
+    private static readonly string BufferedCompletion = ResponsesTestData.Text("Hi there", 11, 7, 3);
 
     private static List<ChatHistoryMessage> BuildHistory(int count) =>
         Enumerable.Range(0, count)
@@ -341,18 +623,17 @@ public class AiIntentServiceStreamingTests
             .ToList();
 
     [Fact]
-    public async Task SendWithToolsAsync_Streaming_RequestsUsageInStreamOptions()
+    public async Task SendWithToolsAsync_Streaming_RequestsResponsesStream()
     {
-        var handler = new SseHandler(RoleChunk() + ContentChunk("hi") + FinishChunk("stop") + Done());
+        var handler = new SseHandler(TextStream("hi", "hi"));
         var (service, sink) = BuildService(handler);
 
         var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
 
         result.IsSuccess.Should().BeTrue();
         using var request = JsonDocument.Parse(handler.LastRequestBody!);
-        request.RootElement.TryGetProperty("stream_options", out var streamOptions).Should().BeTrue(
-            "the SDK emits stream_options for a streamed round; if a future version stops, per-user token accounting silently records nothing");
-        streamOptions.GetProperty("include_usage").GetBoolean().Should().BeTrue();
+        request.RootElement.GetProperty("stream").GetBoolean().Should().BeTrue();
+        request.RootElement.TryGetProperty("stream_options", out _).Should().BeFalse();
     }
 
     private static (AiIntentService Service, CollectingSink Sink) BuildService(
@@ -360,8 +641,8 @@ public class AiIntentServiceStreamingTests
         IAiUsageRecorder? usageRecorder = null)
     {
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         return (service, new CollectingSink());
     }
 
@@ -370,52 +651,46 @@ public class AiIntentServiceStreamingTests
         IAiUsageRecorder? usageRecorder = null)
     {
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var logger = new RecordingLogger();
-        var service = new AiIntentService(aiClient, usageRecorder, logger);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, logger);
         return (service, logger);
     }
 
-    private static ChatClient BuildChatClient(HttpMessageHandler handler) =>
+    private static ResponsesClient BuildResponsesClient(HttpMessageHandler handler) =>
         new(
-            model: "gpt-test",
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
             });
 
-    private static string Chunk(string deltaJson, string finishReason = "null")
+    private static string TextStream(string text, params string[] deltas)
+        => ResponsesTestData.Stream(ResponsesTestData.Response(text, 11, 7, 3), deltas);
+
+    private static string ToolStream(string name, string arguments, string? text = null)
     {
-        return "data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1700000000," +
-               $"\"model\":\"gpt-test\",\"choices\":[{{\"index\":0,\"delta\":{deltaJson},\"finish_reason\":{finishReason}}}]}}\n\n";
+        var response = ResponsesTestData.Response(text, 11, 7, 3);
+        var call = ResponseItem.CreateFunctionCallItem("call_1", name, BinaryData.FromString(arguments));
+        call.Id = "fc_1";
+        response.OutputItems.Add(call);
+        return ResponsesTestData.Event(new StreamingResponseOutputItemAddedUpdate
+        {
+            Item = ResponseItem.CreateFunctionCallItem("call_1", name, BinaryData.FromString("")),
+            OutputIndex = 0
+        }) + ResponsesTestData.Event(new StreamingResponseFunctionCallArgumentsDeltaUpdate
+        {
+            ItemId = "fc_1",
+            OutputIndex = 0,
+            Delta = BinaryData.FromString(arguments[..(arguments.Length / 2)])
+        }) + ResponsesTestData.Event(new StreamingResponseFunctionCallArgumentsDeltaUpdate
+        {
+            ItemId = "fc_1",
+            OutputIndex = 0,
+            Delta = BinaryData.FromString(arguments[(arguments.Length / 2)..])
+        }) + ResponsesTestData.Stream(response, text is null ? [] : [text]);
     }
-
-    private static string RoleChunk() => Chunk("""{"role":"assistant","content":""}""");
-
-    private static string ContentChunk(string text) => Chunk($"{{\"content\":{JsonSerializer.Serialize(text)}}}");
-
-    private static string ToolCallStartChunk(int index, string id, string name)
-    {
-        return Chunk($"{{\"tool_calls\":[{{\"index\":{index},\"id\":\"{id}\",\"type\":\"function\"," +
-                     $"\"function\":{{\"name\":\"{name}\",\"arguments\":\"\"}}}}]}}");
-    }
-
-    private static string ToolCallArgsChunk(int index, string argsFragment)
-    {
-        return Chunk($"{{\"tool_calls\":[{{\"index\":{index}," +
-                     $"\"function\":{{\"arguments\":{JsonSerializer.Serialize(argsFragment)}}}}}]}}");
-    }
-
-    private static string FinishChunk(string reason) => Chunk("{}", $"\"{reason}\"");
-
-    private static string UsageChunk() =>
-        "data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1700000000," +
-        "\"model\":\"gpt-test\",\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7," +
-        "\"total_tokens\":18,\"prompt_tokens_details\":{\"cached_tokens\":3}}}\n\n";
-
-    private static string Done() => "data: [DONE]\n\n";
 
     private sealed class CollectingSink
     {
@@ -494,7 +769,8 @@ public class AiIntentServiceStreamingTests
 
         private HttpResponseMessage BuildResponse(HttpRequestMessage request)
         {
-            var content = new StringContent(_bodies.Dequeue(), Encoding.UTF8, "text/event-stream");
+            var body = _bodies.Dequeue();
+            var content = new StringContent(body, Encoding.UTF8, body.StartsWith("data:", StringComparison.Ordinal) ? "text/event-stream" : "application/json");
             return new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content };
         }
     }

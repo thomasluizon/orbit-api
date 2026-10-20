@@ -1,5 +1,10 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using MediatR;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Validators;
+using Orbit.Application.Goals.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -21,6 +26,7 @@ public class UpdateHabitToolTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly UpdateHabitTool _tool;
+    private readonly IGenericRepository<SentReminder> _sentReminders = Substitute.For<IGenericRepository<SentReminder>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
@@ -32,7 +38,132 @@ public class UpdateHabitToolTests
         ConfigureTransaction(_unitOfWork);
         _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
+        _tool = CreateTool(_habitRepo, _unitOfWork, _payGate);
+    }
+
+    [Fact]
+    public async Task DueTimeChange_ClearsOnlyTodaysSentReminder()
+    {
+        var habit = CreateHabitWithTime("Read", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
+        SetupHabitFound(habit);
+        var reminders = _sentReminders;
+        var today = SentReminder.Create(habit.Id, Today, 15);
+        var yesterday = SentReminder.Create(habit.Id, Today.AddDays(-1), 15);
+        reminders.FindAsync(Arg.Any<Expression<Func<SentReminder, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { today, yesterday }.Where(call.Arg<Expression<Func<SentReminder, bool>>>().Compile()).ToList());
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","due_time":"10:00"}""");
+        result.Success.Should().BeTrue();
+        reminders.Received(1).Remove(today);
+        reminders.DidNotReceive().Remove(yesterday);
+    }
+
+    [Fact]
+    public async Task ParentGeneralFlag_CannotDivergeFromActiveChildren()
+    {
+        var parent = CreateHabit("Parent", null, null);
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1,
+            Today, ParentHabitId: parent.Id)).Value;
+        SetupHabitFound(parent);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { parent, child }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        var result = await Execute($$"""{"habit_id":"{{parent.Id}}","is_general":true}""");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be(Orbit.Application.Common.ErrorMessages.GeneralMismatchWithChildren.Message);
+        parent.IsGeneral.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("due_end_time", "\"15:00\"")]
+    [InlineData("is_general", "true")]
+    [InlineData("slip_alert_enabled", "true")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
+    [InlineData("relative_reminders", "[{\"minutes_before\":30,\"when\":null,\"time\":null}]")]
+    public async Task NewFields_UpdateStoredValues(string field, string value)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+            DueTime: new TimeOnly(9, 0))).Value;
+        SetupHabitFound(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","{{field}}":{{value}}}""");
+        result.Success.Should().BeTrue();
+        switch (field)
+        {
+            case "due_end_time": habit.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
+            case "is_general": habit.IsGeneral.Should().BeTrue(); break;
+            case "slip_alert_enabled": habit.SlipAlertEnabled.Should().BeTrue(); break;
+            case "relative_reminders": habit.RelativeReminders.Should().Equal(new RelativeReminderTime(MinutesBefore: 30)); break;
+        }
+    }
+
+    [Fact]
+    public async Task ChildGeneralFlag_CannotDivergeFromParent()
+    {
+        var parent = CreateHabit("Parent", null, null);
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", null, null, Today, ParentHabitId: parent.Id)).Value;
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()(child) ? child : parent);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        var result = await Execute($$"""{"habit_id":"{{child.Id}}","is_general":true}""");
+        result.Success.Should().BeFalse();
+        child.IsGeneral.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("[{\"minutes_before\":30,\"when\":\"same_day\",\"time\":\"08:00\"}]")]
+    [InlineData("[{\"minutes_before\":-1440}]")]
+    [InlineData("[{\"when\":\"same_day\",\"time\":\"25:00\"}]")]
+    [InlineData("[{\"minutes_before\":30},{\"minutes_before\":30}]")]
+    public async Task InvalidRelativeReminders_FailBeforeMutation(string reminders)
+    {
+        var habit = CreateHabitWithTime("Read", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
+        SetupHabitFound(habit);
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","relative_reminders":{{reminders}}}""");
+        result.Success.Should().BeFalse();
+        habit.RelativeReminders.Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EnablingSlipAlerts_RequiresPro()
+    {
+        var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Pro required"));
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","slip_alert_enabled":true}""");
+        result.Success.Should().BeFalse();
+        habit.SlipAlertEnabled.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DueEndTime_ClearFieldClearsDeadline()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+            DueEndTime: new TimeOnly(15, 0))).Value;
+        SetupHabitFound(habit);
+        var result = await Execute($$"""{"habit_id":"{{habit.Id}}","clear_fields":["due_end_time"]}""");
+        result.Success.Should().BeTrue();
+        habit.DueEndTime.Should().BeNull();
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(UpdateHabitTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_PreservesHabitLikeAbsent(string field)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+            DueDate: Today, Description: "Keep", Emoji: "📖", Days: [DayOfWeek.Friday],
+            DueTime: new TimeOnly(8, 0), DueEndTime: new TimeOnly(15, 0), EndDate: Today.AddDays(10), ReminderEnabled: true,
+            ReminderTimes: [15], ChecklistItems: [new ChecklistItem("Page", true)])).Value;
+        SetupHabitFound(habit);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { habit });
+        (await Execute($$"""{"habit_id":"{{habit.Id}}"}""")).Success.Should().BeTrue();
+        var before = OptionalParameterCases.HabitState(habit);
+        var args = JsonSerializer.Deserialize<JsonElement>($$"""{"habit_id":"{{habit.Id}}","{{field}}":null}""");
+        (await _tool.CheckArgumentsAsync(args, UserId, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        (await _tool.ExecuteAsync(args, UserId, CancellationToken.None)).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(habit).Should().Be(before);
     }
 
     [Fact]
@@ -55,9 +186,9 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("Habit limit reached"));
-        var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
+        var tool = CreateTool(_habitRepo, _unitOfWork, payGate);
 
-        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
+        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["end_date"]}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
@@ -74,9 +205,9 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
+        var tool = CreateTool(_habitRepo, _unitOfWork, payGate);
 
-        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
+        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["end_date"]}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
@@ -150,7 +281,7 @@ public class UpdateHabitToolTests
     [InlineData("{}")]
     [InlineData("""{"emoji":"📚"}""")]
     [InlineData("""{"due_date":"2026-06-15"}""")]
-    [InlineData("""{"due_time":null}""")]
+    [InlineData("""{"clear_fields": ["due_time"]}""")]
     public async Task PartialUpdate_KeepsDueEndTime(string updates)
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -164,6 +295,7 @@ public class UpdateHabitToolTests
 
         result.Success.Should().BeTrue();
         habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
+        habit.DueTime.Should().Be(fields.ContainsKey("clear_fields") ? null : new TimeOnly(9, 0));
     }
 
     [Fact]
@@ -232,7 +364,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabit("Task", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "frequency_unit": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["frequency_unit"]}""");
 
         result.Success.Should().BeTrue();
         habit.FrequencyUnit.Should().BeNull();
@@ -284,7 +416,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabitWithTime("Meditate", FrequencyUnit.Day, 1, new TimeOnly(8, 0));
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["due_time"]}""");
 
         result.Success.Should().BeTrue();
         habit.DueTime.Should().BeNull();
@@ -361,7 +493,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabitWithEmoji("Gym", "💪");
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "emoji": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["emoji"]}""");
 
         result.Success.Should().BeTrue();
         habit.Emoji.Should().BeNull();
@@ -385,7 +517,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "description": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["description"]}""");
 
         result.Success.Should().BeTrue();
         habit.Description.Should().BeNull();
@@ -433,7 +565,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabit("Challenge", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["end_date"]}""");
 
         result.Success.Should().BeTrue();
         habit.EndDate.Should().BeNull();
@@ -560,7 +692,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabitWithTimeAndReminderTimes("Standup", new TimeOnly(9, 0), 30);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["due_time"]}""");
 
         result.Success.Should().BeTrue();
         habit.DueTime.Should().BeNull();
@@ -693,8 +825,7 @@ public class UpdateHabitToolTests
         ConfigureTransaction(unitOfWork);
         unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
-        var tool = new UpdateHabitTool(
-            new GenericRepository<Habit>(context), _userDateService, unitOfWork, _payGate);
+        var tool = CreateTool(new GenericRepository<Habit>(context), unitOfWork, _payGate);
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Hijacked"), attackerId, CancellationToken.None);
@@ -717,12 +848,27 @@ public class UpdateHabitToolTests
     private static JsonElement RenameArgs(Guid habitId, string title) =>
         JsonDocument.Parse($$"""{"habit_id":"{{habitId}}","title":"{{title}}"}""").RootElement;
 
+    private UpdateHabitTool CreateTool(IGenericRepository<Habit> repository, IUnitOfWork unitOfWork, IPayGateService gate)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var handler = new UpdateHabitCommandHandler(repository, _sentReminders, Substitute.For<IGenericRepository<Goal>>(),
+            gate, Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
+            new MemoryCache(new MemoryCacheOptions()));
+        mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var command = call.Arg<UpdateHabitFieldsCommand>();
+            var validation = await new UpdateHabitFieldsCommandValidator().ValidateAsync(command, call.Arg<CancellationToken>());
+            return validation.IsValid ? await handler.Handle(command, call.Arg<CancellationToken>()) : Result.Failure<string>(validation.ToString());
+        });
+        return new UpdateHabitTool(repository, _userDateService, mediator);
+    }
+
     private static void ConfigureTransaction(IUnitOfWork unitOfWork)
     {
         unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<string>>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<string>>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
     }
 

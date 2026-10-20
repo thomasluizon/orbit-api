@@ -269,7 +269,7 @@ public class GetProfileQueryHandlerTests
             user.SocialOptIn,
             Uses24HourClock = true,
             PublicProfile = (Orbit.Application.Profile.Commands.PublicProfileSettings?)null,
-            user.ProactiveAstraEnabled,
+            ProactiveAstraEnabled = user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             LastCompletionDate = (DateOnly?)null
         });

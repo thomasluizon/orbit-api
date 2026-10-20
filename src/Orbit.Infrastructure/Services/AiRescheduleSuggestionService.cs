@@ -12,11 +12,11 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiRescheduleSuggestionService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiRescheduleSuggestionService> logger) : IRescheduleSuggestionService
 {
     private const int MaxRationaleChars = 240;
-    private const int MaxOutputTokens = 220;
+    private const int MaxOutputTokens = 8192;
     private const int RescheduleHistoryWindowDays = 60;
 
     public async Task<Result<RescheduleSuggestion>> GenerateAsync(
@@ -51,6 +51,10 @@ public sealed partial class AiRescheduleSuggestionService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogRescheduleGenerated(logger, habit.Id);
             return suggestion;
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<RescheduleSuggestion>(AiBudgetExceededException.Error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

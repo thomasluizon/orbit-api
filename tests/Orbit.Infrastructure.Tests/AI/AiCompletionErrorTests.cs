@@ -1,3 +1,5 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -6,9 +8,9 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Tests.AI;
@@ -22,7 +24,7 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiCompletionErrorTests
 {
     [Fact]
-    public async Task CompleteTextAsync_QuotaExhausted429_RetriesThenThrowsWithoutRecordingUsage()
+    public async Task CompleteTextAsync_QuotaExhausted429_RetriesThenThrowsAndRecordsErrorWithoutTokens()
     {
         const string quotaBody =
             "{\"error\":{\"message\":\"You exceeded your current quota\",\"type\":\"insufficient_quota\",\"code\":\"insufficient_quota\"}}";
@@ -38,13 +40,13 @@ public class AiCompletionErrorTests
         handler.CallCount.Should().Be(3);
         retryLogger.Entries.Should().HaveCount(3);
         retryLogger.Entries[^1].Should().Contain("retriable: False");
-        await usageRecorder.DidNotReceive().RecordAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
-            Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await usageRecorder.Received(1).RecordAsync(
+            Arg.Any<string>(), "gpt-6-luna", 0, 0, 0, 0, Arg.Any<CancellationToken>(), null,
+            Arg.Is<AiCallTelemetry>(call => call.IsError && !call.HasUsage));
     }
 
     [Fact]
-    public async Task CompleteJsonAsync_ContextLengthExceeded400_ThrowsImmediatelyWithoutRetryOrUsage()
+    public async Task CompleteJsonAsync_ContextLengthExceeded400_ThrowsImmediatelyAndRecordsErrorWithoutTokens()
     {
         const string contextBody =
             "{\"error\":{\"message\":\"maximum context length exceeded\",\"type\":\"invalid_request_error\",\"code\":\"context_length_exceeded\"}}";
@@ -59,18 +61,17 @@ public class AiCompletionErrorTests
         exception.Status.Should().Be(400);
         handler.CallCount.Should().Be(1);
         retryLogger.Entries.Should().ContainSingle().Which.Should().Contain("retriable: False");
-        await usageRecorder.DidNotReceive().RecordAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
-            Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await usageRecorder.Received(1).RecordAsync(
+            Arg.Any<string>(), "gpt-6-luna", 0, 0, 0, 0, Arg.Any<CancellationToken>(), null,
+            Arg.Is<AiCallTelemetry>(call => call.IsError && !call.HasUsage));
     }
 
     private static AiCompletionClient BuildClient(
         HttpMessageHandler handler, ILogger retryLogger, IAiUsageRecorder usageRecorder, int maxRetries)
     {
-        var chatClient = new ChatClient(
-            model: "gpt-test",
+        var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(new HttpClient(handler)),

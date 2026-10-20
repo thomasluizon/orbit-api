@@ -7,6 +7,18 @@ namespace Orbit.Domain.Tests.Entities;
 public class AgentStateAndAuditTests
 {
     [Fact]
+    public void PendingAgentOperationState_LegacySchemaCannotConsumeEvenWhenConfirmed()
+    {
+        var state = CreateState();
+        state.ArgumentSchemaVersion.Should().Be(PendingAgentOperationState.CurrentArgumentSchemaVersion);
+        state.SetConfirmationTokenHash("hash");
+        state.IsUsable(state.CapabilityId, state.OperationFingerprint, false, DateTime.UtcNow).Should().BeTrue();
+        typeof(PendingAgentOperationState).GetProperty(nameof(PendingAgentOperationState.ArgumentSchemaVersion))!
+            .SetValue(state, 0);
+        state.IsUsable(state.CapabilityId, state.OperationFingerprint, false, DateTime.UtcNow).Should().BeFalse();
+    }
+
+    [Fact]
     public void PendingAgentOperationState_Create_UsesDefaultsForBlankArguments()
     {
         var capability = CreateCapability(AgentCapabilityIds.HabitsDelete, AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation);

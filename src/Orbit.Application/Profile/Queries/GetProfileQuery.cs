@@ -156,7 +156,7 @@ public class GetProfileQueryHandler(
             false,
             TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone),
             null,
-            user.ProactiveAstraEnabled,
+            user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             lastCompletionDate,
             activeApiKeyCount));

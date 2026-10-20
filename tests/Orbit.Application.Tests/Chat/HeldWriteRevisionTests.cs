@@ -7,6 +7,7 @@ using Orbit.Application.Auth.Services;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.ApiKeys.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
@@ -18,7 +19,7 @@ public sealed class HeldWriteRevisionTests
     public static TheoryData<string, string, string, string, string> EditableTools => new()
     {
         { "create_habit", """{"title":"Read"}""", "title", "\"Write\"", "Title" },
-        { "update_habit", """{"habit_id":"$habit","title":"Read"}""", "title", "\"Write\"", "Title" },
+        { "update_habit", """{"habit_id":"$habit","title":"Read"}""", "title", "\"Write\"", "Changes.Title" },
         { "assign_tags", """{"habit_id":"$habit","tag_names":["Study"]}""", "tag_names", """["Work"]""", "Tags.0.Name" },
         { "bulk_create_habits", """{"habits":[{"title":"Read"}]}""", "title", "\"Write\"", "Habits.0.Title" },
         { "bulk_update_habits", """{"filter":{"all":true},"updates":{"title":"Read"}}""", "title", "\"Write\"", "Changes.Title" },
@@ -76,13 +77,20 @@ public sealed class HeldWriteRevisionTests
         execution.Success.Should().BeTrue(execution.Error);
         object written = name switch
         {
-            "assign_tags" or "bulk_update_habit_emojis" or "update_habit" => context.Habit,
+            "assign_tags" or "bulk_update_habit_emojis" => context.Habit,
             "create_habit" => context.Added.OfType<Habit>().Single(),
             "create_goal" => context.Added.OfType<Goal>().Single(),
             "update_goal" or "update_goal_progress" or "update_goal_status" => context.Goal,
             "suggest_breakdown" => execution,
             _ => context.Commands.Single()
         };
+        if (name == "update_habit")
+        {
+            var command = written.Should().BeOfType<UpdateHabitFieldsCommand>().Subject;
+            command.Changes.HasTitle.Should().BeTrue();
+            command.Changes.HasDueTime.Should().BeFalse();
+            command.Changes.HasDueEndTime.Should().BeFalse();
+        }
         var actual = AtPath(JsonSerializer.SerializeToElement(written), executionPath);
         var expected = name switch
         {
@@ -146,6 +154,7 @@ public sealed class HeldWriteRevisionTests
         { "create_tag", """{"name":"Read","color":"#7c3aed"}""", """{"color":"invalid"}""" },
         { "update_tag", """{"tag_id":"$tag","name":"Read","color":"#7c3aed"}""", """{"name":""}""" },
         { "update_goal", """{"goal_id":"$goal","target_value":1}""", """{"target_value":0}""" },
+        { "update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":""}""" },
         { "update_goal", """{"goal_id":"$goal","title":"Read"}""", """{"title":null}""" },
         { "update_goal_progress", """{"goal_id":"$goal","current_value":1}""", """{"current_value":-1}""" },
         { "update_goal_status", """{"goal_id":"$goal","status":"Completed"}""", """{"status":"Active"}""" }

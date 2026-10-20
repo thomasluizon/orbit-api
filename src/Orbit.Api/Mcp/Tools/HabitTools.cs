@@ -16,6 +16,7 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService, McpExecutorBridge executorBridge)
 {
+    private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
     private const string HabitIdDescription = "The habit ID (GUID)";
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
@@ -54,7 +55,23 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         {
             lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
                 h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.IsGeneral, h.IsFlexible,
-                h.ChecklistItems, h.Tags, h.Emoji), indent: 0));
+                h.ChecklistItems, h.Tags, h.Emoji,
+                new HabitFieldSummary
+                {
+                    Description = h.Description,
+                    DueTime = h.DueTime,
+                    DueEndTime = h.DueEndTime,
+                    IntervalWeeks = h.IntervalWeeks,
+                    Days = h.Days,
+                    EndDate = h.EndDate,
+                    ReminderEnabled = h.ReminderEnabled,
+                    ReminderTimes = h.ReminderTimes,
+                    ScheduledReminders = h.ScheduledReminders,
+                    RelativeReminders = h.RelativeReminders ?? [],
+                    SlipAlertEnabled = h.SlipAlertEnabled,
+                    IsFlexible = h.IsFlexible,
+                    ChecklistItems = h.ChecklistItems
+                }.Format(h.DueDate)), indent: 0));
             McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
         }
 
@@ -90,7 +107,28 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                    (h.ChecklistItems.Count > 0 ? string.Create(CultureInfo.InvariantCulture, $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n") : "") +
                    string.Create(CultureInfo.InvariantCulture, $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n") +
                    (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
-        return habitSummary;
+        var details = new HabitFieldSummary
+        {
+            Description = null,
+            DueTime = null,
+            DueEndTime = h.DueEndTime,
+            IntervalWeeks = h.IntervalWeeks,
+            Days = [],
+            EndDate = h.EndDate,
+            ReminderEnabled = h.ReminderEnabled,
+            ReminderTimes = h.ReminderTimes,
+            ScheduledReminders = h.ScheduledReminders,
+            RelativeReminders = h.RelativeReminders ?? [],
+            SlipAlertEnabled = h.SlipAlertEnabled == true,
+            IsFlexible = false,
+            ChecklistItems = h.ChecklistItems
+        }.Format();
+        if (details.Length > 0) habitSummary += details + "\n";
+        if (h.Tags is { Count: > 0 }) habitSummary += $"Tags: {string.Join(", ", h.Tags.Select(t => t.Name))}\n";
+        if (h.LinkedGoals is { Count: > 0 }) habitSummary += $"Goals: {string.Join(", ", h.LinkedGoals.Select(g => $"{g.Title} ({g.Id})"))}\n";
+        var children = new List<string>();
+        McpToolHelpers.AppendDetailChildren(children, h.Children, 1);
+        return habitSummary + string.Join("\n", children);
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]
@@ -133,34 +171,40 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             : $"More detail needed before creating '{title}': specify a frequency (e.g. Day, Week) or mark it as a one-time task.";
     }
 
-    [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Title is required (pass current title if unchanged). Only change fields you need to modify.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "UpdateHabit preserves nine flat habit update schema properties, including intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
+    [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Omitted fields keep their current values.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "UpdateHabit preserves flat habit update schema properties, including intervalWeeks, reminders and emoji. MCP schema generation requires these separate parameters.")]
     public async Task<string> UpdateHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
-        [Description("Habit title (required, pass current title if not changing)")] string title,
+        [Description("New habit title. Omit to keep the current title.")] string? title = null,
         [Description("New description")] string? description = null,
         [Description("New frequency unit: Day, Week, Month, Year")] string? frequencyUnit = null,
         [Description("New frequency quantity")] int? frequencyQuantity = null,
         [Description("New due date in YYYY-MM-DD format")] string? dueDate = null,
-        [Description("New due time in HH:mm format")] string? dueTime = null,
+        [Description("New due time in HH:mm format. Omit to keep it; an empty string clears it.")] string? dueTime = null,
         [Description("New repeat interval in weeks. Use 1 for every week.")] int? intervalWeeks = null,
         [Description("Emoji icon. Omit to keep it, or pass null to clear it.")] string? emoji = "",
+        [Description("End time or deadline in HH:mm format. Omit to keep it; null clears it.")] string? dueEndTime = "",
+        [Description("Whether this is a general habit. Children must match their parent.")] bool? isGeneral = null,
+        [Description("Enable slip alerts. Requires Pro.")] bool? slipAlertEnabled = null,
+        [Description("JSON array of relative reminders: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.")] string? relativeReminders = null,
         CancellationToken cancellationToken = default)
     {
-        var arguments = new Dictionary<string, object?>
-        {
-            ["habit_id"] = habitId,
-            ["title"] = title,
-            ["description"] = description,
-            ["frequency_unit"] = frequencyUnit,
-            ["frequency_quantity"] = frequencyQuantity,
-            ["due_date"] = dueDate,
-            ["due_time"] = dueTime,
-            ["interval_weeks"] = intervalWeeks
-        };
-        if (emoji != string.Empty)
-            arguments["emoji"] = emoji;
+        var arguments = new Dictionary<string, object?> { ["habit_id"] = habitId };
+        if (title is not null) arguments["title"] = title;
+        if (description is not null) arguments["description"] = description;
+        if (frequencyUnit is not null) arguments["frequency_unit"] = frequencyUnit;
+        if (frequencyQuantity is not null) arguments["frequency_quantity"] = frequencyQuantity;
+        if (dueDate is not null) arguments["due_date"] = dueDate;
+        if (dueTime is not null) arguments["due_time"] = dueTime.Length == 0 ? null : dueTime;
+        if (intervalWeeks is not null) arguments["interval_weeks"] = intervalWeeks;
+        if (emoji != string.Empty) arguments["emoji"] = emoji;
+        if (dueEndTime != string.Empty) arguments["due_end_time"] = dueEndTime;
+        if (isGeneral is not null) arguments["is_general"] = isGeneral;
+        if (slipAlertEnabled is not null) arguments["slip_alert_enabled"] = slipAlertEnabled;
+        var jsonError = McpToolHelpers.AddJsonArguments(arguments, ("relative_reminders", relativeReminders));
+        if (jsonError is not null)
+            return jsonError;
 
         var result = await executorBridge.ExecuteAsync(user, "update_habit", arguments, confirmationToken: null, cancellationToken);
 
@@ -182,7 +226,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return result.Succeeded ? $"Deleted habit {habitId}" : result.Message;
     }
 
-    [McpServerTool(Name = "log_habit"), Description("Log a habit as completed (or toggle it off if already logged today).")]
+    [McpServerTool(Name = "log_habit"), Description("Log a habit as completed. Already logged dates fail; use unlog_habit to undo.")]
     public async Task<string> LogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
@@ -196,6 +240,21 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? $"Logged habit {habitId}" : result.Message;
+    }
+
+    [McpServerTool(Name = "unlog_habit"), Description("Undo a habit completion for a specific date (defaults to today). Fails if no completion exists.")]
+    public async Task<string> UnlogHabit(
+        ClaimsPrincipal user,
+        [Description(HabitIdDescription)] string habitId,
+        [Description("Date of the completion in YYYY-MM-DD format (defaults to today)")] string? date = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "unlog_habit", new
+        {
+            habit_id = habitId,
+            date
+        }, confirmationToken: null, cancellationToken);
+        return result.Succeeded ? $"Unlogged habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "get_habit_metrics"), Description("Get streak, completion rate, and other metrics for a habit.")]
@@ -326,8 +385,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return $"Logs for {grouped.Count} habits (total_logs: {totalLogs}, returned_logs: {returnedLogCount}, partial: {partial.ToString().ToLowerInvariant()}):\n{string.Join("\n", lines)}";
     }
 
-    [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit. Requires Pro subscription.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateSubHabit preserves nine flat child-habit schema properties, including parentHabitId and isFlexible. MCP schema generation requires these separate parameters.")]
+    [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateSubHabit preserves flat child-habit schema properties, including parentHabitId, reminders and checklist items. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateSubHabit(
         ClaimsPrincipal user,
         [Description("The parent habit ID (GUID)")] string parentHabitId,
@@ -339,20 +398,49 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Whether this is a bad habit")] bool isBadHabit = false,
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due date override in YYYY-MM-DD format")] string? dueDate = null,
+        [Description("End time or deadline in HH:mm format")] string? dueEndTime = null,
+        [Description("End date in YYYY-MM-DD format")] string? endDate = null,
+        [Description("Repeat interval in weeks")] int? intervalWeeks = null,
+        [Description("Emoji icon")] string? emoji = null,
+        [Description("Weekday names")] string[]? days = null,
+        [Description("Enable reminders")] bool reminderEnabled = false,
+        [Description("Minutes before due time")] int[]? reminderTimes = null,
+        [Description("Enable slip alerts")] bool slipAlertEnabled = false,
+        [Description("JSON array of scheduled reminders with when (day_before/same_day) and time (HH:mm)")] string? scheduledReminders = null,
+        [Description("JSON array of relative reminders with minutes_before, or when and time")] string? relativeReminders = null,
+        [Description("JSON array of checklist items with text and is_checked")] string? checklistItems = null,
+        [Description("Existing tag IDs")] string[]? tagIds = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", new
+        var arguments = new Dictionary<string, object?>
         {
-            parent_habit_id = parentHabitId,
-            title,
-            description,
-            frequency_unit = frequencyUnit,
-            frequency_quantity = frequencyQuantity,
-            due_time = dueTime,
-            is_bad_habit = isBadHabit,
-            is_flexible = isFlexible,
-            due_date = dueDate
-        }, confirmationToken: null, cancellationToken);
+            ["parent_habit_id"] = parentHabitId,
+            ["title"] = title,
+            ["description"] = description,
+            ["frequency_quantity"] = frequencyQuantity,
+            ["due_time"] = dueTime,
+            ["is_bad_habit"] = isBadHabit,
+            ["is_flexible"] = isFlexible,
+            ["due_date"] = dueDate,
+            ["due_end_time"] = dueEndTime,
+            ["end_date"] = endDate,
+            ["interval_weeks"] = intervalWeeks,
+            ["emoji"] = emoji,
+            ["days"] = days,
+            ["reminder_enabled"] = reminderEnabled,
+            ["reminder_times"] = reminderTimes,
+            ["slip_alert_enabled"] = slipAlertEnabled,
+            ["tag_ids"] = tagIds
+        }.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value);
+        if (frequencyUnit is not null)
+            arguments["frequency_unit"] = frequencyUnit;
+        var jsonError = McpToolHelpers.AddJsonArguments(arguments,
+            ("scheduled_reminders", scheduledReminders), ("relative_reminders", relativeReminders),
+            ("checklist_items", checklistItems));
+        if (jsonError is not null)
+            return jsonError;
+        var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", arguments,
+            confirmationToken: null, cancellationToken);
 
         return result.Succeeded
             ? $"Created sub-habit '{title}' (id: {result.TargetId}) under parent {parentHabitId}"
@@ -390,8 +478,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         if (!result.Succeeded)
             return result.Message;
 
-        if (result.Payload is not BulkCreateResult bulk)
-            return $"Bulk create: {result.TargetName}";
+        var bulk = result.Payload switch
+        {
+            BulkCreateResult typed => typed,
+            JsonElement json => json.Deserialize<BulkCreateResult>(PayloadOptions),
+            _ => null
+        };
+        if (bulk is null)
+            return FormatBulkMutationResult(result);
 
         var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);
         var failCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Failed);
@@ -400,7 +494,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 ? $"- OK: {x.Title} (id: {x.HabitId})"
                 : $"- FAILED: {x.Title} - {x.Error}");
 
-        return $"Bulk create: {successCount} succeeded, {failCount} failed\n{string.Join("\n", lines)}";
+        var coverage = JsonSerializer.Serialize(new
+        {
+            applied_count = bulk.AppliedCount,
+            total_matched = bulk.TotalMatched,
+            skipped_count = bulk.SkippedCount,
+            partial = bulk.Partial
+        });
+        return $"Bulk create: {successCount} succeeded, {failCount} failed\n{string.Join("\n", lines)}\n{coverage}";
     }
 
     [McpServerTool(Name = "bulk_delete_habits"), Description("Delete multiple habits at once.")]
@@ -420,10 +521,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             filter
         }, confirmationToken, cancellationToken);
 
-        if (!result.Succeeded)
-            return result.Message;
-
-        return result.TargetName ?? "Bulk delete completed.";
+        return FormatBulkMutationResult(result);
     }
 
     [McpServerTool(Name = "bulk_update_habits"), Description("Update the full server-side set of habits matching a JSON filter in one operation.")]
@@ -442,7 +540,29 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             updates
         }, confirmationToken, cancellationToken);
 
-        return result.Succeeded ? result.TargetName ?? "Bulk habit update completed." : result.Message;
+        return FormatBulkMutationResult(result);
+    }
+
+    [McpServerTool(Name = "bulk_update_habit_emojis"), Description("Update emojis for the full server-side set matching a filter. Infer from each title in bounded AI batches, apply an explicit emoji, or pass null to clear. Returns applied_count, total_matched and partial.")]
+    public async Task<string> BulkUpdateHabitEmojis(
+        ClaimsPrincipal user,
+        [Description("JSON filter with all, habit_ids, tag, search, is_completed, is_general, is_bad_habit, or frequency")] string filterJson,
+        [Description("Emoji to apply, null to clear, or omit to infer from titles")] string? emoji = "",
+        [Description("Infer one relevant emoji per habit. Defaults to true when emoji is omitted.")] bool? inferFromTitle = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        var arguments = new Dictionary<string, object?>
+        {
+            ["filter"] = JsonSerializer.Deserialize<JsonElement>(filterJson),
+            ["infer_from_title"] = inferFromTitle ?? emoji == string.Empty
+        };
+        if (emoji != string.Empty)
+            arguments["emoji"] = emoji;
+
+        var result = await executorBridge.ExecuteAsync(user, "bulk_update_habit_emojis", arguments,
+            confirmationToken, cancellationToken);
+        return FormatBulkMutationResult(result);
     }
 
     [McpServerTool(Name = "bulk_reschedule_habits"), Description("Reschedule the full server-side set of habits matching a JSON filter in one operation.")]
@@ -460,7 +580,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             due_date = dueDate
         }, confirmationToken, cancellationToken);
 
-        return result.Succeeded ? result.TargetName ?? "Bulk habit reschedule completed." : result.Message;
+        return FormatBulkMutationResult(result);
     }
 
     [McpServerTool(Name = "bulk_log_habits"), Description("Log multiple habits as completed at once.")]
@@ -502,7 +622,16 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             date
         }, confirmationToken, cancellationToken);
 
-        return result.Succeeded ? result.TargetName ?? "Bulk habit operation completed." : result.Message;
+        return FormatBulkMutationResult(result);
+    }
+
+    private static string FormatBulkMutationResult(McpExecutorResult result)
+    {
+        if (!result.Succeeded)
+            return result.Message;
+        if (result.Payload is null)
+            return result.TargetName ?? "Bulk habit coverage is unavailable.";
+        return $"{result.TargetName ?? "Bulk habit result"}\n{JsonSerializer.Serialize(result.Payload)}";
     }
 
     [McpServerTool(Name = "reorder_habits"), Description("Reorder habits by setting new positions.")]

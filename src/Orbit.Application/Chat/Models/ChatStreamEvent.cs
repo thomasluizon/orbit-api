@@ -13,9 +13,10 @@ public sealed record ChatStreamEvent(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Error = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Code = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Domain = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Access = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Access = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null)
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
+    internal static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter() }
@@ -26,7 +27,7 @@ public sealed record ChatStreamEvent(
     public static ChatStreamEvent Delta(string text) => new("delta", Text: text);
     public static ChatStreamEvent Reset() => new("reset");
     public static ChatStreamEvent Step(string domain, string access) => new("step", Domain: domain, Access: access);
-    public static ChatStreamEvent Final(ChatResponse response) => new("final", Response: response);
+    public static ChatStreamEvent Final(ChatResponse response) => new("final", Response: response, EvalTrace: response.EvalTrace);
 
     public static ChatStreamEvent Failure(int status, string error, string? code = null) =>
         new("error", Status: status, Error: error, Code: code);

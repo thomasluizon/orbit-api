@@ -168,6 +168,8 @@ public class GlobalRulesSectionTests
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("NO HABIT SUBSTITUTION FOR LOG / SKIP");
+        result.Should().Contain("Only log habits that are due or overdue on the user's today unless the user explicitly named a date");
+        result.Should().Contain("call unlog_habit for the same habit and date");
         result.Should().Contain("log_habit");
         result.Should().Contain("bulk_log_habits");
         result.Should().Contain("skip_habit");
@@ -207,6 +209,8 @@ public class GlobalRulesSectionTests
         result.Should().Contain("partial=false");
         result.Should().Contain("applied_count equals total_matched");
         result.Should().Contain("Never loop update_habit");
+        result.Should().NotContain("call the tool for BOTH the parent and each sub-habit separately");
+        result.Should().Contain("one bulk call including the parent and every requested sub-habit");
     }
 }
 

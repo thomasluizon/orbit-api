@@ -18,6 +18,9 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
             .MaximumLength(AppConstants.MaxChatMessageLength)
             .WithCopy(ValidationErrorCodes.ChatMessageLength);
 
+        When(x => x.BlockAnswer is not null, () =>
+            RuleFor(x => x.BlockAnswer!).SetValidator(new AstraBlockAnswerValidator()));
+
         RuleFor(x => x.History)
             .Must(history => history is null || history.Count <= AppConstants.MaxChatHistoryMessages)
             .WithCopy(ValidationErrorCodes.ChatHistoryLimit);

@@ -1,43 +1,178 @@
+#pragma warning disable OPENAI001
+
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
-using OpenAI;
-using OpenAI.Chat;
+using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Services;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
 public class AiCompletionClientTests
 {
+    [Theory]
+    [InlineData("json")]
+    [InlineData("text")]
+    public async Task UsageCancellation_DoesNotReplaceProviderError(string kind)
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>(), Arg.Any<long>())
+            .Returns(_ => Task.FromException(new OperationCanceledException("recording cancelled")));
+        var client = new AiCompletionClient(BuildResponsesClient(new UnauthorizedHandler()),
+            NullLogger<AiCompletionClient>.Instance, usage);
+        Func<Task> call = kind == "json"
+            ? async () => await client.CompleteJsonAsync<Probe>("system", "user")
+            : async () => await client.CompleteTextAsync("system", "user");
+
+        (await call.Should().ThrowAsync<ClientResultException>()).Which.Status.Should().Be(401);
+        usage.ReceivedCalls().Should().ContainSingle();
+    }
+
+    private sealed class UnauthorizedHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            });
+    }
+
+    [Theory]
+    [InlineData("json")]
+    [InlineData("text")]
+    [InlineData("chat")]
+    public async Task CompletionDeadline_CancelsUsageWriteAfterSuccessfulResponse(string kind)
+    {
+        var entered = new TaskCompletionSource<(CancellationToken Token, AiCallTelemetry Telemetry)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var usage = Substitute.For<IAiUsageRecorder>();
+        usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>())
+            .Returns(async call =>
+            {
+                var token = call.Arg<CancellationToken>();
+                entered.TrySetResult((token, call.Arg<AiCallTelemetry>()));
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    cancelled.TrySetResult();
+                    throw;
+                }
+            });
+        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance,
+            usage, TimeSpan.FromSeconds(1));
+        var intent = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        Func<Task> call = kind switch
+        {
+            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
+            "text" => async () => await client.CompleteTextAsync("system", "user"),
+            _ => async () => await intent.SendWithToolsAsync(new AiToolRequest("user", "system", []))
+        };
+
+        var completion = call();
+        var recording = await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        recording.Telemetry.HasUsage.Should().BeTrue();
+        recording.Telemetry.IsError.Should().BeFalse();
+        recording.Token.CanBeCanceled.Should().BeTrue();
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        recording.Token.IsCancellationRequested.Should().BeTrue();
+        Func<Task> bounded = () => completion.WaitAsync(TimeSpan.FromSeconds(5));
+        await bounded.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    public async Task BackgroundCalls_RecordPurposeLatencyAndOneTracePerRun(string kind)
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance, usage);
+        for (var index = 0; index < 2; index++)
+        {
+            if (kind == "json")
+                await client.CompleteJsonAsync<Probe>("private system", "private user", purpose: "daily_summary");
+            else
+                await client.CompleteTextAsync("private system", "private user", purpose: "daily_summary");
+        }
+        var calls = usage.ReceivedCalls().ToList();
+        calls.Should().HaveCount(2);
+        calls.Should().OnlyContain(call => (string)call.GetArguments()[0]! == "daily_summary");
+        var metadata = calls.Select(call => (AiCallTelemetry)call.GetArguments()[8]!).ToList();
+        metadata.Should().OnlyContain(call => call.LatencySeconds >= 0 && !call.IsError && call.HasUsage && call.ToolNames.Count == 0);
+        metadata.Select(call => call.TraceId).Distinct().Should().HaveCount(2);
+        JsonSerializer.Serialize(metadata).Should().NotContain("private");
+    }
+
     [Fact]
     public async Task CompleteJsonAsync_SubTaskTier_OmitsTemperature()
     {
         var handler = new CapturingHandler();
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
-        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
 
         await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", purpose: "fact_extraction", tier: AiModelTier.SubTask);
 
         handler.LastRequestBody.Should().NotBeNull();
+        handler.LastRequestUri.Should().EndWith("/responses");
         handler.LastRequestBody.Should().NotContain("temperature");
         await usageRecorder.Received(1).RecordAsync(
-            "fact_extraction", "subtask-test", 0, 1, 2, 3, Arg.Any<CancellationToken>());
+            "fact_extraction", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), null, Arg.Any<AiCallTelemetry>());
+    }
+
+    [Theory]
+    [InlineData("json", AiModelTier.Primary)]
+    [InlineData("json", AiModelTier.SubTask)]
+    [InlineData("text", AiModelTier.Primary)]
+    [InlineData("text", AiModelTier.SubTask)]
+    public async Task DefaultModels_BackgroundCalls_UseLunaWithLowReasoning(string kind, AiModelTier tier)
+    {
+        var handler = new CapturingHandler();
+        var settings = new AiSettings { ApiKey = "test-key", BaseUrl = "https://orbit.test/v1" };
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+
+        if (kind == "json")
+            await client.CompleteJsonAsync<Probe>("system", "user", tier: tier);
+        else
+            await client.CompleteTextAsync("system", "user", tier: tier);
+
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+        document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
+        await usage.Received(1).RecordAsync(kind, "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), null, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
-    public async Task CompleteJsonAsync_PrimaryTier_SendsTemperature()
+    public async Task CompleteJsonAsync_LegacyPrimaryModel_SendsTemperature()
     {
         var handler = new CapturingHandler();
-        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>(), primaryModel: "gpt-4.1-mini");
 
         await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", temperature: 0.1, purpose: "json", tier: AiModelTier.Primary);
 
-        handler.LastRequestBody.Should().Contain("temperature");
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        document.RootElement.GetProperty("temperature").GetDouble().Should().BeApproximately(0.1, 0.00001);
+        document.RootElement.TryGetProperty("reasoning", out _).Should().BeFalse();
+        document.RootElement.TryGetProperty("include", out _).Should().BeFalse();
     }
 
     [Fact]
@@ -45,13 +180,17 @@ public class AiCompletionClientTests
     {
         var handler = new CapturingHandler();
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
-        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var userId = Guid.NewGuid();
 
         await client.CompleteJsonAsync<Probe>("system", "user", userId: userId);
 
         await usageRecorder.Received(1).RecordAsync(
-            "json", "primary-test", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId);
+            "json", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        document.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
+        document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        document.RootElement.TryGetProperty("user", out _).Should().BeFalse();
     }
 
     [Fact]
@@ -68,18 +207,326 @@ public class AiCompletionClientTests
     }
 
     [Theory]
+    [InlineData(AiModelTier.Primary, "gpt-6-luna", "gpt-6-luna", false)]
+    [InlineData(AiModelTier.Primary, "gpt-5.4-nano", "gpt-6-luna", false)]
+    [InlineData(AiModelTier.SubTask, "gpt-6-luna", "gpt-4.1-mini", true)]
     [InlineData(AiModelTier.Primary, "gpt-4.1-mini", "gpt-5.4-nano", true)]
     [InlineData(AiModelTier.SubTask, "gpt-4.1-mini", "gpt-5.4-nano", false)]
     [InlineData(AiModelTier.SubTask, "gpt-4.1-mini", "gpt-4.1-mini", true)]
-    public void ShouldApplyTemperature_SuppressedOnlyForDistinctSubTaskModel(
+    public void ShouldApplyTemperature_UsesSelectedModelCapabilities(
         AiModelTier tier, string primary, string subTask, bool expected)
         => AiCompletionClient.ShouldApplyTemperature(tier, primary, subTask).Should().Be(expected);
 
-    private static ChatClient BuildChatClient(HttpMessageHandler handler) =>
+    public static IEnumerable<object[]> CompletionDeadlineCases()
+    {
+        for (var iteration = 0; iteration < 200; iteration++)
+            yield return ["json", iteration];
+        foreach (var kind in new[] { "text", "chat", "stream" })
+            yield return [kind, 0];
+    }
+
+    [Theory]
+    [MemberData(nameof(CompletionDeadlineCases))]
+    public async Task CompletionDeadline_CancelsTheWholeCallIncludingRetryWaits(string kind, int iteration)
+    {
+        using var handler = new WaitingHandler();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>(), TimeSpan.FromMilliseconds(50));
+        var intent = new AiIntentService(AiBudgetTestDouble.Wrap(client), Substitute.For<IAiUsageRecorder>(), NullLogger<AiIntentService>.Instance);
+        Func<Task> call = kind switch
+        {
+            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
+            "text" => async () => await client.CompleteTextAsync("system", "user"),
+            _ => async () => await intent.SendWithToolsAsync(new AiToolRequest("user", "system", [], Guid.NewGuid()),
+                kind == "stream" ? _ => Task.CompletedTask : null)
+        };
+
+        Func<Task> boundedCall = () => call().WaitAsync(TimeSpan.FromSeconds(5));
+        await boundedCall.Should().ThrowAsync<OperationCanceledException>($"deadline case {kind}/{iteration} must cancel");
+    }
+
+    [Theory]
+    [InlineData("json")]
+    [InlineData("text")]
+    [InlineData("chat")]
+    public async Task CompletionDeadline_ConfiguredBound_CancelsBufferedCallsDuringRetryWait(string kind)
+    {
+        var settings = new AiSettings
+        {
+            ApiKey = "test-key",
+            BaseUrl = "https://orbit.test/v1",
+            CompletionTimeoutSeconds = 1
+        };
+        var usage = Substitute.For<IAiUsageRecorder>();
+        using var handler = new WaitingHandler();
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        Func<Task> call = kind switch
+        {
+            "json" => async () => await client.CompleteJsonAsync<Probe>("system", "user"),
+            "text" => async () => await client.CompleteTextAsync("system", "user"),
+            _ => async () => await service.SendWithToolsAsync(new AiToolRequest("user", "system", []))
+        };
+
+        Func<Task> boundedCall = () => call().WaitAsync(TimeSpan.FromSeconds(5));
+        await boundedCall.Should().ThrowAsync<OperationCanceledException>();
+        client.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(1));
+        client.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
+        var metadata = (AiCallTelemetry)usage.ReceivedCalls().Single().GetArguments()[8]!;
+        metadata.IsError.Should().BeTrue();
+        metadata.HasUsage.Should().BeFalse();
+        metadata.LatencySeconds.Should().BeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData("gpt-6.1-sol", "gpt-6-luna", AiModelTier.Primary, "gpt-6.1-sol", false)]
+    [InlineData("gpt-6-luna", "gpt-6-luna", AiModelTier.Primary, "gpt-6-luna", false)]
+    [InlineData("gpt-6-luna", "gpt-6-luna", AiModelTier.SubTask, "gpt-6-luna", false)]
+    [InlineData("gpt-4.1-mini", "gpt-6-luna", AiModelTier.Primary, "gpt-4.1-mini", true)]
+    [InlineData("gpt-6-luna", "gpt-4.1-mini", AiModelTier.SubTask, "gpt-4.1-mini", true)]
+    [InlineData("gpt-4.1-mini", "", AiModelTier.SubTask, "gpt-4.1-mini", true)]
+    public async Task CompleteTextAsync_ConfiguredTier_SendsCompatibleResponsesOptions(
+        string primary, string subTask, AiModelTier tier, string expectedModel, bool temperatureAccepted)
+    {
+        var handler = new CapturingHandler();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>(), primaryModel: primary, subTaskModel: subTask);
+
+        await client.CompleteTextAsync("system", "user", tier: tier);
+
+        using var document = System.Text.Json.JsonDocument.Parse(handler.LastRequestBody!);
+        var root = document.RootElement;
+        root.GetProperty("model").GetString().Should().Be(expectedModel);
+        root.GetProperty("store").GetBoolean().Should().BeFalse();
+        root.TryGetProperty("temperature", out _).Should().Be(temperatureAccepted);
+        if (temperatureAccepted)
+        {
+            root.TryGetProperty("reasoning", out _).Should().BeFalse();
+            root.TryGetProperty("include", out _).Should().BeFalse();
+        }
+        else
+        {
+            root.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+            root.GetProperty("include").EnumerateArray().Select(value => value.GetString())
+                .Should().Contain("reasoning.encrypted_content");
+        }
+    }
+
+    [Fact]
+    public async Task CompleteTextAsync_MultipleAssistantMessages_PreservesMessageBoundaries()
+    {
+        var response = ResponsesTestData.Response();
+        response.OutputItems.Add(ResponseItem.CreateAssistantMessageItem(
+            [ResponseContentPart.CreateOutputTextPart("Check", []), ResponseContentPart.CreateOutputTextPart("ing.", [])]));
+        response.OutputItems.Add(ResponseItem.CreateReasoningItem([]));
+        response.OutputItems.Add(ResponseItem.CreateAssistantMessageItem("Done."));
+        var handler = new CapturingHandler(ModelReaderWriter.Write(response).ToString());
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>());
+
+        var result = await client.CompleteTextAsync("system", "user");
+
+        result.Should().Be("Checking.\n\nDone.");
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("json")]
+    [InlineData("chat")]
+    [InlineData("stream")]
+    public async Task NetworkTimeout_BufferedReasoningHasHeadroomWhileStreamingFailsPromptly(string kind)
+    {
+        var handler = new SlowResponseHandler(waitForCancellation: kind == "stream");
+        var settings = new AiSettings
+        {
+            ApiKey = "test-key",
+            BaseUrl = "https://orbit.test/v1",
+            NetworkTimeoutSeconds = 1,
+            BufferedNetworkTimeoutSeconds = 10,
+            MaxRetries = 0
+        };
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        Func<Task> call = async () =>
+        {
+            if (kind == "text")
+                (await client.CompleteTextAsync("system", "user")).Should().NotBeNullOrWhiteSpace();
+            else if (kind == "json")
+                (await client.CompleteJsonAsync<Probe>("system", "user"))!.Value.Should().Be("ok");
+            else
+            {
+                var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []),
+                    kind == "stream" ? _ => Task.CompletedTask : null);
+                result.IsSuccess.Should().Be(kind != "stream");
+            }
+        };
+
+        var elapsed = Stopwatch.StartNew();
+        var error = await Record.ExceptionAsync(() => call().WaitAsync(TimeSpan.FromSeconds(20)));
+        elapsed.Stop();
+
+        if (kind != "stream")
+        {
+            error.Should().BeNull();
+            elapsed.Elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(2));
+        }
+        else
+        {
+            if (error is not null)
+                error.Should().BeAssignableTo<OperationCanceledException>();
+            elapsed.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
+        }
+        handler.CancellationObserved.Should().Be(kind == "stream");
+        handler.RequestCount.Should().Be(1);
+    }
+
+    private sealed class SlowResponseHandler(bool waitForCancellation) : HttpMessageHandler
+    {
+        internal bool CancellationObserved { get; private set; }
+        internal int RequestCount { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            try
+            {
+                await Task.Delay(waitForCancellation ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(3), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                CancellationObserved = true;
+                throw;
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent(ResponsesTestData.Text("{\"value\":\"ok\"}"), Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    [Fact]
+    public async Task CompletionDeadline_CancellationDuringResponseBuffering_PreservesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var handler = new BufferingCancellationHandler(cancellation.Cancel);
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            Substitute.For<IAiUsageRecorder>());
+
+        var call = () => client.CompleteJsonAsync<Probe>("system", "user", cancellationToken: cancellation.Token);
+
+        await call.Should().ThrowAsync<OperationCanceledException>();
+        handler.Buffers.Should().NotBeEmpty().And.OnlyContain(stream => stream.CanRead,
+            "the handler owns backing streams until SDK buffering and cleanup finish");
+    }
+
+    private sealed class BufferingCancellationHandler(Action cancel) : HttpMessageHandler
+    {
+        internal List<Stream> Buffers { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                RequestMessage = request,
+            };
+            response.Content = new CancellationContent(() =>
+            {
+                var buffer = new CancellingMemoryStream(() =>
+                {
+                    cancel();
+                    response.Dispose();
+                });
+                Buffers.Add(buffer);
+                return buffer;
+            });
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                Buffers.ForEach(stream => stream.Dispose());
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class CancellationContent(Func<Stream> createBuffer) : HttpContent
+    {
+        protected override Task<Stream> CreateContentReadStreamAsync()
+            => Task.FromResult<Stream>(new NetworkResponseStream(createBuffer()));
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+            => throw new NotSupportedException();
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 2;
+            return true;
+        }
+    }
+
+    private sealed class CancellingMemoryStream(Action cancel) : MemoryStream(Encoding.UTF8.GetBytes("{}"))
+    {
+        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+        {
+            cancel();
+            return base.CopyToAsync(destination, bufferSize, cancellationToken);
+        }
+    }
+
+    private sealed class WaitingHandler : HttpMessageHandler
+    {
+        private readonly List<Stream> _buffers = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var buffer = new MemoryStream(Encoding.UTF8.GetBytes("{}"));
+            _buffers.Add(buffer);
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                RequestMessage = request,
+                Content = new StreamContent(new NetworkResponseStream(buffer))
+            };
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromHours(1));
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                _buffers.ForEach(stream => stream.Dispose());
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>
+    /// The HTTP handler owns the backing stream until SDK buffering and response cleanup finish.
+    /// Disposing this non-seekable response view does not close the handler's backing stream.
+    /// </summary>
+    private sealed class NetworkResponseStream(Stream inner) : Stream
+    {
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => inner.ReadAsync(buffer, cancellationToken);
+        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
+            => inner.CopyToAsync(destination, bufferSize, cancellationToken);
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    private static ResponsesClient BuildResponsesClient(HttpMessageHandler handler) =>
         new(
-            model: "gpt-test",
             credential: new ApiKeyCredential("test-key"),
-            options: new OpenAIClientOptions
+            options: new ResponsesClientOptions
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
@@ -87,32 +534,31 @@ public class AiCompletionClientTests
 
     private sealed record Probe(string Value);
 
-    private sealed class CapturingHandler : HttpMessageHandler
+    private sealed class CapturingHandler(string? responseBody = null) : HttpMessageHandler
     {
-        private const string Body = """
-            {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
-             "choices":[{"index":0,"message":{"role":"assistant","content":"{\"value\":\"ok\"}"},"finish_reason":"stop"}],
-             "usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
-            """;
+        private static readonly string Body = ResponsesTestData.Text("{\"value\":\"ok\"}");
 
         public string? LastRequestBody { get; private set; }
+        public string? LastRequestUri { get; private set; }
 
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastRequestUri = request.RequestUri?.ToString();
             LastRequestBody = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
             return BuildResponse(request);
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastRequestUri = request.RequestUri?.ToString();
             if (request.Content is not null)
                 LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
             return BuildResponse(request);
         }
 
-        private static HttpResponseMessage BuildResponse(HttpRequestMessage request)
+        private HttpResponseMessage BuildResponse(HttpRequestMessage request)
         {
-            var content = new StringContent(Body, Encoding.UTF8, "application/json");
+            var content = new StringContent(responseBody ?? Body, Encoding.UTF8, "application/json");
             return new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content };
         }
     }

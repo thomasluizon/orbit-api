@@ -39,7 +39,8 @@ public class OrbitDbContext : DbContext
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
-    public DbSet<SentProactiveCheckin> SentProactiveCheckins => Set<SentProactiveCheckin>();
+    public DbSet<ProactiveItem> ProactiveItems => Set<ProactiveItem>();
+    public DbSet<ProactiveCalendarDay> ProactiveCalendarDays => Set<ProactiveCalendarDay>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
@@ -49,8 +50,11 @@ public class OrbitDbContext : DbContext
     public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
+    public DbSet<AiBudgetCall> AiBudgetCalls => Set<AiBudgetCall>();
+    public DbSet<OAuthState> OAuthStates => Set<OAuthState>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
+    public DbSet<IssuedAstraBlock> IssuedAstraBlocks => Set<IssuedAstraBlock>();
     public DbSet<PendingClarification> PendingClarifications => Set<PendingClarification>();
     public DbSet<AgentStepUpChallengeState> AgentStepUpChallenges => Set<AgentStepUpChallengeState>();
     public DbSet<AgentAuditLog> AgentAuditLogs => Set<AgentAuditLog>();
@@ -60,10 +64,14 @@ public class OrbitDbContext : DbContext
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
+    public DbSet<NotionConnection> NotionConnections => Set<NotionConnection>();
+    public DbSet<NotionTask> NotionTasks => Set<NotionTask>();
+    public DbSet<NotionOAuthState> NotionOAuthStates => Set<NotionOAuthState>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
+    public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<Cheer> Cheers => Set<Cheer>();
@@ -114,16 +122,32 @@ public class OrbitDbContext : DbContext
         });
         ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
+        ConfigureNotionEntities(modelBuilder, encConverter, nullableEncConverter);
         ConfigureTagEntity(modelBuilder);
         ConfigurePushSubscriptionEntity(modelBuilder);
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
-        ConfigureSentProactiveCheckinEntity(modelBuilder);
+        ConfigureProactiveEntities(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
         ConfigureAiFactExtractionBatchEntity(modelBuilder);
         ConfigureAiUsageDailyEntity(modelBuilder);
+        modelBuilder.Entity<ConversationTurn>(entity =>
+        {
+            entity.HasKey(turn => turn.Id);
+            entity.Property(turn => turn.Role).HasMaxLength(20).IsRequired();
+            entity.Property(turn => turn.Model).HasMaxLength(200);
+            entity.Property(turn => turn.ToolCallsJson).IsRequired();
+            entity.HasIndex(turn => new { turn.UserId, turn.CreatedAtUtc });
+            entity.HasIndex(turn => turn.CreatedAtUtc);
+            entity.HasIndex(turn => new { turn.TurnId, turn.Role }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
+            if (nullableEncConverter is not null)
+                entity.Property(turn => turn.Content).HasConversion(nullableEncConverter);
+            if (encConverter is not null)
+                entity.Property(turn => turn.ToolCallsJson).HasConversion(encConverter);
+        });
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -134,9 +158,35 @@ public class OrbitDbContext : DbContext
         ConfigureUserSessionEntity(modelBuilder);
         ConfigureUserSessionRefreshTokenEntity(modelBuilder);
         ConfigureApiKeyEntity(modelBuilder);
+        modelBuilder.Entity<AiBudgetCall>(entity =>
+        {
+            entity.Property<long>("ChargedTokens");
+            entity.Property(call => call.ChargedMicroDollars).HasDefaultValue(0L);
+            entity.HasIndex(call => new { call.UserId, call.LocalDate });
+            entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<OAuthState>(entity =>
+        {
+            entity.HasIndex(state => state.SecretHash).IsUnique();
+            entity.HasIndex(state => new { state.Kind, state.ExpiresAtUtc });
+            entity.Property(state => state.SecretHash).HasMaxLength(64);
+            entity.Property(state => state.Kind).HasMaxLength(30);
+            entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
+        });
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);
         ConfigurePendingClarificationEntity(modelBuilder);
+        modelBuilder.Entity<IssuedAstraBlock>(entity =>
+        {
+            entity.HasIndex(block => new { block.UserId, block.CreatedAtUtc });
+            entity.HasIndex(block => block.ExpiresAtUtc);
+            entity.Property(block => block.Form).HasMaxLength(16);
+            entity.Property(block => block.DefinitionJson).HasColumnType(JsonbColumnType);
+            entity.Property(block => block.AnswerJson).HasColumnType(JsonbColumnType);
+            entity.Property(block => block.ResponseJson).HasColumnType("text");
+            entity.Property(block => block.CommittedResponseJson).HasColumnType("text");
+            entity.HasOne<User>().WithMany().HasForeignKey(block => block.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         ConfigureAgentAuditLogEntity(modelBuilder);
         ConfigureDistributedRateLimitBucketEntity(modelBuilder);
         ConfigureAppConfigEntity(modelBuilder);
@@ -249,11 +299,40 @@ public class OrbitDbContext : DbContext
         });
     }
 
-    private static void ConfigureSentProactiveCheckinEntity(ModelBuilder modelBuilder)
+    private static void ConfigureProactiveEntities(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<SentProactiveCheckin>(entity =>
+        modelBuilder.Entity("Orbit.Domain.Entities.SentProactiveCheckin", entity =>
         {
-            entity.HasIndex(a => new { a.UserId, a.Date }).IsUnique();
+            entity.Property<Guid>("Id").ValueGeneratedOnAdd();
+            entity.Property<Guid>("UserId");
+            entity.Property<DateOnly>("Date");
+            entity.Property<DateTime>("SentAtUtc");
+            entity.HasKey("Id");
+            entity.HasIndex("UserId", "Date").IsUnique();
+            entity.ToTable("SentProactiveCheckins");
+            entity.HasOne(typeof(User)).WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<User>().Ignore(u => u.EffectiveProactivePushEnabled);
+        modelBuilder.Entity<ProactiveItem>(entity =>
+        {
+            entity.HasIndex(a => new { a.UserId, a.Trigger, a.LocalDate }).IsUnique();
+            entity.HasIndex(a => new { a.UserId, a.LocalDate }).IsUnique()
+                .HasFilter("\"PushedAtUtc\" IS NOT NULL");
+            entity.HasIndex(a => new { a.UserId, a.Trigger, a.EndedAtUtc });
+            entity.Property(a => a.Text).HasMaxLength(140).IsRequired();
+            entity.Property(a => a.ActionLabel).IsRequired();
+            entity.Property(a => a.ActionPrompt).IsRequired();
+            entity.Property(a => a.FactsJson).IsRequired();
+            entity.Ignore(a => a.Ignored);
+            entity.Property(a => a.ShownAtUtc).IsConcurrencyToken();
+            entity.Property(a => a.OpenedAtUtc).IsConcurrencyToken();
+            entity.Property(a => a.ActedAtUtc).IsConcurrencyToken();
+            entity.Property(a => a.EndedAtUtc).IsConcurrencyToken();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ProactiveCalendarDay>(entity =>
+        {
+            entity.HasIndex(a => new { a.UserId, a.LocalDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -404,6 +483,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(k => k.KeyPrefix);
             entity.HasIndex(k => k.UserId);
+            entity.HasIndex(k => k.OAuthFamilyId);
+            entity.Property(k => k.IsRevoked).IsConcurrencyToken();
             entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(k => k.Name).HasMaxLength(50);
             entity.Property(k => k.KeyPrefix).HasMaxLength(12);
@@ -430,6 +511,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
             entity.Property(item => item.PreviewFingerprint).HasMaxLength(256);
+            entity.Property(item => item.ArgumentSchemaVersion).IsRequired();
             entity.Property(item => item.RevisionNumber).IsConcurrencyToken();
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
             entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();
@@ -513,7 +595,38 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
+                AppConfig.Create("FreeAiCallsPerDay", "45", "Daily AI call safety budget for Free users"),
+                AppConfig.Create("ProAiCallsPerDay", "450", "Daily AI call safety budget for Pro users"),
+                AppConfig.Create("FreeAiMicroDollarsPerDay", "20000", "Daily AI safety budget for Free users in USD micro-dollars"),
+                AppConfig.Create("ProAiMicroDollarsPerDay", "120000", "Daily AI safety budget for Pro users in USD micro-dollars"),
                 AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
+        });
+    }
+
+    private static void ConfigureNotionEntities(ModelBuilder modelBuilder,
+        EncryptionValueConverter? encConverter, NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<NotionConnection>(entity =>
+        {
+            entity.HasIndex(c => c.UserId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(32);
+            if (encConverter is not null) entity.Property(c => c.AccessToken).HasConversion(encConverter);
+            if (nullableEncConverter is not null) entity.Property(c => c.RefreshToken).HasConversion(nullableEncConverter);
+        });
+        modelBuilder.Entity<NotionTask>(entity =>
+        {
+            entity.HasIndex(t => new { t.UserId, t.PageId }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(t => t.Title).HasMaxLength(NotionTask.MaxTitleLength);
+        });
+        modelBuilder.Entity<NotionOAuthState>(entity =>
+        {
+            entity.HasIndex(s => s.StateHash).IsUnique();
+            entity.HasIndex(s => s.ExpiresAtUtc);
+            entity.Property(s => s.StateHash).HasMaxLength(64);
+            entity.Property(s => s.RedirectUri).HasMaxLength(2048);
+            entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -551,8 +664,10 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "astra_conversation_recording", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -565,6 +680,7 @@ public class OrbitDbContext : DbContext
                 new { Key = "habit_duplication", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Duplicate habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "bulk_operations", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Bulk create/delete/log habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "calendar_integration", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Google Calendar integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "notion_integration", Enabled = false, PlanRequirement = (string?)"Pro", Description = (string?)"Notion task integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) });
         });
     }
@@ -746,6 +862,7 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
+            entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 

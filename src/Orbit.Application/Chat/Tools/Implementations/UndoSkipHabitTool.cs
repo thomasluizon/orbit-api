@@ -7,14 +7,14 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public sealed class UndoSkipHabitTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "undo_skip_habit";
-    public string Description => "Undo one skip using its skip_id. Restores the previous schedule and removes that skip's log. Refuses if the habit changed afterward. Repeating an undo is safe.";
+    public string Description => "Undo skip_id, restoring its schedule and removing its log. Refuses if the habit changed afterward. Safe to repeat.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit" },
+            habit_id = new { type = JsonSchemaTypes.String },
             skip_id = new { type = JsonSchemaTypes.String, description = "Skip ID returned by skip_habit" }
         },
         required = new[] { "habit_id", "skip_id" }

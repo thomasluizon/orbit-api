@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using Orbit.Api.Mcp;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text.Json.Nodes;
 using Amazon;
 using Amazon.Runtime;
@@ -13,6 +14,7 @@ using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -278,6 +280,7 @@ public static partial class ServiceCollectionExtensions
             .WithTools<RecordPageTools>()
             .WithTools<SubscriptionTools>()
             .WithTools<CalendarTools>()
+            .WithTools<NotionTools>()
             .WithTools<AccountTools>()
             .WithTools<ApiKeyTools>()
             .WithTools<SupportTools>()
@@ -351,6 +354,12 @@ public static partial class ServiceCollectionExtensions
             {
                 schema.Type = JsonSchemaType.String;
                 schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
+            }
+            if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo property
+                && property.DeclaringType == typeof(ToolResultMessageParams) && property.PropertyType == typeof(int?))
+            {
+                schema.Type = JsonSchemaType.Integer | JsonSchemaType.Null;
+                schema.Pattern = null;
             }
             if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
                 schema.Deprecated = true;

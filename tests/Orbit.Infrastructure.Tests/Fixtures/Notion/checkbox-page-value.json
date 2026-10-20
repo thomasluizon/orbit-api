@@ -1,0 +1,7 @@
+{
+  "Done": {
+    "id": "done",
+    "type": "checkbox",
+    "checkbox": true
+  }
+}

@@ -10,7 +10,7 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
     public string Name => "bulk_reschedule_habits";
 
     public string Description =>
-        "Reschedule the complete server-side set of habits matching a filter to one due date. Use one call for every multi-habit reschedule instead of repeating update_habit.";
+        "Reschedule the complete matching habit set in one call.";
 
     public object GetParameterSchema() => new
     {
