@@ -14,8 +14,9 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public partial class HabitEnumContractTests
 {
-    public static IEnumerable<object[]> AcceptedInputs()
+    public static TheoryData<string, string> AcceptedInputs()
     {
+        var cases = new TheoryData<string, string>();
         foreach (var type in new[] { typeof(FrequencyUnit), typeof(DayOfWeek) })
         {
             var tokens = Enum.GetNames(type).SelectMany(name => new[]
@@ -27,15 +28,19 @@ public partial class HabitEnumContractTests
                     ? ["\"dAy\"", "\" Day, wEEk \"", "\"Day,\"", "\"Day,  \""]
                     : ["\"mOnDaY\"", "\" Monday, SUNDAY \"", "\"Monday,\"", "\"Monday,  \""]);
             foreach (var token in tokens)
-                yield return type == typeof(FrequencyUnit) ? [token, "[]"] : ["\"Day\"", $"[{token}]"];
+            {
+                if (type == typeof(FrequencyUnit)) cases.Add(token, "[]");
+                else cases.Add("\"Day\"", $"[{token}]");
+            }
         }
         foreach (var token in new[] { "\"\\u0085+0002147483647\\u3000\"", "\"" + new string('0', 80) + "2147483647\"", "\"-" + new string('0', 80) + "2147483648\"" })
         {
-            yield return [token, "[]"];
-            yield return ["null", $"[{token}]"];
+            cases.Add(token, "[]");
+            cases.Add("null", $"[{token}]");
         }
-        yield return ["null", "[]"];
-        yield return ["null", "null"];
+        cases.Add("null", "[]");
+        cases.Add("null", "null");
+        return cases;
     }
 
     [Theory]

@@ -22,8 +22,9 @@ public partial class ReminderInputContractTests
             .And.Contain("same_day").And.Contain("day_before").And.Contain("domain snake_case annotation");
     }
 
-    public static IEnumerable<object[]> OutputContracts()
+    public static TheoryData<Type, bool> OutputContracts()
     {
+        var cases = new TheoryData<Type, bool>();
         foreach (var type in new[]
         {
             typeof(HabitDetailResponse), typeof(HabitChildResponse), typeof(HabitScheduleItem),
@@ -32,9 +33,10 @@ public partial class ReminderInputContractTests
             typeof(SyncController.SyncHabitDto), typeof(SyncController.SyncChangesV2Response)
         })
         {
-            yield return [type, false];
-            yield return [type, true];
+            cases.Add(type, false);
+            cases.Add(type, true);
         }
+        return cases;
     }
 
     [Theory]

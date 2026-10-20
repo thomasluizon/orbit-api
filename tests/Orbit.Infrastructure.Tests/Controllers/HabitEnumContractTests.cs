@@ -189,7 +189,7 @@ public partial class HabitEnumContractTests(ITestOutputHelper output)
         using var document = ReadDocument("openapi_v1-r2.json");
         var schema = document.RootElement.GetProperty("components").GetProperty("schemas").GetProperty("FrequencyUnitInput");
         Allows(schema, JsonSerializer.Deserialize<JsonElement>(token), document.RootElement).Should().BeTrue();
-        Action bind = () => JsonSerializer.Deserialize(RequestJson(token, "[]"), typeof(HabitsController.CreateHabitRequest), Mvc);
+        Action bind = () => JsonSerializer.Deserialize<HabitsController.CreateHabitRequest>(RequestJson(token, "[]"), Mvc);
         bind.Should().Throw<JsonException>();
     }
 

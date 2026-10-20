@@ -66,6 +66,14 @@ ordinary comparison to succeed. Every later r2 change compares against its own
 target-branch file. The existing severity configuration is unchanged. Failure,
 cancellation or skipping of a dependent comparison cannot satisfy the required gate.
 
+Publication tooling reconstructs canonical paths from validated ASCII catalog
+identities and rejects files whose symlinks escape the repository. Generator-cache
+entries must equal the complete canonical absolute output paths; tooling never
+resolves paths supplied by cache contents. Target refs use ASCII letters, digits,
+slashes, dots, underscores and hyphens, starting with a letter or digit. Git calls
+use fixed subcommands and an end-of-options boundary. Resolved commits must be full
+40-character hexadecimal values before any target inventory or artifact is read.
+
 Tracks thomasluizon/orbit-tickets#1591. The blocked UI adoption ticket
 thomasluizon/orbit-tickets#1601 owns selector, pin, snapshot, Orval, Contract Drift,
 rebaseline workflows and consumer instruction changes after API acceptance and

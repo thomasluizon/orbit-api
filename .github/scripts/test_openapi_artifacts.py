@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 import openapi_artifacts as guard
 
@@ -15,15 +16,16 @@ class PublicationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.repo = pathlib.Path(self.temp.name)
-        self.rows = json.loads((ROOT / guard.CATALOG).read_bytes())
+        self.repo = pathlib.Path(self.temp.name).resolve()
+        self.catalog_file = guard.repository_path(guard.CATALOG, self.repo)
+        self.rows = guard.catalog(guard.repository_path(guard.CATALOG, ROOT).read_bytes())
         for path in [guard.CATALOG, *(r['path'] for r in self.rows)]:
-            target = self.repo / path
+            target = guard.repository_path(path, self.repo)
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / path, target)
+            shutil.copyfile(guard.repository_path(path, ROOT), target)
         cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'
         cache.parent.mkdir(parents=True)
-        cache.write_text('\n'.join(str(self.repo / r['path']) for r in self.rows))
+        cache.write_text('\n'.join(str(guard.artifact_path(r, self.repo)) for r in self.rows))
         self.git('init', '-q')
         self.git('config', 'user.name', 'Contract guard')
         self.git('config', 'user.email', 'contract@example.com')
@@ -45,7 +47,7 @@ class PublicationTests(unittest.TestCase):
         return subprocess.run(args, cwd=self.repo, text=True, capture_output=True)
 
     def write_catalog(self):
-        (self.repo / guard.CATALOG).write_text(json.dumps(self.rows))
+        self.catalog_file.write_text(json.dumps(self.rows))
 
     def test_all_published_streams_use_their_actual_target_artifacts(self):
         result = self.run_guard()
@@ -70,16 +72,15 @@ class PublicationTests(unittest.TestCase):
     def test_deleting_any_published_stream_fails(self):
         for row in self.rows:
             with self.subTest(row=row['id']):
-                original = (self.repo / guard.CATALOG).read_bytes()
-                (self.repo / guard.CATALOG).write_text(json.dumps([r for r in self.rows if r != row]))
+                self.catalog_file.write_text(json.dumps([r for r in self.rows if r != row]))
                 self.assertNotEqual(0, self.run_guard().returncode)
-                (self.repo / guard.CATALOG).write_bytes(original)
+                self.write_catalog()
 
     def test_renaming_a_stream_cannot_become_first_publication(self):
         row = self.rows[-1]
-        source = self.repo / row['path']
+        source = guard.artifact_path(row, self.repo)
         row.update(id='orbit-http-v2-r3', revision='r3', documentName='v2-r3', path='src/Orbit.Api/openapi_v2-r3.json')
-        source.rename(self.repo / row['path'])
+        source.rename(guard.artifact_path(row, self.repo))
         self.rows[1]['replacement'] = row['id']
         self.write_catalog()
         self.assertNotEqual(0, self.run_guard().returncode)
@@ -108,7 +109,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_freshness_rejects_every_missing_stale_and_uncommitted_artifact(self):
         for row in self.rows:
-            path = self.repo / row['path']
+            path = guard.artifact_path(row, self.repo)
             original = path.read_bytes()
             with self.subTest(row=row['id'], mode='stale'):
                 path.write_bytes(original + b'\n')
@@ -123,26 +124,81 @@ class PublicationTests(unittest.TestCase):
         self.assertNotEqual(0, self.run_guard('freshness').returncode)
 
     def test_freshness_accepts_complete_deterministic_output(self):
-        self.assertEqual(0, self.run_guard('freshness').returncode)
+        result = self.run_guard('freshness')
+        self.assertEqual(0, result.returncode, result.stderr)
 
     def test_generator_cannot_silently_deregister_an_existing_stream(self):
         cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'
-        cache.write_text(str(self.repo / self.rows[0]['path']))
+        cache.write_text(str(guard.artifact_path(self.rows[0], self.repo)))
         self.assertNotEqual(0, self.run_guard('freshness').returncode)
 
     def test_wrong_document_version_fails(self):
-        path = self.repo / self.rows[-1]['path']
+        path = guard.artifact_path(self.rows[-1], self.repo)
         doc = json.loads(path.read_bytes())
         doc['info']['version'] = '1.0'
         path.write_text(json.dumps(doc))
         self.assertNotEqual(0, self.run_guard().returncode)
 
     def test_additive_endpoint_changes_remain_eligible_for_ordinary_diff(self):
-        path = self.repo / self.rows[0]['path']
+        path = guard.artifact_path(self.rows[0], self.repo)
         doc = json.loads(path.read_bytes())
         doc['paths']['/api/Additional'] = {'get': {'responses': {'200': {'description': 'OK'}}}}
         path.write_text(json.dumps(doc))
         self.assertEqual(0, self.run_guard().returncode)
+
+    def test_artifact_symlinks_cannot_escape_the_repository(self):
+        path = self.repo / 'src/Orbit.Api/openapi_v2-r2.json'
+        original = path.read_bytes()
+        with tempfile.TemporaryDirectory() as outside:
+            external = pathlib.Path(outside) / 'external.json'
+            external.write_bytes(original)
+            path.unlink()
+            path.symlink_to(external)
+            for command in ('plan', 'freshness', 'evidence'):
+                with self.subTest(command=command):
+                    result = self.run_guard(command)
+                    self.assertNotEqual(0, result.returncode, result.stdout)
+                    self.assertIn('outside the repository', result.stderr)
+
+    def test_catalog_symlinks_cannot_escape_the_repository(self):
+        path = self.repo / guard.CATALOG
+        original = path.read_bytes()
+        with tempfile.TemporaryDirectory() as outside:
+            external = pathlib.Path(outside) / 'catalog.json'
+            external.write_bytes(original)
+            path.unlink()
+            path.symlink_to(external)
+            for command in ('plan', 'freshness', 'evidence'):
+                with self.subTest(command=command):
+                    result = self.run_guard(command)
+                    self.assertNotEqual(0, result.returncode, result.stdout)
+                    self.assertIn('outside the repository', result.stderr)
+
+    def test_generator_cache_cannot_substitute_uncataloged_path_aliases(self):
+        cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'
+        with tempfile.TemporaryDirectory() as outside:
+            alias = pathlib.Path(outside) / 'alias.json'
+            alias.symlink_to(self.repo / 'src/Orbit.Api/openapi.json')
+            cache.write_text(cache.read_text().replace(str(self.repo / 'src/Orbit.Api/openapi.json'), str(alias)))
+            result = self.run_guard('freshness')
+            self.assertNotEqual(0, result.returncode, result.stdout)
+            self.assertIn('Generator output', result.stderr)
+
+    def test_invalid_target_refs_are_rejected_before_invoking_git(self):
+        for ref in ('--help', '-c core.pager=anything', 'HEAD^{commit}', 'HEAD:src/Orbit.Api/openapi.json',
+                    'origin/main\nHEAD', 'origin/ma\u0131n', 'https://example.com/main'):
+            with self.subTest(ref=ref), mock.patch.object(guard.subprocess, 'check_output',
+                                                        side_effect=AssertionError('Untrusted ref reached git')):
+                with self.assertRaisesRegex(ValueError, 'Invalid target ref'):
+                    guard.plan(ref)
+
+    def test_catalog_identity_digits_remain_ascii(self):
+        for revision in ('2\u0663', '2\uff13'):
+            row = self.rows[-1].copy()
+            row.update(id='orbit-http-v2-r' + revision, revision='r' + revision,
+                       documentName='v2-r' + revision, path='src/Orbit.Api/openapi_v2-r' + revision + '.json')
+            with self.subTest(revision=revision), self.assertRaises(ValueError):
+                guard.catalog(json.dumps([*self.rows[:-1], row]))
 
 
 if __name__ == '__main__':

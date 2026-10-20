@@ -353,28 +353,31 @@ public static partial class ServiceCollectionExtensions
                 operation.Deprecated = true;
             return Task.CompletedTask;
         });
-        options.AddSchemaTransformer((schema, context, _) =>
-        {
-            var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
-            if (type == typeof(HabitSchedule))
-            {
-                schema.Type = JsonSchemaType.String;
-                schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
-            }
-            if (type == typeof(ScheduledReminderWhen) && artifact.Revision == "r1")
-                schema.Description = "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing.";
-            if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo property
-                && property.DeclaringType == typeof(ToolResultMessageParams) && property.PropertyType == typeof(int?))
-            {
-                schema.Type = JsonSchemaType.Integer | JsonSchemaType.Null;
-                schema.Pattern = null;
-            }
-            if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
-                schema.Deprecated = true;
-            return Task.CompletedTask;
-        });
+        options.AddSchemaTransformer((schema, context, _) => ConfigureOrbitSchema(schema, context, artifact.Revision == "r1"));
         if (artifact.Revision != "r1")
             options.AddSchemaTransformer<HabitEnumSchemaTransformer>();
+    }
+
+    private static Task ConfigureOrbitSchema(OpenApiSchema schema,
+        Microsoft.AspNetCore.OpenApi.OpenApiSchemaTransformerContext context, bool legacyRevision)
+    {
+        var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
+        if (type == typeof(HabitSchedule))
+        {
+            schema.Type = JsonSchemaType.String;
+            schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
+        }
+        if (type == typeof(ScheduledReminderWhen) && legacyRevision)
+            schema.Description = "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing.";
+        if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo property
+            && property.DeclaringType == typeof(ToolResultMessageParams) && property.PropertyType == typeof(int?))
+        {
+            schema.Type = JsonSchemaType.Integer | JsonSchemaType.Null;
+            schema.Pattern = null;
+        }
+        if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
+            schema.Deprecated = true;
+        return Task.CompletedTask;
     }
 
     private static void AddResponseCompression(WebApplicationBuilder builder)

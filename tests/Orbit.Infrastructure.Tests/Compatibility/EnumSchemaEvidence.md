@@ -31,8 +31,8 @@ Actual installed assembly decompilation established these construction points:
   `fileName + "_" + documentName + ".json"`. Actual normal builds with the existing
   `--file-name openapi --openapi-version OpenApi3_1` emitted all four catalog paths.
   `obj/Orbit.Api.OpenApiFiles.cache` contains exactly those four absolute output
-  paths, one per line. Freshness resolves those lines and compares their complete
-  set against the catalog.
+  paths, one per line. Freshness compares those lines as strings against the complete
+  canonical output set from the catalog, without resolving cache-supplied paths.
 - `OpenApiSchema.Type` is nullable `JsonSchemaType`; `Enum` is a JsonNode list;
   `AnyOf` is an IOpenApiSchema list; `Pattern`, `Minimum`, `Maximum` and
   `Description` are strings; `Metadata` is a string/object dictionary.
@@ -185,3 +185,55 @@ failed dependent jobs cannot satisfy it. Its action pin and ERR semantics remain
 
 The existing `.oasdiff.yaml` and strengthened removal severity file are unchanged.
 Historical compatibility evidence in the neighboring README remains historical.
+
+## Publication boundary hardening
+
+The Sonar findings on producer `359c857eec01e363dfcfe446d7e2f8322f06ac91`
+were addressed in the owning publication code. Catalog validation reconstructs
+identities and paths from ASCII version/revision numbers before filesystem access.
+Repository containment checks reject escaped artifact, catalog and cache symlinks.
+Cache entries are compared as strings, so arbitrary aliases never trigger path
+resolution. Git calls have fixed subcommands, validated ref/commit/path grammars
+and `--end-of-options`; no general git argument dispatcher remains in the guard.
+Catalog validation, target-inventory checks and evidence traversal have separate
+functions. Shared schema transformations are separate from document registration.
+Catalog serializer options are cached, and theory data is typed while retaining
+every dynamic request type and every data row.
+
+The installed Git reported `git version 2.55.0`. Actual installed invocations
+confirmed every new end-of-options use:
+
+```sh
+git rev-parse --verify --end-of-options 'HEAD^{commit}'
+git ls-tree -r --name-only --end-of-options HEAD src/Orbit.Api/OpenApi/artifacts.json
+git show --end-of-options HEAD:src/Orbit.Api/OpenApi/artifacts.json
+```
+
+At the inspected producer, the first returned exactly the single 40-character
+commit above; the second returned exactly `src/Orbit.Api/OpenApi/artifacts.json`;
+the third returned the complete committed seven-key catalog already recorded in
+`enum-schema-evidence.json`. The guard also executed these commands successfully
+with the full resolved target commit. No new Git response property is assumed.
+The actual installed xUnit 2.9.3 `xunit.core.xml` declares
+`Xunit.TheoryData<T1,T2>.Add(T1,T2)`; compilation and the focused suite exercise
+its rows through the real runner.
+
+Regression command:
+
+```sh
+python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py' -v
+```
+
+The unchanged 12-test publication suite passed with the security defects present.
+Before the guard fix, the strengthened suite failed 14 subcases: three commands
+each accepted escaped artifact and catalog symlinks, freshness accepted an external
+cache alias, and seven malformed target refs reached the mocked subprocess boundary.
+The mock returned no invented Git response. After the fix, all 17 tests passed,
+including ASCII-only identity controls and every original negative publication
+control. The existing focused command above passed all 423 cases both before and
+after the changes. Its complete 632-line producer receipts are byte-identical and
+retain SHA-256 `7b26509224a8f212da45dad38d87fd006de19bccf61c4e853345a130e246e54d`.
+All four generated artifact byte sequences and the complete recorded schema evidence
+are unchanged. Both actual-target legacy comparisons pass at ERR, operation removal
+fails at ERR for each of the four artifacts, and additive operation controls pass.
+The pinned action, severity configuration and required dependency checks are unchanged.

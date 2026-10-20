@@ -31,20 +31,22 @@ public partial class HabitEnumContractTests
             Allows(reminder, JsonSerializer.SerializeToElement(when, Mvc), document.RootElement).Should().BeFalse();
     }
 
-    public static IEnumerable<object[]> ReminderForms()
+    public static TheoryData<string, bool> ReminderForms()
     {
+        var cases = new TheoryData<string, bool>();
         foreach (var type in new[] { typeof(ScheduledReminderWhen) })
         {
             foreach (var name in Enum.GetNames(type))
                 foreach (var form in new[] { name, name.ToLowerInvariant(), name.ToUpperInvariant(), name + ",", name + ", SameDay" })
-                    yield return [JsonSerializer.Serialize(form), true];
+                    cases.Add(JsonSerializer.Serialize(form), true);
         }
         foreach (var whitespace in "\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000")
-            yield return [JsonSerializer.Serialize(whitespace + "SameDay" + whitespace), true];
+            cases.Add(JsonSerializer.Serialize(whitespace + "SameDay" + whitespace), true);
         foreach (var token in new[] { "0", "1", "99", "-1", "2147483647", "-2147483648", "\"+0002147483647\"", "\"-0002147483648\"", "\"-000\"", "\"same_day\"", "\"day_before\"" })
-            yield return [token, true];
+            cases.Add(token, true);
         foreach (var token in new[] { "\"SAME_DAY\"", "\"DAY_BEFORE\"", "\" same_day \"", "\"same_day,DayBefore\"", "\"unknown\"", "\"SameDay,,DayBefore\"", "\"1,2\"", "\"2147483648\"", "\"-2147483649\"", "2147483648", "-2147483649", "true", "{}", "1.5", "\"\"", "\"0x1\"", "\"1.0\"" })
-            yield return [token, false];
+            cases.Add(token, false);
+        return cases;
     }
 
     [Theory]
