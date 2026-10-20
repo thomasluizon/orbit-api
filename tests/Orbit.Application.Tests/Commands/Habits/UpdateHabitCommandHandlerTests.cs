@@ -62,6 +62,43 @@ public class UpdateHabitCommandHandlerTests
         return habit;
     }
 
+    [Fact]
+    public async Task Handle_UnchangedStartWithChangedInterval_UsesAccountCalendar()
+    {
+        var anchor = new DateOnly(2026, 10, 25);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+            anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+
+        var result = await _handler.Handle(new UpdateHabitCommand(UserId, habit.Id, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: anchor, IntervalWeeks: 2, Options: new(Days: [DayOfWeek.Monday])), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2026, 11, 2));
+        habit.ScheduledStartDate.Should().Be(anchor);
+        await _userDateService.Received(1).GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
+        await _userDateService.Received(1).GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStart_PassesAccountDayAndRetainsHistory()
+    {
+        var habit = CreateTestHabit();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        var command = new UpdateHabitCommand(UserId, habit.Id, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: Today.AddDays(-1));
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        habit.StartDate.Should().Be(Today.AddDays(-1));
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.Logs.Should().ContainSingle();
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().Be(Today.AddDays(1));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

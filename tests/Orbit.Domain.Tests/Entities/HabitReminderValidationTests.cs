@@ -116,6 +116,7 @@ public class HabitReminderValidationTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("VALIDATION_SCHEDULED_REMINDER_WHEN");
+        result.Error.Should().Be("Choose the same day or the day before for each scheduled reminder.");
     }
 
     [Theory]
@@ -137,6 +138,7 @@ public class HabitReminderValidationTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("VALIDATION_SCHEDULED_REMINDER_WHEN");
+        result.Error.Should().Be("Choose the same day or the day before for each scheduled reminder.");
         habit.Title.Should().Be("Reminder");
         habit.DueTime.Should().BeNull();
         habit.ScheduledReminders.Should().Equal(existing);

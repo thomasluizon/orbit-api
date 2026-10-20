@@ -6,6 +6,8 @@ namespace Orbit.Domain.Common;
 /// </summary>
 public static class DomainErrors
 {
+    public static readonly AppError InvalidDatePhrase = new("INVALID_DATE_PHRASE", "A date phrase of up to 200 characters and a supported language are required.");
+    public static readonly AppError InvalidStartDate = new("INVALID_START_DATE", "A valid start date requires a recurring habit and account date context.");
     public static readonly AppError UserIdRequired = new("USER_ID_REQUIRED", "User ID is required.");
     public static readonly AppError TokenHashRequired = new("TOKEN_HASH_REQUIRED", "Token hash is required.");
     public static readonly AppError SessionNotActive = new("SESSION_NOT_ACTIVE", "Session is no longer active.");
@@ -85,7 +87,7 @@ public static class DomainErrors
     public static readonly AppError ReminderTimeOutOfRange = new("VALIDATION_REMINDER_TIME_RANGE", "Set reminders from 0 to {0} minutes before the due time.");
     public static readonly AppError DuplicateReminderTimes = new("VALIDATION_REMINDER_TIMES_UNIQUE", "Remove duplicate reminder times.");
     public static readonly AppError DuplicateScheduledReminders = new("DUPLICATE_SCHEDULED_REMINDERS", "Scheduled reminders must not contain duplicate entries.");
-    public static readonly AppError InvalidScheduledReminderWhen = new("VALIDATION_SCHEDULED_REMINDER_WHEN", "Scheduled reminders must use a defined timing value.");
+    public static readonly AppError InvalidScheduledReminderWhen = new("VALIDATION_SCHEDULED_REMINDER_WHEN", "Choose the same day or the day before for each scheduled reminder.");
     public static readonly AppError InvalidRelativeReminders = new("INVALID_RELATIVE_REMINDERS", "Relative reminders must be unique and have a valid offset or local time.");
     public static readonly AppError EmojiTooLong = new("EMOJI_TOO_LONG", "Habit emoji must not exceed {0} characters.");
 

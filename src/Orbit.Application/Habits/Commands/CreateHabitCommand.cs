@@ -26,7 +26,8 @@ public record CreateHabitCommand(
     IReadOnlyList<Guid>? TagIds = null,
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null,
-    int? IntervalWeeks = null) : IRequest<Result<Guid>>, IIdempotentCommand;
+    int? IntervalWeeks = null,
+    DateOnly? StartDate = null) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).
@@ -64,9 +65,9 @@ public partial class CreateHabitCommandHandler(
             return gateResult.PropagateError<Guid>();
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var dueDate = request.DueDate ?? today;
+        var dueDate = request.StartDate ?? request.DueDate ?? today;
 
-        if (opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
+        if (!request.StartDate.HasValue && opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
         {
             while (!opts.Days.Contains(dueDate.DayOfWeek))
                 dueDate = dueDate.AddDays(1);
@@ -79,6 +80,8 @@ public partial class CreateHabitCommandHandler(
             ? 0
             : siblings.Max(h => h.Position ?? -1) + 1;
 
+        var weekStartDay = request.StartDate.HasValue
+            ? await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken) : 1;
         var habitResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
@@ -101,18 +104,31 @@ public partial class CreateHabitCommandHandler(
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
             Position: nextPosition,
-            IntervalWeeks: request.IntervalWeeks));
+            IntervalWeeks: request.IntervalWeeks,
+            StartDate: request.StartDate,
+            WeekStartDay: weekStartDay));
 
         if (habitResult.IsFailure)
             return habitResult.PropagateError<Guid>();
 
         var habit = habitResult.Value;
+        if (request.StartDate.HasValue)
+        {
+            if (!habit.IsFlexible)
+            {
+                var catchUp = habit.CatchUpDueDate(today, weekStartDay);
+                if (catchUp.IsFailure)
+                    return catchUp.PropagateError<Guid>();
+            }
+            else if (habit.DueDate < today)
+                habit.PostponeTo(today);
+        }
 
         var featureGate = await HabitCreationGates.CheckAsync(habit, payGate, cancellationToken);
         if (featureGate.IsFailure)
             return featureGate.PropagateError<Guid>();
 
-        var subResult = await CreateSubHabitsAsync(request, habit.Id, dueDate, opts, cancellationToken);
+        var subResult = await CreateSubHabitsAsync(request, habit, opts, cancellationToken);
         if (subResult.IsFailure)
             return subResult.PropagateError<Guid>();
 
@@ -145,7 +161,7 @@ public partial class CreateHabitCommandHandler(
     }
 
     private async Task<Result> CreateSubHabitsAsync(
-        CreateHabitCommand request, Guid parentId, DateOnly dueDate,
+        CreateHabitCommand request, Habit parent,
         HabitCommandOptions opts, CancellationToken cancellationToken)
     {
         if (request.SubHabits is not { Count: > 0 })
@@ -159,15 +175,19 @@ public partial class CreateHabitCommandHandler(
                 subTitle,
                 request.FrequencyUnit,
                 request.FrequencyQuantity,
-                request.DueDate ?? dueDate,
-                ParentHabitId: parentId,
+                request.StartDate ?? request.DueDate ?? parent.DueDate,
+                ParentHabitId: parent.Id,
                 IsGeneral: request.IsGeneral,
                 EndDate: opts.EndDate,
                 Position: subPosition++,
-                IntervalWeeks: request.IntervalWeeks));
+                IntervalWeeks: request.IntervalWeeks,
+                StartDate: request.StartDate));
 
             if (childResult.IsFailure)
                 return childResult.PropagateError();
+
+            if (request.StartDate.HasValue)
+                childResult.Value.InheritResolvedOccurrence(parent);
 
             await repos.HabitRepository.AddAsync(childResult.Value, cancellationToken);
         }

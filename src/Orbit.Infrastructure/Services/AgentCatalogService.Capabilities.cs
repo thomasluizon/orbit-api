@@ -184,6 +184,18 @@ public partial class AgentCatalogService
                 ]),
 
             new AgentCapability(
+                AgentCapabilityIds.HabitDateInterpret,
+                "Interpret Habit Date",
+                "Explicit form consultation proposes a calendar date using the account day and AI allowance. It does not write habits.",
+                HabitsDomain,
+                AgentScopes.ReadHabits,
+                AgentRiskClass.Low,
+                IsMutation: false,
+                IsPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                ControllerActionKeys: ["HabitsController.InterpretDate"]),
+
+            new AgentCapability(
                 AgentCapabilityIds.HabitsWrite,
                 "Write Habits",
                 "Creates and updates habits, checklists, and hierarchy links.",

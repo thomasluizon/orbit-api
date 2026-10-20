@@ -115,17 +115,7 @@ internal static class HabitLiveRootEntry
         if (habit.IsDeleted || !habit.IsCompleted || habit.ParentHabitId is not null)
             return false;
 
-        var remainsCompleted = habit.IsCompleted;
-        if (update.IsGeneral == true)
-            remainsCompleted = false;
-
-        if ((update.ClearEndDate == true || update.EndDate.HasValue) && update.FrequencyUnit is not null)
-        {
-            var effectiveEndDate = update.ClearEndDate == true ? null : update.EndDate;
-            var effectiveDueDate = update.DueDate ?? habit.DueDate;
-            remainsCompleted = effectiveEndDate.HasValue && effectiveDueDate > effectiveEndDate.Value;
-        }
-
-        return !remainsCompleted;
+        var preview = habit.PreviewUpdate(update);
+        return preview.IsSuccess && !preview.Value.IsCompleted;
     }
 }

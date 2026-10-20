@@ -29,6 +29,14 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithCopy(ValidationErrorCodes.FrequencyQuantityRequired)
             .When(x => x.FrequencyUnit is not null);
 
+        RuleFor(x => x.StartDate)
+            .Must((x, date) => !date.HasValue || (date != DateOnly.MinValue
+                && !(x.IsGeneral) && x.FrequencyUnit.HasValue))
+            .WithCopy(ValidationErrorCodes.CalendarDateValid);
+        RuleFor(x => x.StartDate)
+            .Must((x, date) => !date.HasValue || x.Options?.EndDate is not { } end || end >= date.Value)
+            .WithCopy(ValidationErrorCodes.DateRangeOrderLower);
+
         SharedHabitRules.AddIntervalWeeksRules(RuleFor(x => x.IntervalWeeks));
 
         SharedHabitRules.AddDaysRules(this,

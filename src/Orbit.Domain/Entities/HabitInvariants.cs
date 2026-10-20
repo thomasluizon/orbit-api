@@ -45,6 +45,16 @@ internal static class HabitInvariants
         return null;
     }
 
+    public static AppError? ValidateStartDate(DateOnly? startDate, bool isGeneral,
+        FrequencyUnit? frequencyUnit, DateOnly? endDate)
+    {
+        if (!startDate.HasValue)
+            return null;
+        if (startDate == DateOnly.MinValue || isGeneral || frequencyUnit is null)
+            return DomainErrors.InvalidStartDate;
+        return endDate < startDate ? DomainErrors.EndDateBeforeStartDate : null;
+    }
+
     public static AppError? ValidateDateOptions(
         TimeOnly? dueTime, TimeOnly? dueEndTime,
         DateOnly? endDate, FrequencyUnit? frequencyUnit,

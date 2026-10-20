@@ -216,7 +216,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             TagIds: request.TagIds,
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
-            IntervalWeeks: request.IntervalWeeks);
+            IntervalWeeks: request.IntervalWeeks,
+            StartDate: request.StartDate);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -224,6 +225,19 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             logger.LogHabitCreated(result.Value, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
+    }
+
+    [HttpPost("interpret-date")]
+    [DistributedRateLimit("habit-suggest")]
+    [ProducesResponseType(typeof(Orbit.Domain.Models.DateInterpretation), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> InterpretDate([FromBody] InterpretDateRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new InterpretDateCommand(HttpContext.GetUserId(), request.Phrase, request.Language), cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpPost("suggest-setup")]
@@ -326,7 +340,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 RelativeReminders: request.RelativeReminders),
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
-            IntervalWeeks: request.IntervalWeeks);
+            IntervalWeeks: request.IntervalWeeks,
+            StartDate: request.StartDate);
 
         var result = await mediator.Send(command, cancellationToken);
 
