@@ -115,6 +115,32 @@ public class DistributedRateLimitFilterTests
         nextCalled.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("support")]
+    [InlineData("chat")]
+    public async Task CanceledAcquisition_NeverInvokesAction(string policy)
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var failure = new OperationCanceledException(cancellation.Token);
+        _service.TryAcquireAsync(policy, Arg.Any<string>(), cancellation.Token).ThrowsAsync(failure);
+        var filter = new DistributedRateLimitFilter(policy, _service, _authSessionService,
+            Options.Create(new BffForwardingSettings()), _logger);
+        var (context, _) = CreateExecutingContext();
+        context.HttpContext.RequestAborted = cancellation.Token;
+        var actionCalls = 0;
+        var execute = () => filter.OnActionExecutionAsync(context, () =>
+        {
+            actionCalls++;
+            return Task.FromResult(CreateExecutedContext(context));
+        });
+
+        await execute.Should().ThrowAsync<OperationCanceledException>();
+
+        actionCalls.Should().Be(0);
+        await _service.Received(1).TryAcquireAsync(policy, Arg.Any<string>(), cancellation.Token);
+    }
+
     [Fact]
     public async Task SupportPolicy_StillThrottles_WhenStoreReportsLimitExceeded()
     {

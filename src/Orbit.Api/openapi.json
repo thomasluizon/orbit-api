@@ -14529,7 +14529,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/FrequencyUnitInput"
+                "$ref": "#/components/schemas/FrequencyUnit"
               }
             ]
           },
@@ -14548,7 +14548,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/DayOfWeekInput"
+              "$ref": "#/components/schemas/DayOfWeek"
             }
           },
           "isBadHabit": {
@@ -14870,7 +14870,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/FrequencyUnitInput"
+                "$ref": "#/components/schemas/FrequencyUnit"
               }
             ]
           },
@@ -14889,7 +14889,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/DayOfWeekInput"
+              "$ref": "#/components/schemas/DayOfWeek"
             }
           },
           "isBadHabit": {
@@ -16008,7 +16008,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/FrequencyUnitInput"
+                "$ref": "#/components/schemas/FrequencyUnit"
               }
             ]
           },
@@ -16027,7 +16027,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/DayOfWeekInput"
+              "$ref": "#/components/schemas/DayOfWeek"
             }
           },
           "isBadHabit": {
@@ -16193,7 +16193,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/FrequencyUnitInput"
+                "$ref": "#/components/schemas/FrequencyUnit"
               }
             ]
           },
@@ -16212,7 +16212,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/DayOfWeekInput"
+              "$ref": "#/components/schemas/DayOfWeek"
             }
           },
           "isBadHabit": {
@@ -16372,47 +16372,7 @@
         }
       },
       "DayOfWeek": {
-        "anyOf": [
-          {
-            "enum": [
-              "Sunday",
-              "Monday",
-              "Tuesday",
-              "Wednesday",
-              "Thursday",
-              "Friday",
-              "Saturday"
-            ],
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          }
-        ]
-      },
-      "DayOfWeekInput": {
-        "anyOf": [
-          {
-            "enum": [
-              "Sunday",
-              "Monday",
-              "Tuesday",
-              "Wednesday",
-              "Thursday",
-              "Friday",
-              "Saturday"
-            ],
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "pattern": "^[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[+-]?[0-9]+|(?:[Ss][Uu][Nn][Dd][Aa][Yy]|[Mm][Oo][Nn][Dd][Aa][Yy]|[Tt][Uu][Ee][Ss][Dd][Aa][Yy]|[Ww][Ee][Dd][Nn][Ee][Ss][Dd][Aa][Yy]|[Tt][Hh][Uu][Rr][Ss][Dd][Aa][Yy]|[Ff][Rr][Ii][Dd][Aa][Yy]|[Ss][Aa][Tt][Uu][Rr][Dd][Aa][Yy])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Ss][Uu][Nn][Dd][Aa][Yy]|[Mm][Oo][Nn][Dd][Aa][Yy]|[Tt][Uu][Ee][Ss][Dd][Aa][Yy]|[Ww][Ee][Dd][Nn][Ee][Ss][Dd][Aa][Yy]|[Tt][Hh][Uu][Rr][Ss][Dd][Aa][Yy]|[Ff][Rr][Ii][Dd][Aa][Yy]|[Ss][Aa][Tt][Uu][Rr][Dd][Aa][Yy]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$",
-            "type": "string"
-          }
-        ],
-        "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        "type": "integer"
       },
       "DaySummaryCard": {
         "required": [
@@ -16572,41 +16532,7 @@
         }
       },
       "FrequencyUnit": {
-        "anyOf": [
-          {
-            "enum": [
-              "Day",
-              "Week",
-              "Month",
-              "Year"
-            ],
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          }
-        ]
-      },
-      "FrequencyUnitInput": {
-        "anyOf": [
-          {
-            "enum": [
-              "Day",
-              "Week",
-              "Month",
-              "Year"
-            ],
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "pattern": "^[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[+-]?[0-9]+|(?:[Dd][Aa][Yy]|[Ww][Ee][Ee][Kk]|[Mm][Oo][Nn][Tt][Hh]|[Yy][Ee][Aa][Rr])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Dd][Aa][Yy]|[Ww][Ee][Ee][Kk]|[Mm][Oo][Nn][Tt][Hh]|[Yy][Ee][Aa][Rr]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$",
-            "type": "string"
-          }
-        ],
-        "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        "type": "integer"
       },
       "GetPushSubscriptionsResponse": {
         "required": [
@@ -18044,19 +17970,7 @@
         "format": "binary"
       },
       "InstanceStatus": {
-        "anyOf": [
-          {
-            "enum": [
-              "Pending",
-              "Completed",
-              "Overdue"
-            ],
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          }
-        ]
+        "type": "integer"
       },
       "InterpretDateRequest": {
         "required": [
@@ -21691,7 +21605,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/FrequencyUnitInput"
+                "$ref": "#/components/schemas/FrequencyUnit"
               }
             ]
           },
@@ -21710,7 +21624,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/DayOfWeekInput"
+              "$ref": "#/components/schemas/DayOfWeek"
             }
           },
           "isBadHabit": {

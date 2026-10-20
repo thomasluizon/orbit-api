@@ -86,7 +86,7 @@ public partial class ReminderInputContractTests
         }
     }
 
-    private static object? OutputValue(Type type, bool optionalNulls, int depth = 0)
+    internal static object? OutputValue(Type type, bool optionalNulls, int depth = 0)
     {
         if (Nullable.GetUnderlyingType(type) is { } underlying)
             return optionalNulls ? null : OutputValue(underlying, optionalNulls, depth);

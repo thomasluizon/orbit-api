@@ -1,16 +1,22 @@
+using System.Data;
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class DistributedRateLimitServiceTests : IDisposable
+public partial class DistributedRateLimitServiceTests : IDisposable
 {
     private static readonly DateTimeOffset MidWindowInstant =
         new(2026, 1, 15, 12, 30, 30, TimeSpan.Zero);
@@ -308,46 +314,370 @@ public class DistributedRateLimitServiceTests : IDisposable
         blocked.WindowEndsAtUtc.Should().Be(MidWindowInstant.UtcDateTime.AddMinutes(1));
     }
 
-    [Fact]
-    public async Task TryAcquireAsync_RelationalProvider_RetriesSerializationConflictThenSucceeds()
+    [Theory]
+    [InlineData("40001", false, false)]
+    [InlineData("40P01", false, false)]
+    [InlineData("23505", false, false)]
+    [InlineData("40001", true, true)]
+    [InlineData("40P01", true, true)]
+    [InlineData("23505", true, true)]
+    public async Task TryAcquireAsync_ActualStrategy_AbortedSavesCommitOnePermit(
+        string sqlState, bool wrapped, bool warm)
     {
-        using var connection = new SqliteConnection("Data Source=:memory:");
-        connection.Open();
+        using var scope = new ProviderRateLimitScope();
+        if (warm)
+            await scope.Service.TryAcquireAsync("auth", "user:retry");
+        scope.Save.Reset(attempt => attempt <= 2 ? Conflict(sqlState, wrapped) : null);
+        scope.Transactions.Reset();
 
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var decision = await scope.Service.TryAcquireAsync("auth", "user:retry");
 
-        using var context = new SerializationConflictOrbitDbContext(options, conflictsBeforeSuccess: 2);
-        context.Database.EnsureCreated();
-        var service = new DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant));
+        decision.Should().Be(new DistributedRateLimitDecision(true, 10, warm ? 2 : 1,
+            MidWindowInstant.UtcDateTime.AddSeconds(30)));
+        scope.Save.Attempts.Should().Be(3);
+        scope.Transactions.Starts.Should().Be(3);
+        scope.Transactions.Commits.Should().Be(1);
+        (await scope.Context.DistributedRateLimitBuckets.AsNoTracking().SingleAsync()).Count.Should().Be(warm ? 2 : 1);
+    }
 
-        var decision = await service.TryAcquireAsync("auth", "ip:203.0.113.20");
+    [Theory]
+    [InlineData("40001")]
+    [InlineData("40P01")]
+    [InlineData("23505")]
+    [InlineData("mixed")]
+    [InlineData("transport")]
+    public async Task TryAcquireAsync_ActualStrategy_ExhaustionHasThreeAttemptsAndRetainsCause(string failure)
+    {
+        using var scope = new ProviderRateLimitScope();
+        scope.Save.Reset(attempt => failure switch
+        {
+            "mixed" => Conflict(new[] { "23505", "40001", "40P01" }[(attempt - 1) % 3]),
+            "transport" => new NpgsqlException("Connection interrupted before commit.", new IOException()),
+            _ => Conflict(failure)
+        });
+        var acquire = () => scope.Service.TryAcquireAsync("auth", "user:retry");
 
-        decision.Allowed.Should().BeTrue();
-        decision.CurrentCount.Should().Be(1);
-        context.SaveChangesAttempts.Should().Be(3);
+        var exception = await acquire.Should().ThrowAsync<Exception>();
+
+        scope.Save.Attempts.Should().Be(3);
+        scope.Transactions.Starts.Should().Be(3);
+        scope.Transactions.Commits.Should().Be(0);
+        exception.Which.Should().BeOfType<RetryLimitExceededException>()
+            .Which.InnerException.Should().BeSameAs(scope.Save.LastFailure);
+        (await scope.Context.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("40001")]
+    [InlineData("40P01")]
+    [InlineData("23505")]
+    public async Task TryAcquireAsync_ActualStrategy_ConfirmedCommitAbortRetries(string sqlState)
+    {
+        using var scope = new ProviderRateLimitScope();
+        scope.Transactions.BeforeCommit = attempt => attempt <= 2 ? Conflict(sqlState) : null;
+
+        var result = await scope.Service.TryAcquireAsync("auth", "user:commit");
+
+        result.Allowed.Should().BeTrue();
+        result.CurrentCount.Should().Be(1);
+        scope.Transactions.Starts.Should().Be(3);
+        scope.Transactions.CommitAttempts.Should().Be(3);
+        scope.Transactions.Commits.Should().Be(1);
+        (await scope.Context.DistributedRateLimitBuckets.AsNoTracking().SingleAsync()).Count.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TryAcquireAsync_ActualStrategy_UnknownCommitOutcomeIsNeverReplayed(bool committed)
+    {
+        using var scope = new ProviderRateLimitScope();
+        var failure = new NpgsqlException("Commit acknowledgement lost.", new IOException());
+        if (committed)
+            scope.Transactions.AfterCommit = _ => failure;
+        else
+            scope.Transactions.BeforeCommit = _ => failure;
+        var acquire = () => scope.Service.TryAcquireAsync("auth", "user:commit");
+
+        var exception = await acquire.Should().ThrowAsync<Exception>();
+
+        scope.Transactions.Starts.Should().Be(1);
+        scope.Save.Attempts.Should().Be(1);
+        exception.Which.Should().BeSameAs(failure);
+        (await scope.Context.DistributedRateLimitBuckets.AsNoTracking().SumAsync(bucket => bucket.Count))
+            .Should().Be(committed ? 1 : 0);
+    }
+
+    [Theory]
+    [InlineData("23503")]
+    [InlineData("unrelated")]
+    [InlineData("terminal-wrapper")]
+    [InlineData("null-inner")]
+    public async Task TryAcquireAsync_ActualStrategy_UnrelatedFailuresTerminateOnce(string kind)
+    {
+        using var scope = new ProviderRateLimitScope();
+        Exception failure = kind switch
+        {
+            "23503" => Conflict(kind),
+            "terminal-wrapper" => new RetryLimitExceededException("Already exhausted.", Conflict("40001")),
+            "null-inner" => new DbUpdateException("No inner exception."),
+            _ => new InvalidOperationException("Unrelated failure.")
+        };
+        scope.Save.Reset(_ => failure);
+        var acquire = () => scope.Service.TryAcquireAsync("auth", "user:failure");
+
+        var exception = await acquire.Should().ThrowAsync<Exception>();
+
+        exception.Which.Should().BeSameAs(failure);
+        scope.Save.Attempts.Should().Be(1);
+        scope.Transactions.Starts.Should().Be(1);
+        (await scope.Context.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
     }
 
     [Fact]
-    public async Task TryAcquireAsync_RelationalProvider_ExhaustsRetries_ThrowsFailedAfterRetrying()
+    public async Task TryAcquireAsync_ActualStrategy_PreCanceledNeverStartsTransaction()
     {
-        using var connection = new SqliteConnection("Data Source=:memory:");
-        connection.Open();
+        using var scope = new ProviderRateLimitScope();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var acquire = () => scope.Service.TryAcquireAsync("auth", "user:canceled", cancellation.Token);
 
-        var options = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        await acquire.Should().ThrowAsync<OperationCanceledException>();
 
-        using var context = new SerializationConflictOrbitDbContext(options, conflictsBeforeSuccess: int.MaxValue);
-        context.Database.EnsureCreated();
-        var service = new DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant));
+        scope.Transactions.Starts.Should().Be(0);
+        scope.Save.Attempts.Should().Be(0);
+        (await scope.Context.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
+    }
 
-        var acquire = () => service.TryAcquireAsync("auth", "ip:203.0.113.21");
+    [Fact]
+    public async Task TryAcquireAsync_PendingBusinessMutation_IsNeitherSavedNorCleared()
+    {
+        using var scope = new ProviderRateLimitScope();
+        var user = User.Create("Pending", "pending@example.com").Value;
+        scope.Context.Users.Add(user);
+        var acquire = () => scope.Service.TryAcquireAsync("auth", "user:pending");
 
-        await acquire.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*failed after retrying*");
-        context.SaveChangesAttempts.Should().Be(3);
+        await acquire.Should().ThrowAsync<InvalidOperationException>().WithMessage("*pending changes*");
+
+        scope.Transactions.Starts.Should().Be(0);
+        scope.Save.Attempts.Should().Be(0);
+        scope.Context.Entry(user).State.Should().Be(EntityState.Added);
+        (await scope.Context.Users.AsNoTracking().AnyAsync(item => item.Id == user.Id)).Should().BeFalse();
+        (await scope.Context.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("auth", 10, 60)]
+    [InlineData("chat", 20, 15)]
+    public async Task TryAcquireAsync_ActualStrategy_WindowRolloverAndExactExpiryPreserveQuota(
+        string policy, int limit, int segmentSeconds)
+    {
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 1, 15, 12, 30, 0, TimeSpan.Zero));
+        using var scope = new ProviderRateLimitScope(clock);
+        for (var i = 0; i < limit; i++)
+            (await scope.Service.TryAcquireAsync(policy, "user:window")).Allowed.Should().BeTrue();
+        clock.Advance(TimeSpan.FromSeconds(segmentSeconds));
+
+        var rollover = await scope.Service.TryAcquireAsync(policy, "user:window");
+
+        rollover.Allowed.Should().Be(policy == "auth");
+        rollover.CurrentCount.Should().Be(policy == "auth" ? 1 : limit);
+        if (policy == "chat")
+        {
+            rollover.WindowEndsAtUtc.Should().Be(new DateTime(2026, 1, 15, 12, 31, 0, DateTimeKind.Utc));
+            (await scope.Context.DistributedRateLimitBuckets.AsNoTracking().SumAsync(bucket => bucket.Count)).Should().Be(limit);
+            clock.Advance(TimeSpan.FromSeconds(45));
+            var expired = await scope.Service.TryAcquireAsync(policy, "user:window");
+            expired.Allowed.Should().BeTrue();
+            expired.CurrentCount.Should().Be(1);
+        }
+        (await scope.Context.DistributedRateLimitBuckets.AsNoTracking().SingleAsync()).Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TryAcquireAsync_ActualStrategy_RetryWaitUsesCallerTokenAndStopsBeforeNextAttempt()
+    {
+        using var scope = new ProviderRateLimitScope();
+        using var cancellation = new CancellationTokenSource();
+        var strategy = new ObservedAcquisitionStrategy(scope.Context)
+        {
+            OnWaiting = cancellation.Cancel
+        };
+        var service = new ObservedRateLimitService(scope.Context, strategy);
+        scope.Save.Reset(_ => Conflict("40001"));
+        var acquire = () => service.TryAcquireAsync("auth", "user:wait", cancellation.Token);
+
+        await acquire.Should().ThrowAsync<OperationCanceledException>();
+
+        strategy.CallerToken.Should().Be(cancellation.Token);
+        strategy.Waits.Should().Be(2);
+        strategy.MaxRetryCount.Should().Be(2);
+        strategy.MaxRetryDelay.Should().Be(TimeSpan.FromSeconds(5));
+        scope.Save.Attempts.Should().Be(2);
+        scope.Transactions.Starts.Should().Be(2);
+        scope.Transactions.Commits.Should().Be(0);
+        scope.Save.Tokens.Should().OnlyContain(token => token == cancellation.Token);
+        scope.Transactions.Tokens.Should().OnlyContain(token => token == cancellation.Token);
+        (await scope.Context.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TryAcquireAsync_ActualStrategy_SuccessForwardsTokenThroughCommit()
+    {
+        using var scope = new ProviderRateLimitScope();
+        using var cancellation = new CancellationTokenSource();
+
+        var decision = await scope.Service.TryAcquireAsync("auth", "user:token", cancellation.Token);
+
+        decision.Allowed.Should().BeTrue();
+        scope.Save.Tokens.Should().ContainSingle().Which.Should().Be(cancellation.Token);
+        scope.Transactions.Tokens.Should().HaveCount(2).And.OnlyContain(token => token == cancellation.Token);
+        var strategy = scope.Save.Strategies.Single();
+        strategy.Should().BeAssignableTo<NpgsqlRetryingExecutionStrategy>();
+        strategy!.MaxRetryCount.Should().Be(2);
+        strategy.MaxRetryDelay.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    private sealed class ObservedRateLimitService(
+        OrbitDbContext context, DistributedRateLimitService.AcquisitionExecutionStrategy strategy)
+        : DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant))
+    {
+        internal override AcquisitionExecutionStrategy CreateAcquisitionStrategy() => strategy;
+    }
+
+    private sealed class ObservedAcquisitionStrategy(OrbitDbContext context)
+        : DistributedRateLimitService.AcquisitionExecutionStrategy(context)
+    {
+        public CancellationToken CallerToken { get; private set; }
+        public int Waits { get; private set; }
+        public Action OnWaiting { get; init; } = () => { };
+
+        public override Task<TResult> ExecuteAsync<TState, TResult>(TState state,
+            Func<DbContext, TState, CancellationToken, Task<TResult>> operation,
+            Func<DbContext, TState, CancellationToken, Task<ExecutionResult<TResult>>>? verifySucceeded,
+            CancellationToken cancellationToken = default)
+        {
+            CallerToken = cancellationToken;
+            return base.ExecuteAsync(state, operation, verifySucceeded, cancellationToken);
+        }
+
+        protected override void OnRetry()
+        {
+            Waits++;
+            if (Waits == 2)
+                OnWaiting();
+            base.OnRetry();
+        }
+    }
+
+    private static Exception Conflict(string sqlState, bool wrapped = true)
+    {
+        var postgres = new PostgresException("Transaction aborted.", "ERROR", "ERROR", sqlState);
+        return wrapped ? new DbUpdateException("Aborted save.", postgres) : postgres;
+    }
+
+    private sealed class ProviderRateLimitScope : IDisposable
+    {
+        private readonly SqliteOrbitDbContextFactory _factory;
+
+        public ProviderRateLimitScope(TimeProvider? clock = null)
+        {
+            _factory = new SqliteOrbitDbContextFactory(
+                dependencies => new NpgsqlRetryingExecutionStrategy(dependencies, 3, TimeSpan.Zero, null),
+                Save, Transactions);
+            Transactions.Enabled = true;
+            Service = new DistributedRateLimitService(Context, clock ?? new FixedTimeProvider(MidWindowInstant));
+        }
+
+        public SaveFailure Save { get; } = new();
+        public TransactionFailure Transactions { get; } = new();
+        public OrbitDbContext Context => _factory.Context;
+        public DistributedRateLimitService Service { get; }
+        public void Dispose() => _factory.Dispose();
+    }
+
+    private sealed class SaveFailure : SaveChangesInterceptor
+    {
+        private Func<int, Exception?> _failure = _ => null;
+        public int Attempts { get; private set; }
+        public Exception? LastFailure { get; private set; }
+        public List<CancellationToken> Tokens { get; } = [];
+        public List<ExecutionStrategy?> Strategies { get; } = [];
+
+        public void Reset(Func<int, Exception?> failure)
+        {
+            Attempts = 0;
+            _failure = failure;
+        }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Attempts++;
+            Tokens.Add(cancellationToken);
+            Strategies.Add(ExecutionStrategy.Current);
+            LastFailure = _failure(Attempts);
+            if (LastFailure is not null)
+                throw LastFailure;
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class TransactionFailure : DbTransactionInterceptor
+    {
+        public bool Enabled { get; set; }
+        public int Starts { get; private set; }
+        public int CommitAttempts { get; private set; }
+        public int Commits { get; private set; }
+        public Func<int, Exception?> BeforeCommit { get; set; } = _ => null;
+        public Func<int, Exception?> AfterCommit { get; set; } = _ => null;
+        public List<CancellationToken> Tokens { get; } = [];
+
+        public void Reset()
+        {
+            Starts = 0;
+            CommitAttempts = 0;
+            Commits = 0;
+        }
+
+        public override ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection,
+            TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled)
+            {
+                Starts++;
+                Tokens.Add(cancellationToken);
+            }
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction,
+            TransactionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled)
+            {
+                CommitAttempts++;
+                transaction.IsolationLevel.Should().Be(IsolationLevel.Serializable);
+                Tokens.Add(cancellationToken);
+                var failure = BeforeCommit(CommitAttempts);
+                if (failure is not null)
+                    throw failure;
+            }
+            return ValueTask.FromResult(result);
+        }
+
+        public override Task TransactionCommittedAsync(DbTransaction transaction,
+            TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            if (Enabled)
+            {
+                Commits++;
+                var failure = AfterCommit(Commits);
+                if (failure is not null)
+                    throw failure;
+            }
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
@@ -432,25 +762,4 @@ public class DistributedRateLimitServiceTests : IDisposable
         }
     }
 
-    private sealed class SerializationConflictOrbitDbContext(
-        DbContextOptions<OrbitDbContext> options,
-        int conflictsBeforeSuccess) : RateLimitOnlyOrbitDbContext(options)
-    {
-        public int SaveChangesAttempts { get; private set; }
-
-        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        {
-            SaveChangesAttempts++;
-            if (SaveChangesAttempts <= conflictsBeforeSuccess)
-                throw new DbUpdateException(
-                    "Simulated serialization conflict.",
-                    new PostgresException(
-                        "could not serialize access due to concurrent update",
-                        "ERROR",
-                        "ERROR",
-                        PostgresErrorCodes.SerializationFailure));
-
-            return base.SaveChangesAsync(cancellationToken);
-        }
-    }
 }

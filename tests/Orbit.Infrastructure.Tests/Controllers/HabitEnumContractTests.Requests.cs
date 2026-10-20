@@ -22,12 +22,17 @@ public partial class HabitEnumContractTests
                 { name, name.ToLowerInvariant(), name.ToUpperInvariant(), " " + name + " ", "\u0085" + name + "\u0085" })
                 .Select(name => JsonSerializer.Serialize(name))
                 .Concat(Enum.GetValues(type).Cast<object>().Select(value => Convert.ToInt32(value).ToString()))
-                .Concat(["99", "-1", "2147483647", "-2147483648", "\"0\"", "\"+0001\"", "\" -1 \"", "\"99\""])
+                .Concat(["99", "-1", "2147483647", "-2147483648", "\"0\"", "\"+0001\"", "\" -1 \"", "\"99\"", "\"+0002147483647\"", "\"-0002147483648\"", "\"-000000\""])
                 .Concat(type == typeof(FrequencyUnit)
                     ? ["\"dAy\"", "\" Day, wEEk \"", "\"Day,\"", "\"Day,  \""]
                     : ["\"mOnDaY\"", "\" Monday, SUNDAY \"", "\"Monday,\"", "\"Monday,  \""]);
             foreach (var token in tokens)
                 yield return type == typeof(FrequencyUnit) ? [token, "[]"] : ["\"Day\"", $"[{token}]"];
+        }
+        foreach (var token in new[] { "\"\\u0085+0002147483647\\u3000\"", "\"" + new string('0', 80) + "2147483647\"", "\"-" + new string('0', 80) + "2147483648\"" })
+        {
+            yield return [token, "[]"];
+            yield return ["null", $"[{token}]"];
         }
         yield return ["null", "[]"];
         yield return ["null", "null"];
@@ -61,6 +66,10 @@ public partial class HabitEnumContractTests
     [InlineData("\"1,2\"")]
     [InlineData("\"2147483648\"")]
     [InlineData("2147483648")]
+    [InlineData("-2147483649")]
+    [InlineData("\"-2147483649\"")]
+    [InlineData("\"+0002147483648\"")]
+    [InlineData("\"-0002147483649\"")]
     [InlineData("1.5")]
     [InlineData("true")]
     [InlineData("{}")]

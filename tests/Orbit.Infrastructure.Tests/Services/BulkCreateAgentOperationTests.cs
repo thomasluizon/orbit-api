@@ -58,6 +58,9 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 3, 20));
 
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
         _provider = new ServiceCollection()
             .AddLogging()
             .AddMemoryCache()
@@ -74,6 +77,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
                 new GenericRepository<Tag>(context)))
             .AddSingleton(_payGate)
             .AddSingleton(dates)
+            .AddSingleton(config)
             .AddSingleton<IUnitOfWork>(work)
             .BuildServiceProvider();
 

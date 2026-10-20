@@ -133,6 +133,8 @@ public class HabitScheduleContractTests
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
     public void OpenApi_DateInterpretationAndOptionalStartDateMatchActualTypes(string file)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
@@ -160,6 +162,8 @@ public class HabitScheduleContractTests
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
     public void OpenApi_AppendsOptionalScheduleAndStartDateOnBothVersions(string file)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
@@ -183,6 +187,8 @@ public class HabitScheduleContractTests
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
     public void OpenApi_HabitScheduleMatchesActualMvcNames(string file)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

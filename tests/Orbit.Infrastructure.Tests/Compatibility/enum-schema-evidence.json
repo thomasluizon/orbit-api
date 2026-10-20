@@ -1,0 +1,822 @@
+{
+  "catalog": [
+    {
+      "id": "orbit-http-v1-r1",
+      "httpVersion": "1.0",
+      "revision": "r1",
+      "documentName": "v1",
+      "path": "src/Orbit.Api/openapi.json",
+      "deprecated": true,
+      "replacement": "orbit-http-v1-r2"
+    },
+    {
+      "id": "orbit-http-v2-r1",
+      "httpVersion": "2.0",
+      "revision": "r1",
+      "documentName": "v2",
+      "path": "src/Orbit.Api/openapi_v2.json",
+      "deprecated": true,
+      "replacement": "orbit-http-v2-r2"
+    },
+    {
+      "id": "orbit-http-v1-r2",
+      "httpVersion": "1.0",
+      "revision": "r2",
+      "documentName": "v1-r2",
+      "path": "src/Orbit.Api/openapi_v1-r2.json",
+      "deprecated": false,
+      "replacement": null
+    },
+    {
+      "id": "orbit-http-v2-r2",
+      "httpVersion": "2.0",
+      "revision": "r2",
+      "documentName": "v2-r2",
+      "path": "src/Orbit.Api/openapi_v2-r2.json",
+      "deprecated": false,
+      "replacement": null
+    }
+  ],
+  "documents": {
+    "orbit-http-v1-r1": {
+      "sha256": "62b22e45d94879a7479adce81c4614909b89a61b1e49119ab129d7d69ce56b0a",
+      "rootKeys": {
+        "openapi": "string",
+        "info": "object",
+        "paths": "object",
+        "components": "object",
+        "tags": "array"
+      },
+      "info": {
+        "title": "Orbit.Api | v1",
+        "version": "1.0"
+      },
+      "pathCount": 165,
+      "operationCount": 180,
+      "components": {
+        "DayOfWeek": {
+          "type": "integer"
+        },
+        "FrequencyUnit": {
+          "type": "integer"
+        },
+        "InstanceStatus": {
+          "type": "integer"
+        },
+        "RelativeReminderTime": {
+          "type": "object",
+          "properties": {
+            "minutesBefore": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "null",
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "when": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ScheduledReminderWhen"
+                }
+              ]
+            },
+            "time": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderTime": {
+          "required": [
+            "when",
+            "time"
+          ],
+          "type": "object",
+          "properties": {
+            "when": {
+              "$ref": "#/components/schemas/ScheduledReminderWhen"
+            },
+            "time": {
+              "type": "string",
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderWhen": {
+          "enum": [
+            "same_day",
+            "day_before"
+          ],
+          "description": "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing."
+        }
+      },
+      "enumReferences": {
+        "/components/schemas/AiAction/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/AiAction/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/ApplyHabitInput/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/ApplyHabitInput/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/BulkHabitItemRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/BulkHabitItemRequest/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/CreateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/CreateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/CreateSubHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/CreateSubHabitRequest/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitChildResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitChildResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitDetailResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitDetailResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitInstanceItem/properties/status": "#/components/schemas/InstanceStatus",
+        "/components/schemas/HabitScheduleChildItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleChildItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitScheduleItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/RelativeReminderTime/properties/when/oneOf/1": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/ScheduledReminderTime/properties/when": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/SyncHabitDto/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/UpdateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/UpdateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeek"
+      }
+    },
+    "orbit-http-v2-r1": {
+      "sha256": "1705b7cac0fa0fb7c64912d077b73c2a1d57b5ffed76b1d2abaea9704908bcf1",
+      "rootKeys": {
+        "openapi": "string",
+        "info": "object",
+        "paths": "object",
+        "components": "object",
+        "tags": "array"
+      },
+      "info": {
+        "title": "Orbit.Api | v2",
+        "version": "2.0"
+      },
+      "pathCount": 165,
+      "operationCount": 180,
+      "components": {
+        "DayOfWeek": {
+          "type": "integer"
+        },
+        "FrequencyUnit": {
+          "type": "integer"
+        },
+        "InstanceStatus": {
+          "type": "integer"
+        },
+        "RelativeReminderTime": {
+          "type": "object",
+          "properties": {
+            "minutesBefore": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "null",
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "when": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ScheduledReminderWhen"
+                }
+              ]
+            },
+            "time": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderTime": {
+          "required": [
+            "when",
+            "time"
+          ],
+          "type": "object",
+          "properties": {
+            "when": {
+              "$ref": "#/components/schemas/ScheduledReminderWhen"
+            },
+            "time": {
+              "type": "string",
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderWhen": {
+          "enum": [
+            "same_day",
+            "day_before"
+          ],
+          "description": "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing."
+        }
+      },
+      "enumReferences": {
+        "/components/schemas/AiAction/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/AiAction/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/ApplyHabitInput/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/ApplyHabitInput/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/BulkHabitItemRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/BulkHabitItemRequest/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/CreateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/CreateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/CreateSubHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/CreateSubHabitRequest/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitChildResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitChildResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitDetailResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitDetailResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitInstanceItem/properties/status": "#/components/schemas/InstanceStatus",
+        "/components/schemas/HabitScheduleChildItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleChildItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitScheduleItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/RelativeReminderTime/properties/when/oneOf/1": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/ScheduledReminderTime/properties/when": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/SyncHabitDto/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/UpdateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/UpdateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeek"
+      }
+    },
+    "orbit-http-v1-r2": {
+      "sha256": "4fd5280f2dffcc3c46cd4b111747a78689f07e7a5f6397117e7aeda27127c6ca",
+      "rootKeys": {
+        "openapi": "string",
+        "info": "object",
+        "paths": "object",
+        "components": "object",
+        "tags": "array"
+      },
+      "info": {
+        "title": "Orbit.Api | v1-r2",
+        "description": "Documentation revision orbit-http-v1-r2 for HTTP API 1.0. Select this artifact with a full producer commit; request version selection is unchanged.",
+        "version": "1.0"
+      },
+      "pathCount": 165,
+      "operationCount": 180,
+      "components": {
+        "DayOfWeek": {
+          "anyOf": [
+            {
+              "enum": [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "DayOfWeekInput": {
+          "anyOf": [
+            {
+              "enum": [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:(?:[+]?0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|-0*(?:(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|2147483648))|(?:[Ss][Uu][Nn][Dd][Aa][Yy]|[Mm][Oo][Nn][Dd][Aa][Yy]|[Tt][Uu][Ee][Ss][Dd][Aa][Yy]|[Ww][Ee][Dd][Nn][Ee][Ss][Dd][Aa][Yy]|[Tt][Hh][Uu][Rr][Ss][Dd][Aa][Yy]|[Ff][Rr][Ii][Dd][Aa][Yy]|[Ss][Aa][Tt][Uu][Rr][Dd][Aa][Yy])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Ss][Uu][Nn][Dd][Aa][Yy]|[Mm][Oo][Nn][Dd][Aa][Yy]|[Tt][Uu][Ee][Ss][Dd][Aa][Yy]|[Ww][Ee][Dd][Nn][Ee][Ss][Dd][Aa][Yy]|[Tt][Hh][Uu][Rr][Ss][Dd][Aa][Yy]|[Ff][Rr][Ii][Dd][Aa][Yy]|[Ss][Aa][Tt][Uu][Rr][Dd][Aa][Yy]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*)(?![\\s\\S])",
+              "type": "string"
+            }
+          ],
+          "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        },
+        "FrequencyUnit": {
+          "anyOf": [
+            {
+              "enum": [
+                "Day",
+                "Week",
+                "Month",
+                "Year"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "FrequencyUnitInput": {
+          "anyOf": [
+            {
+              "enum": [
+                "Day",
+                "Week",
+                "Month",
+                "Year"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:(?:[+]?0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|-0*(?:(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|2147483648))|(?:[Dd][Aa][Yy]|[Ww][Ee][Ee][Kk]|[Mm][Oo][Nn][Tt][Hh]|[Yy][Ee][Aa][Rr])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Dd][Aa][Yy]|[Ww][Ee][Ee][Kk]|[Mm][Oo][Nn][Tt][Hh]|[Yy][Ee][Aa][Rr]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*)(?![\\s\\S])",
+              "type": "string"
+            }
+          ],
+          "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        },
+        "InstanceStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "Pending",
+                "Completed",
+                "Overdue"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "RelativeReminderTime": {
+          "type": "object",
+          "properties": {
+            "minutesBefore": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "null",
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "when": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ScheduledReminderWhen"
+                }
+              ]
+            },
+            "time": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "format": "time"
+            }
+          }
+        },
+        "RelativeReminderTimeInput": {
+          "type": "object",
+          "properties": {
+            "minutesBefore": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "null",
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "when": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ScheduledReminderWhenInput"
+                }
+              ]
+            },
+            "time": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderTime": {
+          "required": [
+            "when",
+            "time"
+          ],
+          "type": "object",
+          "properties": {
+            "when": {
+              "$ref": "#/components/schemas/ScheduledReminderWhen"
+            },
+            "time": {
+              "type": "string",
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderTimeInput": {
+          "required": [
+            "when",
+            "time"
+          ],
+          "type": "object",
+          "properties": {
+            "when": {
+              "$ref": "#/components/schemas/ScheduledReminderWhenInput"
+            },
+            "time": {
+              "type": "string",
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderWhen": {
+          "anyOf": [
+            {
+              "enum": [
+                "SameDay",
+                "DayBefore"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "ScheduledReminderWhenInput": {
+          "anyOf": [
+            {
+              "enum": [
+                "SameDay",
+                "DayBefore"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^(?:same_day|day_before|[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:(?:[+]?0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|-0*(?:(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|2147483648))|(?:[Ss][Aa][Mm][Ee][Dd][Aa][Yy]|[Dd][Aa][Yy][Bb][Ee][Ff][Oo][Rr][Ee])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Ss][Aa][Mm][Ee][Dd][Aa][Yy]|[Dd][Aa][Yy][Bb][Ee][Ff][Oo][Rr][Ee]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*)(?![\\s\\S])",
+              "type": "string"
+            }
+          ],
+          "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        }
+      },
+      "enumReferences": {
+        "/components/schemas/AiAction/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/AiAction/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/ApplyHabitInput/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/ApplyHabitInput/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/BulkHabitItemRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/BulkHabitItemRequest/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/CreateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/CreateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/CreateSubHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/CreateSubHabitRequest/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/HabitChildResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitChildResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitDetailResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitDetailResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitInstanceItem/properties/status": "#/components/schemas/InstanceStatus",
+        "/components/schemas/HabitScheduleChildItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleChildItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitScheduleItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/RelativeReminderTime/properties/when/oneOf/1": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/RelativeReminderTimeInput/properties/when/oneOf/1": "#/components/schemas/ScheduledReminderWhenInput",
+        "/components/schemas/ScheduledReminderTime/properties/when": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/ScheduledReminderTimeInput/properties/when": "#/components/schemas/ScheduledReminderWhenInput",
+        "/components/schemas/SyncHabitDto/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/UpdateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/UpdateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeekInput"
+      }
+    },
+    "orbit-http-v2-r2": {
+      "sha256": "4c7ee997e3742144c81679b1bc803f638bc25a1c3b1f8f9003dda8dace6666a3",
+      "rootKeys": {
+        "openapi": "string",
+        "info": "object",
+        "paths": "object",
+        "components": "object",
+        "tags": "array"
+      },
+      "info": {
+        "title": "Orbit.Api | v2-r2",
+        "description": "Documentation revision orbit-http-v2-r2 for HTTP API 2.0. Select this artifact with a full producer commit; request version selection is unchanged.",
+        "version": "2.0"
+      },
+      "pathCount": 165,
+      "operationCount": 180,
+      "components": {
+        "DayOfWeek": {
+          "anyOf": [
+            {
+              "enum": [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "DayOfWeekInput": {
+          "anyOf": [
+            {
+              "enum": [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:(?:[+]?0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|-0*(?:(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|2147483648))|(?:[Ss][Uu][Nn][Dd][Aa][Yy]|[Mm][Oo][Nn][Dd][Aa][Yy]|[Tt][Uu][Ee][Ss][Dd][Aa][Yy]|[Ww][Ee][Dd][Nn][Ee][Ss][Dd][Aa][Yy]|[Tt][Hh][Uu][Rr][Ss][Dd][Aa][Yy]|[Ff][Rr][Ii][Dd][Aa][Yy]|[Ss][Aa][Tt][Uu][Rr][Dd][Aa][Yy])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Ss][Uu][Nn][Dd][Aa][Yy]|[Mm][Oo][Nn][Dd][Aa][Yy]|[Tt][Uu][Ee][Ss][Dd][Aa][Yy]|[Ww][Ee][Dd][Nn][Ee][Ss][Dd][Aa][Yy]|[Tt][Hh][Uu][Rr][Ss][Dd][Aa][Yy]|[Ff][Rr][Ii][Dd][Aa][Yy]|[Ss][Aa][Tt][Uu][Rr][Dd][Aa][Yy]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*)(?![\\s\\S])",
+              "type": "string"
+            }
+          ],
+          "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        },
+        "FrequencyUnit": {
+          "anyOf": [
+            {
+              "enum": [
+                "Day",
+                "Week",
+                "Month",
+                "Year"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "FrequencyUnitInput": {
+          "anyOf": [
+            {
+              "enum": [
+                "Day",
+                "Week",
+                "Month",
+                "Year"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:(?:[+]?0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|-0*(?:(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|2147483648))|(?:[Dd][Aa][Yy]|[Ww][Ee][Ee][Kk]|[Mm][Oo][Nn][Tt][Hh]|[Yy][Ee][Aa][Rr])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Dd][Aa][Yy]|[Ww][Ee][Ee][Kk]|[Mm][Oo][Nn][Tt][Hh]|[Yy][Ee][Aa][Rr]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*)(?![\\s\\S])",
+              "type": "string"
+            }
+          ],
+          "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        },
+        "InstanceStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "Pending",
+                "Completed",
+                "Overdue"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "RelativeReminderTime": {
+          "type": "object",
+          "properties": {
+            "minutesBefore": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "null",
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "when": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ScheduledReminderWhen"
+                }
+              ]
+            },
+            "time": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "format": "time"
+            }
+          }
+        },
+        "RelativeReminderTimeInput": {
+          "type": "object",
+          "properties": {
+            "minutesBefore": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "null",
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "when": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ScheduledReminderWhenInput"
+                }
+              ]
+            },
+            "time": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderTime": {
+          "required": [
+            "when",
+            "time"
+          ],
+          "type": "object",
+          "properties": {
+            "when": {
+              "$ref": "#/components/schemas/ScheduledReminderWhen"
+            },
+            "time": {
+              "type": "string",
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderTimeInput": {
+          "required": [
+            "when",
+            "time"
+          ],
+          "type": "object",
+          "properties": {
+            "when": {
+              "$ref": "#/components/schemas/ScheduledReminderWhenInput"
+            },
+            "time": {
+              "type": "string",
+              "format": "time"
+            }
+          }
+        },
+        "ScheduledReminderWhen": {
+          "anyOf": [
+            {
+              "enum": [
+                "SameDay",
+                "DayBefore"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ]
+        },
+        "ScheduledReminderWhenInput": {
+          "anyOf": [
+            {
+              "enum": [
+                "SameDay",
+                "DayBefore"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^(?:same_day|day_before|[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:(?:[+]?0*(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|-0*(?:(?:[0-9]{1,9}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])|2147483648))|(?:[Ss][Aa][Mm][Ee][Dd][Aa][Yy]|[Dd][Aa][Yy][Bb][Ee][Ff][Oo][Rr][Ee])(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*(?:[Ss][Aa][Mm][Ee][Dd][Aa][Yy]|[Dd][Aa][Yy][Bb][Ee][Ff][Oo][Rr][Ee]))*(?:[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*,)?)[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*)(?![\\s\\S])",
+              "type": "string"
+            }
+          ],
+          "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
+        }
+      },
+      "enumReferences": {
+        "/components/schemas/AiAction/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/AiAction/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/ApplyHabitInput/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/ApplyHabitInput/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/BulkHabitItemRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/BulkHabitItemRequest/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/CreateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/CreateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/CreateSubHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/CreateSubHabitRequest/properties/days/items": "#/components/schemas/DayOfWeekInput",
+        "/components/schemas/HabitChildResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitChildResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitDetailResponse/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitDetailResponse/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitInstanceItem/properties/status": "#/components/schemas/InstanceStatus",
+        "/components/schemas/HabitScheduleChildItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleChildItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/HabitScheduleItem/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/HabitScheduleItem/properties/days/items": "#/components/schemas/DayOfWeek",
+        "/components/schemas/RelativeReminderTime/properties/when/oneOf/1": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/RelativeReminderTimeInput/properties/when/oneOf/1": "#/components/schemas/ScheduledReminderWhenInput",
+        "/components/schemas/ScheduledReminderTime/properties/when": "#/components/schemas/ScheduledReminderWhen",
+        "/components/schemas/ScheduledReminderTimeInput/properties/when": "#/components/schemas/ScheduledReminderWhenInput",
+        "/components/schemas/SyncHabitDto/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnit",
+        "/components/schemas/UpdateHabitRequest/properties/frequencyUnit/oneOf/1": "#/components/schemas/FrequencyUnitInput",
+        "/components/schemas/UpdateHabitRequest/properties/days/items": "#/components/schemas/DayOfWeekInput"
+      }
+    }
+  }
+}

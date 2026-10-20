@@ -210,19 +210,22 @@ public sealed class ApiVersioningTests : IAsyncLifetime
     [Theory]
     [InlineData("v1", "1.0", "openapi.json", false)]
     [InlineData("v2", "2.0", "openapi_v2.json", true)]
+    [InlineData("v1-r2", "1.0", "openapi_v1-r2.json", false)]
+    [InlineData("v2-r2", "2.0", "openapi_v2-r2.json", true)]
     public void OpenApiDocuments_ContainOnlyTheirVersionAndPreserveSchemas(
         string group, string version, string file, bool requiresHeader)
     {
         var provider = _application.Services.GetRequiredService<IApiDescriptionGroupCollectionProvider>();
         var options = _application.Services.GetRequiredService<IOptionsMonitor<OpenApiOptions>>().Get(group);
+        options.DocumentName.Should().Be(group);
         var descriptions = provider.ApiDescriptionGroups.Items.SelectMany(item => item.Items).ToArray();
         descriptions.Should().NotBeEmpty();
         foreach (var description in descriptions)
-            options.ShouldInclude(description).Should().Be(description.GroupName == group);
+            options.ShouldInclude(description).Should().Be(description.GroupName == group.Split('-')[0]);
 
         var directory = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api"));
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, file)));
-        using var v1 = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "openapi.json")));
+        using var v1 = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, group.EndsWith("r2", StringComparison.Ordinal) ? "openapi_v1-r2.json" : "openapi.json")));
         var root = document.RootElement;
         root.GetProperty("info").GetProperty("version").GetString().Should().Be(version);
         root.GetProperty("components").GetRawText().Should().Be(v1.RootElement.GetProperty("components").GetRawText());
