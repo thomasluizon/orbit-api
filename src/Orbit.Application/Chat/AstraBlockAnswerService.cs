@@ -28,15 +28,19 @@ public sealed class AstraBlockAnswerService(
     IPendingAgentOperationStore pendingOperations,
     ILogger? logger = null,
     IPendingOperationChangePreviewer? previewer = null,
-    TimeSpan? claimLifetime = null)
+    TimeSpan? claimLifetime = null,
+    Action<PreparedAstraBlockAnswer>? observePrepared = null,
+    Action<ConversationToolCall>? observeTool = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
-        Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct)
+        Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
+        Func<string, CancellationToken, Task<Result>>? checkInput = null)
     {
-        var preparation = await PrepareAsync(request, ct);
+        var preparation = await PrepareAsync(request, ct, checkInput);
         if (preparation.IsFailure)
             return preparation.PropagateError<ChatResponse>();
         var prepared = preparation.Value;
+        observePrepared?.Invoke(prepared);
         if (prepared.Response is { } storedResponse)
         {
             if (!prepared.IsReplay)
@@ -141,7 +145,8 @@ public sealed class AstraBlockAnswerService(
             throw new InvalidOperationException(refund.Error);
     }
 
-    public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct)
+    public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct,
+        Func<string, CancellationToken, Task<Result>>? checkInput = null)
     {
         var answer = request.BlockAnswer ?? throw new ArgumentException("Block answer is required.", nameof(request));
         var validation = await new AstraBlockAnswerValidator().ValidateAsync(answer, ct);
@@ -175,12 +180,12 @@ public sealed class AstraBlockAnswerService(
                     return answerError;
                 var isChoice = definition.Form == AstraBlockKinds.Choice;
                 var message = BuildMessage(definition, answer);
-                var crisis = isChoice ? await DetectCrisisTurnAsync(request.UserId, message, token) : CrisisLocales.None;
-                if (isChoice && crisis == CrisisLocales.None)
+                var crisis = await DetectCrisisTurnAsync(request.UserId, message, token);
+                if (crisis == CrisisLocales.None && checkInput is not null)
                 {
-                    var allowance = await payGate.CanSendAiMessage(request.UserId, token);
-                    if (allowance.IsFailure)
-                        return allowance.PropagateError<PreparedAstraBlockAnswer>();
+                    var inputCheck = await checkInput(message, token);
+                    if (inputCheck.IsFailure)
+                        return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
                 }
                 var now = TimeProvider.System.GetUtcNow().UtcDateTime;
                 var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
@@ -191,7 +196,7 @@ public sealed class AstraBlockAnswerService(
                 var user = await users.GetByIdAsync(request.UserId, token);
                 ChatResponse? response = null;
                 DateOnly? reservedAllowanceDate = null;
-                if (definition.Form == AstraBlockKinds.PickList)
+                if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
                 {
                     response = await BuildPickListResponseAsync(request, definition, answer, user, token);
                 }
@@ -219,11 +224,16 @@ public sealed class AstraBlockAnswerService(
         AstraBlockDefinition definition, AstraBlockAnswer answer, User? user, CancellationToken token)
     {
         var chosen = definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).ToArray();
+        var arguments = AskTool.BuildBulkArguments(definition.Action!, chosen);
         var preview = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             request.UserId, "bulk_" + definition.Action,
-            AskTool.BuildBulkArguments(definition.Action!, chosen), AgentExecutionSurface.Chat,
+            arguments, AgentExecutionSurface.Chat,
             request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
             CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
+        observeTool?.Invoke(new ConversationToolCall("block-preview", "bulk_" + definition.Action,
+            arguments.Clone(), preview.Operation.Status == AgentOperationStatus.Succeeded,
+            preview.Operation.PolicyReason ?? (preview.Operation.Status == AgentOperationStatus.Succeeded
+                ? null : preview.Operation.Status.ToString())));
         if (preview.Operation.Status != AgentOperationStatus.PendingConfirmation
             || preview.PendingOperation?.Items?.Count != chosen.Length)
             throw new AnswerRejectedException(Failure(ErrorCodes.AstraBlockPreviewUnavailable));

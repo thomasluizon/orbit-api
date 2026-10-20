@@ -16,6 +16,7 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
         var ownershipChecks = new[]
         {
             CreateCheck("habit", await AllOwnedAsync(dbContext.Habits.IgnoreQueryFilters(), userId, CollectGuids(arguments, "habit_id", "habit_ids", "parent_habit_id", "new_parent_id"), cancellationToken)),
+            CreateCheck("tag", await AllOwnedAsync(dbContext.Tags, userId, CollectGuids(arguments, "tag_id", "tag_ids"), cancellationToken)),
             CreateCheck("goal", await AllOwnedAsync(dbContext.Goals.IgnoreQueryFilters(), userId, CollectGuids(arguments, "goal_id", "goal_ids"), cancellationToken)),
             CreateCheck("notification", await AllOwnedAsync(dbContext.Notifications, userId, CollectGuids(arguments, "notification_id"), cancellationToken)),
             CreateCheck("template", await AllOwnedAsync(dbContext.ChecklistTemplates, userId, CollectGuids(arguments, "template_id"), cancellationToken)),

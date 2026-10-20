@@ -14,7 +14,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class ExpandHabitScheduleAndStartDateMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesRedesignAndOnlyLacksEvalTraceSeed()
+    public void TargetModel_PreservesRedesignWithConversationAiSecurityAndEvalTraceAdditions()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -22,18 +22,89 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             .Initialize(Migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
 
-        var differ = context.GetService<IMigrationsModelDiffer>();
-        var seed = differ.GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
-            .Should().ContainSingle().Which.Should().BeOfType<InsertDataOperation>().Subject;
-        seed.Table.Should().Be("AppFeatureFlags");
-        seed.Values.GetLength(0).Should().Be(1);
-        seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("astra_eval_trace");
-        seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().HaveCount(14);
+        differences.OfType<CreateTableOperation>().Select(table => table.Name)
+            .Should().BeEquivalentTo("ConversationTurns", "OAuthStates", "AiBudgetCalls");
+        differences.OfType<CreateIndexOperation>().Should().HaveCount(7);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(2);
+        differences.OfType<InsertDataOperation>().Should().HaveCount(2);
+        AssertAiSecurityAdditions(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences);
+        AssertEvalTraceSeed(differences);
+        differences.OfType<InsertDataOperation>().Single(seed => seed.Table == "AppFeatureFlags")
+            .Values.GetLength(0).Should().Be(2);
+        context.Database.HasPendingModelChanges().Should().BeFalse();
+    }
 
-        var evalTraceTarget = context.GetService<IModelRuntimeInitializer>()
+    [Fact]
+    public void EvalTraceTargetModel_MatchesCurrentModel()
+    {
+        using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=unused").Options);
+        var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new AddAstraEvalTraceFlag().TargetModel, designTime: true);
-        differ.GetDifferences(evalTraceTarget.GetRelationalModel(), current.GetRelationalModel())
-            .Should().BeEmpty();
+        var current = context.GetService<IDesignTimeModel>().Model;
+        context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
+    }
+
+    internal static void AssertEvalTraceSeed(IReadOnlyList<MigrationOperation> operations)
+    {
+        var seed = operations.OfType<InsertDataOperation>().Should().ContainSingle(operation => operation.Table == "AppFeatureFlags").Subject;
+        var row = Enumerable.Range(0, seed.Values.GetLength(0)).Should().ContainSingle(index =>
+            Equals(seed.Values[index, Array.IndexOf(seed.Columns, "Key")], "astra_eval_trace")).Subject;
+        seed.Values[row, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+        seed.Values[row, Array.IndexOf(seed.Columns, "PlanRequirement")].Should().BeNull();
+    }
+
+    internal static void AssertAiSecurityAdditions(IReadOnlyList<MigrationOperation> operations)
+    {
+        var oauth = operations.OfType<CreateTableOperation>().Should().ContainSingle(table => table.Name == "OAuthStates").Subject;
+        oauth.Columns.Select(column => column.Name).Should().BeEquivalentTo(
+            "Id", "SecretHash", "Kind", "Payload", "ExpiresAtUtc", "ConsumedAtUtc");
+        oauth.Columns.Should().ContainSingle(column => column.Name == "ConsumedAtUtc"
+            && column.ClrType == typeof(DateTime) && column.IsNullable);
+        oauth.PrimaryKey!.Columns.Should().Equal("Id");
+        oauth.ForeignKeys.Should().BeEmpty();
+        var budget = operations.OfType<CreateTableOperation>().Should().ContainSingle(table => table.Name == "AiBudgetCalls").Subject;
+        budget.Columns.Select(column => column.Name).Should().BeEquivalentTo(
+            "Id", "UserId", "LocalDate", "ChargedTokens", "ChargedMicroDollars", "IsSettled");
+        budget.Columns.Should().ContainSingle(column => column.Name == "ChargedMicroDollars"
+            && column.ClrType == typeof(long) && !column.IsNullable && Equals(column.DefaultValue, 0L));
+        budget.PrimaryKey!.Columns.Should().Equal("Id");
+        var foreignKey = budget.ForeignKeys.Should().ContainSingle().Subject;
+        foreignKey.Columns.Should().Equal("UserId");
+        foreignKey.PrincipalTable.Should().Be("Users");
+        foreignKey.PrincipalColumns.Should().Equal("Id");
+        foreignKey.OnDelete.Should().Be(ReferentialAction.Cascade);
+        operations.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "ApiKeys"
+            && column.Name == "OAuthFamilyId" && column.ClrType == typeof(Guid) && column.IsNullable);
+        var indexes = operations.OfType<CreateIndexOperation>()
+            .Where(index => index.Table is "OAuthStates" or "AiBudgetCalls"
+                || index.Table == "ApiKeys" && index.Name == "IX_ApiKeys_OAuthFamilyId").ToArray();
+        indexes.Should().HaveCount(4);
+        indexes.Should().ContainSingle(index => index.Name == "IX_OAuthStates_Kind_ExpiresAtUtc"
+            && index.Table == "OAuthStates" && index.Columns.SequenceEqual(new[] { "Kind", "ExpiresAtUtc" }) && !index.IsUnique);
+        indexes.Should().ContainSingle(index => index.Name == "IX_OAuthStates_SecretHash"
+            && index.Table == "OAuthStates" && index.Columns.SequenceEqual(new[] { "SecretHash" }) && index.IsUnique);
+        indexes.Should().ContainSingle(index => index.Name == "IX_AiBudgetCalls_UserId_LocalDate"
+            && index.Table == "AiBudgetCalls" && index.Columns.SequenceEqual(new[] { "UserId", "LocalDate" }) && !index.IsUnique);
+        indexes.Should().ContainSingle(index => index.Name == "IX_ApiKeys_OAuthFamilyId"
+            && index.Table == "ApiKeys" && index.Columns.SequenceEqual(new[] { "OAuthFamilyId" }) && !index.IsUnique);
+        var configs = operations.OfType<InsertDataOperation>().Should().ContainSingle(seed => seed.Table == "AppConfigs").Subject;
+        var keyColumn = Array.IndexOf(configs.Columns, "Key");
+        var valueColumn = Array.IndexOf(configs.Columns, "Value");
+        var values = Enumerable.Range(0, configs.Values.GetLength(0))
+            .ToDictionary(row => (string)configs.Values[row, keyColumn]!, row => (string)configs.Values[row, valueColumn]!);
+        values.Should().BeEquivalentTo(new Dictionary<string, string>
+        {
+            ["FreeAiCallsPerDay"] = "45",
+            ["ProAiCallsPerDay"] = "450",
+            ["FreeAiMicroDollarsPerDay"] = "20000",
+            ["ProAiMicroDollarsPerDay"] = "120000"
+        });
     }
 
     [Fact]

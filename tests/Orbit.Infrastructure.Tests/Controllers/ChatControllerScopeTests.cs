@@ -146,6 +146,7 @@ public class ChatControllerScopeTests
             var payGate = Substitute.For<IPayGateService>();
             payGate.CanReadApiKeys(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
             using var services = new ServiceCollection()
+                .AddSingleton(Substitute.For<IApiKeyUsageTracker>())
                 .AddSingleton(repository)
                 .AddSingleton(payGate)
                 .AddSingleton(Substitute.For<IUnitOfWork>())

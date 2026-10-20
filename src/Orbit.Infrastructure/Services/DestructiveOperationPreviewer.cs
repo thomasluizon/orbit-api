@@ -80,12 +80,24 @@ public sealed class DestructiveOperationPreviewer(OrbitDbContext dbContext) : ID
         string operationId, JsonElement arguments, CancellationToken cancellationToken)
     {
         var action = ReadString(arguments, "action");
-        if (action is not ("set_auto_sync" or "dismiss_import" or "run_sync"))
+        if (action is not ("set_auto_sync" or "set_selected_calendars" or "dismiss_import" or "run_sync"))
             return null;
         var user = await dbContext.Users.AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
         if (user is null)
             return null;
+        if (action == "set_selected_calendars")
+        {
+            if (!arguments.TryGetProperty("calendar_ids", out var ids) || ids.ValueKind != JsonValueKind.Array)
+                return null;
+            var selection = new PendingOperationChange(userId, "Calendar sync", "calendar_ids",
+                JsonSerializer.Serialize(user.GetSelectedCalendarIds() ?? []), ids.GetRawText(),
+                "text", ids.Clone(), false);
+            var selectionItem = new PendingOperationItem(userId.ToString(), userId, "Calendar sync", [selection],
+                AgentOperationFingerprint.Compute(operationId, user.GoogleCalendarSelectedIds ?? string.Empty), RemovesData: false);
+            return new PendingOperationChangePreview([selection], 1, [selectionItem],
+                AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(selectionItem)));
+        }
         var field = action == "set_auto_sync" ? "enabled" : action;
         var oldValue = action switch
         {

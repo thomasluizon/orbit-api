@@ -289,7 +289,6 @@ public class AstraBlockAnswerRecoveryTests
         var today = new DateOnly(2026, 4, 3);
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
         var quota = Substitute.For<IPayGateService>();
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.RefundAiMessage(user.Id, today, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -331,7 +330,7 @@ public class AstraBlockAnswerRecoveryTests
                 executor, Substitute.For<IPendingClarificationStore>(), syncer, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(),
                 store, Substitute.For<IPendingAgentOperationStore>()),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
 
         var response = await handler.Handle(new(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"])), default);
 

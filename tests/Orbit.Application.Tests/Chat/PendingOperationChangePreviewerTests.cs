@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
@@ -26,6 +27,150 @@ public sealed class PendingOperationChangePreviewerTests
     public PendingOperationChangePreviewerTests() =>
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 9, 25));
+
+    [Fact]
+    public async Task Unlog_DefaultDate_PreviewShowsUserToday()
+    {
+        var habit = CreateHabit("Beber água", null);
+        Setup([habit]);
+        var preview = await Preview("unlog_habit", JsonSerializer.Serialize(new { habit_id = habit.Id }));
+        preview.Should().NotBeNull();
+        preview!.Items.Should().ContainSingle().Which.EntityName.Should().Be(habit.Title);
+        preview.Changes.Should().Contain(change => change.Field == "date" && change.NewValue == "2026-09-25");
+    }
+
+    [Fact]
+    public async Task RoundThree_BulkDelete_UsesNormalizedTitleWordPrefixes()
+    {
+        var water = CreateHabit("Beber água", null);
+        var reading = CreateHabit("Ler 10 minutos", null);
+        var allergy = CreateHabit("Alergia", null);
+        allergy.Update(new HabitUpdateParams(allergy.Title, "Ler sobre água e meditação",
+            allergy.FrequencyUnit, allergy.FrequencyQuantity, allergy.Days.ToArray(), allergy.IsBadHabit, allergy.DueDate))
+            .IsSuccess.Should().BeTrue();
+        Setup([water, reading, allergy]);
+        foreach (var search in new[] { "agua", "ÁGUA", "agu beb" })
+        {
+            var preview = await Preview("bulk_delete_habits", JsonSerializer.Serialize(new { filter = new { search } }));
+            preview!.Items.Should().ContainSingle().Which.EntityId.Should().Be(water.Id);
+        }
+        var read = await Preview("bulk_delete_habits", """{"filter":{"search":"ler"}}""");
+        read!.Items.Should().ContainSingle().Which.EntityId.Should().Be(reading.Id);
+        (await Preview("bulk_delete_habits", """{"filter":{"search":"medit"}}""")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RoundThree_UnchangedUpdateFields_JsonOrderDoesNotInvalidateApproval()
+    {
+        Setup([CreateHabit("Read", null)]);
+        var first = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"title":"Read","description":null}}""");
+        var reordered = await Preview("bulk_update_habits", """{"updates":{"description":null,"title":"Read"},"filter":{"all":true}}""");
+        reordered!.PreviewFingerprint.Should().Be(first!.PreviewFingerprint);
+    }
+
+    [Fact]
+    public async Task RoundThree_CreateChildren_ShowsParentInEveryItemAndOnceInChanges()
+    {
+        var parent = CreateHabit("Academia", null);
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { parent });
+        var preview = await Preview("bulk_create_habits", JsonSerializer.Serialize(new
+        {
+            parent_habit_id = parent.Id,
+            habits = new[] { new { title = "Aquecimento" }, new { title = "Treino" }, new { title = "Alongamento" } }
+        }));
+        preview!.Items.Should().HaveCount(3).And.OnlyContain(item => item.Fields.Any(field => field.Field == "parent_habit_id"
+            && field.NewValue == "Academia" && !field.IsEditable));
+        preview.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            field => field.Field == "parent_habit_id" && field.NewValue == "Academia");
+    }
+
+    [Theory]
+    [InlineData("Alergia", "ler", false)]
+    [InlineData("Ler 10 minutos", "leitura", false)]
+    [InlineData("Beber água", "AGUA", true)]
+    [InlineData("Meditação", "medit", true)]
+    [InlineData("Meditação diária", "DIÁ MED", true)]
+    [InlineData("Meditação diária", "med falt", false)]
+    [InlineData("Meditação", "!!!", false)]
+    public void RoundThree_NameMatching_UsesNormalizedWordPrefixes(string title, string search, bool matches) =>
+        HabitNameMatcher.Matches(title, search).Should().Be(matches);
+
+    [Fact]
+    public async Task PreviewAsync_Create_JsonPropertyOrderDoesNotChangeApproval()
+    {
+        var first = await Preview("bulk_create_habits", """{"habits":[{"title":"Academia","frequency_unit":"Day","sub_habits":[{"title":"Treino"}]}]}""");
+        var stored = await Preview("bulk_create_habits", """{"habits":[{"sub_habits":[{"title":"Treino"}],"frequency_unit":"Day","title":"Academia"}]}""");
+
+        stored!.PreviewFingerprint.Should().Be(first!.PreviewFingerprint);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_NoMatches_DoesNotOfferEmptyPreview()
+    {
+        Setup([]);
+
+        var preview = await Preview("bulk_log_habits", """{"filter":{"search":"meditação"}}""");
+
+        preview.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("bulk_log_habits")]
+    [InlineData("bulk_skip_habits")]
+    public async Task PreviewAsync_RevisedDates_IgnoreOriginalRangeAndKeepOfferedIdentity(string operationId)
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+        var itemId = $"{habit.Id}:2026-10-19";
+        var arguments = JsonSerializer.Serialize(new
+        {
+            habit_ids = new[] { habit.Id },
+            dates = new[] { "2026-10-18", "2026-10-19" },
+            revised_items = new[] { new { habit_id = habit.Id, date = "2026-10-17", preview_item_id = itemId } }
+        });
+
+        var preview = await Preview(operationId, arguments);
+
+        var retained = preview!.Items.Should().ContainSingle().Subject;
+        retained.ItemId.Should().Be(itemId);
+        retained.EntityId.Should().Be(habit.Id);
+        retained.Fields.Should().ContainSingle().Which.NewValue.Should().Be("2026-10-17");
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    public async Task PreviewAsync_InvalidRevisedDates_DoNotFallBackToOriginalRange(string revisedItems)
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+
+        var preview = await Preview("bulk_log_habits", $$"""
+            {"habit_ids":["{{habit.Id}}"],"dates":["2026-10-18","2026-10-19"],"revised_items":{{revisedItems}}}
+            """);
+
+        preview.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PreviewAsync_GoalLink_OnlyLinkedRecordChangesInvalidateApproval()
+    {
+        var linked = CreateHabit("Ler 10 minutos", null);
+        var unrelated = CreateHabit("Beber água", null);
+        var habits = new[] { linked, unrelated };
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        var arguments = JsonSerializer.Serialize(new { title = "Ler livros", habit_ids = new[] { linked.Id } });
+        var initial = await Preview("create_goal", arguments);
+        unrelated.PostponeTo(new DateOnly(2026, 9, 26));
+        var afterUnrelated = await Preview("create_goal", arguments);
+        linked.PostponeTo(new DateOnly(2026, 9, 27));
+        var afterLinked = await Preview("create_goal", arguments);
+
+        afterUnrelated!.PreviewFingerprint.Should().Be(initial!.PreviewFingerprint);
+        afterLinked!.PreviewFingerprint.Should().NotBe(initial.PreviewFingerprint);
+    }
 
     [Fact]
     public async Task PreviewAsync_ThreeMatches_UsesEachRealOldEmoji()
@@ -88,13 +233,57 @@ public sealed class PendingOperationChangePreviewerTests
     [InlineData("{}")]
     [InlineData("{\"infer_from_title\":true}")]
     [InlineData("{\"emoji\":\"✅\",\"infer_from_title\":true}")]
-    public async Task PreviewAsync_InferredEmojis_DoNotOfferEditableItems(string arguments)
+    public async Task PreviewAsync_InferredEmojis_OffersExplicitEditableValues(string arguments)
     {
-        Setup([CreateHabit("One", null), CreateHabit("Two", null)]);
+        var habits = new[] { CreateHabit("One", null), CreateHabit("Two", null) };
+        Setup(habits);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyDictionary<Guid, string>>(
+                habits.ToDictionary(habit => habit.Id, _ => "📚")));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
 
-        var preview = await Preview("bulk_update_habit_emojis", arguments);
+        var preview = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>(arguments));
+
+        preview.Should().NotBeNull();
+        preview!.ChangeTargetCount.Should().Be(habits.Length);
+        preview.Items!.SelectMany(item => item.Fields).Should().OnlyContain(field =>
+            field.Field == "emoji" && field.NewValue == "📚" && field.IsEditable);
+        preview.ExecutionArguments!.Value.GetProperty("infer_from_title").GetBoolean().Should().BeFalse();
+        preview.ExecutionArguments.Value.GetProperty("revised_items").GetArrayLength().Should().Be(habits.Length);
+        JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web)
+            .TryGetProperty("executionArguments", out _).Should().BeFalse();
+        habits.Should().OnlyContain(habit => habit.Emoji == null);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_EmojiInferenceStopsMidway_OffersNoUninferredChangesAndWritesNothing()
+    {
+        var habits = Enumerable.Range(1, 55).Select(index => CreateHabit($"Habit {index}", null)).ToArray();
+        Setup(habits);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        var work = Substitute.For<IUnitOfWork>();
+        var count = 0;
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(call => ++count == 2
+                ? Result.Failure<IReadOnlyDictionary<Guid, string>>("budget unavailable")
+                : Result.Success<IReadOnlyDictionary<Guid, string>>(call.ArgAt<IReadOnlyList<HabitEmojiInferenceInput>>(1)
+                    .ToDictionary(input => input.HabitId, _ => "📚")));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work,
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+
+        var preview = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("""{"infer_from_title":true}"""));
 
         preview.Should().BeNull();
+        count.Should().Be(2);
+        habits.Should().OnlyContain(habit => habit.Emoji == null);
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _habits.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default!, default);
     }
 
     [Fact]
@@ -169,7 +358,7 @@ public sealed class PendingOperationChangePreviewerTests
         item.ValidationErrors.Should().BeNull();
         preview.Changes.Should().BeEmpty();
         preview.ChangeTargetCount.Should().Be(1);
-        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_unit", "frequency_quantity");
+        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_quantity", "frequency_unit");
         var legacyItemJson = JsonSerializer.SerializeToElement(item);
         legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
             "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");
@@ -247,14 +436,13 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
-    public async Task PreviewAsync_ZeroMatches_ReturnsEmptyRowsAndZeroTotal()
+    public async Task PreviewAsync_ZeroMatches_OffersNoPreview()
     {
         Setup([]);
 
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""");
 
-        preview!.ChangeTargetCount.Should().Be(0);
-        preview.Changes.Should().BeEmpty();
+        preview.Should().BeNull();
     }
 
     [Fact]

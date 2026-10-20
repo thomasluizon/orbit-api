@@ -178,7 +178,9 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         var call = EvalResponseJson(result.Value, false).GetProperty("evalTrace").GetProperty("toolCalls")[0];
         call.GetProperty("status").GetString().Should().Be(status.ToString());
-        call.GetProperty("result").GetProperty("success").GetBoolean().Should().BeFalse();
+        call.GetProperty("result").GetProperty("success").GetBoolean().Should().Be(status == AgentOperationStatus.PendingConfirmation);
+        if (status == AgentOperationStatus.PendingConfirmation)
+            call.GetProperty("result").GetProperty("payload").GetProperty("status").GetString().Should().Be("awaiting_confirmation");
     }
 
     private static JsonElement EvalResponseJson(ChatResponse response, bool stream)

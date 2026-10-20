@@ -53,6 +53,7 @@ public sealed class AgentArgumentPreviewTests
         item.EntityId.Should().BeNull();
         item.RemovesData.Should().BeFalse();
         item.Fields.Should().HaveCount(4);
+        item.Fields.Select(field => field.Field).Should().Equal("title", "due_time", "frequency_quantity", "frequency_unit");
         item.Fields.Should().OnlyContain(field => field.IsEditable);
         item.Fields.Should().Contain(field => field.Field == "title" && field.NewValue == "Beber agua"
             && field.OldValue == null);

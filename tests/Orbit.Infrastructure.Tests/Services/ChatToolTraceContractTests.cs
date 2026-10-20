@@ -43,6 +43,8 @@ public class ChatToolTraceContractTests
 
         tools.Should().NotBeEmpty();
         tools.Select(tool => tool.Name).Should().Contain("ask").And.Contain("update_notifications").And.Contain("manage_api_keys");
+        tools.Select(tool => tool.Name).Should().Contain("update_checklist_template").And.Contain("update_profile_preferences")
+            .And.Contain("manage_calendar_sync").And.Contain("bulk_log_habits");
         foreach (var tool in tools)
         {
             AssertSensitiveFields(JsonSerializer.SerializeToElement(tool.GetParameterSchema()), tool.Name);

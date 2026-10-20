@@ -26,6 +26,27 @@ public class AssignTagsToolTests
     }
 
     [Fact]
+    public async Task RoundThree_TagBatch_LoadsAndSavesOnce()
+    {
+        var habits = new[] { CreateHabit("One"), CreateHabit("Two") };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(habits);
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits);
+        foreach (var habit in habits)
+            _habitRepo.FindOneTrackedAsync(Arg.Is<Expression<Func<Habit, bool>>>(predicate => predicate.Compile()(habit)),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        var arguments = JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id).ToArray(), tag_names = new[] { "Saúde" } });
+
+        var result = await _tool.ExecuteAsync(arguments, UserId, default);
+
+        result.Success.Should().BeTrue();
+        habits.Should().OnlyContain(habit => habit.Tags.Count == 1);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _habitRepo.Received(1).FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AssignTags_ReplacesExistingTags()
     {
         var habit = CreateHabit("Run");

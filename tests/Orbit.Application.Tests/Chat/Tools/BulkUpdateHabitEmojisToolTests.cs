@@ -50,6 +50,21 @@ public class BulkUpdateHabitEmojisToolTests
     }
 
     [Fact]
+    public async Task CheckArgumentsAsync_InferFromTitle_AcceptsWithoutInferenceOrWrites()
+    {
+        var habit = CreateHabit("Read");
+        SetupHabits(habit);
+
+        var result = await _tool.CheckArgumentsAsync(JsonSerializer.Deserialize<JsonElement>(
+            """{"infer_from_title":true}"""), UserId, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        habit.Emoji.Should().BeNull();
+        await _inferenceService.DidNotReceiveWithAnyArgs().InferAsync(default, default!, default);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task InferFromTitle_UpdatesAllActiveHabitsWithSensibleEmojis()
     {
         var gym = CreateHabit("Go to the gym");
@@ -231,6 +246,10 @@ public class BulkUpdateHabitEmojisToolTests
         payload.GetProperty("skipped_count").GetInt32().Should().Be(30);
         payload.GetProperty("partial").GetBoolean().Should().BeTrue();
         result.EntityName.Should().Contain("Partial result");
+        callCount.Should().Be(2);
+        habits.Count(habit => habit.Emoji == "🎯").Should().Be(25);
+        habits.Count(habit => habit.Emoji == null).Should().Be(30);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

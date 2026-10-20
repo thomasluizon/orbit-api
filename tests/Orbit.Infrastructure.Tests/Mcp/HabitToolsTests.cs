@@ -1,17 +1,25 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -250,6 +258,58 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task UpdateHabit_TitleOnly_PreservesDeadlineThroughExecutorAndTool()
+    {
+        var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var today = new DateOnly(2026, 4, 3);
+        var scheduledReminders = new List<ScheduledReminderTime>
+        {
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(14, 0))
+        };
+        var habit = Habit.Create(new HabitCreateParams(
+            userId, "Read", null, null, today, DueEndTime: new TimeOnly(15, 0),
+            ReminderEnabled: true, SlipAlertEnabled: true, ScheduledReminders: scheduledReminders)).Value;
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+        _userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        var tool = new UpdateHabitTool(repository, _userDateService, unitOfWork, Substitute.For<IPayGateService>());
+        var catalog = new AgentCatalogService([tool]);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
+            AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByChatTool(tool.Name)!));
+        var ownership = Substitute.For<IAgentTargetOwnershipService>();
+        ownership.GetDenialReasonAsync(
+            Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        var stepUp = Substitute.For<IAgentStepUpAuthorizationBridge>();
+        stepUp.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((AgentConfirmationRequirement?)null);
+        var executor = new AgentOperationExecutor(
+            catalog, policy, Substitute.For<IAgentAuditService>(), ownership, stepUp,
+            new AiToolRegistry([tool]), Substitute.For<IPendingOperationChangePreviewer>(),
+            Substitute.For<IPendingAgentOperationStore>(), unitOfWork, NullLogger<AgentOperationExecutor>.Instance);
+        var tools = new HabitTools(_mediator, _userDateService, new McpExecutorBridge(executor));
+
+        var result = await tools.UpdateHabit(_user, habit.Id.ToString(), "Read daily");
+
+        result.Should().Be($"Updated habit {habit.Id}");
+        habit.Title.Should().Be("Read daily");
+        habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
+        habit.SlipAlertEnabled.Should().BeTrue();
+        habit.ScheduledReminders.Should().Equal(scheduledReminders);
+        await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task UpdateHabit_WithEmoji_ForwardsValue()
     {
         StubExecutor(AgentOperationStatus.Succeeded);
@@ -341,6 +401,26 @@ public class HabitToolsTests
         var result = await _tools.LogHabit(_user, Guid.NewGuid().ToString());
 
         result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task UnlogHabit_Success_RoutesDateAndHabitThroughExecutor()
+    {
+        var habitId = Guid.NewGuid();
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
+        var request = await CapturedRequestAsync(() => _tools.UnlogHabit(_user, habitId.ToString(), "2026-08-06"));
+        request.OperationId.Should().Be("unlog_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        request.Arguments.GetProperty("habit_id").GetString().Should().Be(habitId.ToString());
+        request.Arguments.GetProperty("date").GetString().Should().Be("2026-08-06");
+    }
+
+    [Fact]
+    public async Task UnlogHabit_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "No log for date");
+        var result = await _tools.UnlogHabit(_user, Guid.NewGuid().ToString());
+        result.Should().StartWith("Error: ").And.Contain("No log for date");
     }
 
     [Fact]
@@ -595,13 +675,16 @@ public class HabitToolsTests
         result.Should().StartWith("Error: ");
     }
 
-    [Fact]
-    public async Task BulkCreateHabits_Success_RoutesThroughExecutorAndFormatsBreakdown()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BulkCreateHabits_Success_RoutesThroughExecutorAndFormatsBreakdown(bool partial)
     {
         var id = Guid.NewGuid();
-        var bulkResult = new BulkCreateResult([
-            new BulkCreateItemResult(0, BulkItemStatus.Success, id, "Habit1")
-        ]);
+        var items = new List<BulkCreateItemResult> { new(0, BulkItemStatus.Success, id, "Habit1") };
+        if (partial)
+            items.Add(new(1, BulkItemStatus.Failed, Title: "Habit2", Error: "Invalid schedule"));
+        var bulkResult = new BulkCreateResult(items);
         StubExecutor(AgentOperationStatus.Succeeded, payload: bulkResult);
 
         var json = "[{\"title\":\"Habit1\",\"dueDate\":\"2026-04-01\"}]";
@@ -610,7 +693,108 @@ public class HabitToolsTests
         request = await CapturedRequestAsync(async () => result = await _tools.BulkCreateHabits(_user, json));
 
         request.OperationId.Should().Be("bulk_create_habits");
-        result.Should().Contain("1 succeeded, 0 failed");
+        result.Should().Contain($"1 succeeded, {(partial ? 1 : 0)} failed");
+        result.Should().Contain("\"applied_count\":1");
+        result.Should().Contain($"\"total_matched\":{items.Count}");
+        result.Should().Contain($"\"partial\":{partial.ToString().ToLowerInvariant()}");
+    }
+
+    [Theory]
+    [InlineData("bulk_update_habits")]
+    [InlineData("bulk_reschedule_habits")]
+    [InlineData("bulk_delete_habits")]
+    [InlineData("bulk_log_habits")]
+    [InlineData("bulk_skip_habits")]
+    public async Task BulkMutations_ReturnStructuredCoverageEvenWithoutSummary(string operationId)
+    {
+        StubExecutor(AgentOperationStatus.Succeeded, payload: new
+        {
+            applied_count = 200,
+            total_matched = 250,
+            skipped_count = 50,
+            partial = true
+        });
+        var id = Guid.NewGuid().ToString();
+        var result = operationId switch
+        {
+            "bulk_update_habits" => await _tools.BulkUpdateHabits(_user, "{\"all\":true}", "{\"description\":\"Shared\"}"),
+            "bulk_reschedule_habits" => await _tools.BulkRescheduleHabits(_user, "{\"all\":true}", "2026-04-02"),
+            "bulk_delete_habits" => await _tools.BulkDeleteHabits(_user, id),
+            "bulk_log_habits" => await _tools.BulkLogHabits(_user, id),
+            _ => await _tools.BulkSkipHabits(_user, id)
+        };
+
+        result.Should().Contain("\"applied_count\":200");
+        result.Should().Contain("\"total_matched\":250");
+        result.Should().Contain("\"partial\":true");
+        result.Should().NotContain("completed");
+    }
+
+    [Theory]
+    [InlineData("infer")]
+    [InlineData("explicit")]
+    [InlineData("clear")]
+    public async Task BulkUpdateHabitEmojis_ForwardsFilterAndConfirmationAndReportsCoverage(string mode)
+    {
+        StubExecutor(AgentOperationStatus.Succeeded, payload: new
+        {
+            applied_count = 225,
+            total_matched = 225,
+            skipped_count = 0,
+            partial = false
+        });
+        var filter = "{\"tag\":\"Health\",\"include_completed\":true}";
+        string? output = null;
+        var request = await CapturedRequestAsync(async () => output = mode switch
+        {
+            "infer" => await _tools.BulkUpdateHabitEmojis(_user, filter, confirmationToken: "approved"),
+            "explicit" => await _tools.BulkUpdateHabitEmojis(_user, filter, "💊", confirmationToken: "approved"),
+            _ => await _tools.BulkUpdateHabitEmojis(_user, filter, null, confirmationToken: "approved")
+        });
+
+        request.OperationId.Should().Be("bulk_update_habit_emojis");
+        request.ConfirmationToken.Should().Be("approved");
+        request.Arguments.GetProperty("filter").GetProperty("tag").GetString().Should().Be("Health");
+        request.Arguments.GetProperty("filter").GetProperty("include_completed").GetBoolean().Should().BeTrue();
+        request.Arguments.GetProperty("infer_from_title").GetBoolean().Should().Be(mode == "infer");
+        if (mode == "infer")
+            request.Arguments.TryGetProperty("emoji", out _).Should().BeFalse();
+        else if (mode == "clear")
+            request.Arguments.GetProperty("emoji").ValueKind.Should().Be(JsonValueKind.Null);
+        else
+            request.Arguments.GetProperty("emoji").GetString().Should().Be("💊");
+        output.Should().Contain("\"applied_count\":225");
+        output.Should().Contain("\"total_matched\":225");
+        output.Should().Contain("\"partial\":false");
+    }
+
+    [Theory]
+    [InlineData(AgentOperationStatus.PendingConfirmation)]
+    [InlineData(AgentOperationStatus.Denied)]
+    public async Task BulkUpdateHabitEmojis_PreservesExecutorGate(AgentOperationStatus status)
+    {
+        StubExecutor(status, policyReason: "read_only_credential", pendingOperationId: Guid.NewGuid());
+
+        var result = await _tools.BulkUpdateHabitEmojis(_user, "{\"all\":true}");
+
+        result.Should().NotContain("applied_count");
+        result.Should().Contain(status == AgentOperationStatus.PendingConfirmation ? "Confirmation required" : "read_only_credential");
+    }
+
+    [Fact]
+    public async Task BulkCreateHabits_ReplayedPayload_PreservesFormattedResult()
+    {
+        var payload = new BulkCreateResult([new BulkCreateItemResult(0, BulkItemStatus.Success, Guid.NewGuid(), "Habit1")]);
+        var original = new AgentExecuteOperationResponse(new AgentOperationResult("bulk_create_habits", "bulk_create_habits",
+            AgentRiskClass.Destructive, AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Succeeded, Payload: payload));
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var replay = System.Text.Json.JsonSerializer.Deserialize<AgentExecuteOperationResponse>(
+            System.Text.Json.JsonSerializer.Serialize(original, options), options)!;
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(original, replay);
+        var first = await _tools.BulkCreateHabits(_user, """[{"title":"Habit1"}]""");
+        var second = await _tools.BulkCreateHabits(_user, """[{"title":"Habit1"}]""");
+        first.Should().Contain("1 succeeded, 0 failed").And.Contain("Habit1");
+        second.Should().Be(first);
     }
 
     [Fact]

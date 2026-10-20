@@ -67,7 +67,6 @@ public class BlockAnswerWriteRetryTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
         var quota = Substitute.For<IPayGateService>();
-        quota.CanSendAiMessage(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var ai = Substitute.For<IAiIntentService>();
         ai.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -88,7 +87,7 @@ public class BlockAnswerWriteRetryTests
             new(dates, Substitute.For<IUserStreakService>(), quota, work, Substitute.For<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), Substitute.For<IGoalProgressReadSyncer>(), Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), analytics, Substitute.For<IHabitScheduleLogReader>(), new IssuedAstraBlockStore(db), pending),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>());
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
         var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]));
 
         var first = await handler.Handle(request, default);

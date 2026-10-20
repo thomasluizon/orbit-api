@@ -10,16 +10,28 @@ public static class BulkToolRepeatGuard
     private static readonly IReadOnlyDictionary<string, string> BulkAlternatives =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["create_habit"] = "bulk_create_habits",
+            ["create_sub_habit"] = "bulk_create_habits",
             ["update_habit"] = "bulk_update_habits",
+            ["update_checklist"] = "bulk_update_habits",
             ["log_habit"] = "bulk_log_habits",
             ["skip_habit"] = "bulk_skip_habits",
             ["delete_habit"] = "bulk_delete_habits"
         };
 
-    public static IReadOnlyDictionary<string, string> FindRedirects(IReadOnlyList<AiToolCall> calls)
+    internal static bool IsBulkAlternative(string singleTool, string bulkTool) =>
+        BulkAlternatives.TryGetValue(singleTool, out var alternative)
+        && (string.Equals(alternative, bulkTool, StringComparison.OrdinalIgnoreCase)
+            || alternative == "bulk_update_habits" && bulkTool == "bulk_reschedule_habits");
+
+    public static IReadOnlyDictionary<string, string> FindRedirects(
+        IReadOnlyList<AiToolCall> calls,
+        IReadOnlyList<AiToolCall>? previousCalls = null)
     {
         var redirects = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var toolGroup in calls.GroupBy(call => call.Name, StringComparer.OrdinalIgnoreCase))
+        var currentIds = calls.Select(call => call.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var toolGroup in (previousCalls ?? []).Concat(calls)
+            .GroupBy(call => call.Name, StringComparer.OrdinalIgnoreCase))
         {
             if (!BulkAlternatives.TryGetValue(toolGroup.Key, out var bulkTool))
                 continue;
@@ -40,7 +52,7 @@ public static class BulkToolRepeatGuard
 
                 if (equivalent.Count < Threshold)
                     continue;
-                foreach (var call in equivalent)
+                foreach (var call in equivalent.Where(call => currentIds.Contains(call.Id)))
                     redirects[call.Id] = bulkTool;
             }
         }
