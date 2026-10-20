@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DuplicateHabitTool(
     IMediator mediator,
-    IGenericRepository<Habit>? habitRepository = null) : IAiTool, IArgumentCheckTool
+    IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
 {
     public string Name => "duplicate_habit";
 
@@ -45,9 +45,7 @@ public class DuplicateHabitTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        var duplicate = habitRepository is null
-            ? null
-            : await HabitToolHelpers.FindHabitAsync(habitRepository, result.Value, userId, ct);
+        var duplicate = await HabitToolHelpers.FindHabitAsync(habitRepository, result.Value, userId, ct);
 
         return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: duplicate?.Title);
     }

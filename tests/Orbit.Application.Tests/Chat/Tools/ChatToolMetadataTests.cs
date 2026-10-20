@@ -40,7 +40,7 @@ public class ChatToolMetadataTests
         var createSubHabitTool = new CreateSubHabitTool(mediator);
         var deleteGoalTool = new DeleteGoalTool(Repo<Goal>(), unitOfWork);
         var deleteHabitTool = new DeleteHabitTool(mediator, Repo<Habit>());
-        var duplicateHabitTool = new DuplicateHabitTool(mediator);
+        var duplicateHabitTool = new DuplicateHabitTool(mediator, Repo<Habit>());
         var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);
         var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
         var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
