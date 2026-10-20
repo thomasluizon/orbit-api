@@ -44,7 +44,7 @@ public sealed partial class AiSummaryService(
                 prompt,
                 temperature: 0.3,
                 cancellationToken: cancellationToken,
-                maxOutputTokens: 240,
+                maxOutputTokens: 8192,
                 purpose: "daily_summary");
 
             if (content is null || string.IsNullOrWhiteSpace(content.Summary))

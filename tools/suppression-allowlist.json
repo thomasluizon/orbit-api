@@ -33,6 +33,18 @@
     }
   },
   "pragmas": {
+    "src/Orbit.Infrastructure/AI/AiCompletionClient.cs": {
+      "OPENAI001": {
+        "count": 1,
+        "reason": "The installed OpenAI SDK marks its typed Responses API experimental. Astra requires Responses for reasoning with function tools."
+      }
+    },
+    "src/Orbit.Infrastructure/Services/AiIntentService.cs": {
+      "OPENAI001": {
+        "count": 1,
+        "reason": "The installed OpenAI SDK marks Responses request, output and streaming event types experimental. Astra maps those types at its AI boundary."
+      }
+    },
     "src/Orbit.Api/Controllers/OAuthController.cs": {
       "S6931": {
         "count": 1,
