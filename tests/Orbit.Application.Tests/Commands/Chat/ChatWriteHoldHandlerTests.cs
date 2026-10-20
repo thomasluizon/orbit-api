@@ -18,6 +18,7 @@ using Orbit.Application.Chat.Validators;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Queries;
+using Orbit.Application.Habits.Commands;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -80,10 +81,12 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             _payGate, _unitOfWork);
         var emojiTool = new BulkUpdateHabitEmojisTool(_habitRepo, _emojiInference, _unitOfWork,
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
-        _toolRegistry = new AiToolRegistry([_createHabitTool, emojiTool]);
+        var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
+        var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
+        _toolRegistry = new AiToolRegistry([_createHabitTool, emojiTool, updateTool, bulkUpdateTool]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
             _toolRegistry);
-        _catalogService = new AgentCatalogService([_createHabitTool, emojiTool]);
+        _catalogService = new AgentCatalogService([_createHabitTool, emojiTool, updateTool, bulkUpdateTool]);
         var settings = Options.Create(new AgentPlatformSettings());
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
         var stepUpBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
@@ -113,6 +116,200 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
         _flagCache.Dispose();
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task Handle_BulkFallback_SupersedesCoveredSinglesAndApprovalUpdatesFullSet()
+    {
+        var habits = SetupUpdateHabits();
+        AiResponse Single(int index) => new()
+        {
+            ToolCalls = [new AiToolCall("update_habit", $"single_{index}", JsonSerializer.SerializeToElement(new
+            {
+                habit_id = habits[index].Id, description = "Shared"
+            }))],
+            ConversationContext = new()
+        };
+        ScriptToolCall(Single(0).ToolCalls![0].Args.GetRawText(), "update_habit");
+        var forwarded = new List<AiToolCallResult>();
+        var round = 0;
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                forwarded.AddRange(call.ArgAt<IReadOnlyList<AiToolCallResult>>(1));
+                return Result.Success(++round switch
+                {
+                    1 => Single(1),
+                    2 => Single(2),
+                    3 => new AiResponse
+                    {
+                        ToolCalls = [new AiToolCall("bulk_update_habits", "bulk", JsonSerializer.SerializeToElement(new
+                        {
+                            filter = new { all = true }, updates = new { description = "Shared" }
+                        }))],
+                        ConversationContext = new()
+                    },
+                    _ => new AiResponse { TextMessage = "Review the changes to all three habits." }
+                });
+            });
+        var held = new List<AgentExecuteOperationResponse>();
+
+        var result = await CreateHandler(HoldReplayWrites(held)).Handle(new ProcessUserChatCommand(_userId,
+            "Change the description of all my habits to Shared",
+            ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        forwarded.Should().HaveCount(4);
+        forwarded[2].Success.Should().BeFalse();
+        forwarded[2].Error.Should().Contain("bulk_update_habits");
+        held.Select(item => item.Operation.OperationId).Should().Equal("update_habit", "update_habit", "bulk_update_habits");
+        var pending = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        pending.ChangeTargetCount.Should().Be(3);
+        pending.Items!.Select(item => item.EntityId).Should().BeEquivalentTo(habits.Select(habit => habit.Id));
+        habits.Should().OnlyContain(habit => habit.Description == null);
+        foreach (var single in held.Take(2))
+        {
+            _pendingOperationStore.GetExecution(_userId, single.PendingOperation!.Id).Should().BeNull();
+            _pendingOperationStore.Confirm(_userId, single.PendingOperation.Id).Should().BeNull();
+        }
+        _dbContext.PendingAgentOperations.Where(item => item.ConsumedAtUtc == null)
+            .Should().ContainSingle().Which.Id.Should().Be(pending.Id);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+
+        var approved = await _executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId,
+            execution.OperationId, execution.Arguments, execution.Surface, AgentAuthMethod.Jwt,
+            ConfirmationToken: confirmation.ConfirmationToken));
+
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        habits.Should().OnlyContain(habit => habit.Description == "Shared");
+    }
+
+    [Theory]
+    [InlineData("outside_filter")]
+    [InlineData("different_fields")]
+    [InlineData("previous_turn")]
+    public async Task Handle_BulkPreview_PreservesProposalsItDoesNotReplace(string reason)
+    {
+        var habits = SetupUpdateHabits();
+        var singleArgs = JsonSerializer.SerializeToElement(new { habit_id = habits[1].Id, description = "Shared" });
+        var bulkArgs = reason == "outside_filter"
+            ? JsonSerializer.SerializeToElement(new
+            {
+                filter = new { habit_ids = new[] { habits[0].Id, habits[2].Id } },
+                updates = new { description = "Shared" }
+            })
+            : reason == "different_fields"
+                ? JsonSerializer.SerializeToElement(new { filter = new { all = true }, updates = new { title = "Renamed" } })
+                : JsonSerializer.SerializeToElement(new { filter = new { all = true }, updates = new { description = "Shared" } });
+        var held = new List<AgentExecuteOperationResponse>();
+        if (reason == "previous_turn")
+        {
+            held.Add(await _executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, "update_habit",
+                singleArgs, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt)));
+            ScriptToolCall(bulkArgs.GetRawText(), "bulk_update_habits");
+        }
+        else
+        {
+            ScriptToolCall(singleArgs.GetRawText(), "update_habit");
+            var round = 0;
+            _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                    Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(_ => Result.Success(++round == 1 ? new AiResponse
+                {
+                    ToolCalls = [new AiToolCall("bulk_update_habits", "bulk", bulkArgs)],
+                    ConversationContext = new()
+                } : new AiResponse { TextMessage = "Review the proposals." }));
+        }
+
+        var result = await CreateHandler(HoldReplayWrites(held)).Handle(new ProcessUserChatCommand(_userId,
+            "Prepare these changes", ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        held.Should().HaveCount(2);
+        var single = held[0].PendingOperation!;
+        var bulk = held[1].PendingOperation!;
+        result.Value.PendingOperations!.Select(item => item.Id).Should().BeEquivalentTo(
+            reason == "previous_turn" ? [bulk.Id] : new[] { single.Id, bulk.Id });
+        var stored = _pendingOperationStore.GetExecution(_userId, single.Id)!;
+        stored.Arguments.GetRawText().Should().Be(singleArgs.GetRawText());
+        stored.PreviewFingerprint.Should().Be(single.PreviewFingerprint);
+        _pendingOperationStore.GetExecution(_userId, bulk.Id).Should().NotBeNull();
+        _dbContext.PendingAgentOperations.Should().OnlyContain(item => item.ConsumedAtUtc == null && item.RevisionNumber == 1);
+        _pendingOperationStore.Confirm(_userId, single.Id).Should().NotBeNull();
+        habits.Should().OnlyContain(habit => habit.Description == null);
+    }
+
+    [Fact]
+    public async Task Handle_BulkPreviewInSameRound_RemovesCoveredSinglesBeforeAccumulatingResponse()
+    {
+        var habits = SetupUpdateHabits();
+        ScriptToolCall("{}", "bulk_update_habits");
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ToolCalls = habits.Take(2).Select((habit, index) => new AiToolCall("update_habit", $"single_{index}",
+                        JsonSerializer.SerializeToElement(new { habit_id = habit.Id, description = "Shared" })))
+                    .Append(new AiToolCall("bulk_update_habits", "bulk", JsonSerializer.SerializeToElement(new
+                    {
+                        filter = new { all = true },
+                        updates = new { description = "Shared" }
+                    }))).ToList(),
+                ConversationContext = new()
+            }));
+        var held = new List<AgentExecuteOperationResponse>();
+
+        var result = await CreateHandler(HoldReplayWrites(held)).Handle(new ProcessUserChatCommand(_userId,
+            "Change all descriptions", ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        held.Should().HaveCount(3);
+        var bulk = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        bulk.ChangeTargetCount.Should().Be(3);
+        foreach (var single in held.Take(2))
+            _pendingOperationStore.GetExecution(_userId, single.PendingOperation!.Id).Should().BeNull();
+        _pendingOperationStore.GetExecution(_userId, bulk.Id).Should().NotBeNull();
+    }
+
+    private Habit[] SetupUpdateHabits()
+    {
+        var habits = new[] { "A", "B", "C" }.Select(title => Habit.Create(new HabitCreateParams(
+            _userId, title, null, null, Today)).Value).ToArray();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _unitOfWork.PassThroughTransactions<Result<int>>();
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var bulkHandler = new BulkUpdateHabitsCommandHandler(_habitRepo, _userDateService, _payGate,
+            _unitOfWork, _flagCache, NullLogger<BulkUpdateHabitsCommandHandler>.Instance);
+        _mediator.Send(Arg.Any<BulkUpdateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => bulkHandler.Handle(call.Arg<BulkUpdateHabitsCommand>(), call.Arg<CancellationToken>()));
+        return habits;
+    }
+
+    private IAgentOperationExecutor HoldReplayWrites(List<AgentExecuteOperationResponse> held)
+    {
+        var executor = Substitute.For<IAgentOperationExecutor>();
+        executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var result = await _executor.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), call.Arg<CancellationToken>());
+                held.Add(result);
+                return result;
+            });
+        return executor;
     }
 
     [Fact]
@@ -285,17 +482,17 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             && habit.ReminderTimes.SequenceEqual(new[] { 15 })), Arg.Any<CancellationToken>());
     }
 
-    private ProcessUserChatCommandHandler CreateHandler()
+    private ProcessUserChatCommandHandler CreateHandler(IAgentOperationExecutor? executor = null)
     {
         var aiDeps = new ChatAiDependencies(_aiIntentService, _toolRegistry,
             _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo,
             _tagRepo, _templateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _executor,
+            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, executor ?? _executor,
             _clarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator,
             _productAnalytics, _scheduleLogReader, Substitute.For<IIssuedAstraBlockStore>(),
-            Substitute.For<IPendingAgentOperationStore>());
+            _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(dataDeps, aiDeps, executionDeps,
             Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>());

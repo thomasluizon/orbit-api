@@ -19,6 +19,11 @@ public static class BulkToolRepeatGuard
             ["delete_habit"] = "bulk_delete_habits"
         };
 
+    internal static bool IsBulkAlternative(string singleTool, string bulkTool) =>
+        BulkAlternatives.TryGetValue(singleTool, out var alternative)
+        && (string.Equals(alternative, bulkTool, StringComparison.OrdinalIgnoreCase)
+            || alternative == "bulk_update_habits" && bulkTool == "bulk_reschedule_habits");
+
     public static IReadOnlyDictionary<string, string> FindRedirects(
         IReadOnlyList<AiToolCall> calls,
         IReadOnlyList<AiToolCall>? previousCalls = null)
