@@ -31,6 +31,7 @@ public class CreateHabitToolTests
         _tool = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<ToolResult>>>(),
                 Arg.Any<CancellationToken>())

@@ -28,7 +28,8 @@ public class CreateSubHabitCommandHandlerTests
     public CreateSubHabitCommandHandlerTests()
     {
         _handler = new CreateSubHabitCommandHandler(
-            _habitRepo, _tagRepo, _userDateService, _unitOfWork, _appConfigService, _cache);
+            _habitRepo, _tagRepo, _userDateService, _unitOfWork, _appConfigService,
+            Substitute.For<IPayGateService>(), _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);

@@ -59,7 +59,7 @@ public partial class CreateHabitCommandHandler(
     {
         var opts = request.Options ?? new HabitCommandOptions();
 
-        var gateResult = await CheckCreationGatesAsync(request, opts, cancellationToken);
+        var gateResult = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
         if (gateResult.IsFailure)
             return gateResult.PropagateError<Guid>();
 
@@ -108,6 +108,10 @@ public partial class CreateHabitCommandHandler(
 
         var habit = habitResult.Value;
 
+        var featureGate = await HabitCreationGates.CheckAsync(habit, payGate, cancellationToken);
+        if (featureGate.IsFailure)
+            return featureGate.PropagateError<Guid>();
+
         var subResult = await CreateSubHabitsAsync(request, habit.Id, dueDate, opts, cancellationToken);
         if (subResult.IsFailure)
             return subResult.PropagateError<Guid>();
@@ -138,23 +142,6 @@ public partial class CreateHabitCommandHandler(
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(habitId);
-    }
-
-    private async Task<Result> CheckCreationGatesAsync(
-        CreateHabitCommand request, HabitCommandOptions opts, CancellationToken cancellationToken)
-    {
-        var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
-        if (opts.SlipAlertEnabled)
-        {
-            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
-            if (slipAlertGate.IsFailure)
-                return slipAlertGate;
-        }
-
-        return Result.Success();
     }
 
     private async Task<Result> CreateSubHabitsAsync(

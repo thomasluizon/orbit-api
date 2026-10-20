@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -29,6 +30,7 @@ public class CreateSubHabitCommandHandler(
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IAppConfigService appConfigService,
+    IPayGateService payGate,
     IMemoryCache cache) : IRequestHandler<CreateSubHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateSubHabitCommand request, CancellationToken cancellationToken)
@@ -59,6 +61,10 @@ public class CreateSubHabitCommandHandler(
             return childResult.PropagateError<Guid>();
 
         var child = childResult.Value;
+
+        var gate = await HabitCreationGates.CheckAsync(child, payGate, cancellationToken);
+        if (gate.IsFailure)
+            return gate.PropagateError<Guid>();
 
         if (request.TagIds is { Count: > 0 })
         {

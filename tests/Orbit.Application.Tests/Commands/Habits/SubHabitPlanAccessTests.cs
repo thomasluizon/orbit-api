@@ -85,7 +85,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
             case "dedicated":
                 var existingParent = AddExisting("Parent");
                 var dedicated = await CreateDedicatedHandler().Handle(
-                    new CreateSubHabitCommand(_user.Id, existingParent.Id, "Child", null), CancellationToken.None);
+                    new CreateSubHabitCommand(_user.Id, existingParent.Id, "Child", null, IsBadHabit: true), CancellationToken.None);
                 dedicated.IsSuccess.Should().BeTrue("{0}", dedicated.Error);
                 _added.Should().ContainSingle().Which.Id.Should().Be(dedicated.Value);
                 parentId = existingParent.Id;
@@ -107,7 +107,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                     _payGate, _dates, _unitOfWork, _cache, Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>())
                     .Handle(new BulkCreateHabitsCommand(_user.Id,
                         [new("Parent", null, FrequencyUnit.Day, 1,
-                            SubHabits: [new("Child", null, null, null), new("Second child", null, null, null)])]), CancellationToken.None);
+                            SubHabits: [new("Child", null, null, null, IsBadHabit: true), new("Second child", null, null, null)])]), CancellationToken.None);
                 bulk.IsSuccess.Should().BeTrue("{0}", bulk.Error);
                 bulk.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
                 parentId = _added.Single(habit => habit.ParentHabitId is null).Id;
@@ -115,7 +115,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                 break;
             case "duplicate":
                 var original = AddExisting("Parent");
-                var originalChild = AddExisting("Child", original.Id);
+                var originalChild = AddExisting("Child", original.Id, slipAlertEnabled: true);
                 AddExisting("Grandchild", originalChild.Id);
                 var duplicate = await new DuplicateHabitCommandHandler(_habits,
                     Substitute.For<IGenericRepository<HabitLog>>(), _payGate, _unitOfWork, _dates, _cache)
@@ -127,9 +127,10 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                 _added.Single(habit => habit.Title == "Grandchild").ParentHabitId.Should()
                     .Be(_added.Single(habit => habit.Title == "Child").Id);
                 _added.Should().OnlyContain(habit => habit.Id != original.Id && habit.Id != originalChild.Id);
+                originalChild.SlipAlertEnabled.Should().BeTrue();
                 break;
             case "astra":
-                using (var args = JsonDocument.Parse("""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child"},{"title":"Second child"}]}"""))
+                using (var args = JsonDocument.Parse("""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child","is_bad_habit":true},{"title":"Second child"}]}"""))
                 {
                     var astra = await new CreateHabitTool(_habits, _tags, _goals, _dates, _payGate, _unitOfWork)
                         .ExecuteAsync(args.RootElement, _user.Id, CancellationToken.None);
@@ -146,6 +147,79 @@ public sealed class SubHabitPlanAccessTests : IDisposable
         _added.Where(habit => habit.Title == "Second child").Should()
             .OnlyContain(habit => habit.ParentHabitId == parentId);
         _added.Should().OnlyContain(habit => habit.UserId == _user.Id);
+        _added.Should().OnlyContain(habit => !habit.SlipAlertEnabled);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("dedicated", false)]
+    [InlineData("dedicated", true)]
+    [InlineData("inline", false)]
+    [InlineData("inline", true)]
+    [InlineData("astra-explicit", false)]
+    [InlineData("astra-explicit", true)]
+    [InlineData("astra-default", false)]
+    [InlineData("astra-default", true)]
+    public async Task CreateWithSlipAlerts_RequiresProBeforeAnyPersistence(string path, bool pro)
+    {
+        if (pro)
+            _user.GrantLifetimePro();
+        _user.HasProAccess.Should().Be(pro);
+
+        bool success;
+        string? errorCode;
+        switch (path)
+        {
+            case "dedicated":
+                for (var index = 0; index < AppConstants.DefaultFreeMaxHabits; index++)
+                    AddExisting($"Root {index}");
+                var dedicated = await CreateDedicatedHandler().Handle(
+                    new CreateSubHabitCommand(_user.Id, _stored[0].Id, "Bad child", null,
+                        IsBadHabit: true, Options: new HabitCommandOptions(SlipAlertEnabled: true)),
+                    CancellationToken.None);
+                success = dedicated.IsSuccess;
+                errorCode = dedicated.ErrorCode;
+                break;
+            case "inline":
+                var inline = await new CreateHabitCommandHandler(
+                    new CreateHabitRepositories(_habits, _tags, _goals), _dates, _payGate,
+                    Substitute.For<IGamificationService>(), Substitute.For<IGoalCompletionService>(),
+                    _unitOfWork, _cache, Substitute.For<ILogger<CreateHabitCommandHandler>>())
+                    .Handle(new CreateHabitCommand(_user.Id, "Bad parent", null, FrequencyUnit.Day, 1,
+                        IsBadHabit: true, SubHabits: ["Child"],
+                        Options: new HabitCommandOptions(SlipAlertEnabled: true)), CancellationToken.None);
+                success = inline.IsSuccess;
+                errorCode = inline.ErrorCode;
+                break;
+            case "astra-explicit":
+            case "astra-default":
+                using (var args = JsonDocument.Parse(path == "astra-explicit"
+                    ? """{"title":"Bad parent","frequency_unit":"Day","is_bad_habit":true,"slip_alert_enabled":true,"sub_habits":[{"title":"Child"}]}"""
+                    : """{"title":"Bad parent","frequency_unit":"Day","is_bad_habit":true,"sub_habits":[{"title":"Child"}]}"""))
+                {
+                    var astra = await new CreateHabitTool(_habits, _tags, _goals, _dates, _payGate, _unitOfWork)
+                        .ExecuteAsync(args.RootElement, _user.Id, CancellationToken.None);
+                    success = astra.Success;
+                    errorCode = astra.ErrorCode;
+                }
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(path));
+        }
+
+        success.Should().Be(pro);
+        if (!pro)
+        {
+            errorCode.Should().Be("PAY_GATE");
+            _added.Should().BeEmpty();
+            await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+            return;
+        }
+
+        _added.Should().HaveCount(path == "dedicated" ? 1 : 2);
+        _added.Where(habit => habit.IsBadHabit).Should().ContainSingle()
+            .Which.SlipAlertEnabled.Should().BeTrue();
+        _added.Where(habit => !habit.IsBadHabit).Should().OnlyContain(habit => !habit.SlipAlertEnabled);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -198,12 +272,13 @@ public sealed class SubHabitPlanAccessTests : IDisposable
     }
 
     private CreateSubHabitCommandHandler CreateDedicatedHandler() =>
-        new(_habits, _tags, _dates, _unitOfWork, _config, _cache);
+        new(_habits, _tags, _dates, _unitOfWork, _config, _payGate, _cache);
 
-    private Habit AddExisting(string title, Guid? parentId = null)
+    private Habit AddExisting(string title, Guid? parentId = null, bool slipAlertEnabled = false)
     {
         var habit = Habit.Create(new HabitCreateParams(_user.Id, title, FrequencyUnit.Day, 1,
-            DueDate: Today, ParentHabitId: parentId)).Value;
+            DueDate: Today, ParentHabitId: parentId, IsBadHabit: slipAlertEnabled,
+            SlipAlertEnabled: slipAlertEnabled)).Value;
         _stored.Add(habit);
         return habit;
     }
