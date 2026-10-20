@@ -70,6 +70,8 @@ public static class AppConstants
     public const int MaxStreakFreezesAccumulated = 3;
     public const int StreakDaysPerFreeze = 7;
     public const int MaxStreakLookbackDays = 365;
+    /// <summary>Two annual intervals retain a completed predecessor while a repaired yearly occurrence remains current.</summary>
+    public const int StreakRepairWindowDays = 2 * 366;
     public const int MaxSyncWindowDays = 30;
     public const int SyncCleanupMarginDays = 1;
     public const int MaxChallengeTitleLength = 200;
