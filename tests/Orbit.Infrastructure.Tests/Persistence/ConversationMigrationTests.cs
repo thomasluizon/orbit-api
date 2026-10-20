@@ -33,7 +33,9 @@ public class ConversationMigrationTests
         var additions = differ.GetDifferences(preceding.GetRelationalModel(), target.GetRelationalModel());
         additions.Should().HaveCount(6);
         AssertConversationExpansion(additions);
-        differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel()).Should().BeEmpty();
+        var subsequent = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
+        subsequent.Should().ContainSingle();
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(subsequent);
     }
 
     internal static void AssertConversationExpansion(IReadOnlyList<MigrationOperation> operations)

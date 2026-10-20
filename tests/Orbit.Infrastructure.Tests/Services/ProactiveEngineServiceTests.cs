@@ -473,7 +473,7 @@ public sealed class ProactiveEngineServiceTests
         await h.Run();
         h.Db.ProactiveItems.Count().Should().Be(1);
         h.Db.ProactiveItems.Single().PushedAtUtc.HasValue.Should().Be(pushes);
-        h.Db.Users.Single().ProactiveAstraEnabled.Should().Be(choice);
+        h.Db.Users.Single().ProactiveAstraEnabled.Should().Be(choice ?? true);
     }
 
     [Fact]

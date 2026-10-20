@@ -41,7 +41,8 @@ public class DailyAiDollarBudgetMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(6);
+        differences.Should().HaveCount(7);
+        RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences);
         var entity = current.FindEntityType(typeof(AiBudgetCall))!;
         entity.FindProperty("ChargedTokens").Should().NotBeNull();
