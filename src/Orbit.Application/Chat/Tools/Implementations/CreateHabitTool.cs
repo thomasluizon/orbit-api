@@ -253,10 +253,6 @@ public class CreateHabitTool(
         if (!args.TryGetProperty("sub_habits", out var subEl) || subEl.ValueKind != JsonValueKind.Array)
             return null;
 
-        var subGate = await payGate.CanCreateSubHabits(userId, ct);
-        if (subGate.IsFailure)
-            return ToolResult.FromFailure(subGate);
-
         var children = BuildChildHabits(args, subEl.EnumerateArray().ToList(), userId, parent, parentDueDate);
         if (children.IsFailure)
             return ToolResult.FromFailure(children);

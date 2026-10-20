@@ -42,8 +42,6 @@ public class BulkCreateHabitsCommandHandlerTests
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
@@ -107,7 +105,6 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(1);
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-        await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -221,25 +218,6 @@ public class BulkCreateHabitsCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().BeNull();
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_SubHabitsPayGated_ReturnsPayGateFailure()
-    {
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Sub-habits are a Pro feature"));
-
-        var items = new List<BulkHabitItem>
-        {
-            new("Routine", null, FrequencyUnit.Day, 1,
-                SubHabits: new List<BulkHabitItem> { new("Sub", null, null, null) })
-        };
-        var command = new BulkCreateHabitsCommand(UserId, items);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]
@@ -421,17 +399,6 @@ public class BulkCreateHabitsCommandHandlerTests
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
             Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
             Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_NoSubHabits_DoesNotCheckSubHabitGate()
-    {
-        var items = new List<BulkHabitItem> { new("Habit", null, FrequencyUnit.Day, 1) };
-        var command = new BulkCreateHabitsCommand(UserId, items);
-
-        await _handler.Handle(command, CancellationToken.None);
-
-        await _payGate.DidNotReceive().CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     private (List<Tag> AddedTags, List<Habit> AddedHabits) CaptureTagAndHabitAdds()

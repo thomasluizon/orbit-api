@@ -53,8 +53,6 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         var work = new UnitOfWork(context, new DatabaseConnectionSettings());
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 3, 20));

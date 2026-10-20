@@ -176,6 +176,34 @@ public class ConfigControllerTests : IDisposable
         cache.Location.Should().Be(ResponseCacheLocation.None);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetConfig_SubHabitsAreFree_PreservesLimits(bool pro)
+    {
+        var account = User.Create("Account", "free-subhabits@example.com").Value;
+        account.StartTrial(DateTime.UtcNow.AddDays(-1));
+        if (pro)
+            account.GrantLifetimePro();
+        _dbContext.Users.Add(account);
+        await _dbContext.SaveChangesAsync();
+        _controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString())], "Test"));
+        var stored = await _dbContext.AppConfigs.AsNoTracking()
+            .ToDictionaryAsync(config => config.Key, config => config.Value);
+        _configService.GetAllAsync(Arg.Any<CancellationToken>()).Returns(stored);
+
+        var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
+
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        var flag = payload.GetProperty("features").GetProperty("sub_habits");
+        flag.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        flag.GetProperty("planRequirement").ValueKind.Should().Be(JsonValueKind.Null);
+        payload.GetProperty("limits").Deserialize<Dictionary<string, string>>()
+            .Should().BeEquivalentTo(stored.Where(pair => pair.Key != "MaxUserFacts")
+                .ToDictionary(pair => pair.Key, pair => pair.Value));
+    }
+
     [Fact]
     public async Task GetConfig_ReturnsOk()
     {

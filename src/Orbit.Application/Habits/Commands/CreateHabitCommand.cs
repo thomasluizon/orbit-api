@@ -147,13 +147,6 @@ public partial class CreateHabitCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck;
 
-        if (request.SubHabits is { Count: > 0 })
-        {
-            var subGateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
-            if (subGateCheck.IsFailure)
-                return subGateCheck;
-        }
-
         if (opts.SlipAlertEnabled)
         {
             var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);

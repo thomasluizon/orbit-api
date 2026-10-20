@@ -26,7 +26,6 @@ public record CreateSubHabitCommand(
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
-    IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IAppConfigService appConfigService,
@@ -34,10 +33,6 @@ public class CreateSubHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateSubHabitCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<Guid>();
-
         var parent = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.ParentHabitId && h.UserId == request.UserId,
             cancellationToken: cancellationToken);
