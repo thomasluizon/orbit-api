@@ -14,6 +14,7 @@ internal static class AgentEditableArguments
         {
             "update_profile_preferences" => action.GetString() switch
             {
+                "set_name" => new[] { "name" },
                 "set_timezone" => new[] { "timezone" },
                 "set_language" => ["language"],
                 "set_week_start_day" => ["week_start_day"],

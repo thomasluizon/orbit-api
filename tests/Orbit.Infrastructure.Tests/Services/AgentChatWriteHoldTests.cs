@@ -2,6 +2,16 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using FluentValidation;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using Orbit.Application.Calendar.Commands;
+using Orbit.Application.Calendar.Validators;
+using Orbit.Application.ChecklistTemplates.Commands;
+using Orbit.Application.ChecklistTemplates.Validators;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Profile.Commands;
+using Orbit.Application.Profile.Validators;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +20,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Api.Mcp;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -378,6 +391,153 @@ public class AgentChatWriteHoldTests : IDisposable
             tool.Calls.Should().Be(0);
             _pendingOperationStore.GetExecution(_userId, pending.Id).Should().NotBeNull();
         }
+    }
+
+    [Theory]
+    [InlineData("template", false)]
+    [InlineData("name", false)]
+    [InlineData("selection", false)]
+    [InlineData("selection", true)]
+    public async Task CapabilityParityWrites_ShowPreviewBeforeApprovalAndDispatchOnlyAfterConfirmation(string action, bool reset)
+    {
+        var template = ChecklistTemplate.Create(_userId, "Morning", ["Water"]).Value;
+        _dbContext.ChecklistTemplates.Add(template);
+        var user = await _dbContext.Users.SingleAsync(u => u.Id == _userId);
+        user.SetSelectedCalendars(["primary"]);
+        await _dbContext.SaveChangesAsync();
+        var mediator = Substitute.For<IMediator>();
+        var templates = new GenericRepository<ChecklistTemplate>(_dbContext);
+        using var services = new ServiceCollection()
+            .AddSingleton<IGenericRepository<ChecklistTemplate>>(templates)
+            .AddSingleton<IValidator<UpdateChecklistTemplateCommand>>(new UpdateChecklistTemplateCommandValidator())
+            .AddSingleton<IValidator<SetNameCommand>>(new SetNameCommandValidator())
+            .AddSingleton<IValidator<SetSelectedCalendarsCommand>>(new SetSelectedCalendarsCommandValidator())
+            .BuildServiceProvider();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => new CheckChatCommandQueryHandler(services).Handle(call.Arg<CheckChatCommandQuery>(), default));
+        mediator.Send(Arg.Any<UpdateChecklistTemplateCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        mediator.Send(Arg.Any<SetNameCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        mediator.Send(Arg.Any<SetSelectedCalendarsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        IAiTool tool = action switch
+        {
+            "template" => new UpdateChecklistTemplateTool(mediator),
+            "name" => new UpdateProfilePreferencesTool(mediator),
+            _ => new ManageCalendarSyncTool(mediator)
+        };
+        var arguments = action switch
+        {
+            "template" => JsonSerializer.SerializeToElement(new { template_id = template.Id, name = "Evening", items = new[] { "Read" } }),
+            "name" => JsonSerializer.SerializeToElement(new { action = "set_name", name = "Ana" }),
+            _ => JsonSerializer.SerializeToElement(new { action = "set_selected_calendars", calendar_ids = reset ? Array.Empty<string>() : new[] { "work" } })
+        };
+        var checkedArgs = await ((IArgumentCheckTool)tool).CheckArgumentsAsync(arguments, _userId, default);
+        checkedArgs.IsSuccess.Should().BeTrue(checkedArgs.Error);
+        mediator.ClearReceivedCalls();
+        var tools = new AiToolRegistry([tool]);
+        var previewer = new PendingOperationChangePreviewer(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<Goal>(_dbContext),
+            new GenericRepository<Tag>(_dbContext), Substitute.For<IUserDateService>(), tools,
+            new DestructiveOperationPreviewer(_dbContext), templates);
+        var executor = CreateExecutor(tools, previewer);
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+
+        held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        var pending = held.PendingOperation!;
+        pending.Items.Should().ContainSingle();
+        pending.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+        var field = pending.Items![0].Fields.Single(change => change.Field == (action == "selection" ? "calendar_ids" : "name"));
+        if (action == "selection")
+        {
+            field.OldValue.Should().Be("[\"primary\"]");
+            field.ProposedValue!.Value.GetArrayLength().Should().Be(reset ? 0 : 1);
+        }
+        else
+        {
+            field.NewValue.Should().Be(action == "template" ? "Evening" : "Ana");
+            field.IsEditable.Should().BeTrue();
+        }
+        if (action == "template")
+            field.OldValue.Should().Be("Morning");
+        mediator.ReceivedCalls().Should().ContainSingle().Which.GetArguments()[0].Should().BeOfType<CheckChatCommandQuery>();
+        template.Name.Should().Be("Morning");
+        user.Name.Should().Be("Alex");
+        user.GetSelectedCalendarIds().Should().Equal("primary");
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var executed = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        executed.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        mediator.ReceivedCalls().Where(call => call.GetArguments()[0] is not CheckChatCommandQuery).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("name", ValidationErrorCodes.ProfileNameLength)]
+    [InlineData("template_limit", ValidationErrorCodes.TemplateItemLimit)]
+    [InlineData("template_length", ValidationErrorCodes.TemplateItemLength)]
+    [InlineData("selection", ValidationErrorCodes.CalendarSelectionLimit)]
+    public async Task CapabilityParityWrites_InvalidArgumentsAreRejectedBeforePreviewOnChatAndMcp(string action, string code)
+    {
+        var template = ChecklistTemplate.Create(_userId, "Morning", ["Water"]).Value;
+        _dbContext.ChecklistTemplates.Add(template);
+        await _dbContext.SaveChangesAsync();
+        var mediator = Substitute.For<IMediator>();
+        using var services = new ServiceCollection()
+            .AddSingleton<IGenericRepository<ChecklistTemplate>>(new GenericRepository<ChecklistTemplate>(_dbContext))
+            .AddValidatorsFromAssemblyContaining<SetNameCommandValidator>()
+            .BuildServiceProvider();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => new CheckChatCommandQueryHandler(services).Handle(call.Arg<CheckChatCommandQuery>(), default));
+        mediator.Send(Arg.Any<SetNameCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new ValidationBehavior<SetNameCommand, Result>([new SetNameCommandValidator()])
+                .Handle(call.Arg<SetNameCommand>(), _ => Task.FromResult(Result.Success()), default));
+        mediator.Send(Arg.Any<UpdateChecklistTemplateCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new ValidationBehavior<UpdateChecklistTemplateCommand, Result>([new UpdateChecklistTemplateCommandValidator()])
+                .Handle(call.Arg<UpdateChecklistTemplateCommand>(), _ => Task.FromResult(Result.Success()), default));
+        mediator.Send(Arg.Any<SetSelectedCalendarsCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new ValidationBehavior<SetSelectedCalendarsCommand, Result>([new SetSelectedCalendarsCommandValidator()])
+                .Handle(call.Arg<SetSelectedCalendarsCommand>(), _ => Task.FromResult(Result.Success()), default));
+        IAiTool tool = action switch
+        {
+            "name" => new UpdateProfilePreferencesTool(mediator),
+            "selection" => new ManageCalendarSyncTool(mediator),
+            _ => new UpdateChecklistTemplateTool(mediator)
+        };
+        var name = new string('a', 51);
+        var items = action == "template_limit" ? Enumerable.Repeat("Item", AppConstants.MaxChecklistItems + 1).ToArray()
+            : new[] { new string('a', AppConstants.MaxChecklistItemTextLength + 1) };
+        var ids = Enumerable.Range(0, AppConstants.MaxSelectedCalendars + 1).Select(i => $"calendar-{i}").ToArray();
+        var arguments = action switch
+        {
+            "name" => JsonSerializer.SerializeToElement(new { action = "set_name", name }),
+            "selection" => JsonSerializer.SerializeToElement(new { action = "set_selected_calendars", calendar_ids = ids }),
+            _ => JsonSerializer.SerializeToElement(new { template_id = template.Id, items })
+        };
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(_userId, tool.Name, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(call => AgentArgumentPreview.Build(tool.Name, call.Arg<JsonElement>(), null, default));
+        var executor = CreateExecutor(new AiToolRegistry([tool]), previewer);
+
+        var chat = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, _userId.ToString())], "Test"));
+        var bridge = new McpExecutorBridge(executor);
+        var mcp = action switch
+        {
+            "name" => await new Orbit.Api.Mcp.Tools.ProfileTools(mediator, bridge).SetName(user, name),
+            "selection" => await new Orbit.Api.Mcp.Tools.CalendarTools(mediator, bridge).SetSelectedCalendars(user, ids),
+            _ => await new Orbit.Api.Mcp.Tools.ChecklistTemplateTools(mediator, bridge)
+                .UpdateChecklistTemplate(user, template.Id.ToString(), items: items)
+        };
+
+        chat.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        chat.Operation.PolicyReason.Should().Be(code);
+        chat.PendingOperation.Should().BeNull();
+        mcp.Should().Be($"Error: {code}");
+        await previewer.DidNotReceive().PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>());
+        _dbContext.PendingAgentOperations.Should().BeEmpty();
+        mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);
+        template.Items.Should().Equal("Water");
     }
 
     [Fact]

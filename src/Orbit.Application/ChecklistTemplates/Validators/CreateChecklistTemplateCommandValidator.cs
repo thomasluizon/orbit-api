@@ -1,6 +1,5 @@
 using FluentValidation;
 using Orbit.Application.ChecklistTemplates.Commands;
-using Orbit.Application.Common;
 
 namespace Orbit.Application.ChecklistTemplates.Validators;
 
@@ -9,17 +8,7 @@ public class CreateChecklistTemplateCommandValidator : AbstractValidator<CreateC
     public CreateChecklistTemplateCommandValidator()
     {
         RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Name).NotEmpty().WithFieldCopy(ValidationCopyKeys.TemplateNameRequired)
-            .MaximumLength(100).WithFieldCopy(ValidationCopyKeys.TemplateNameLength);
-        RuleFor(x => x.Items)
-            .Must(items => items.Count <= AppConstants.MaxChecklistItems)
-            .When(x => x.Items is not null)
-            .WithCopy(ValidationErrorCodes.TemplateItemLimit);
-
-        RuleForEach(x => x.Items)
-            .NotEmpty()
-            .WithCopy(ValidationErrorCodes.TemplateItemRequired)
-            .MaximumLength(AppConstants.MaxChecklistItemTextLength)
-            .WithCopy(ValidationErrorCodes.TemplateItemLength);
+        RuleFor(x => x.Name).AddTemplateNameRules();
+        this.AddTemplateItemsRules(x => x.Items);
     }
 }

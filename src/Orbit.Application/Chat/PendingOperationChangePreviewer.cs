@@ -19,7 +19,8 @@ public sealed class PendingOperationChangePreviewer(
     IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
     AiToolRegistry toolRegistry,
-    IDestructiveOperationPreviewer? destructivePreviewer = null) : IPendingOperationChangePreviewer
+    IDestructiveOperationPreviewer? destructivePreviewer = null,
+    IGenericRepository<ChecklistTemplate>? templateRepository = null) : IPendingOperationChangePreviewer
 {
     private const int MaxDisplayedEntries = 3;
     private const int MaxEntryLength = 60;
@@ -273,6 +274,20 @@ public sealed class PendingOperationChangePreviewer(
             var tag = tags.FirstOrDefault();
             return tag is null ? null : new AgentPreviewTarget(
                 tag.Id, tag.Name, TagValues(tag), FingerprintTag(tag));
+        }
+
+        if (templateRepository is not null && TryReadId(arguments, "template_id", out var templateId))
+        {
+            var templates = await templateRepository.FindAsync(
+                item => item.Id == templateId && item.UserId == userId, cancellationToken);
+            var template = templates.FirstOrDefault();
+            return template is null ? null : new AgentPreviewTarget(template.Id, template.Name,
+                new Dictionary<string, string?>
+                {
+                    ["name"] = template.Name,
+                    ["items"] = JsonSerializer.Serialize(template.Items)
+                }, AgentOperationFingerprint.Compute(template.Id.ToString(),
+                    JsonSerializer.Serialize(new { template.Name, template.Items, template.UpdatedAtUtc })));
         }
 
         return null;
