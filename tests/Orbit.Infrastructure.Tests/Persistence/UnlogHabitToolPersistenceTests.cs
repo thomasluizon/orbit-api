@@ -18,7 +18,8 @@ public sealed class UnlogHabitToolPersistenceTests
     [Fact]
     public async Task UnlogThenLogAgain_PartialIndexRetainsDeletedRowAndAcceptsNewCompletion()
     {
-        using var factory = new SqliteOrbitDbContextFactory();
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
         await factory.Context.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS \"IX_HabitLogs_HabitId_Date_Completed\"");
         await factory.Context.Database.ExecuteSqlRawAsync("""
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_HabitLogs_HabitId_Date_Completed"
@@ -29,6 +30,10 @@ public sealed class UnlogHabitToolPersistenceTests
         var user = User.Create("Alex", "undo@example.test").Value;
         var habit = Habit.Create(new HabitCreateParams(user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
         habit.Log(today).IsSuccess.Should().BeTrue();
+        var goals = Enumerable.Range(1, 3)
+            .Select(index => Goal.Create(user.Id, $"Goal {index}", 10m, "completions").Value).ToList();
+        foreach (var goal in goals)
+            habit.AddGoal(goal);
         var originalLogId = habit.Logs.Single().Id;
         await using (var seed = factory.CreateContext())
         {
@@ -42,13 +47,22 @@ public sealed class UnlogHabitToolPersistenceTests
             var dates = Substitute.For<IUserDateService>();
             dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
             var work = new UnitOfWork(context, new DatabaseConnectionSettings());
+            var goalCompletion = Substitute.For<IGoalCompletionService>();
             var tool = new UnlogHabitTool(new GenericRepository<Habit>(context), dates, work,
                 Substitute.For<IPayGateService>(), Substitute.For<IUserStreakService>(),
-                Substitute.For<IGoalCompletionService>());
+                goalCompletion);
 
+            counter.Reset();
             var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { habit_id = habit.Id }), user.Id, default);
 
             result.Success.Should().BeTrue();
+            counter.Commands.Should().NotContain(command =>
+                command.Sql.Contains("\"HabitLogs\"", StringComparison.Ordinal)
+                && command.Sql.Contains("\"Goals\"", StringComparison.Ordinal),
+                "log and goal collections must load without a Cartesian product");
+            await goalCompletion.Received(1).SyncDerivedGoalsAsync(user.Id,
+                Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == goals.Count && goals.All(goal => ids.Contains(goal.Id))),
+                today, cancellationToken: Arg.Any<CancellationToken>());
         }
 
         await using (var context = factory.CreateContext())

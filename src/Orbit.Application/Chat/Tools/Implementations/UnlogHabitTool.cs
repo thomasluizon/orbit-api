@@ -28,12 +28,12 @@ public sealed class UnlogHabitTool(
         "ISO date (YYYY-MM-DD) of the completion to undo. Defaults to today.");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
-        ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+        ExecuteCoreAsync(args, userId, checkOnly: false, ct);
 
     public Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
-        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+        ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, checkOnly: true, ct));
 
-    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
+    private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, bool checkOnly, CancellationToken ct)
     {
         if (args.ValueKind != JsonValueKind.Object
             || !args.TryGetProperty("habit_id", out var idElement) || idElement.ValueKind != JsonValueKind.String
@@ -81,7 +81,9 @@ public sealed class UnlogHabitTool(
     private async Task<Result<Habit>> LoadAsync(Guid habitId, Guid userId, DateOnly date, CancellationToken ct)
     {
         var habit = await habitRepository.FindOneTrackedAsync(habit => habit.Id == habitId,
-            query => query.Include(habit => habit.Logs.Where(log => log.Date == date)).Include(habit => habit.Goals), ct);
+            query => query.Include(habit => habit.Logs.Where(log => log.Date == date))
+                .Include(habit => habit.Goals)
+                .AsSplitQuery(), ct);
         if (habit is null)
             return Result.Failure<Habit>($"Habit {habitId} not found.");
         if (habit.UserId != userId)
