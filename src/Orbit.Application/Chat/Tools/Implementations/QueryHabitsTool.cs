@@ -292,6 +292,7 @@ public class QueryHabitsTool(
             if (!habit.IsGeneral && !isCompleted && habit.DueDate < today) labels.Add("OVERDUE");
             if (!habit.IsGeneral && !isCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
         }
+        AddNotDueLabel(labels, habit, today);
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
         if (isCompleted) labels.Add("COMPLETED");
         if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
@@ -304,7 +305,7 @@ public class QueryHabitsTool(
             labels.Add($"Checklist: {habit.ChecklistItems.Count(i => i.IsChecked)}/{habit.ChecklistItems.Count}");
 
         if (schedule is null && includeMetrics && habit.Logs.Any(l => l.Date == today))
-            labels.Add("DONE TODAY");
+            labels.Add("DONE");
 
         return labels;
     }
@@ -313,6 +314,12 @@ public class QueryHabitsTool(
         habit.IsGeneral
             ? HabitScheduleService.HasCompletedLogInRange(habit, today, today)
             : habit.IsCompleted;
+
+    private static void AddNotDueLabel(List<string> labels, Habit habit, DateOnly today)
+    {
+        if (!habit.IsGeneral && !GetResponseCompletion(habit, today) && habit.DueDate > today)
+            labels.Add(string.Create(CultureInfo.InvariantCulture, $"NOT DUE: {habit.DueDate:yyyy-MM-dd}"));
+    }
 
     private static void AddMetricLabels(
         List<string> labels,

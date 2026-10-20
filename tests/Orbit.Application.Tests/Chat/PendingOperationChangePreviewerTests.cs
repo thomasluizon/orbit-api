@@ -106,6 +106,17 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
+    public async Task Unlog_DefaultDate_PreviewShowsUserToday()
+    {
+        var habit = CreateHabit("Beber água", null);
+        Setup([habit]);
+        var preview = await Preview("unlog_habit", JsonSerializer.Serialize(new { habit_id = habit.Id }));
+        preview.Should().NotBeNull();
+        preview!.Items.Should().ContainSingle().Which.EntityName.Should().Be(habit.Title);
+        preview.Changes.Should().Contain(change => change.Field == "date" && change.NewValue == "2026-09-25");
+    }
+
+    [Fact]
     public async Task RoundThree_BulkDelete_UsesNormalizedTitleWordPrefixes()
     {
         var water = CreateHabit("Beber água", null);

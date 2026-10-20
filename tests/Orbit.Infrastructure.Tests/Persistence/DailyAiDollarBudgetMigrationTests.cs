@@ -13,7 +13,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class DailyAiDollarBudgetMigrationTests
 {
     [Fact]
-    public void DollarExpansion_PreservesLegacyWritersAndMatchesCurrentModel()
+    public void DollarExpansion_PreservesLegacyWritersWithOnlyConversationChangesInCurrentModel()
     {
         var migration = new PriceDailyAiBudgetsInUsd { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
         migration.UpOperations.OfType<DropColumnOperation>().Should().BeEmpty();
@@ -39,8 +39,10 @@ public class DailyAiDollarBudgetMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
-        context.GetService<IMigrationsModelDiffer>().GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
-            .Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().HaveCount(6);
+        ConversationMigrationTests.AssertConversationExpansion(differences);
         var entity = current.FindEntityType(typeof(AiBudgetCall))!;
         entity.FindProperty("ChargedTokens").Should().NotBeNull();
         entity.FindProperty(nameof(AiBudgetCall.ChargedMicroDollars)).Should().NotBeNull();

@@ -614,6 +614,26 @@ public class HabitToolsTests
     }
 
     [Fact]
+    public async Task UnlogHabit_Success_RoutesDateAndHabitThroughExecutor()
+    {
+        var habitId = Guid.NewGuid();
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
+        var request = await CapturedRequestAsync(() => _tools.UnlogHabit(_user, habitId.ToString(), "2026-08-06"));
+        request.OperationId.Should().Be("unlog_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
+        request.Arguments.GetProperty("habit_id").GetString().Should().Be(habitId.ToString());
+        request.Arguments.GetProperty("date").GetString().Should().Be("2026-08-06");
+    }
+
+    [Fact]
+    public async Task UnlogHabit_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "No log for date");
+        var result = await _tools.UnlogHabit(_user, Guid.NewGuid().ToString());
+        result.Should().StartWith("Error: ").And.Contain("No log for date");
+    }
+
+    [Fact]
     public async Task SkipHabit_Success_RoutesThroughExecutor()
     {
         var habitId = Guid.NewGuid();

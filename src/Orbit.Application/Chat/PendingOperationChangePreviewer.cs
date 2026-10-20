@@ -36,6 +36,7 @@ public sealed class PendingOperationChangePreviewer(
     private const string TimeFormat = "HH:mm";
     private const int MaxDisplayedEntries = 3;
     private const int MaxEntryLength = 60;
+    private const string DateFormat = "yyyy-MM-dd";
     private static readonly HashSet<string> CreateFields = new(StringComparer.Ordinal)
     {
         "title", "description", "emoji", "frequency_unit", "frequency_quantity",
@@ -51,6 +52,7 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,
@@ -126,6 +128,20 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         return BuildPreview(operationId, rows, items);
+    }
+
+    private async Task<JsonElement> ResolveUnlogDateAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken cancellationToken)
+    {
+        if (operationId == "unlog_habit" && arguments.ValueKind == JsonValueKind.Object
+            && !arguments.TryGetProperty("date", out _))
+        {
+            var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+            var resolved = arguments.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);
+            resolved["date"] = JsonSerializer.SerializeToElement(today.ToString(DateFormat, CultureInfo.InvariantCulture));
+            arguments = JsonSerializer.SerializeToElement(resolved);
+        }
+        return arguments;
     }
 
     private static bool RequiresEmojiInference(string operationId, JsonElement arguments) =>
@@ -243,13 +259,13 @@ public sealed class PendingOperationChangePreviewer(
         var stableIds = arguments.GetProperty("revised_items").EnumerateArray()
             .Where(item => item.TryGetProperty("preview_item_id", out var id) && id.ValueKind == JsonValueKind.String)
             .ToDictionary(item => (Guid.Parse(item.GetProperty("habit_id").GetString()!),
-                DateOnly.ParseExact(item.GetProperty("date").GetString()!, "yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                DateOnly.ParseExact(item.GetProperty("date").GetString()!, DateFormat, CultureInfo.InvariantCulture)),
                 item => item.GetProperty("preview_item_id").GetString()!);
         var multipleDates = datedItems.GroupBy(item => item.HabitId).Any(group => group.Count() > 1);
         var datedPreview = datedItems.OrderBy(item => item.HabitId).ThenBy(item => item.Date).Select(item =>
         {
             var habit = byId[item.HabitId];
-            var date = item.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var date = item.Date.ToString(DateFormat, CultureInfo.InvariantCulture);
             var change = new PendingOperationChange(habit.Id, habit.Title, "date", null, date,
                 "date", JsonSerializer.SerializeToElement(date), true);
             var itemId = stableIds.TryGetValue((item.HabitId, item.Date), out var stableId)
@@ -428,7 +444,7 @@ public sealed class PendingOperationChangePreviewer(
             ? revisedValue.ToString()
             : arguments.TryGetProperty(field == "emoji" ? "emoji" : "date", out var proposed)
                 ? proposed.ToString()
-                : field == "date" ? today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null;
+                : field == "date" ? today.ToString(DateFormat, CultureInfo.InvariantCulture) : null;
         return new PendingOperationChange(habit.Id, habit.Title, field,
             field == "emoji" ? habit.Emoji : null, value,
             field == "emoji" ? "emoji" : field == "date" ? "date" : "action",
@@ -465,7 +481,7 @@ public sealed class PendingOperationChangePreviewer(
         {
             if (!arguments.TryGetProperty("due_date", out var dateElement)
                 || dateElement.ValueKind != JsonValueKind.String
-                || !DateOnly.TryParseExact(dateElement.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                || !DateOnly.TryParseExact(dateElement.GetString(), DateFormat, CultureInfo.InvariantCulture,
                     DateTimeStyles.None, out var date))
                 return null;
             return new BulkHabitChanges(HasDueDate: true, DueDate: date);
@@ -786,7 +802,7 @@ public sealed class PendingOperationChangePreviewer(
     private static string? Format(object? value) => value switch
     {
         null => null,
-        DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        DateOnly date => date.ToString(DateFormat, CultureInfo.InvariantCulture),
         TimeOnly time => time.ToString(TimeFormat, CultureInfo.InvariantCulture),
         bool boolean => boolean ? "true" : "false",
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),

@@ -71,6 +71,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
+    public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<Cheer> Cheers => Set<Cheer>();
@@ -132,6 +133,21 @@ public class OrbitDbContext : DbContext
         ConfigureProcessedRequestEntity(modelBuilder);
         ConfigureAiFactExtractionBatchEntity(modelBuilder);
         ConfigureAiUsageDailyEntity(modelBuilder);
+        modelBuilder.Entity<ConversationTurn>(entity =>
+        {
+            entity.HasKey(turn => turn.Id);
+            entity.Property(turn => turn.Role).HasMaxLength(20).IsRequired();
+            entity.Property(turn => turn.Model).HasMaxLength(200);
+            entity.Property(turn => turn.ToolCallsJson).IsRequired();
+            entity.HasIndex(turn => new { turn.UserId, turn.CreatedAtUtc });
+            entity.HasIndex(turn => turn.CreatedAtUtc);
+            entity.HasIndex(turn => new { turn.TurnId, turn.Role }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
+            if (nullableEncConverter is not null)
+                entity.Property(turn => turn.Content).HasConversion(nullableEncConverter);
+            if (encConverter is not null)
+                entity.Property(turn => turn.ToolCallsJson).HasConversion(encConverter);
+        });
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -647,6 +663,7 @@ public class OrbitDbContext : DbContext
             entity.HasData(
                 new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "astra_conversation_recording", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

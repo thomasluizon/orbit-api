@@ -83,10 +83,18 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
         var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
         var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
-        _toolRegistry = new AiToolRegistry([_createHabitTool, emojiTool, updateTool, bulkUpdateTool]);
+        _toolRegistry = new AiToolRegistry([
+            _createHabitTool,
+            new LogHabitTool(_mediator, _habitRepo, _userDateService),
+            new UnlogHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate,
+                _userStreakService, Substitute.For<IGoalCompletionService>()),
+            emojiTool,
+            updateTool,
+            bulkUpdateTool
+        ]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
             _toolRegistry);
-        _catalogService = new AgentCatalogService([_createHabitTool, emojiTool, updateTool, bulkUpdateTool]);
+        _catalogService = new AgentCatalogService(_toolRegistry.GetAll());
         var settings = Options.Create(new AgentPlatformSettings());
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
         var stepUpBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
@@ -390,6 +398,49 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 
+    [Theory]
+    [InlineData("log_habit", false)]
+    [InlineData("unlog_habit", true)]
+    public async Task Handle_LogAndUnlog_HoldTheSameApprovalPreviewWithoutChangingHabit(
+        string operationId, bool logged)
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1, Today)).Value;
+        if (logged)
+            habit.Log(Today).IsSuccess.Should().BeTrue();
+        var logIds = habit.Logs.Select(log => log.Id).ToArray();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { habit }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList().AsReadOnly());
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _catalogService.GetCapabilityByChatTool(operationId)!.ConfirmationRequirement
+            .Should().Be(AgentConfirmationRequirement.None);
+        ScriptToolCall(JsonSerializer.Serialize(new { habit_id = habit.Id }), operationId);
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(
+            _userId, logged ? "Desmarque o de hoje" : "Marque o de hoje",
+            ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var pending = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        pending.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.FreshConfirmation);
+        pending.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+        var item = pending.Items.Should().ContainSingle().Subject;
+        item.EntityId.Should().Be(habit.Id);
+        item.EntityName.Should().Be(habit.Title);
+        item.RemovesData.Should().BeFalse();
+        if (logged)
+            item.Fields.Should().Contain(field => field.Field == "date" && field.NewValue == "2026-04-03");
+        result.Value.Actions.Should().BeEmpty();
+        result.Value.Operations.Should().NotContain(operation => operation.OperationId == operationId);
+        habit.Logs.Select(log => log.Id).Should().Equal(logIds);
+        habit.Logs.Should().OnlyContain(log => !log.IsDeleted);
+        await _mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.Habits.Commands.LogHabitCommand>(),
+            Arg.Any<CancellationToken>());
+        await _userStreakService.DidNotReceive().RecalculateAsync(_userId, false, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_ApprovedChatWrite_RunsTheToolOneTime()
     {
@@ -498,13 +549,13 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>(), Orbit.Application.Tests.ModerationTestDouble.Clean());
     }
 
-    private void ScriptToolCall(string arguments, string toolName = "create_habit")
+    private void ScriptToolCall(string arguments, string operationId = "create_habit")
     {
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse
             {
-                ToolCalls = [new AiToolCall(toolName, "call_1",
+                ToolCalls = [new AiToolCall(operationId, "call_1",
                     JsonDocument.Parse(arguments).RootElement.Clone())],
                 ConversationContext = new AiConversationContext
                 {
@@ -522,6 +573,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
     {
         _unitOfWork.PassThroughTransactions();
         _unitOfWork.PassThroughTransactions<ToolResult>();
+        _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
         var scopeProvider = Substitute.For<IServiceProvider>();
         scopeProvider.GetService(typeof(IAgentOperationExecutor)).Returns(_executor);
         scopeProvider.GetService(typeof(IPendingClarificationStore)).Returns(_clarificationStore);
