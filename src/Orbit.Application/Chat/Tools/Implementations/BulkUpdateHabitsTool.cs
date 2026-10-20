@@ -11,7 +11,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
     public string Name => "bulk_update_habits";
 
     public string Description =>
-        "Update fields or schedules for the complete server-side set of habits matching a filter. Use one call for every multi-habit update instead of repeating update_habit.";
+        "Update the complete matching habit set in one call.";
 
     public object GetParameterSchema() => new
     {

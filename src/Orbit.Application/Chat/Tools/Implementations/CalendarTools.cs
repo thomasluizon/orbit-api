@@ -15,7 +15,7 @@ public record CalendarOverviewPayload(
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_calendar_overview";
-    public string Description => "Read calendar events, auto-sync state, and sync suggestions in one payload.";
+    public string Description => "Read calendar events, auto-sync and suggestions.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
@@ -66,7 +66,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "manage_calendar_sync";
-    public string Description => "Enable or disable calendar auto-sync, dismiss imports or suggestions, or trigger a sync run.";
+    public string Description => "Toggle calendar auto-sync, dismiss imports/suggestions or run sync.";
 
     public object GetParameterSchema() => new
     {

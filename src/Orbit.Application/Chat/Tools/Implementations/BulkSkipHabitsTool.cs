@@ -15,7 +15,7 @@ public sealed class BulkSkipHabitsTool(
     public string Name => "bulk_skip_habits";
 
     public string Description =>
-        "Skip all server-side matches in one operation, only as requested. Reports applied, matched, skipped and partial counts.";
+        "Skip the complete matching habit set, only as requested.";
 
     public object GetParameterSchema() => BulkHabitToolArguments.ActionFilterSchema(
         "Habit IDs to skip instead of filter.",

@@ -10,7 +10,7 @@ public class ReorderHabitsTool(
     public string Name => "reorder_habits";
 
     public string Description =>
-        "Set new display positions for habits. Pass each habit ID with its target zero-based position.";
+        "Reorder habits by ID and zero-based position.";
 
     public object GetParameterSchema() => new
     {
@@ -26,7 +26,7 @@ public class ReorderHabitsTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to position" },
+                        habit_id = new { type = JsonSchemaTypes.String },
                         position = new { type = JsonSchemaTypes.Integer, description = "Zero-based target position" }
                     },
                     required = new[] { "habit_id", "position" }

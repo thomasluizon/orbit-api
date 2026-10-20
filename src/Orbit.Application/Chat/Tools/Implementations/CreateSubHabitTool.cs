@@ -14,16 +14,16 @@ public class CreateSubHabitTool(
     public int Order => 1;
 
     public string Description =>
-        "Create a sub-habit under an existing parent habit. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user.";
+        "Create a sub-habit under an existing parent, with a requested or relevant emoji.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            parent_habit_id = new { type = JsonSchemaTypes.String, description = "ID of the existing parent habit" },
-            title = new { type = JsonSchemaTypes.String, description = "Name of the new sub-habit" },
-            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            parent_habit_id = new { type = JsonSchemaTypes.String },
+            title = new { type = JsonSchemaTypes.String },
+            description = new { type = JsonSchemaTypes.String },
             emoji = new { type = JsonSchemaTypes.String, description = "Requested or relevant icon emoji.", nullable = true },
             frequency_unit = new
             {
@@ -39,8 +39,8 @@ public class CreateSubHabitTool(
                 description = "Specific weekdays, only when frequency_quantity is 1",
                 items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
-            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
-            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time" },
+            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm" },
+            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm end time" },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "True for habits the user wants to AVOID" },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Set true for reminder notifications" },
             reminder_times = new { type = JsonSchemaTypes.Array, description = "Minutes before dueTime to send reminders", items = new { type = JsonSchemaTypes.Integer } },
@@ -57,7 +57,7 @@ public class CreateSubHabitTool(
                     properties = new
                     {
                         when = new { type = JsonSchemaTypes.String, description = "Reminder day.", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
+                        time = new { type = JsonSchemaTypes.String, description = "HH:mm" }
                     },
                     required = new[] { "when", "time" }
                 }

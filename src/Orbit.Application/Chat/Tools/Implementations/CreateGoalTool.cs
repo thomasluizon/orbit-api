@@ -34,15 +34,15 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
     }
 
     public string Name => "create_goal";
-    public string Description => "Create a measurable goal with habit_ids inline. Defaults to target_value=1 and unit=goal. Use goal_type=Streak to track consecutive habit days.";
+    public string Description => "Create a measurable goal with habit_ids inline. Defaults: target 1, unit goal. Streak goals track consecutive habit days.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = JsonSchemaTypes.String, description = "Name of the goal" },
-            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            title = new { type = JsonSchemaTypes.String },
+            description = new { type = JsonSchemaTypes.String },
             target_value = new { type = "number", description = "Target number to reach (default: 1)" },
             unit = new { type = JsonSchemaTypes.String, description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
             deadline = new { type = JsonSchemaTypes.String, description = "Optional deadline in YYYY-MM-DD format" },

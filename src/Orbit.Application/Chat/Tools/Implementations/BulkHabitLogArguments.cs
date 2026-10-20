@@ -14,7 +14,6 @@ internal static class BulkHabitLogArguments
         IGenericRepository<Habit> habits, IUserDateService dates, Guid userId, CancellationToken ct,
         IReadOnlyList<Habit>? loadedHabits = null)
     {
-        arguments = OptionalToolArguments.OmitNulls(arguments);
         if (arguments.TryGetProperty("revised_items", out _))
         {
             var (_, error) = BulkHabitToolArguments.ParseRevisedDatedItems(arguments);
@@ -24,9 +23,9 @@ internal static class BulkHabitLogArguments
         if (filterError is not null)
             return Result.Failure<JsonElement>(filterError);
         var selectedDates = new HashSet<DateOnly>();
-        if (arguments.TryGetProperty("dates", out var dateArray))
+        if (arguments.TryGetProperty("dates", out var dateArray) && dateArray.ValueKind != JsonValueKind.Null)
         {
-            if (arguments.TryGetProperty("date", out _) || dateArray.ValueKind != JsonValueKind.Array
+            if ((arguments.TryGetProperty("date", out var singleDate) && singleDate.ValueKind != JsonValueKind.Null) || dateArray.ValueKind != JsonValueKind.Array
                 || dateArray.GetArrayLength() == 0)
                 return Result.Failure<JsonElement>("Provide dates as a non-empty array, without date.");
             if (dateArray.GetArrayLength() > AppConstants.MaxBulkOperationSize)

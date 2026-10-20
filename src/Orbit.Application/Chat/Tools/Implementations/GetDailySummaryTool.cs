@@ -11,7 +11,7 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Generate an AI habit summary for today or a date range. Defaults to today.";
+        "Generate an AI habit summary for a date range, defaulting to today.";
 
     public object GetParameterSchema() => new
     {

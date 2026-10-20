@@ -7,7 +7,7 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
     public string Name => "suggest_breakdown";
 
     public string Description =>
-        "Suggest smaller sub-habits for a vague request. Returns suggestions for review without creating anything.";
+        "Suggest sub-habits for a vague request, without creating them.";
 
     public object GetParameterSchema() => new
     {
@@ -24,8 +24,8 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        title = new { type = JsonSchemaTypes.String, description = "Sub-habit title" },
-                        description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+                        title = new { type = JsonSchemaTypes.String },
+                        description = new { type = JsonSchemaTypes.String },
                         frequency_unit = new
                         {
                             type = JsonSchemaTypes.String,

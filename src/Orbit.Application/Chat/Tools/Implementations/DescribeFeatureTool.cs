@@ -9,7 +9,7 @@ public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read the authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule/overdue math.";
+        "Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math.";
 
     public object GetParameterSchema() => new
     {

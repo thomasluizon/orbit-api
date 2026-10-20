@@ -18,14 +18,14 @@ public class QueryGoalsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read goals, progress, status, deadlines, descriptions and linked habits with filters. Call before answering goal questions; prompt indexes do not ground replies.";
+        "Read goals and their progress, deadlines and linked habits. Call before answering goal questions; indexes do not ground replies.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            search = new { type = JsonSchemaTypes.String, description = "Search goals by title or description (case-insensitive contains match)." },
+            search = new { type = JsonSchemaTypes.String, description = "Case-insensitive title/description search." },
             status = new
             {
                 type = JsonSchemaTypes.String,
@@ -33,8 +33,8 @@ public class QueryGoalsTool(
                 @enum = new[] { "Active", "Completed", "Abandoned" }
             },
             include_completed = new { type = JsonSchemaTypes.Boolean, description = "Include non-active goals when status is not specified. Default: false." },
-            include_descriptions = new { type = JsonSchemaTypes.Boolean, description = "Include goal descriptions in the response. Default: true." },
-            include_linked_habits = new { type = JsonSchemaTypes.Boolean, description = "Include linked habit names in the response. Default: true." },
+            include_descriptions = new { type = JsonSchemaTypes.Boolean, description = "Include descriptions. Default: true." },
+            include_linked_habits = new { type = JsonSchemaTypes.Boolean, description = "Include linked habits. Default: true." },
             limit = new { type = JsonSchemaTypes.Integer, description = "Maximum results to return. Default: 50." }
         },
         required = Array.Empty<string>()

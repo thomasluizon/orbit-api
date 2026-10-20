@@ -24,20 +24,20 @@ public class CreateHabitTool(
     public int Order => 0;
 
     public string Description =>
-        "Create habits or dated one-time tasks with tags, goals, checklists and children inline. Single dated events use due_date and no recurrence, even if a weekday is named. Mixed requests keep recurring classes separate from dated extras. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Ask for frequency via NeedsClarification for unspecified habits/rotina/hábito. Use checklist_items for steps done together, sub_habits for independent tracking; never hide list items in descriptions. X times per week without weekdays uses is_flexible=true and Week; fixed weekdays use Day, quantity 1, preserving every requested day. For 'before 15h' use due_end_time=15:00 without due_time; ranges use both.";
+        "Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = JsonSchemaTypes.String, description = "Name of the habit" },
-            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            title = new { type = JsonSchemaTypes.String },
+            description = new { type = JsonSchemaTypes.String },
             emoji = new { type = JsonSchemaTypes.String, description = "Icon emoji. Use the requested emoji or a relevant one.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
-                description = "Recurrence unit. OneTime for explicit one-time tasks; null leaves frequency unspecified.",
+                description = "OneTime for explicit one-time tasks; null leaves recurrence unspecified.",
                 nullable = true,
                 @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum
             },
@@ -51,8 +51,8 @@ public class CreateHabitTool(
             },
             due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. One-time due date or recurrence start. Defaults to today." },
             end_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
-            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format start time. Omit when there is only a deadline.", nullable = true },
-            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time or deadline. For 'before 15h' without a fixed start, set 15:00 and omit due_time.", nullable = true },
+            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm start time. Omit when there is only a deadline.", nullable = true },
+            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm end time or deadline. For 'before 15h' without a fixed start, set 15:00 and omit due_time.", nullable = true },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip pattern alerts. Defaults to true for bad habits." },
@@ -78,8 +78,8 @@ public class CreateHabitTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
-                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
+                        text = new { type = JsonSchemaTypes.String },
+                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Default: false." }
                     },
                     required = new[] { "text" }
                 }
@@ -94,7 +94,7 @@ public class CreateHabitTool(
                     properties = new
                     {
                         when = new { type = JsonSchemaTypes.String, description = "Reminder day.", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format, e.g. '09:00'" }
+                        time = new { type = JsonSchemaTypes.String, description = "HH:mm" }
                     },
                     required = new[] { "when", "time" }
                 }
@@ -114,8 +114,8 @@ public class CreateHabitTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        title = new { type = JsonSchemaTypes.String, description = "Sub-habit name" },
-                        description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+                        title = new { type = JsonSchemaTypes.String },
+                        description = new { type = JsonSchemaTypes.String },
                         emoji = new { type = JsonSchemaTypes.String, description = "Relevant icon emoji.", nullable = true },
                         frequency_unit = new { type = JsonSchemaTypes.String, description = "Override parent recurrence. Use OneTime for a one-time task; null inherits. Otherwise the parent's unit and quantity are inherited.", nullable = true, @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
                         frequency_quantity = new { type = JsonSchemaTypes.Integer },
@@ -132,8 +132,8 @@ public class CreateHabitTool(
                                 type = JsonSchemaTypes.Object,
                                 properties = new
                                 {
-                                    text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
-                                    is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
+                                    text = new { type = JsonSchemaTypes.String },
+                                    is_checked = new { type = JsonSchemaTypes.Boolean, description = "Default: false." }
                                 },
                                 required = new[] { "text" }
                             }
@@ -148,7 +148,7 @@ public class CreateHabitTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        args = OptionalToolArguments.OmitNulls(args);
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         if (!args.TryGetProperty(TitleProperty, out var titleEl) || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return new ToolResult(false, Error: "title is required.");
 
@@ -163,7 +163,7 @@ public class CreateHabitTool(
 
     public async Task<Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        args = OptionalToolArguments.OmitNulls(args);
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         if (!args.TryGetProperty(TitleProperty, out var titleEl) || titleEl.ValueKind != JsonValueKind.String
             || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return Domain.Common.Result.Failure("title is required.");

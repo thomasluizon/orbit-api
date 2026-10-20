@@ -13,15 +13,15 @@ public class MoveHabitParentTool(
     public string Name => "move_habit_parent";
 
     public string Description =>
-        "Re-parent a habit under a different parent habit, or promote it to top-level by passing a null parent_id.";
+        "Move a habit to parent_id, or to top-level when null.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to move" },
-            parent_id = new { type = JsonSchemaTypes.String, description = "ID of the new parent habit, or null to promote to top-level", nullable = true }
+            habit_id = new { type = JsonSchemaTypes.String },
+            parent_id = new { type = JsonSchemaTypes.String, nullable = true }
         },
         required = new[] { "habit_id" }
     };

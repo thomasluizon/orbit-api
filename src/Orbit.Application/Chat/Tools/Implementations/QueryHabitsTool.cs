@@ -20,7 +20,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read habits with schedule, metric, description and checklist filters. Call before answering habit or schedule questions; prompt indexes do not ground replies.";
+        "Read habits, schedules, metrics and checklists. Call before answering habit questions; indexes do not ground replies.";
 
     public object GetParameterSchema() => new
     {
@@ -28,15 +28,15 @@ public class QueryHabitsTool(
         properties = new
         {
             search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
-            date = new { type = JsonSchemaTypes.String, description = "Return the canonical schedule for this date (YYYY-MM-DD), including entries already done on that date. Use 'today' for the user's current date. Omit is_completed for the full schedule." },
-            include_overdue = new { type = JsonSchemaTypes.Boolean, description = "When filtering by date, also include habits overdue before that date. Default: true when date is 'today', false otherwise." },
-            is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter by general/timeless habits (true) or non-general habits (false). Omit to include both." },
-            is_completed = new { type = JsonSchemaTypes.Boolean, description = "With date: false returns remaining work, true returns entries done on that date, omitted returns the full schedule. Without date: filter by completion status, default only active (false)." },
-            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Filter by bad habit status. Omit to include both." },
-            frequency = new { type = JsonSchemaTypes.String, description = "Filter by frequency: 'Day', 'Week', 'Month', 'Year', or 'OneTime'.", @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } },
+            date = new { type = JsonSchemaTypes.String, description = "Schedule on YYYY-MM-DD or today, including done entries. Null is_completed returns the full schedule." },
+            include_overdue = new { type = JsonSchemaTypes.Boolean, description = "Include overdue entries with date. Default: true for today, false otherwise." },
+            is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter timeless habits; null includes both." },
+            is_completed = new { type = JsonSchemaTypes.Boolean, description = "With date: false remaining, true done, null all. Without date: false active (default), true completed." },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Filter bad habits; null includes both." },
+            frequency = new { type = JsonSchemaTypes.String, @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } },
             tag = new { type = JsonSchemaTypes.String, description = "Filter by tag name (case-insensitive)" },
-            include_sub_habits = new { type = JsonSchemaTypes.Boolean, description = "Include sub-habits in results. Default: true" },
-            include_metrics = new { type = JsonSchemaTypes.Boolean, description = "Include streak and completion metrics. Default: false (set true for performance/progress questions)" },
+            include_sub_habits = new { type = JsonSchemaTypes.Boolean, description = "Include children. Default: true." },
+            include_metrics = new { type = JsonSchemaTypes.Boolean, description = "Include streak/completion metrics for progress questions. Default: false." },
             limit = new { type = JsonSchemaTypes.Integer, description = "Maximum results to return. Default: 50" }
         },
         required = Array.Empty<string>()

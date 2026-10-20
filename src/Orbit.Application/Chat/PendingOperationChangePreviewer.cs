@@ -36,8 +36,8 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
-        if (!arguments.TryGetProperty("revised_items", out _))
-            arguments = OptionalToolArguments.OmitNulls(arguments);
+        if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
+            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
         if (HasLogDates(operationId, arguments))
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,

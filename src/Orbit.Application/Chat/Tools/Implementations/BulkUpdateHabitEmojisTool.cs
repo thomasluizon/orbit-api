@@ -20,7 +20,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     public string Name => "bulk_update_habit_emojis";
 
     public string Description =>
-        "Infer distinct emojis for all server-side matches, set one requested emoji, or clear icons. Reports applied, matched, skipped and partial counts.";
+        "Infer distinct habit emojis, set a requested emoji, or clear icons for all matches.";
 
     public object GetParameterSchema() => new
     {
@@ -38,7 +38,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             emoji = new
             {
                 type = JsonSchemaTypes.String,
-                description = "Optional emoji to apply to every selected habit. Use emoji_mode=clear to remove icons; null uses the default mode.",
+                description = "Requested icon. Null uses the default mode; clear via emoji_mode.",
                 nullable = true
             },
             infer_from_title = new
@@ -58,7 +58,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         if (!args.TryGetProperty("revised_items", out _))
-            args = OptionalToolArguments.OmitNulls(args);
+            args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var overrides = new Dictionary<Guid, string?>();
         var (filter, error) = args.TryGetProperty("revised_items", out var items)
             ? ParseRevisedItems(items, overrides) : BulkHabitToolArguments.ParseEmojiFilter(args);
@@ -89,7 +89,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         if (!args.TryGetProperty("revised_items", out _))
-            args = OptionalToolArguments.OmitNulls(args);
+            args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var overrides = new Dictionary<Guid, string?>();
         var (filter, filterError) = args.TryGetProperty("revised_items", out var revisedItems)
             ? ParseRevisedItems(revisedItems, overrides)

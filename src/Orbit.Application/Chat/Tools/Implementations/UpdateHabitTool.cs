@@ -19,7 +19,7 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update an existing habit's properties. Null fields keep current values. Use clear_fields to remove values or clear frequency_unit for a one-time task. Use bulk_update_habit_emojis for multiple habits. Set is_flexible for window-based tracking.";
+        "Update habit fields. Null keeps values; clear_fields removes them (frequency_unit makes a one-time task). Use is_flexible for windows and bulk tools for multiple habits.";
 
     public object GetParameterSchema() => new
     {
@@ -27,8 +27,8 @@ public class UpdateHabitTool(
         properties = new
         {
             clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.HabitClearFields),
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to update" },
-            title = new { type = JsonSchemaTypes.String, description = "New title" },
+            habit_id = new { type = JsonSchemaTypes.String },
+            title = new { type = JsonSchemaTypes.String },
             description = new { type = JsonSchemaTypes.String, description = "New description", nullable = true },
             emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the habit icon. Use clear_fields to clear.", nullable = true },
             frequency_unit = new
@@ -43,11 +43,10 @@ public class UpdateHabitTool(
             days = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "New weekday schedule",
                 items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
             due_date = new { type = JsonSchemaTypes.String, description = "New due date (YYYY-MM-DD)" },
-            end_date = new { type = JsonSchemaTypes.String, description = "New end date (YYYY-MM-DD). Use clear_fields to clear. Habit stops after this date.", nullable = true },
+            end_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD cutoff; clear via clear_fields.", nullable = true },
             due_time = new { type = JsonSchemaTypes.String, description = "New due time (HH:mm). Use clear_fields to clear.", nullable = true },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit" },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking. Cannot have days set." },
@@ -55,7 +54,7 @@ public class UpdateHabitTool(
             reminder_times = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "New reminder times (minutes before)",
+                description = "Minutes before due_time.",
                 items = new { type = JsonSchemaTypes.Integer }
             },
             checklist_items = new
@@ -67,8 +66,8 @@ public class UpdateHabitTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
-                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked" }
+                        text = new { type = JsonSchemaTypes.String },
+                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Default: false." }
                     },
                     required = new[] { "text" }
                 }
@@ -83,7 +82,7 @@ public class UpdateHabitTool(
                     properties = new
                     {
                         when = new { type = JsonSchemaTypes.String, description = "Reminder day.", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
+                        time = new { type = JsonSchemaTypes.String, description = "HH:mm" }
                     },
                     required = new[] { "when", "time" }
                 }

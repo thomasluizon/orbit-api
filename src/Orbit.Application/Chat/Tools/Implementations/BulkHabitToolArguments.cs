@@ -114,19 +114,19 @@ internal static class BulkHabitToolArguments
         if (!args.TryGetProperty("updates", out var updates) || updates.ValueKind != JsonValueKind.Object)
             return (null, "updates is required and must be an object.");
 
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
+            "days", "due_date", "end_date", "due_time", "is_bad_habit", "is_flexible",
+            "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields"
+        };
+        if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
+            return (null, "updates contains an unsupported field.");
         var (resolvedUpdates, argumentError) = OptionalToolArguments.ResolveClears(updates,
             OptionalToolArguments.BulkHabitClearFields);
         if (argumentError is not null)
             return (null, argumentError);
         updates = resolvedUpdates;
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
-            "days", "due_date", "end_date", "due_time", "is_bad_habit", "is_flexible",
-            "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders"
-        };
-        if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
-            return (null, "updates contains an unsupported field.");
         var fieldError = CheckHabitFields(updates);
         if (fieldError is not null)
             return (null, fieldError);
@@ -194,14 +194,14 @@ internal static class BulkHabitToolArguments
     public static object FilterSchema() => new
     {
         type = JsonSchemaTypes.Object,
-        description = "Server-side selection. Set all=true for the complete matching set, or provide habit_ids, tag, search, or another predicate.",
+        description = "Select all matches or use predicates.",
         properties = new
         {
-            all = new { type = JsonSchemaTypes.Boolean, description = "Select the complete matching set." },
+            all = new { type = JsonSchemaTypes.Boolean, description = "Select every match." },
             habit_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
             tag = new { type = JsonSchemaTypes.String, description = "Exact tag name, case-insensitive." },
             search = new { type = JsonSchemaTypes.String, description = "Match every search word to a title word prefix, ignoring case, accents and order. Excludes descriptions." },
-            is_completed = new { type = JsonSchemaTypes.Boolean, description = "Select completed habits when true or active habits when false. Active habits are the default." },
+            is_completed = new { type = JsonSchemaTypes.Boolean, description = "true: completed; false: active (default)." },
             is_general = new { type = JsonSchemaTypes.Boolean },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean },
             frequency = new { type = JsonSchemaTypes.String, @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } }
@@ -210,13 +210,13 @@ internal static class BulkHabitToolArguments
 
     private static (BulkHabitFilter? Filter, string? Error) ParseFilter(JsonElement filter)
     {
-        filter = OptionalToolArguments.OmitNulls(filter);
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "all", "habit_ids", "tag", "search", "is_completed", "is_general", "is_bad_habit", "frequency"
         };
         if (filter.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "filter contains an unsupported field.");
+        filter = OptionalToolArguments.OmitNulls(filter);
         foreach (var booleanName in new[] { "all", "is_completed", "is_general", "is_bad_habit" })
         {
             if (filter.TryGetProperty(booleanName, out var booleanValue)

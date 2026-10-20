@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class GetProfileTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_profile";
-    public string Description => "Read the user's profile, plan, AI settings, timezone, clock format, light or dark mode, and calendar sync status. Orbit uses one accent.";
+    public string Description => "Read profile, plan, AI preferences and calendar sync. Orbit uses one accent.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
@@ -31,7 +31,7 @@ public class GetProfileTool(IMediator mediator) : IAiTool
 public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
     public string Name => "update_profile_preferences";
-    public string Description => "Update profile preferences such as timezone, language, week start day, clock format, light or dark mode, onboarding completion, or tour state. Orbit uses one accent.";
+    public string Description => "Update profile preferences, onboarding or tour state. Orbit uses one accent.";
 
     public object GetParameterSchema() => new
     {

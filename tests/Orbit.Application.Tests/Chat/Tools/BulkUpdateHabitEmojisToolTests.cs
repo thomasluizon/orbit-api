@@ -49,6 +49,25 @@ public class BulkUpdateHabitEmojisToolTests
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitEmojisTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_InfersSameIconsAsAbsent(string field)
+    {
+        var habit = CreateHabit("Read", "📝");
+        SetupHabits(habit);
+        var body = field == "habit_ids"
+            ? new Dictionary<string, object?> { ["filter"] = new { all = true } }
+            : new Dictionary<string, object?> { ["habit_ids"] = new[] { habit.Id } };
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        var before = OptionalParameterCases.HabitState(habit);
+        body[field] = null;
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(habit).Should().Be(before);
+        await _inferenceService.Received(2).InferAsync(UserId,
+            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(inputs => inputs.Count == 1 && inputs[0].HabitId == habit.Id),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task InferFromTitle_UpdatesAllActiveHabitsWithSensibleEmojis()
     {

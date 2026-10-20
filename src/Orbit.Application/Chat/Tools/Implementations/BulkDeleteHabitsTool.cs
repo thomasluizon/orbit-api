@@ -13,7 +13,7 @@ public sealed class BulkDeleteHabitsTool(
     public string Name => "bulk_delete_habits";
 
     public string Description =>
-        "Permanently delete all server-side matches in one operation, only as requested. Reports applied, matched, skipped and partial counts.";
+        "Permanently delete the complete matching habit set, only as requested.";
 
     public object GetParameterSchema() => new
     {

@@ -12,7 +12,7 @@ public class UpdateGoalTool(
     public string Name => "update_goal";
 
     public string Description =>
-        "Update an existing goal's properties. Null fields keep current values. Use clear_fields to remove descriptions or deadlines.";
+        "Update goal fields. Null keeps values; clear_fields removes descriptions or deadlines.";
 
     public object GetParameterSchema() => new
     {
@@ -20,12 +20,12 @@ public class UpdateGoalTool(
         properties = new
         {
             clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.GoalClearFields),
-            goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to update." },
-            title = new { type = JsonSchemaTypes.String, description = "New goal title.", nullable = true },
-            description = new { type = JsonSchemaTypes.String, description = "New description. Use clear_fields to clear.", nullable = true },
-            target_value = new { type = "number", description = "New numeric target value." },
-            unit = new { type = JsonSchemaTypes.String, description = "New unit of measurement." },
-            deadline = new { type = JsonSchemaTypes.String, description = "New deadline in YYYY-MM-DD format. Use clear_fields to clear.", nullable = true }
+            goal_id = new { type = JsonSchemaTypes.String },
+            title = new { type = JsonSchemaTypes.String, nullable = true },
+            description = new { type = JsonSchemaTypes.String, description = "Description; clear via clear_fields.", nullable = true },
+            target_value = new { type = "number" },
+            unit = new { type = JsonSchemaTypes.String },
+            deadline = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD deadline; clear via clear_fields.", nullable = true }
         },
         required = new[] { "goal_id" }
     };

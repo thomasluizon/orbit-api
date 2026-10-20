@@ -43,7 +43,8 @@ public static class AgentArgumentPreview
         if (arguments.ValueKind != JsonValueKind.Object)
             return null;
 
-        arguments = OptionalToolArguments.OmitNulls(arguments);
+        if (editableSchema.ValueKind == JsonValueKind.Object)
+            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, editableSchema);
         if (operationId is "update_habit" or "update_goal")
         {
             var (prepared, error) = OptionalToolArguments.ResolveClears(arguments, OptionalToolArguments.ClearableFields(operationId));
