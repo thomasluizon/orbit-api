@@ -120,7 +120,8 @@ public sealed class PendingOperationRevisionService(
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(execution.PreviewFingerprint))
-            return toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
+            return execution.Surface != AgentExecutionSurface.Chat
+                || toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
         var current = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
         return current?.PreviewFingerprint == execution.PreviewFingerprint;

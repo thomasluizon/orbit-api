@@ -24,10 +24,12 @@ public partial class ProcessUserChatCommandHandler
         public bool IsTaggingIntent { get; init; }
         public HashSet<string> ExistingDuplicateNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> PendingDuplicateNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> BlockedReplacementNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string[]> AmbiguousHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> InvalidCalls { get; } = new(StringComparer.Ordinal);
         public HashSet<string> MissingHabitNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> PreviewedCalls { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> MergedCallIds { get; } = new(StringComparer.Ordinal);
 
         public DateTime? AnsweredAtUtc { get; init; }
         public List<ActionResult> CommittedActions { get; } = [];

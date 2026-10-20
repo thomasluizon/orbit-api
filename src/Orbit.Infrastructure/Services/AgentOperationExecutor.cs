@@ -243,7 +243,7 @@ public partial class AgentOperationExecutor(
                 pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
                     AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
                 return await BuildToolOutcomeResponseAsync(execution, policyDecision,
-                    new ToolResult(false, Error: "preview_unavailable"), cancellationToken);
+                    new ToolResult(false, Error: "stale_preview"), cancellationToken);
             }
 
             var argumentsJson = execution.Arguments.GetRawText();

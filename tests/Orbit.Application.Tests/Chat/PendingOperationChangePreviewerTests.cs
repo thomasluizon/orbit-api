@@ -28,11 +28,23 @@ public sealed class PendingOperationChangePreviewerTests
             .Returns(new DateOnly(2026, 9, 25));
 
     [Fact]
-    public async Task RoundThree_BulkDelete_PreservesLiteralSearchSemantics()
+    public async Task RoundThree_BulkDelete_UsesNormalizedTitleWordPrefixes()
     {
-        Setup([CreateHabit("Beber água", null)]);
-        (await Preview("bulk_delete_habits", """{"filter":{"search":"agua"}}""")).Should().BeNull();
-        (await Preview("bulk_delete_habits", """{"filter":{"search":"água"}}""")).Should().NotBeNull();
+        var water = CreateHabit("Beber água", null);
+        var reading = CreateHabit("Ler 10 minutos", null);
+        var allergy = CreateHabit("Alergia", null);
+        allergy.Update(new HabitUpdateParams(allergy.Title, "Ler sobre água e meditação",
+            allergy.FrequencyUnit, allergy.FrequencyQuantity, allergy.Days.ToArray(), allergy.IsBadHabit, allergy.DueDate))
+            .IsSuccess.Should().BeTrue();
+        Setup([water, reading, allergy]);
+        foreach (var search in new[] { "agua", "ÁGUA", "agu beb" })
+        {
+            var preview = await Preview("bulk_delete_habits", JsonSerializer.Serialize(new { filter = new { search } }));
+            preview!.Items.Should().ContainSingle().Which.EntityId.Should().Be(water.Id);
+        }
+        var read = await Preview("bulk_delete_habits", """{"filter":{"search":"ler"}}""");
+        read!.Items.Should().ContainSingle().Which.EntityId.Should().Be(reading.Id);
+        (await Preview("bulk_delete_habits", """{"filter":{"search":"medit"}}""")).Should().BeNull();
     }
 
     [Fact]
@@ -45,25 +57,30 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
-    public async Task RoundThree_CreateChildren_ShowsParentInEveryItem()
+    public async Task RoundThree_CreateChildren_ShowsParentInEveryItemAndOnceInChanges()
     {
         var parent = CreateHabit("Academia", null);
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { parent });
         var preview = await Preview("bulk_create_habits", JsonSerializer.Serialize(new
         {
             parent_habit_id = parent.Id,
-            habits = new[] { new { title = "Treino" } }
+            habits = new[] { new { title = "Aquecimento" }, new { title = "Treino" }, new { title = "Alongamento" } }
         }));
-        preview!.Items!.Single().Fields.Should().Contain(field => field.Field == "parent_habit_id"
-            && field.NewValue == "Academia" && !field.IsEditable);
-        preview.Changes.Should().Contain(field => field.Field == "parent_habit_id" && field.NewValue == "Academia");
+        preview!.Items.Should().HaveCount(3).And.OnlyContain(item => item.Fields.Any(field => field.Field == "parent_habit_id"
+            && field.NewValue == "Academia" && !field.IsEditable));
+        preview.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
+            field => field.Field == "parent_habit_id" && field.NewValue == "Academia");
     }
 
     [Theory]
     [InlineData("Alergia", "ler", false)]
     [InlineData("Ler 10 minutos", "leitura", false)]
     [InlineData("Beber água", "AGUA", true)]
-    public void RoundThree_NameMatching_UsesNormalizedWholeWords(string title, string search, bool matches) =>
+    [InlineData("Meditação", "medit", true)]
+    [InlineData("Meditação diária", "DIÁ MED", true)]
+    [InlineData("Meditação diária", "med falt", false)]
+    [InlineData("Meditação", "!!!", false)]
+    public void RoundThree_NameMatching_UsesNormalizedWordPrefixes(string title, string search, bool matches) =>
         HabitNameMatcher.Matches(title, search).Should().Be(matches);
 
     [Fact]
@@ -285,7 +302,7 @@ public sealed class PendingOperationChangePreviewerTests
         item.ValidationErrors.Should().BeNull();
         preview.Changes.Should().BeEmpty();
         preview.ChangeTargetCount.Should().Be(1);
-        item.Fields.Select(field => field.Field).Should().Equal("frequency_quantity", "frequency_unit", "title");
+        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_quantity", "frequency_unit");
         var legacyItemJson = JsonSerializer.SerializeToElement(item);
         legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
             "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");

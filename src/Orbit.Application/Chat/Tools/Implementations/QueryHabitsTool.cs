@@ -27,7 +27,7 @@ public class QueryHabitsTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            search = new { type = JsonSchemaTypes.String, description = "Search habits by title (case-insensitive contains match)" },
+            search = new { type = JsonSchemaTypes.String, description = "Search titles by word prefixes, ignoring case and accents. Every search word must start a title word; word order does not matter." },
             date = new { type = JsonSchemaTypes.String, description = "Return the canonical schedule for this date (YYYY-MM-DD), including entries already done on that date. Use 'today' for the user's current date. Omit is_completed for the full schedule." },
             include_overdue = new { type = JsonSchemaTypes.Boolean, description = "When filtering by date, also include habits overdue before that date. Default: true when date is 'today', false otherwise." },
             is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter by general/timeless habits (true) or non-general habits (false). Omit to include both." },

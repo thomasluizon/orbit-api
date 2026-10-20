@@ -98,7 +98,12 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.PendingOperations.Should().ContainSingle();
         held.Should().ContainSingle().Which.OperationId.Should().Be("assign_tags");
         held[0].Arguments.GetProperty("habit_id").GetString().Should().Be(habits[2].Id.ToString());
-        result.Value.AiMessage.Should().NotContain("Meditação").And.NotContain("Água");
+        held.Should().OnlyContain(operation => operation.OperationId != "bulk_create_habits"
+            && operation.OperationId != "create_habit");
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(values => values.Any(value => value.Name == "bulk_create_habits"
+                && JsonSerializer.SerializeToElement(value.Payload).GetProperty("status").GetString() == "no_new_preview")),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -318,6 +323,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(bulk);
         var held = HoldReplayWrites(bulk);
         _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
+        _pendingOperationStore.SupersedeHabitCreation(UserId, "Novo", null).Returns(true);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"NOVO"}]}"""));
         ReplyToReplay("Revise a prévia.");
@@ -397,6 +403,135 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Is<IReadOnlyList<AiToolCallResult>>(values => values.Where(value => value.Payload != null)
                 .All(value => !JsonSerializer.SerializeToElement(value.Payload).EnumerateObject().Any(property => property.Name == "items"))),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        var returned = _aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "ContinueWithToolResultsAsync")
+            .GetArguments()[1].Should().BeAssignableTo<IReadOnlyList<AiToolCallResult>>().Subject;
+        returned.Count(value => JsonSerializer.SerializeToElement(value.Payload).GetProperty("status").GetString() == "awaiting_confirmation")
+            .Should().Be(1);
+        var merged = returned.Where(value => JsonSerializer.SerializeToElement(value.Payload).GetProperty("status").GetString() == "merged_into_preview").ToArray();
+        merged.Should().HaveCount(5).And.OnlyContain(value => value.Success && value.Error == null);
+        merged.Should().OnlyContain(value => JsonSerializer.SerializeToElement(value.Payload).GetProperty("instruction").GetString()!
+            .Contains("Do not repeat", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RoundFour_MalformedCreateAfterDuplicate_DoesNotReachExecutor()
+    {
+        SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Academia"},{"title":42}]}"""));
+        ReplyToReplay("Tente novamente.");
+
+        var result = await handler.Handle(new(UserId, "Crie Academia e outro hábito."), default);
+
+        held.Should().BeEmpty();
+        result.Value.PendingOperations.Should().BeEmpty();
+        result.Value.Actions.Should().Contain(action => action.Status == ActionStatus.Failed
+            && action.MessageKey == "chat.toolResult.toolFailure" && action.Error == PortugueseToolFailureMessage);
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(values => values.Any(value => !value.Success
+                && value.Error != null && value.Error.Contains("title", StringComparison.Ordinal))),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "Você já tem uma prévia aguardando para criar Novo. Aprove a prévia ou me peça para preparar uma nova.")]
+    [InlineData("en", "You already have a preview waiting to create Novo. Approve it, or ask me to prepare a new one.")]
+    public async Task RoundFour_PendingDuplicate_UsesRequestedCopy(string language, string expected)
+    {
+        SetupResolutionAccount();
+        var user = User.Create("Test", "copy@example.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        HoldReplayWrites(bulk);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Novo"}]}"""));
+        ReplyToReplay("Review.");
+
+        var result = await handler.Handle(new(UserId, "Crie Novo."), default);
+
+        result.Value.AiMessage.Should().Be(expected);
+        result.Value.PendingOperations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RoundFour_Replacement_UsesStoredProposalWithUnrelatedReplyCopy()
+    {
+        SetupResolutionAccount();
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([new PendingHabitCreation("Novo")]);
+        _pendingOperationStore.SupersedeHabitCreation(UserId, "Novo", null).Returns(true);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Novo"}]}"""));
+        ReplyToReplay("Revise a prévia.");
+
+        var result = await handler.Handle(new(UserId, "Crie Novo de novo.",
+            History: [new ChatHistoryMessage("assistant", "Há uma proposta aguardando sua aprovação.")]), default);
+
+        _pendingOperationStore.Received().SupersedeHabitCreation(UserId, "Novo", null);
+        held.Should().ContainSingle();
+        result.Value.PendingOperations.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "A prévia para criar Treino também inclui outros hábitos. Quais itens você quer manter na prévia?")]
+    [InlineData("en", "The preview to create Treino also includes other habits. Which items would you like to keep in the preview?")]
+    public async Task RoundFour_MultiItemReplacement_AsksBeforeSupersedingBatch(string language, string expected)
+    {
+        SetupResolutionAccount();
+        var user = User.Create("Test", "copy@example.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        var held = HoldReplayWrites(bulk);
+        _pendingOperationStore.GetPendingHabitCreations(UserId).Returns([
+            new PendingHabitCreation("Aquecimento"), new PendingHabitCreation("Treino"), new PendingHabitCreation("Alongamento")]);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Treino"}]}"""));
+        ReplyToReplay("Review.");
+
+        var result = await handler.Handle(new(UserId, "Prepare uma nova prévia para Treino."), default);
+
+        held.Should().BeEmpty();
+        result.Value.PendingOperations.Should().BeEmpty();
+        result.Value.AiMessage.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("pt-BR", false, "Não encontrei este hábito: Meditação. Qual hábito você quer usar?")]
+    [InlineData("pt-BR", true, "Não encontrei estes hábitos: Meditação, Yoga. Quais hábitos você quer usar?")]
+    [InlineData("en", false, "I couldn't find this habit: Meditação. Which habit would you like to use?")]
+    [InlineData("en", true, "I couldn't find these habits: Meditação, Yoga. Which habits would you like to use?")]
+    public async Task RoundFour_MissingNames_UsesMatchingNumberInQuestion(string language, bool multiple, string expected)
+    {
+        SetupResolutionAccount();
+        var user = User.Create("Test", "copy@example.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var tags = new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork);
+        var handler = CreateHandler(tags);
+        var held = HoldReplayWrites(tags);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(ReplayCall("assign_tags", JsonSerializer.Serialize(new
+            {
+                habit_ids = multiple ? new[] { "Meditação", "Yoga" } : new[] { "Meditação" },
+                tag_names = new[] { "Saúde" }
+            })));
+        ReplyToReplay("Choose.");
+
+        var result = await handler.Handle(new(UserId, "Atribua Saúde aos hábitos."), default);
+
+        result.Value.AiMessage.Should().Be(expected);
+        result.Value.PendingOperations.Should().BeEmpty();
+        held.Should().BeEmpty();
     }
 
     [Fact]

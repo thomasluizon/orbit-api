@@ -533,7 +533,8 @@ public sealed class PendingOperationChangePreviewer(
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;
             var fields = habit.ValueKind == JsonValueKind.Object
                 ? habit.EnumerateObject().Where(property => CreateFields.Contains(property.Name))
-                    .OrderBy(property => property.Name, StringComparer.Ordinal)
+                    .OrderBy(property => property.Name != "title")
+                    .ThenBy(property => property.Name, StringComparer.Ordinal)
                     .Select(property => new PendingOperationChange(
                     Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value), "text",
                     property.Value.Clone(), true)).ToList()
@@ -553,7 +554,7 @@ public sealed class PendingOperationChangePreviewer(
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null);
         }).ToList();
         return BuildPreview("bulk_create_habits", items.SelectMany(item => item.Fields)
-            .Where(field => field.Field == "parent_habit_id").ToList(), items);
+            .Where(field => field.Field == "parent_habit_id").DistinctBy(field => field.EntityId).ToList(), items);
     }
 
     private static PendingOperationChangePreview? BuildPreview(

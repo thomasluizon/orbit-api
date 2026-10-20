@@ -10,9 +10,6 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private const string PortuguesePendingQuestion = "Você já tem uma prévia para criar";
-    private const string EnglishPendingQuestion = "You already have a preview to create";
-
     private static bool IsExplicitHabitCreate(string message) => Regex.IsMatch(message,
         @"\b(crie|cria|criar|create|add|adicione)\s+(?:(?:um|uma|o|a|os|as|new|one|novo|nova)\s+)?(?:h[aá]bitos?|habits?|rotina)\b",
         RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
@@ -38,27 +35,20 @@ public partial class ProcessUserChatCommandHandler
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
     {
-        var previousReply = request.History?.LastOrDefault(item =>
-            ChatHistoryMessage.NormalizeRole(item.Role) == ChatHistoryMessage.AssistantRole)?.Content;
         var proposals = execution.PendingOperationStore.GetPendingHabitCreations(request.UserId);
+        var normalizedMessage = HabitNameMatcher.Normalize(request.Message);
+        var asksForReplacement = Regex.IsMatch(normalizedMessage,
+            @"\b(nova|new|outra|another)\s+(previa|preview)\b|\b(prepare|preparar|make)\s+(?:(?:um|uma|a)\s+)?(?:nova|new|outra|another)(?: one)?$|\b(again|de novo|reprepare)\b",
+            RegexOptions.None, TimeSpan.FromSeconds(1));
         foreach (var name in proposals)
         {
-            var discussed = previousReply is not null
-                && (previousReply.Contains(PortuguesePendingQuestion, StringComparison.Ordinal)
-                    || previousReply.Contains(EnglishPendingQuestion, StringComparison.Ordinal))
-                && HabitNameMatcher.Matches(previousReply, name.Title);
             var named = HabitNameMatcher.Matches(request.Message, name.Title);
-            var asksForReplacement = Regex.IsMatch(HabitNameMatcher.Normalize(request.Message),
-                @"\b(nova|new|outra|another)\s+(previa|preview)\b|\b(prepare|preparar|make)\s+(?:(?:um|uma|a)\s+)?(?:nova|new|outra|another)(?: one)?$",
-                RegexOptions.None, TimeSpan.FromSeconds(1));
-            var explicitlyReplaces = asksForReplacement && (named || proposals.Count == 1)
-                || discussed && named && Regex.IsMatch(request.Message,
-                    @"\b(crie|cria|criar|create|prepare|preparar|nova|new|again|de novo)\b",
-                    RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
-            if (explicitlyReplaces)
+            if (asksForReplacement && (named || proposals.Count == 1))
             {
-                execution.PendingOperationStore.SupersedeHabitCreation(request.UserId, name.Title, name.ParentHabitId);
-                continue;
+                if (execution.PendingOperationStore.SupersedeHabitCreation(request.UserId, name.Title, name.ParentHabitId))
+                    continue;
+                results.BlockedReplacementNames.Add(name.Title);
+                results.PendingDuplicateNames.Add(name.Title);
             }
             var key = (name.ParentHabitId, HabitNameMatcher.Normalize(name.Title));
             results.ProposedHabitNames.Add(key);
@@ -185,7 +175,10 @@ public partial class ProcessUserChatCommandHandler
         }
         var proposed = NewHabitItems(items, arguments, results);
         if (proposed is null)
-            return call;
+        {
+            results.InvalidCalls[call.Id] = "Every habit must have a non-empty string title.";
+            return null;
+        }
         if (proposed.Count == 0)
             return null;
         if (call.Name == "bulk_create_habits")
@@ -197,12 +190,14 @@ public partial class ProcessUserChatCommandHandler
 
     private static JsonArray? NewHabitItems(JsonArray items, JsonObject arguments, ToolExecutionAccumulator results)
     {
+        if (items.Any(item => item is not JsonObject habit || habit["title"] is not JsonValue value
+            || !value.TryGetValue<string>(out var title) || string.IsNullOrWhiteSpace(title)))
+            return null;
         Guid? parentId = Guid.TryParse(arguments["parent_habit_id"]?.ToString(), out var parsed) ? parsed : null;
         var proposed = new JsonArray();
         foreach (var item in items.OfType<JsonObject>())
         {
-            if (item["title"] is not JsonValue value || !value.TryGetValue<string>(out var name) || string.IsNullOrWhiteSpace(name))
-                return null;
+            var name = item["title"]!.GetValue<string>();
             if (results.IsTaggingIntent)
                 continue;
             var existing = results.Habits.FirstOrDefault(habit => habit.ParentHabitId == parentId
@@ -253,10 +248,14 @@ public partial class ProcessUserChatCommandHandler
             Args = JsonSerializer.SerializeToElement(new { revised_items = entries.Values.ToArray() })
         };
         foreach (var call in logs.Where(call => call.Id != first.Id))
+        {
+            if (resolvedCalls[call.Id] is not null)
+                results.MergedCallIds.Add(call.Id);
             resolvedCalls[call.Id] = null;
+        }
     }
 
-    private static void CoalesceTagCalls(Dictionary<string, AiToolCall?> calls)
+    private static void CoalesceTagCalls(Dictionary<string, AiToolCall?> calls, ToolExecutionAccumulator results)
     {
         var tags = calls.Values.OfType<AiToolCall>().Where(call => call.Name == "assign_tags" && call.Args.ValueKind == JsonValueKind.Object)
             .GroupBy(call =>
@@ -286,7 +285,10 @@ public partial class ProcessUserChatCommandHandler
             arguments["habit_ids"] = new JsonArray(ids.Order(StringComparer.Ordinal).Select(id => (JsonNode?)JsonValue.Create(id)).ToArray());
             calls[first.Id] = first with { Args = JsonSerializer.SerializeToElement(arguments) };
             foreach (var call in group.Skip(1))
+            {
+                results.MergedCallIds.Add(call.Id);
                 calls[call.Id] = null;
+            }
         }
     }
 
@@ -303,17 +305,24 @@ public partial class ProcessUserChatCommandHandler
         return null;
     }
 
-    private static ToolCallOutcome ResolvedWithoutWrite(AiToolCall call, ToolExecutionAccumulator results) => new(
-        new AiToolCallResult(call.Name, call.Id, !results.InvalidCalls.ContainsKey(call.Id), null, null,
-            results.InvalidCalls.GetValueOrDefault(call.Id), new
+    private static ToolCallOutcome ResolvedWithoutWrite(AiToolCall call, ToolExecutionAccumulator results, string? language)
+    {
+        var merged = results.MergedCallIds.Contains(call.Id);
+        var error = results.InvalidCalls.GetValueOrDefault(call.Id);
+        return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, error is null, null, null,
+            error, new
             {
-                status = "no_new_preview",
+                status = merged ? "merged_into_preview" : "no_new_preview",
                 unresolved_names = results.MissingHabitNames.ToArray(),
                 ambiguous_names = results.AmbiguousHabitNames,
                 existing_duplicates = results.ExistingDuplicateNames.ToArray(),
                 pending_duplicates = results.PendingDuplicateNames.ToArray(),
-                instruction = "No new preview was prepared. Ask about the returned missing, ambiguous or duplicate names. Ignore unsolicited creates for a tag-only request."
-            }), null, null, null, null);
+                instruction = merged
+                    ? "This call was merged into the held preview for this intent. Do not repeat the call or prepare another preview. Nothing changes until approval."
+                    : "No new preview was prepared. Ask about the returned missing, ambiguous or duplicate names. Ignore unsolicited creates for a tag-only request."
+            }), error is null ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: ToolFailureMessage(language))
+                .WithToolResultMessage(call, key: "toolFailure"), null, null, null);
+    }
 
     private static string? AddResolutionQuestion(string? message, ToolExecutionAccumulator results, string? language)
     {
@@ -324,8 +333,11 @@ public partial class ProcessUserChatCommandHandler
         if (results.MissingHabitNames.Count > 0)
         {
             var names = string.Join(", ", results.MissingHabitNames);
-            questions.Add(portuguese ? $"Não encontrei estes hábitos: {names}. Qual hábito você quer usar?"
-                : $"I couldn't find these habits: {names}. Which habit would you like to use?");
+            questions.Add(results.MissingHabitNames.Count == 1
+                ? portuguese ? $"Não encontrei este hábito: {names}. Qual hábito você quer usar?"
+                    : $"I couldn't find this habit: {names}. Which habit would you like to use?"
+                : portuguese ? $"Não encontrei estes hábitos: {names}. Quais hábitos você quer usar?"
+                    : $"I couldn't find these habits: {names}. Which habits would you like to use?");
         }
         foreach (var (name, matches) in results.AmbiguousHabitNames)
             questions.Add(portuguese ? $"Para {name}, encontrei: {string.Join(", ", matches)}. Qual hábito você quer usar?"
@@ -334,8 +346,11 @@ public partial class ProcessUserChatCommandHandler
             questions.Add(portuguese ? $"O hábito {name} já existe. Você quer usar esse hábito ou criar outro com um nome diferente?"
                 : $"The habit {name} already exists. Would you like to use it or create another with a different name?");
         foreach (var name in results.PendingDuplicateNames)
-            questions.Add(portuguese ? $"{PortuguesePendingQuestion} {name} aguardando. Aprove a prévia ou me diga para preparar uma nova."
-                : $"{EnglishPendingQuestion} {name} waiting. Approve it, or tell me to prepare a new one.");
+            questions.Add(results.BlockedReplacementNames.Contains(name)
+                ? portuguese ? $"A prévia para criar {name} também inclui outros hábitos. Quais itens você quer manter na prévia?"
+                    : $"The preview to create {name} also includes other habits. Which items would you like to keep in the preview?"
+                : portuguese ? $"Você já tem uma prévia aguardando para criar {name}. Aprove a prévia ou me peça para preparar uma nova."
+                    : $"You already have a preview waiting to create {name}. Approve it, or ask me to prepare a new one.");
         if (results.PendingOperations.Count > 0)
             questions.Insert(0, portuguese ? "Revise a prévia antes de aprovar." : "Review the preview before approving.");
         return string.Join("\n\n", questions);

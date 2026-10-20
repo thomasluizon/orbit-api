@@ -2347,7 +2347,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(mockTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var toolCall = new AiToolCall("create_habit", "call_1", toolCallArgs);
         var aiResponseWithTool = new AiResponse
         {
@@ -2541,7 +2541,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             ToolCalls =
             [
-                new AiToolCall("create_habit", "habit", ParseArguments("{}")),
+                new AiToolCall("create_habit", "habit", ParseArguments("""{"title":"Parent"}""")),
                 new AiToolCall("create_goal", "goal", ParseArguments("{}"))
             ],
             ConversationContext = TestConversationContext
@@ -2650,7 +2650,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_ToolFailure_EmitsStartedStepButNoFollowUps()
     {
         SetupUserAndPayGate();
-        SetupAiResponse(ToolResponse("create_habit", "one", "{}"));
+        SetupAiResponse(ToolResponse("create_habit", "one", """{"title":"Parent"}"""));
         var events = new List<ChatStreamEvent>();
 
         var result = await CreateHandler(CreateFailingCreateHabitTool()).Handle(new ProcessUserChatCommand(
@@ -2675,7 +2675,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _aiIntentService.ContinueWithToolResultsAsync(
                 Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(ToolResponse("create_habit", "two", "{}")));
+            .Returns(Result.Success(ToolResponse("create_habit", "two", """{"title":"Parent"}""")));
         var events = new List<ChatStreamEvent>();
 
         var result = await CreateHandler(readTool, CreateFailingCreateHabitTool()).Handle(
@@ -4018,7 +4018,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(throwingTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var aiResponseWithTool = new AiResponse
         {
             ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
@@ -4285,12 +4285,12 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(createTool, subTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var aiResponseWithTools = new AiResponse
         {
             ToolCalls =
             [
-                new AiToolCall("create_sub_habit", "call_2", toolCallArgs),
+                new AiToolCall("create_sub_habit", "call_2", ParseArguments("""{"title":"Child"}""")),
                 new AiToolCall("create_habit", "call_1", toolCallArgs)
             ],
             ConversationContext = TestConversationContext
@@ -4320,13 +4320,13 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(createTool, subTool, assignTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var aiResponseWithTools = new AiResponse
         {
             ToolCalls =
             [
                 new AiToolCall("assign_tags", "call_3", toolCallArgs),
-                new AiToolCall("create_sub_habit", "call_2", toolCallArgs),
+                new AiToolCall("create_sub_habit", "call_2", ParseArguments("""{"title":"Child"}""")),
                 new AiToolCall("create_habit", "call_1", toolCallArgs)
             ],
             ConversationContext = TestConversationContext
@@ -4337,7 +4337,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
-        var command = new ProcessUserChatCommand(UserId, "Create parent, child, and tag");
+        var command = new ProcessUserChatCommand(UserId, "Create a habit with a child, and assign a tag");
         await handler.Handle(command, CancellationToken.None);
 
         executionOrder.Should().Equal("create_habit", "create_sub_habit", "assign_tags");
@@ -4545,7 +4545,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(firstReadOnly, secondReadOnly, firstWrite, secondWrite);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         SetupAiResponse(new AiResponse
         {
             ToolCalls =

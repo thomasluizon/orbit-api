@@ -296,11 +296,13 @@ public class AgentChatWriteHoldTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(true, true, AgentExecutionSurface.Chat)]
+    [InlineData(true, false, AgentExecutionSurface.Chat)]
+    [InlineData(false, true, AgentExecutionSurface.Chat)]
+    [InlineData(false, false, AgentExecutionSurface.Mcp)]
+    [InlineData(false, true, AgentExecutionSurface.Mcp)]
     public async Task ExecutePendingOperation_InitialPreview_BindsApprovalToTargetSet(
-        bool includePreview, bool addHabit)
+        bool includePreview, bool addHabit, AgentExecutionSurface surface)
     {
         var today = new DateOnly(2026, 9, 25);
         _dbContext.Habits.Add(
@@ -319,7 +321,7 @@ public class AgentChatWriteHoldTests : IDisposable
 
         var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             _userId, tool.Name, Parse("""{"filter":{"all":true}}"""),
-            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
+            surface, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
 
         held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
         var pending = held.PendingOperation!;
@@ -338,7 +340,7 @@ public class AgentChatWriteHoldTests : IDisposable
         _dbContext.ChangeTracker.Clear();
 
         var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
-        var shouldExecute = !addHabit;
+        var shouldExecute = surface == AgentExecutionSurface.Mcp || !addHabit;
         (await revisions.IsCurrentAsync(_userId, execution, CancellationToken.None))
             .Should().Be(shouldExecute);
         execution.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
@@ -525,6 +527,7 @@ public class AgentChatWriteHoldTests : IDisposable
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, operationId,
             Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
         response.PendingOperation.Should().BeNull();
+        response.Operation.PolicyReason.Should().Be("stale_preview");
         tool.Calls.Should().Be(0);
         _dbContext.PendingAgentOperations.Should().OnlyContain(item => item.ConsumedAtUtc != null);
     }

@@ -106,7 +106,7 @@ public partial class ProcessUserChatCommandHandler
 
         if (askCall is not null)
             orderedCalls.Add(askCall);
-        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, cancellationToken);
+        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken);
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         var hadToolFailure = false;
@@ -178,6 +178,7 @@ public partial class ProcessUserChatCommandHandler
         List<AiToolCall> orderedCalls,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
+        string? language,
         CancellationToken cancellationToken)
     {
         var readOnlyCalls = orderedCalls
@@ -189,7 +190,7 @@ public partial class ProcessUserChatCommandHandler
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
-        CoalesceTagCalls(resolvedWrites);
+        CoalesceTagCalls(resolvedWrites, executionResults);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -211,7 +212,9 @@ public partial class ProcessUserChatCommandHandler
             if (resolved is null || !executionResults.PreviewedCalls.Add(
                 Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText())))
             {
-                outcomesByCallId[call.Id] = ResolvedWithoutWrite(call, executionResults);
+                if (resolved is not null)
+                    executionResults.MergedCallIds.Add(call.Id);
+                outcomesByCallId[call.Id] = ResolvedWithoutWrite(call, executionResults, language);
                 continue;
             }
             var outcome = executionResults.AnsweredAtUtc is { } claim

@@ -133,13 +133,14 @@ public class PendingAgentOperationStore(
         return names;
     }
 
-    public void SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId)
+    public bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId)
     {
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
         var pending = dbContext.PendingAgentOperations.Where(item => item.UserId == userId
             && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc
             && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
             .ToList();
+        var matching = new List<PendingAgentOperationState>();
         foreach (var item in pending)
         {
             var args = ParseArguments(item.ArgumentsJson);
@@ -154,8 +155,13 @@ public class PendingAgentOperationStore(
                     .Select(habit => habit.TryGetProperty("title", out var name) ? name.ToString() : "")
                 : args.TryGetProperty("title", out var name) ? [name.ToString()] : Array.Empty<string>();
             if (titles.Any(name => HabitNameMatcher.Normalize(name) == HabitNameMatcher.Normalize(title)))
-                Cancel(userId, item.Id, item.OperationFingerprint);
+            {
+                if (habits.ValueKind == JsonValueKind.Array && habits.GetArrayLength() > 1)
+                    return false;
+                matching.Add(item);
+            }
         }
+        return matching.Count > 0 && matching.All(item => Cancel(userId, item.Id, item.OperationFingerprint));
     }
 
     public bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId)

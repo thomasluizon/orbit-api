@@ -46,7 +46,8 @@ public static class AgentArgumentPreview
         var entityId = target?.EntityId ?? Guid.Empty;
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
         var fields = arguments.EnumerateObject()
-            .OrderBy(property => property.Name, StringComparer.Ordinal)
+            .OrderBy(property => property.Name != "title")
+            .ThenBy(property => property.Name, StringComparer.Ordinal)
             .Select(property => new PendingOperationChange(
                 entityId,
                 entityName,

@@ -23,8 +23,8 @@ public static class HabitNameMatcher
         var normalized = Normalize(search);
         if (normalized.Length == 0)
             return false;
-        var candidate = Normalize(title);
-        return (" " + candidate + " ").Contains(" " + normalized + " ", StringComparison.Ordinal);
+        var titleWords = Normalize(title).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return normalized.Split(' ').All(word => titleWords.Any(candidate => candidate.StartsWith(word, StringComparison.Ordinal)));
     }
 
     public static Habit? Resolve(IEnumerable<Habit> habits, string name)
