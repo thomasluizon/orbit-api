@@ -19,35 +19,36 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. Use emoji to set a user-requested emoji or a sensible emoji for one habit. For bulk emoji changes, use bulk_update_habit_emojis instead of calling this repeatedly. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null. Set is_flexible to true for window-based tracking (e.g. '3x per week, any days').";
+        "Update an existing habit's properties. Null fields keep current values. Use clear_fields to remove values or clear frequency_unit for a one-time task. Use bulk_update_habit_emojis for multiple habits. Set is_flexible for window-based tracking.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.HabitClearFields),
             habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to update" },
             title = new { type = JsonSchemaTypes.String, description = "New title" },
             description = new { type = JsonSchemaTypes.String, description = "New description", nullable = true },
-            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the habit icon. Set to null to clear.", nullable = true },
+            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the habit icon. Use clear_fields to clear.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
-                description = "New recurrence unit. Set to null to convert to one-time task.",
+                description = "New recurrence unit. Clear frequency_unit via clear_fields for a one-time task.",
                 nullable = true,
                 @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "New frequency quantity" },
-            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "New repeat interval in weeks. Set to 1 for every week. Minimum 1." },
+            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks, minimum 1." },
             days = new
             {
                 type = JsonSchemaTypes.Array,
                 description = "New weekday schedule",
-                items = new { type = JsonSchemaTypes.String }
+                items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
             due_date = new { type = JsonSchemaTypes.String, description = "New due date (YYYY-MM-DD)" },
-            end_date = new { type = JsonSchemaTypes.String, description = "New end date (YYYY-MM-DD). Set to null to clear. Habit stops after this date.", nullable = true },
-            due_time = new { type = JsonSchemaTypes.String, description = "New due time (HH:mm). Set to null to clear.", nullable = true },
+            end_date = new { type = JsonSchemaTypes.String, description = "New end date (YYYY-MM-DD). Use clear_fields to clear. Habit stops after this date.", nullable = true },
+            due_time = new { type = JsonSchemaTypes.String, description = "New due time (HH:mm). Use clear_fields to clear.", nullable = true },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit" },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking. Cannot have days set." },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable or disable reminders" },
@@ -75,13 +76,13 @@ public class UpdateHabitTool(
             scheduled_reminders = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Absolute-time reminders for habits WITHOUT a due_time. Use INSTEAD of reminder_times when no due_time is set.",
+                description = "Absolute reminders when due_time is absent. Use instead of reminder_times.",
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                        when = new { type = JsonSchemaTypes.String, description = "Reminder day.", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
                         time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
                     },
                     required = new[] { "when", "time" }
@@ -93,6 +94,11 @@ public class UpdateHabitTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var (resolvedArgs, argumentError) = OptionalToolArguments.ResolveClears(args, OptionalToolArguments.HabitClearFields);
+        if (argumentError is not null)
+            return new ToolResult(false, Error: argumentError);
+        args = resolvedArgs;
+
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
 
@@ -113,6 +119,11 @@ public class UpdateHabitTool(
 
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var (resolvedArgs, argumentError) = OptionalToolArguments.ResolveClears(args, OptionalToolArguments.HabitClearFields);
+        if (argumentError is not null)
+            return Result.Failure(argumentError);
+        args = resolvedArgs;
+
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return Result.Failure("habit_id is required and must be a valid GUID.");
 
@@ -164,7 +175,7 @@ public class UpdateHabitTool(
     private sealed record UpdateToolState(Habit Habit, HabitUpdateParams Update);
 
     /// <summary>
-    /// Resolve each field: absent = keep existing, null = clear, value = update.
+    /// Resolve prepared fields after optional nulls and explicit clear_fields are separated.
     /// Extracted to reduce ExecuteAsync cognitive complexity.
     /// </summary>
     private static HabitUpdateParams ResolveUpdateParams(JsonElement args, Habit habit, DateOnly today)

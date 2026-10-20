@@ -22,16 +22,17 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
             updates = new
             {
                 type = JsonSchemaTypes.Object,
-                description = "Fields to apply to every matching habit. Omitted fields stay unchanged.",
+                description = "Fields to apply to every matching habit. Null fields stay unchanged; clear_fields removes values.",
                 properties = new
                 {
+                    clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.BulkHabitClearFields),
                     title = new { type = JsonSchemaTypes.String },
                     description = new { type = JsonSchemaTypes.String, nullable = true },
                     emoji = new { type = JsonSchemaTypes.String, nullable = true },
                     frequency_unit = new { type = JsonSchemaTypes.String, nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
                     frequency_quantity = new { type = JsonSchemaTypes.Integer, nullable = true },
                     interval_weeks = new { type = JsonSchemaTypes.Integer, nullable = true },
-                    days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
+                    days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
                     due_date = new { type = JsonSchemaTypes.String },
                     end_date = new { type = JsonSchemaTypes.String, nullable = true },
                     due_time = new { type = JsonSchemaTypes.String, nullable = true },

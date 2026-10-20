@@ -18,7 +18,7 @@ public class QueryGoalsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read current-turn facts for goals: listings, progress, status, deadlines, descriptions, linked habits, and filtered searches by text or status. Call this before answering goal questions; prompt indexes alone do not ground the reply.";
+        "Read goals, progress, status, deadlines, descriptions and linked habits with filters. Call before answering goal questions; prompt indexes do not ground replies.";
 
     public object GetParameterSchema() => new
     {

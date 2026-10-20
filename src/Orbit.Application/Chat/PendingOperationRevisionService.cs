@@ -230,7 +230,7 @@ public sealed class PendingOperationRevisionService(
             root["action"] = "delete_selected";
             return true;
         }
-        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits);
+        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits, operationId);
     }
 
     private static bool BuildCalendarArguments(JsonObject root,
@@ -302,7 +302,7 @@ public sealed class PendingOperationRevisionService(
             var previousUpdates = previous?.OfType<JsonObject>().FirstOrDefault(candidate =>
                 candidate["habit_id"]?.ToString() == item.ItemId)?["updates"] as JsonObject;
             var copy = (JsonObject)(previousUpdates ?? updates).DeepClone();
-            if (!ApplyEdits(copy, item.Edits))
+            if (!ApplyEdits(copy, item.Edits, "bulk_update_habits"))
                 return false;
             items.Add(new JsonObject
             {
@@ -381,13 +381,26 @@ public sealed class PendingOperationRevisionService(
         return true;
     }
 
-    private static bool ApplyEdits(JsonObject target, JsonElement? edits)
+    private static bool ApplyEdits(JsonObject target, JsonElement? edits, string? operationId = null)
     {
         if (edits is not { ValueKind: JsonValueKind.Object } fields)
             return true;
         foreach (var field in fields.EnumerateObject())
+        {
+            if (OptionalToolArguments.ClearableFields(operationId ?? string.Empty).Contains(field.Name))
+                ReviseClearField(target, field);
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());
+        }
         return true;
+    }
+
+    private static void ReviseClearField(JsonObject target, JsonProperty field)
+    {
+        var clears = target["clear_fields"] as JsonArray ?? [];
+        for (var index = clears.Count - 1; index >= 0; index--)
+            if (clears[index]?.GetValue<string>() == field.Name) clears.RemoveAt(index);
+        if (field.Value.ValueKind == JsonValueKind.Null) clears.Add(field.Name);
+        target["clear_fields"] = clears;
     }
 
     private static PendingOperationRevisionResult Failure(string error) =>

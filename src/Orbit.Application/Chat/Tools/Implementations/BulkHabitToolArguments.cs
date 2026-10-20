@@ -42,7 +42,7 @@ internal static class BulkHabitToolArguments
 
     public static (BulkHabitFilter? Filter, string? Error) ParseEmojiFilter(JsonElement args)
     {
-        if (args.TryGetProperty("filter", out var filterElement))
+        if (args.TryGetProperty("filter", out var filterElement) && filterElement.ValueKind != JsonValueKind.Null)
         {
             if (filterElement.ValueKind != JsonValueKind.Object)
                 return (null, "filter must be an object.");
@@ -51,7 +51,7 @@ internal static class BulkHabitToolArguments
         }
 
         var ids = new List<Guid>();
-        if (args.TryGetProperty("habit_ids", out var idsElement))
+        if (args.TryGetProperty("habit_ids", out var idsElement) && idsElement.ValueKind != JsonValueKind.Null)
         {
             if (idsElement.ValueKind != JsonValueKind.Array || idsElement.GetArrayLength() == 0)
                 return (null, "habit_ids must be omitted or provided as a non-empty array of valid habit IDs.");
@@ -114,6 +114,11 @@ internal static class BulkHabitToolArguments
         if (!args.TryGetProperty("updates", out var updates) || updates.ValueKind != JsonValueKind.Object)
             return (null, "updates is required and must be an object.");
 
+        var (resolvedUpdates, argumentError) = OptionalToolArguments.ResolveClears(updates,
+            OptionalToolArguments.BulkHabitClearFields);
+        if (argumentError is not null)
+            return (null, argumentError);
+        updates = resolvedUpdates;
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
@@ -173,12 +178,15 @@ internal static class BulkHabitToolArguments
     /// weekday name and the date or time format that the habit writes expect. Fields that are
     /// not habit fields are left to their tool.
     /// </summary>
-    public static string? CheckHabitFields(JsonElement fields) =>
-        ValidateUpdateKinds(fields)
+    public static string? CheckHabitFields(JsonElement fields)
+    {
+        fields = OptionalToolArguments.OmitNulls(fields);
+        return ValidateUpdateKinds(fields)
             ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
             ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
             ?? ParseNullableTime(fields, "due_time").Error
             ?? ParseFrequency(fields).Error;
+    }
 
     public static string? CheckCreateHabitFields(JsonElement fields) =>
         CheckHabitFields(fields) ?? ParseNullableTime(fields, "due_end_time").Error;
@@ -192,7 +200,7 @@ internal static class BulkHabitToolArguments
             all = new { type = JsonSchemaTypes.Boolean, description = "Select the complete matching set." },
             habit_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
             tag = new { type = JsonSchemaTypes.String, description = "Exact tag name, case-insensitive." },
-            search = new { type = JsonSchemaTypes.String, description = "Search titles by word prefixes, ignoring case and accents. Every search word must start a title word; word order does not matter. Descriptions are not searched." },
+            search = new { type = JsonSchemaTypes.String, description = "Match every search word to a title word prefix, ignoring case, accents and order. Excludes descriptions." },
             is_completed = new { type = JsonSchemaTypes.Boolean, description = "Select completed habits when true or active habits when false. Active habits are the default." },
             is_general = new { type = JsonSchemaTypes.Boolean },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean },
@@ -202,6 +210,7 @@ internal static class BulkHabitToolArguments
 
     private static (BulkHabitFilter? Filter, string? Error) ParseFilter(JsonElement filter)
     {
+        filter = OptionalToolArguments.OmitNulls(filter);
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "all", "habit_ids", "tag", "search", "is_completed", "is_general", "is_bad_habit", "frequency"
@@ -302,7 +311,7 @@ internal static class BulkHabitToolArguments
     {
         if (!element.TryGetProperty("frequency_unit", out var property))
             return (false, null, null);
-        if (property.ValueKind == JsonValueKind.Null)
+        if (property.ValueKind == JsonValueKind.Null || property.ValueKind == JsonValueKind.String && property.GetString() == "OneTime")
             return (true, null, null);
         if (property.ValueKind != JsonValueKind.String
             || !Enum.TryParse<FrequencyUnit>(property.GetString(), true, out var value))

@@ -10,7 +10,7 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read detailed metrics for a single habit: current and longest streak, completion rate, and total completions. Use this when the user asks how they are doing with one specific habit.";
+        "Read one habit's metrics: current and longest streak, completion rate and total completions.";
 
     public object GetParameterSchema() => new
     {

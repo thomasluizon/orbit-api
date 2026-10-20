@@ -11,7 +11,7 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Generate the user's AI retrospective over a period (week, month, quarter, semester, or year). Use this when the user asks to look back on their habits over a span of time, e.g. \"how did last month go?\". Default period is week.";
+        "Generate an AI retrospective for a period. Defaults to week.";
 
     public object GetParameterSchema() => new
     {

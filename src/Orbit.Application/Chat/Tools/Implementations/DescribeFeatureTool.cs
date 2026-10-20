@@ -9,7 +9,7 @@ public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Return the authoritative explanation of how an Orbit feature works (streaks, freezes, frequencies, gamification/XP/levels, notifications, free-vs-pro paygate, schedule/overdue math). Call this before explaining any of these mechanics so the answer matches the app's real behavior instead of guessing.";
+        "Read the authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule/overdue math.";
 
     public object GetParameterSchema() => new
     {

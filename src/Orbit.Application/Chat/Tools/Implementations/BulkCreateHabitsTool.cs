@@ -46,6 +46,7 @@ public class BulkCreateHabitsTool(
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
+        args = OptionalToolArguments.OmitNulls(args);
         if (!args.TryGetProperty("habits", out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
 
@@ -155,7 +156,7 @@ public class BulkCreateHabitsTool(
             ["frequency_unit"] = new { type = JsonSchemaTypes.String, description = "Recurrence unit. Omit for one-time tasks.", nullable = true, @enum = JsonSchemaTypes.FrequencyUnitEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
-            ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String } },
+            ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
             ["end_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date.", nullable = true },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },

@@ -15,10 +15,10 @@ public sealed class BulkSkipHabitsTool(
     public string Name => "bulk_skip_habits";
 
     public string Description =>
-        "Skip multiple habits from the complete server-side set matching a filter in one operation. Use only for habits the user explicitly described skipping. Reports applied, matched, skipped, and partial counts.";
+        "Skip all server-side matches in one operation, only as requested. Reports applied, matched, skipped and partial counts.";
 
     public object GetParameterSchema() => BulkHabitToolArguments.ActionFilterSchema(
-        "Legacy array of habit IDs to skip.",
+        "Habit IDs to skip instead of filter.",
         "Date to skip in YYYY-MM-DD format. Defaults to today.");
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)

@@ -15,7 +15,7 @@ public static class AgentArgumentSchema
         TryGetField(schema, field, out _);
 
     public static bool Accepts(JsonElement schema, string field, JsonElement value) =>
-        TryGetField(schema, field, out var declared) && AcceptsValue(declared, field, value);
+        TryGetField(schema, field, out var declared) && AcceptsValue(declared, field, value, IsOptional(schema, field));
 
     public static bool IsDateField(string field) =>
         field is "date" or "deadline" || field.EndsWith("_date", StringComparison.Ordinal);
@@ -33,10 +33,14 @@ public static class AgentArgumentSchema
             && declared.ValueKind == JsonValueKind.Object;
     }
 
-    private static bool AcceptsValue(JsonElement schema, string field, JsonElement value)
+    private static bool IsOptional(JsonElement schema, string field) =>
+        !schema.TryGetProperty("required", out var required)
+        || !required.EnumerateArray().Any(name => name.GetString() == field);
+
+    private static bool AcceptsValue(JsonElement schema, string field, JsonElement value, bool optional = false)
     {
         if (value.ValueKind == JsonValueKind.Null)
-            return schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True;
+            return optional || (schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True);
 
         if (schema.TryGetProperty("enum", out var options)
             && !options.EnumerateArray().Any(option => JsonElement.DeepEquals(option, value)))
@@ -70,8 +74,7 @@ public static class AgentArgumentSchema
             return false;
 
         return value.EnumerateObject().All(property =>
-            TryGetField(schema, property.Name, out var declared)
-            && AcceptsValue(declared, property.Name, property.Value));
+            Accepts(schema, property.Name, property.Value));
     }
 
     private static bool HasFormat(string field, string value)

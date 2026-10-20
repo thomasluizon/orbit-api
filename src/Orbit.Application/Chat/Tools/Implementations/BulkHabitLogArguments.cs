@@ -14,6 +14,7 @@ internal static class BulkHabitLogArguments
         IGenericRepository<Habit> habits, IUserDateService dates, Guid userId, CancellationToken ct,
         IReadOnlyList<Habit>? loadedHabits = null)
     {
+        arguments = OptionalToolArguments.OmitNulls(arguments);
         if (arguments.TryGetProperty("revised_items", out _))
         {
             var (_, error) = BulkHabitToolArguments.ParseRevisedDatedItems(arguments);

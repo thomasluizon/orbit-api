@@ -22,6 +22,30 @@ public class UpdateGoalToolTests
         _tool = new UpdateGoalTool(_goalRepository, _unitOfWork);
     }
 
+    [Theory]
+    [InlineData("title")]
+    [InlineData("description")]
+    [InlineData("target_value")]
+    [InlineData("unit")]
+    [InlineData("deadline")]
+    [InlineData("clear_fields")]
+    public async Task OptionalNull_PreservesGoalLikeAbsent(string field)
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "Read", 10, "books", "Keep", new DateOnly(2027, 1, 1))).Value;
+        _goalRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
+            cancellationToken: Arg.Any<CancellationToken>()).Returns(Task.FromResult<Goal?>(goal));
+        var absent = await Execute($$"""{"goal_id":"{{goal.Id}}"}""");
+        var explicitNull = await Execute($$"""{"goal_id":"{{goal.Id}}","{{field}}":null}""");
+        absent.Success.Should().BeTrue();
+        explicitNull.Success.Should().BeTrue();
+        goal.Title.Should().Be("Read");
+        goal.Description.Should().Be("Keep");
+        goal.TargetValue.Should().Be(10);
+        goal.Unit.Should().Be("books");
+        goal.Deadline.Should().Be(new DateOnly(2027, 1, 1));
+    }
+
     [Fact]
     public async Task ExecuteAsync_UpdatesGoalFields()
     {

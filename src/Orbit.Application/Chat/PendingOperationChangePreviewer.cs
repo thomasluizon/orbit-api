@@ -36,6 +36,8 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        if (!arguments.TryGetProperty("revised_items", out _))
+            arguments = OptionalToolArguments.OmitNulls(arguments);
         if (HasLogDates(operationId, arguments))
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,
@@ -55,8 +57,7 @@ public sealed class PendingOperationChangePreviewer(
         }
 
         if (operationId == "bulk_update_habit_emojis"
-            && (JsonArgumentParser.GetOptionalBool(arguments, "infer_from_title")
-                ?? !JsonArgumentParser.PropertyExists(arguments, "emoji")))
+            && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer)
             return null;
 
         if (operationId == "delete_habit")

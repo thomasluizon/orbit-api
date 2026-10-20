@@ -83,6 +83,7 @@ public sealed class AskTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitNulls(args);
         AskToolArguments? input;
         try
         {

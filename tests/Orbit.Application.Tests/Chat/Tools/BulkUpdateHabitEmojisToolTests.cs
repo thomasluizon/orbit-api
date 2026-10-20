@@ -121,7 +121,7 @@ public class BulkUpdateHabitEmojisToolTests
         var gym = CreateHabit("Gym", emoji: "🏋️");
         SetupHabits(gym);
 
-        var result = await Execute($$$"""{"habit_ids": ["{{{gym.Id}}}"], "emoji": null, "infer_from_title": false}""");
+        var result = await Execute($$$"""{"habit_ids": ["{{{gym.Id}}}"], "emoji_mode": "clear", "infer_from_title": false}""");
 
         result.Success.Should().BeTrue();
         gym.Emoji.Should().BeNull();

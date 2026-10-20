@@ -35,6 +35,24 @@ public class UpdateHabitToolTests
         _tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(UpdateHabitTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_PreservesHabitLikeAbsent(string field)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+            DueDate: Today, Description: "Keep", Emoji: "📖", Days: [DayOfWeek.Friday],
+            DueTime: new TimeOnly(8, 0), EndDate: Today.AddDays(10), ReminderEnabled: true,
+            ReminderTimes: [15], ChecklistItems: [new ChecklistItem("Page", true)])).Value;
+        SetupHabitFound(habit);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { habit });
+        (await Execute($$"""{"habit_id":"{{habit.Id}}"}""")).Success.Should().BeTrue();
+        var before = OptionalParameterCases.HabitState(habit);
+        var args = JsonSerializer.Deserialize<JsonElement>($$"""{"habit_id":"{{habit.Id}}","{{field}}":null}""");
+        (await _tool.CheckArgumentsAsync(args, UserId, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        (await _tool.ExecuteAsync(args, UserId, CancellationToken.None)).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(habit).Should().Be(before);
+    }
+
     [Fact]
     public async Task SuccessfulUpdate_ReturnsSuccess()
     {
@@ -57,7 +75,7 @@ public class UpdateHabitToolTests
             .Returns(Result.PayGateFailure("Habit limit reached"));
         var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
 
-        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
+        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["end_date"]}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
@@ -76,7 +94,7 @@ public class UpdateHabitToolTests
             .Returns(Result.Success());
         var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
 
-        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
+        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["end_date"]}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
@@ -150,7 +168,7 @@ public class UpdateHabitToolTests
     [InlineData("{}")]
     [InlineData("""{"emoji":"📚"}""")]
     [InlineData("""{"due_date":"2026-06-15"}""")]
-    [InlineData("""{"due_time":null}""")]
+    [InlineData("""{"clear_fields": ["due_time"]}""")]
     public async Task PartialUpdate_KeepsDueEndTime(string updates)
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -232,7 +250,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabit("Task", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "frequency_unit": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["frequency_unit"]}""");
 
         result.Success.Should().BeTrue();
         habit.FrequencyUnit.Should().BeNull();
@@ -284,7 +302,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabitWithTime("Meditate", FrequencyUnit.Day, 1, new TimeOnly(8, 0));
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["due_time"]}""");
 
         result.Success.Should().BeTrue();
         habit.DueTime.Should().BeNull();
@@ -361,7 +379,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabitWithEmoji("Gym", "💪");
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "emoji": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["emoji"]}""");
 
         result.Success.Should().BeTrue();
         habit.Emoji.Should().BeNull();
@@ -385,7 +403,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "description": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["description"]}""");
 
         result.Success.Should().BeTrue();
         habit.Description.Should().BeNull();
@@ -433,7 +451,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabit("Challenge", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["end_date"]}""");
 
         result.Success.Should().BeTrue();
         habit.EndDate.Should().BeNull();
@@ -560,7 +578,7 @@ public class UpdateHabitToolTests
         var habit = CreateHabitWithTimeAndReminderTimes("Standup", new TimeOnly(9, 0), 30);
         SetupHabitFound(habit);
 
-        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": null}""");
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "clear_fields": ["due_time"]}""");
 
         result.Success.Should().BeTrue();
         habit.DueTime.Should().BeNull();

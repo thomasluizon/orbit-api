@@ -12,33 +12,37 @@ public class UpdateGoalTool(
     public string Name => "update_goal";
 
     public string Description =>
-        "Update an existing goal's properties. Only include fields you want to change. Use this for renaming goals, editing descriptions, changing targets or units, and updating deadlines. To clear the deadline, set deadline to null.";
+        "Update an existing goal's properties. Null fields keep current values. Use clear_fields to remove descriptions or deadlines.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.GoalClearFields),
             goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to update." },
             title = new { type = JsonSchemaTypes.String, description = "New goal title.", nullable = true },
-            description = new { type = JsonSchemaTypes.String, description = "New description. Set to null to clear.", nullable = true },
+            description = new { type = JsonSchemaTypes.String, description = "New description. Use clear_fields to clear.", nullable = true },
             target_value = new { type = "number", description = "New numeric target value." },
             unit = new { type = JsonSchemaTypes.String, description = "New unit of measurement." },
-            deadline = new { type = JsonSchemaTypes.String, description = "New deadline in YYYY-MM-DD format. Set to null to clear.", nullable = true }
+            deadline = new { type = JsonSchemaTypes.String, description = "New deadline in YYYY-MM-DD format. Use clear_fields to clear.", nullable = true }
         },
         required = new[] { "goal_id" }
     };
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var (resolvedArgs, argumentError) = OptionalToolArguments.ResolveClears(args, OptionalToolArguments.GoalClearFields);
+        if (argumentError is not null)
+            return Orbit.Domain.Common.Result.Failure(argumentError);
+        args = resolvedArgs;
+
         if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
             return Orbit.Domain.Common.Result.Failure("Invalid goal_id.");
         var goals = await goalRepository.FindAsync(g => g.Id == goalId && g.UserId == userId, ct);
         var goal = goals.FirstOrDefault();
         if (goal is null)
             return Orbit.Domain.Common.Result.Failure("Goal not found.");
-        if (args.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.Null)
-            return Orbit.Domain.Common.Result.Failure("title cannot be cleared.");
         var command = new Orbit.Application.Goals.Commands.UpdateGoalCommand(userId, goalId,
             ResolveTitle(args, goal), ResolveDescription(args, goal), ResolveTargetValue(args, goal),
             ResolveUnit(args, goal), ResolveDeadline(args, goal));
@@ -51,6 +55,11 @@ public class UpdateGoalTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var (resolvedArgs, argumentError) = OptionalToolArguments.ResolveClears(args, OptionalToolArguments.GoalClearFields);
+        if (argumentError is not null)
+            return new ToolResult(false, Error: argumentError);
+        args = resolvedArgs;
+
         if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
             return GoalToolHelpers.InvalidGoalIdResult();
 

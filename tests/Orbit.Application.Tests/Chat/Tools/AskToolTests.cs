@@ -32,6 +32,27 @@ public class AskToolTests
     }
 
     [Theory]
+    [InlineData("title")]
+    [InlineData("multiSelect")]
+    [InlineData("allowFreeText")]
+    [InlineData("action")]
+    [InlineData("items")]
+    public async Task OptionalNull_ChoiceBehavesLikeAbsent(string field)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["form"] = "choice",
+            ["question"] = "When?",
+            ["options"] = new[] { new { id = "a", label = "Morning" }, new { id = "b", label = "Evening" } }
+        };
+        var absent = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(body), UserId, default);
+        body[field] = null;
+        var explicitNull = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(body), UserId, default);
+        absent.Success.Should().BeTrue();
+        explicitNull.Should().BeEquivalentTo(absent);
+    }
+
+    [Theory]
     [InlineData(1, false)]
     [InlineData(2, true)]
     [InlineData(4, true)]

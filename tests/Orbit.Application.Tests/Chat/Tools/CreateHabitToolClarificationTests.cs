@@ -46,9 +46,12 @@ public class CreateHabitToolClarificationTests
     [Theory]
     [InlineData("My morning habit")]
     [InlineData("Meditation habit")]
-    [InlineData("MORNING HABIT")]    [InlineData("Daily Habit Routine")]
-    [InlineData("Minha rotina matinal")]    [InlineData("Rotina de leitura")]
-    [InlineData("Meu hábito de meditar")]    [InlineData("Hábito de exercício")]
+    [InlineData("MORNING HABIT")]
+    [InlineData("Daily Habit Routine")]
+    [InlineData("Minha rotina matinal")]
+    [InlineData("Rotina de leitura")]
+    [InlineData("Meu hábito de meditar")]
+    [InlineData("Hábito de exercício")]
     public async Task HabitFlavoredTitle_NoFrequency_ReturnsClarification(string title)
     {
         var result = await Execute($$"""{"title": "{{title}}"}""");
@@ -70,7 +73,7 @@ public class CreateHabitToolClarificationTests
             && a.Value.Contains("\"frequency_quantity\":3")
             && a.Value.Contains("\"is_flexible\":true"));
         payload.QuickActions.Should().Contain(a =>
-            a.Value.Contains("\"frequency_unit\":null"));
+            a.Value.Contains("\"frequency_unit\":\"OneTime\""));
 
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -99,9 +102,9 @@ public class CreateHabitToolClarificationTests
     }
 
     [Fact]
-    public async Task HabitFlavoredTitle_WithExplicitNullFrequency_CreatesOneTimeTask()
+    public async Task HabitFlavoredTitle_WithExplicitOneTimeFrequency_CreatesOneTimeTask()
     {
-        var result = await Execute("""{"title": "Habit thing", "frequency_unit": null}""");
+        var result = await Execute("""{"title": "Habit thing", "frequency_unit": "OneTime"}""");
 
         result.Success.Should().BeTrue();
         result.Payload.Should().BeNull();

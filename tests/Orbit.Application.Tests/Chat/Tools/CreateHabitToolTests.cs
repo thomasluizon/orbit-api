@@ -42,6 +42,53 @@ public partial class CreateHabitToolTests
             });
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateHabitTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_CreatesSameHabitAsAbsent(string field)
+    {
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        (await Execute("""{"title":"Read","due_date":"2027-01-01"}""")).Success.Should().BeTrue();
+        var baseline = OptionalParameterCases.HabitState(saved.Single());
+        saved.Clear();
+        var body = new Dictionary<string, object?> { ["title"] = "Read", ["due_date"] = "2027-01-01", [field] = null };
+        if (field == "due_date") body.Remove("due_date");
+        if (field == "due_date")
+        {
+            saved.Clear();
+            (await Execute("""{"title":"Read"}""")).Success.Should().BeTrue();
+            baseline = OptionalParameterCases.HabitState(saved.Single());
+            saved.Clear();
+            body[field] = null;
+        }
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(saved.Single()).Should().Be(baseline);
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(CreateHabitTool), "sub_habits.items", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_ChildInheritsLikeAbsent(string field)
+    {
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        var child = new Dictionary<string, object?> { ["title"] = "Child" };
+        object Body() => new
+        {
+            title = "Parent",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            days = new[] { "Monday" },
+            interval_weeks = 2,
+            sub_habits = new[] { child }
+        };
+        (await Execute(JsonSerializer.Serialize(Body()))).Success.Should().BeTrue();
+        var baseline = OptionalParameterCases.HabitState(saved.Single(habit => habit.ParentHabitId is not null));
+        saved.Clear();
+        child[field] = null;
+        (await Execute(JsonSerializer.Serialize(Body()))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(saved.Single(habit => habit.ParentHabitId is not null)).Should().Be(baseline);
+    }
+
     [Fact]
     public async Task SuccessfulCreation_ReturnsSuccessWithTitleAndId()
     {

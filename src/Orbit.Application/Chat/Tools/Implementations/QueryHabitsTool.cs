@@ -20,14 +20,14 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read current-turn facts for habits: listings, schedules, metrics, streaks, completion percentages, descriptions, checklist items, and filtered searches by text, date, frequency, tag, or status. Call this before answering habit listing or schedule questions; prompt indexes alone do not ground the reply.";
+        "Read habits with schedule, metric, description and checklist filters. Call before answering habit or schedule questions; prompt indexes do not ground replies.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            search = new { type = JsonSchemaTypes.String, description = "Search titles by word prefixes, ignoring case and accents. Every search word must start a title word; word order does not matter." },
+            search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
             date = new { type = JsonSchemaTypes.String, description = "Return the canonical schedule for this date (YYYY-MM-DD), including entries already done on that date. Use 'today' for the user's current date. Omit is_completed for the full schedule." },
             include_overdue = new { type = JsonSchemaTypes.Boolean, description = "When filtering by date, also include habits overdue before that date. Default: true when date is 'today', false otherwise." },
             is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter by general/timeless habits (true) or non-general habits (false). Omit to include both." },
@@ -139,7 +139,7 @@ public class QueryHabitsTool(
             date = today;
 
         var includeOverdue = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase);
-        if (args.TryGetProperty("include_overdue", out var overdueEl))
+        if (args.TryGetProperty("include_overdue", out var overdueEl) && overdueEl.ValueKind != JsonValueKind.Null)
             includeOverdue = overdueEl.ValueKind == JsonValueKind.True;
 
         return (date, includeOverdue);

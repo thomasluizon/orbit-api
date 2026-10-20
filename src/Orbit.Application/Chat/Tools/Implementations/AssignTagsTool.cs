@@ -14,7 +14,7 @@ public class AssignTagsTool(
     public string Name => "assign_tags";
 
     public string Description =>
-        "Assign tags to a habit, replacing all existing tags. Provide either tag_names (existing names are reused, new names are auto-created) OR tag_ids (existing tag IDs, no auto-create). Only use when the user explicitly asks to tag a habit. WARNING: This REPLACES all existing tags. To add tags, include the existing tags in the list.";
+        "Replace a habit's tags only when requested. Use tag_names to reuse or create tags, or tag_ids for existing tags. Include current tags when adding; an empty list removes all tags.";
 
     public int Order => 2;
 
@@ -43,6 +43,7 @@ public class AssignTagsTool(
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitNulls(args);
         if (args.TryGetProperty("habit_ids", out _))
         {
             var batch = SingleHabitArguments(args);
@@ -99,6 +100,7 @@ public class AssignTagsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitNulls(args);
         if (args.TryGetProperty("habit_ids", out _))
             return await AssignBatchAsync(args, userId, ct);
 

@@ -27,7 +27,7 @@ internal static class ChatToolArgumentCheck
                 ? PreservesListEntries(field, item) : !string.IsNullOrWhiteSpace(item.GetString()));
         if (field is "text" or "title" or "unit" && value.ValueKind == JsonValueKind.String)
             return !string.IsNullOrWhiteSpace(value.GetString());
-        return field != "is_read_only" || value.ValueKind != JsonValueKind.Null;
+        return true;
     }
 
     public static async Task<ToolResult> CheckCommandAsync(IMediator mediator, object command, CancellationToken ct)

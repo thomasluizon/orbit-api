@@ -24,7 +24,7 @@ public class CreateSubHabitTool(
             parent_habit_id = new { type = JsonSchemaTypes.String, description = "ID of the existing parent habit" },
             title = new { type = JsonSchemaTypes.String, description = "Name of the new sub-habit" },
             description = new { type = JsonSchemaTypes.String, description = "Optional description" },
-            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the sub-habit icon. Pick a relevant emoji when clear, or use the exact emoji requested by the user.", nullable = true },
+            emoji = new { type = JsonSchemaTypes.String, description = "Requested or relevant icon emoji.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
@@ -37,7 +37,7 @@ public class CreateSubHabitTool(
             {
                 type = JsonSchemaTypes.Array,
                 description = "Specific weekdays, only when frequency_quantity is 1",
-                items = new { type = JsonSchemaTypes.String }
+                items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
             },
             due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
             due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time" },
@@ -56,7 +56,7 @@ public class CreateSubHabitTool(
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                        when = new { type = JsonSchemaTypes.String, description = "Reminder day.", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
                         time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
                     },
                     required = new[] { "when", "time" }

@@ -16,7 +16,7 @@ public sealed class BulkLogHabitsTool(
     public string Name => "bulk_log_habits";
 
     public string Description =>
-        "Log multiple habits from the complete server-side set matching a filter in one operation. Use only for habits the user explicitly described completing. Reports applied, matched, skipped, and partial counts.";
+        "Log all server-side matches in one operation, only as requested. Reports applied, matched, skipped and partial counts.";
 
     public object GetParameterSchema()
     {
@@ -35,6 +35,7 @@ public sealed class BulkLogHabitsTool(
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitNulls(args);
         if (args.TryGetProperty("dates", out _))
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(args, habitRepository, userDateService, userId, ct);
@@ -72,6 +73,7 @@ public sealed class BulkLogHabitsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitNulls(args);
         if (args.TryGetProperty("dates", out _))
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(args, habitRepository, userDateService, userId, ct);

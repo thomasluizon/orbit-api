@@ -3,7 +3,6 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Orbit.Application.Common;
 using Microsoft.Extensions.Logging;
 using OpenAI.Responses;
@@ -322,7 +321,6 @@ public sealed partial class AiIntentService(
     private static ResponseTool? ConvertToSdkTool(object declaration)
     {
         var json = JsonSerializer.Serialize(declaration, SerializeOptions);
-        json = NormalizeSchemaTypes(json);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -334,13 +332,10 @@ public sealed partial class AiIntentService(
 
         BinaryData? parameters = null;
         if (root.TryGetProperty("parameters", out var paramsEl))
-            parameters = BinaryData.FromString(paramsEl.GetRawText());
+            parameters = StrictToolSchema.Create(paramsEl.GetRawText());
 
-        return ResponseTool.CreateFunctionTool(name, parameters, strictModeEnabled: false, functionDescription: description);
+        return ResponseTool.CreateFunctionTool(name, parameters, strictModeEnabled: true, functionDescription: description);
     }
-
-    [GeneratedRegex(@"""type""\s*:\s*""(OBJECT|STRING|ARRAY|NUMBER|BOOLEAN|INTEGER)""")]
-    private static partial Regex SchemaTypeRegex();
 
     internal static string? BuildHistoryTranscript(
         IReadOnlyList<ChatHistoryMessage> history,
@@ -391,12 +386,6 @@ public sealed partial class AiIntentService(
 
         retainedEntries.Reverse();
         return string.Concat(prefix, string.Concat(retainedEntries), suffix);
-    }
-
-    private static string NormalizeSchemaTypes(string json)
-    {
-        return SchemaTypeRegex().Replace(json,
-            m => $@"""type"":""{m.Groups[1].Value.ToLowerInvariant()}""");
     }
 
     private void LogChatUsage(ResponseTokenUsage? usage, string phase)

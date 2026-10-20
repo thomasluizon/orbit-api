@@ -13,7 +13,7 @@ public sealed class BulkDeleteHabitsTool(
     public string Name => "bulk_delete_habits";
 
     public string Description =>
-        "Permanently delete the complete server-side set of habits matching a filter in one operation. Only delete habits the user explicitly asked to remove. Reports applied, matched, skipped, and partial counts.";
+        "Permanently delete all server-side matches in one operation, only as requested. Reports applied, matched, skipped and partial counts.";
 
     public object GetParameterSchema() => new
     {
@@ -24,7 +24,7 @@ public sealed class BulkDeleteHabitsTool(
             habit_ids = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Legacy array of habit IDs to delete.",
+                description = "Habit IDs to delete instead of filter.",
                 items = new { type = JsonSchemaTypes.String }
             }
         },

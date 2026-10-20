@@ -2,11 +2,55 @@ using System.Text.Json;
 using FluentAssertions;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Entities;
+using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
 public sealed class BulkHabitToolArgumentsTests
 {
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitsTool), "updates", MemberType = typeof(OptionalParameterCases))]
+    public void OptionalNull_BulkUpdatesPreserveDomainLikeAbsent(string field)
+    {
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Keep", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2027, 1, 1), Description: "Keep description", Emoji: "📖",
+            Days: [DayOfWeek.Monday], DueTime: new TimeOnly(8, 0), EndDate: new DateOnly(2027, 2, 1))).Value;
+        var absent = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{}}"""));
+        var explicitNull = BulkHabitToolArguments.ParseChanges(Parse("{\"updates\":{\"" + field + "\":null}}"));
+        absent.Error.Should().BeNull();
+        explicitNull.Error.Should().BeNull();
+        explicitNull.Changes.Should().BeEquivalentTo(absent.Changes);
+        var before = OptionalParameterCases.HabitState(habit);
+        habit.Update(BulkUpdateHabitsCommandHandler.ResolveUpdate(habit, explicitNull.Changes!, new DateOnly(2027, 1, 1)))
+            .IsSuccess.Should().BeTrue();
+        OptionalParameterCases.HabitState(habit).Should().Be(before);
+    }
+
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitsTool), "filter", MemberType = typeof(OptionalParameterCases))]
+    public void OptionalNull_FilterSelectsSameHabitsAsAbsent(string field)
+    {
+        var absent = BulkHabitToolArguments.ParseRequiredFilter(Parse("""{"filter":{"all":true}}"""));
+        var withNull = field == "all" ? "{\"filter\":{\"all\":null,\"tag\":\"Work\"}}"
+            : "{\"filter\":{\"all\":true,\"" + field + "\":null}}";
+        if (field == "all")
+            absent = BulkHabitToolArguments.ParseRequiredFilter(Parse("""{"filter":{"tag":"Work"}}"""));
+        var explicitNull = BulkHabitToolArguments.ParseRequiredFilter(Parse(withNull));
+        explicitNull.Error.Should().BeNull();
+        explicitNull.Filter.Should().BeEquivalentTo(absent.Filter);
+    }
+
+    [Fact]
+    public void ParseActionFilter_NullFilterWithHabitIds_EqualsAbsentFilter()
+    {
+        const string ids = "[\"11111111-1111-1111-1111-111111111111\"]";
+        var absent = BulkHabitToolArguments.ParseActionFilter(Parse("{\"habit_ids\":" + ids + "}"));
+        var explicitNull = BulkHabitToolArguments.ParseActionFilter(Parse("{\"habit_ids\":" + ids + ",\"filter\":null}"));
+        explicitNull.Error.Should().BeNull();
+        explicitNull.Filter.Should().BeEquivalentTo(absent.Filter);
+    }
+
     [Fact]
     public void CheckHabitFields_DoesNotValidateUnsupportedDeadline()
     {
@@ -21,15 +65,15 @@ public sealed class BulkHabitToolArgumentsTests
             {
               "updates": {
                 "title": "Updated",
-                "description": null,
+                "clear_fields": ["description", "end_date", "due_time"],
                 "emoji": "✅",
                 "frequency_unit": "Day",
                 "frequency_quantity": 1,
                 "interval_weeks": 2,
                 "days": ["Monday"],
                 "due_date": "2026-09-12",
-                "end_date": null,
-                "due_time": null,
+
+
                 "is_bad_habit": true,
                 "is_flexible": false,
                 "reminder_enabled": true,
@@ -76,13 +120,11 @@ public sealed class BulkHabitToolArgumentsTests
     [InlineData("{\"updates\":{\"description\":true}}", "description must be a string or null")]
     [InlineData("{\"updates\":{\"frequency_quantity\":\"one\"}}", "frequency_quantity must be an integer or null")]
     [InlineData("{\"updates\":{\"interval_weeks\":1.5}}", "interval_weeks must be an integer or null")]
-    [InlineData("{\"updates\":{\"is_bad_habit\":null}}", "is_bad_habit must be a boolean")]
     [InlineData("{\"updates\":{\"days\":true}}", "days must be an array")]
     [InlineData("{\"updates\":{\"days\":[\"Funday\"]}}", "days must contain valid weekday names")]
     [InlineData("{\"updates\":{\"reminder_times\":[\"soon\"]}}", "reminder_times must contain only integers")]
     [InlineData("{\"updates\":{\"checklist_items\":[{}]}}", "checklist_items contains an invalid item")]
     [InlineData("{\"updates\":{\"scheduled_reminders\":[{\"when\":\"later\",\"time\":\"08:00\"}]}}", "scheduled_reminders contains an invalid item")]
-    [InlineData("{\"updates\":{\"due_date\":null}}", "due_date must be a date")]
     [InlineData("{\"updates\":{\"end_date\":\"tomorrow\"}}", "end_date must be a date")]
     [InlineData("{\"updates\":{\"due_time\":\"9am\"}}", "due_time must use HH:mm")]
     [InlineData("{\"updates\":{\"frequency_unit\":\"Hour\"}}", "frequency_unit must be")]
@@ -98,7 +140,7 @@ public sealed class BulkHabitToolArgumentsTests
     public void ParseChanges_MinimalAndTimedUpdates_PreserveOmittedAndParsedStates()
     {
         var (minimal, minimalError) = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{"title":"Only"}}"""));
-        var (timed, timedError) = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{"due_time":"09:30","frequency_unit":null}}"""));
+        var (timed, timedError) = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{"due_time":"09:30","clear_fields":["frequency_unit"]}}"""));
 
         minimalError.Should().BeNull();
         minimal!.HasDueDate.Should().BeFalse();
