@@ -38,6 +38,9 @@ public sealed partial class AiIntentService(
             ResponseItem.CreateSystemMessageItem(systemPrompt)
         };
 
+        if (!string.IsNullOrWhiteSpace(request.DynamicContext))
+            messages.Add(ResponseItem.CreateSystemMessageItem(request.DynamicContext));
+
         if (history is { Count: > 0 })
         {
             var historyTranscript = BuildHistoryTranscript(history, logger);
@@ -60,14 +63,14 @@ public sealed partial class AiIntentService(
         var usageUserId = userId == Guid.Empty ? (Guid?)null : userId;
         var options = aiClient.CreateOptions(maxOutputTokens: 8192, userId: usageUserId);
 
-        foreach (var decl in toolDeclarations)
-        {
-            var tool = ConvertToSdkTool(decl);
-            if (tool is not null)
-                options.Tools.Add(tool);
-        }
-
-        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken);
+        var activeTools = BuildToolCatalog(toolDeclarations);
+        foreach (var tool in activeTools.Values)
+            options.Tools.Add(tool);
+        var availableTools = BuildToolCatalog(request.AvailableToolDeclarations);
+        foreach (var (name, tool) in activeTools)
+            availableTools[name] = tool;
+        AddToolLoader(options, availableTools);
+        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken, availableTools);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
@@ -102,7 +105,8 @@ public sealed partial class AiIntentService(
             options,
             conversationContext.UserId,
             streamSink,
-            cancellationToken);
+            cancellationToken,
+            conversationContext.AvailableTools as IReadOnlyDictionary<string, ResponseTool>);
     }
 
     private void AddToolPayload(Dictionary<string, object> payload, AiToolCallResult result)
@@ -133,7 +137,9 @@ public sealed partial class AiIntentService(
         CreateResponseOptions options,
         Guid? userId,
         Func<AiStreamEvent, Task>? streamSink,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, ResponseTool>? availableTools = null,
+        int toolLoadRounds = 0)
     {
         using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
         cancellationToken = completionCancellation.Token;
@@ -153,7 +159,25 @@ public sealed partial class AiIntentService(
 
             if (round.ToolCalls.Count > 0)
             {
-                var toolCalls = ToAiToolCalls(round.ToolCalls);
+                var loaderCalls = round.ToolCalls.Where(call => call.FunctionName == ToolLoaderName).ToList();
+                if (loaderCalls.Count > 0)
+                {
+                    if (toolLoadRounds >= 2)
+                        throw new InvalidOperationException("AI exceeded the tool loading limit.");
+                    foreach (var call in loaderCalls)
+                        messages.Add(ResponseItem.CreateFunctionCallOutputItem(call.CallId,
+                            LoadRequestedTools(call.FunctionArguments, options, availableTools)));
+                }
+                var toolCalls = ToAiToolCalls(round.ToolCalls.Where(call => call.FunctionName != ToolLoaderName).ToList());
+                if (toolCalls.Count == 0)
+                {
+                    var loadedResult = await CallWithToolsAsync(messages, options, userId, streamSink,
+                        cancellationToken, availableTools, toolLoadRounds + 1);
+                    return loadedResult.IsFailure ? loadedResult : Result.Success(loadedResult.Value with
+                    {
+                        ReportedTokenCount = loadedResult.Value.ReportedTokenCount + round.ReportedTokenCount
+                    });
+                }
 
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
@@ -165,7 +189,8 @@ public sealed partial class AiIntentService(
                 {
                     Messages = messages,
                     Options = options,
-                    UserId = userId
+                    UserId = userId,
+                    AvailableTools = availableTools
                 };
                 return Result.Success(new AiResponse
                 {
@@ -371,7 +396,7 @@ public sealed partial class AiIntentService(
         var retainedEntries = new List<string>();
         var retainedCharacters = 0;
 
-        foreach (var entry in sanitizedEntries.TakeLast(AppConstants.MaxChatHistoryMessages).Reverse())
+        foreach (var entry in sanitizedEntries.TakeLast(AppConstants.MaxAiModelHistoryMessages).Reverse())
         {
             var line = $"{entry.Role!.ToUpperInvariant()}: {entry.Content}{Environment.NewLine}";
             if (retainedCharacters + line.Length > availableEntryCharacters)
@@ -497,4 +522,66 @@ public sealed partial class AiIntentService(
         int originalLength,
         int maxLength);
 
+    internal const string ToolLoaderName = "load_tools";
+
+    private static Dictionary<string, ResponseTool> BuildToolCatalog(IReadOnlyList<object> declarations)
+    {
+        var tools = new Dictionary<string, ResponseTool>(StringComparer.Ordinal);
+        foreach (var declaration in declarations)
+        {
+            var tool = ConvertToSdkTool(declaration);
+            if (tool is null)
+                continue;
+            using var document = JsonDocument.Parse(JsonSerializer.Serialize(declaration, SerializeOptions));
+            tools.Add(document.RootElement.GetProperty("name").GetString()!, tool);
+        }
+        return tools;
+    }
+
+    private static void AddToolLoader(CreateResponseOptions options, IReadOnlyDictionary<string, ResponseTool> catalog)
+    {
+        var hiddenTools = catalog.Where(pair => !options.Tools.Contains(pair.Value)).Select(pair => pair.Key)
+            .Order(StringComparer.Ordinal).ToArray();
+        if (hiddenTools.Length == 0)
+            return;
+
+        options.Tools.Add(ResponseTool.CreateFunctionTool(
+            ToolLoaderName,
+            BinaryData.FromObjectAsJson(new
+            {
+                type = "object",
+                properties = new
+                {
+                    tool_names = new { type = "array", items = new { type = "string", @enum = hiddenTools } }
+                },
+                required = new[] { "tool_names" },
+                additionalProperties = false
+            }),
+            strictModeEnabled: true,
+            functionDescription: "Load any missing Orbit tools by name before calling them. Loading only enables tools; it does not execute their operations. Load all needed tools together."));
+    }
+
+    private static string LoadRequestedTools(
+        BinaryData arguments,
+        CreateResponseOptions options,
+        IReadOnlyDictionary<string, ResponseTool>? catalog)
+    {
+        using var document = JsonDocument.Parse(arguments);
+        if (catalog is null || !document.RootElement.TryGetProperty("tool_names", out var names)
+            || names.ValueKind != JsonValueKind.Array)
+            return "{\"success\":false,\"error\":\"Choose tool names from the loader enum.\"}";
+
+        var requested = names.EnumerateArray().ToArray();
+        if (requested.Length == 0 || requested.Any(name => name.ValueKind != JsonValueKind.String
+            || !catalog.ContainsKey(name.GetString()!)))
+            return "{\"success\":false,\"error\":\"Choose tool names from the loader enum.\"}";
+
+        foreach (var name in requested.Select(name => name.GetString()!).Distinct(StringComparer.Ordinal))
+        {
+            var tool = catalog[name];
+            if (!options.Tools.Contains(tool))
+                options.Tools.Add(tool);
+        }
+        return "{\"success\":true,\"instruction\":\"The requested tools are available. Call them to carry out the request.\"}";
+    }
 }

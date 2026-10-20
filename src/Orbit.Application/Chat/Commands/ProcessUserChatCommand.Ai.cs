@@ -43,7 +43,9 @@ public partial class ProcessUserChatCommandHandler
         var systemPrompt = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildStatic(promptRequest),
-            ai.CatalogService.BuildStaticSupplement(),
+            ai.CatalogService.BuildStaticSupplement());
+        var dynamicContext = string.Join(
+            Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
 
@@ -57,17 +59,22 @@ public partial class ProcessUserChatCommandHandler
             && request.ClientContext.PartKinds?.Any(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList) == true
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled);
         if (askEnabled)
-            systemPrompt = string.Join(Environment.NewLine, systemPrompt,
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Use ask when one short answer decides the next step, or several suggested items can be acted on together. Never use ask for a yes/no question the write preview already asks. At most one ask block per reply. An ask call ends the tool round: put it last and make no further tool calls. Supported ask forms: "
                 + string.Join(", ", request.ClientContext!.PartKinds!.Where(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList)));
 
-        systemPrompt = AppendCardPromptInstructions(systemPrompt, request, context, activeToolNames);
+        dynamicContext = AppendCardPromptInstructions(dynamicContext, request, context, activeToolNames);
         if (request.ClientContext?.SupportsFollowUps == true)
-            systemPrompt = string.Join(Environment.NewLine, systemPrompt,
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 request.ClientContext.SupportsParts == true
                     ? "After the reply's text and blocks, end with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them."
                     : "After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
 
+        var availableTools = ai.ToolRegistry.GetAll()
+            .Where(t => t.Name != "ask" || askEnabled)
+            .OrderBy(t => t.Name, StringComparer.Ordinal)
+            .Select(t => (object)new { name = t.Name, description = t.Description, parameters = t.GetParameterSchema() })
+            .ToList();
         var toolDeclarations = skipTools
             ? new List<object>()
             : ai.ToolRegistry.GetAll()
@@ -98,7 +105,11 @@ public partial class ProcessUserChatCommandHandler
                 request.UserId,
                 request.ImageData,
                 request.ImageMimeType,
-                request.History),
+                request.History)
+            {
+                DynamicContext = dynamicContext,
+                AvailableToolDeclarations = skipTools ? [] : availableTools
+            },
             aiStreamSink,
             cancellationToken);
     }

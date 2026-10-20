@@ -14,6 +14,31 @@ public class ChatToolGroupsTests
     ];
 
     [Fact]
+    public void ResolveActiveToolNames_RareHabitOperations_AreGated()
+    {
+        string[] rare = ["reorder_habits", "move_habit_parent", "duplicate_habit", "create_sub_habit",
+            "link_habits_to_goal", "get_daily_summary", "get_retrospective", "update_checklist"];
+        var active = ChatToolGroups.ResolveActiveToolNames(AllTools.Concat(rare), "show my habits");
+
+        active.Should().NotIntersectWith(rare);
+    }
+
+    [Theory]
+    [InlineData("reorder my habits", "reorder_habits")]
+    [InlineData("reorganizar meus hábitos", "reorder_habits")]
+    [InlineData("duplicate my run", "duplicate_habit")]
+    [InlineData("duplicar corrida", "duplicate_habit")]
+    [InlineData("add a sub-habit", "create_sub_habit")]
+    [InlineData("vincular hábito à meta", "link_habits_to_goal")]
+    [InlineData("resumo do dia", "get_daily_summary")]
+    [InlineData("show my retrospective", "get_retrospective")]
+    [InlineData("editar checklist", "update_checklist")]
+    public void ResolveActiveToolNames_RareHabitKeywords_ActivateTool(string message, string tool)
+    {
+        ChatToolGroups.ResolveActiveToolNames(AllTools.Append(tool), message).Should().Contain(tool);
+    }
+
+    [Fact]
     public void ResolveActiveToolNames_NoExtendedKeywords_KeepsCoreDropsExtended()
     {
         var active = ChatToolGroups.ResolveActiveToolNames(AllTools, "log my run and show my habits");

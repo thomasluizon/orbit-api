@@ -3306,8 +3306,9 @@ public partial class ProcessUserChatCommandHandlerTests
         _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("DYNAMIC_SUPPLEMENT");
 
         string? capturedPrompt = null;
+        string? capturedDynamic = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt),
+            Arg.Do<AiToolRequest>(request => { capturedPrompt = request.SystemPrompt; capturedDynamic = request.DynamicContext; }),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
 
@@ -3323,8 +3324,9 @@ public partial class ProcessUserChatCommandHandlerTests
 
         staticSections.Should().BeGreaterThanOrEqualTo(0);
         staticSections.Should().BeLessThan(staticSupplement);
-        staticSupplement.Should().BeLessThan(dynamicSections);
-        dynamicSections.Should().BeLessThan(dynamicSupplement);
+        dynamicSections.Should().Be(-1, "volatile content must be outside the static system message");
+        dynamicSupplement.Should().Be(-1);
+        capturedDynamic.Should().Contain("DYNAMIC_SECTIONS").And.Contain("DYNAMIC_SUPPLEMENT");
     }
 
     [Theory]

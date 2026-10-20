@@ -12,6 +12,20 @@ public static class ChatToolGroups
 
     private static readonly IReadOnlyList<ExtendedGroup> Groups =
     [
+        new("habit_structure", ["reorder_habits", "move_habit_parent", "duplicate_habit", "create_sub_habit", "suggest_breakdown"],
+            ["reorder", "reorganiz", "reorden", "parent", "sub-habit", "subhabit", "sub hab", "sub-hab", "duplicate", "duplic", "break down", "breakdown", "dividir", "decompor"]),
+        new("goal_links", ["link_habits_to_goal", "link_goals_to_habit", "reorder_goals", "update_goal_status", "delete_goal", "review_goals"],
+            ["goal", "meta", "link", "vincul", "objetivo"]),
+        new("insights", ["get_retrospective", "get_daily_summary", "get_habit_metrics"],
+            ["retrospect", "recap", "wrapped", "summary", "resumo", "review", "insight", "metric", "metrica", "progress", "progresso", "stats", "estatistica"]),
+        new("checklists", ["update_checklist"], ["checklist", "check list", "check-list", "lista de tarefas"]),
+        new("tags", ["assign_tags", "list_tags", "create_tag", "update_tag", "delete_tag"],
+            ["tag", "label", "etiqueta", "marcador", "categoria"]),
+        new("bulk_habits", ["bulk_create_habits", "bulk_log_habits", "bulk_skip_habits", "bulk_update_habits", "bulk_reschedule_habits", "bulk_delete_habits", "bulk_update_habit_emojis"],
+            ["all", "every", "bulk", "multiple", "several", "todos", "todas", "varios", "varias", "lote", "habits", "habitos"]),
+        new("profile_preferences", ["update_profile_preferences", "set_ai_summary"],
+            ["preference", "preferencia", "setting", "configura", "theme", "tema", "language", "idioma", "timezone", "fuso", "clock", "relogio", "summary", "resumo"]),
+        new("undo_skip", ["undo_skip_habit"], ["undo", "unskip", "desfazer", "despular"]),
         new("proactive_astra", ["set_proactive_astra"],
             ["proactive", "proativa", "proativo"]),
         new("calendar", ["get_calendar_overview", "manage_calendar_sync"],
