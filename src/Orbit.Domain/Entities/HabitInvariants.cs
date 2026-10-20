@@ -74,6 +74,9 @@ internal static class HabitInvariants
         if (scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
             return DomainErrors.MaxScheduledReminders.Format(DomainConstants.MaxScheduledReminders);
 
+        if (scheduledReminders.Any(reminder => !Enum.IsDefined(reminder.When)))
+            return DomainErrors.InvalidScheduledReminderWhen;
+
         var hasDuplicates = scheduledReminders
             .GroupBy(sr => (sr.When, sr.Time))
             .Any(g => g.Count() > 1);
