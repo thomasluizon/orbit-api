@@ -29,7 +29,7 @@ Dev-only. `BearerSecuritySchemeTransformer` adds the JWT bearer scheme. New endp
 
 ## API versioning
 
-Controllers support v1 and v2 through the `api-version` request header. An omitted header selects v1. Keep the existing routes and declare supported versions on each controller. OpenAPI generates `openapi.json` for v1 and `openapi_v2.json` for v2; the breaking-change gate compares the committed v1 contract.
+Controllers support v1 and v2 through the `api-version` request header. An omitted header selects v1. Keep the existing routes and declare supported versions on each controller. OpenAPI publishes each supported documentation revision from [`OpenApi/artifacts.json`](OpenApi/artifacts.json). The legacy `openapi.json` and `openapi_v2.json` remain supported, deprecated revisions with known enum inaccuracies. Their corrected replacements are `openapi_v1-r2.json` and `openapi_v2-r2.json`. These revisions describe the same HTTP versions and do not change header selection. Follow [`OpenApi/README.md`](OpenApi/README.md) for immutable consumer selection, generation and publication. Freshness and ordinary compatibility protect every supported stream; the required gate retains the pinned v1 comparison and ERR threshold.
 
 When a change would break an old client, add the new shape under v2 with separate DTOs and `[MapToApiVersion]` actions, and preserve v1. Shared handlers and DTOs must remain compatible with both versions. Retire v1 only after every live client uses v2, enforcing the carrying client build through the `MinSupportedVersion` gate and its release preconditions in `AGENTS.md`.
 
