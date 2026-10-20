@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -191,6 +192,36 @@ public class NotionPollServiceTests
         await test.Api.Received(1).SearchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         pending.SetResult([]);
         await first;
+    }
+
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public async Task ScheduledTick_BonusProEligibilityUsesIndependentExpiry(int daysUntilExpiry, bool eligible)
+    {
+        using var test = new NotionTestContext();
+        var now = test.Clock.Now;
+        test.Clock.Now = now.AddDays(daysUntilExpiry - AppConstants.ReferralBonusProDays);
+        var user = User.Create("Bonus", "bonus@example.com", test.Clock).Value;
+        user.StartTrial(now.UtcDateTime.AddDays(-1));
+        user.GrantBonusProDays(AppConstants.ReferralBonusProDays);
+        test.Clock.Now = now;
+        test.Db.Users.Add(user);
+        test.Db.NotionConnections.Add(NotionConnection.Create(user.Id, "access-token", "refresh-token",
+            Guid.NewGuid(), "Workspace", Guid.NewGuid()));
+        await test.Db.SaveChangesAsync();
+        test.Db.ChangeTracker.Clear();
+        var services = new ServiceCollection();
+        services.AddSingleton<OrbitDbContext>(_ => test.Db);
+        services.AddScoped(_ => test.Poller());
+        using var provider = services.BuildServiceProvider();
+        var scheduled = new NotionAutoSyncService(provider.GetRequiredService<IServiceScopeFactory>(), test.Clock,
+            NullLogger<NotionAutoSyncService>.Instance);
+
+        await scheduled.RunAsync(CancellationToken.None);
+
+        await test.Api.Received(eligible ? 1 : 0).SearchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

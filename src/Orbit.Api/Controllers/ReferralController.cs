@@ -35,7 +35,7 @@ public class ReferralController(
     }
 
     [HttpGet("stats")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ReferralStatsResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetStats(CancellationToken cancellationToken)
@@ -50,7 +50,7 @@ public class ReferralController(
     }
 
     [HttpGet("dashboard")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ReferralDashboardResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken)

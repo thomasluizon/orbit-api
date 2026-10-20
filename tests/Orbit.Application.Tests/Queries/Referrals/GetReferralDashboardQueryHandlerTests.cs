@@ -64,6 +64,8 @@ public class GetReferralDashboardQueryHandlerTests
         result.Value.Stats.Should().NotBeNull();
         result.Value.Stats.SuccessfulReferrals.Should().Be(0);
         result.Value.Stats.PendingReferrals.Should().Be(0);
+        result.Value.Stats.RewardType.Should().Be("pro_days");
+        result.Value.Stats.ProDaysPerReferral.Should().Be(AppConstants.ReferralBonusProDays);
     }
 
     [Fact]
