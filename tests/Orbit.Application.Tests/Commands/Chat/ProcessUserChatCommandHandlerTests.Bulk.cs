@@ -18,6 +18,54 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Handle_RejectedWritesAcrossRounds_DoNotCountTowardRepeatGuard(bool sameHabit)
+    {
+        SetupUserAndPayGate();
+        var habits = Enumerable.Range(1, BulkToolRepeatGuard.Threshold)
+            .Select(index => CreateHabit($"Habit {index}")).ToArray();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(habits);
+        var tool = FakeTool("update_habit");
+        tool.IsReadOnly.Returns(false);
+        var handler = CreateHandler(tool);
+        var dispatched = 0;
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new AgentExecuteOperationResponse(new AgentOperationResult(
+                "update_habit", AgentCapabilityIds.HabitsWrite, AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                ++dispatched < BulkToolRepeatGuard.Threshold ? AgentOperationStatus.Denied : AgentOperationStatus.Succeeded,
+                "Update", PolicyReason: dispatched < BulkToolRepeatGuard.Threshold ? "denied" : null)));
+        AiResponse Round(int index) => ToolResponse("update_habit", $"retry_{index}",
+            JsonSerializer.Serialize(new
+            {
+                habit_id = habits[sameHabit ? 0 : index].Id,
+                description = "Shared description"
+            }));
+        SetupAiResponse(Round(0));
+        var round = 0;
+        var forwarded = new List<AiToolCallResult>();
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                forwarded.AddRange(call.ArgAt<IReadOnlyList<AiToolCallResult>>(1));
+                return Result.Success(++round < habits.Length ? Round(round) : new AiResponse { TextMessage = "Finished" });
+            });
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Retry the changes"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        forwarded.Should().HaveCount(habits.Length);
+        forwarded.Take(habits.Length - 1).Should().OnlyContain(item => !item.Success);
+        forwarded[^1].Success.Should().BeTrue();
+        dispatched.Should().Be(habits.Length);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Handle_RepeatedUpdatesAcrossRounds_BlocksAtThresholdAndAllowsDistinctChanges(bool distinctChanges)
     {
         SetupUserAndPayGate();

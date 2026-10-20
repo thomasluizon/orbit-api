@@ -63,6 +63,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
     private readonly CreateHabitTool _createHabitTool;
     private readonly AiToolRegistry _toolRegistry;
     private readonly PendingOperationChangePreviewer _previewer;
+    private readonly IHabitEmojiInferenceService _emojiInference = Substitute.For<IHabitEmojiInferenceService>();
 
     public ChatWriteHoldHandlerTests()
     {
@@ -77,10 +78,12 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
 
         _createHabitTool = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService,
             _payGate, _unitOfWork);
-        _toolRegistry = new AiToolRegistry([_createHabitTool]);
+        var emojiTool = new BulkUpdateHabitEmojisTool(_habitRepo, _emojiInference, _unitOfWork,
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        _toolRegistry = new AiToolRegistry([_createHabitTool, emojiTool]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
             _toolRegistry);
-        _catalogService = new AgentCatalogService([_createHabitTool]);
+        _catalogService = new AgentCatalogService([_createHabitTool, emojiTool]);
         var settings = Options.Create(new AgentPlatformSettings());
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
         var stepUpBridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
@@ -110,6 +113,63 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
         _flagCache.Dispose();
         _dbContext.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task Handle_InferredEmojis_PreviewsFullSetAndApprovalAppliesExactlyThoseValues()
+    {
+        var habits = Enumerable.Range(1, 251).Select(index => Habit.Create(new HabitCreateParams(
+            _userId, $"Habit {index}", FrequencyUnit.Day, 1, Today)).Value).ToArray();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _unitOfWork.PassThroughTransactions<int>();
+        var expected = habits.Select((habit, index) => (habit.Id, Emoji: index % 2 == 0 ? "📚" : "🏃"))
+            .ToDictionary(item => item.Id, item => item.Emoji);
+        _emojiInference.InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => Result.Success<IReadOnlyDictionary<Guid, string>>(
+                call.ArgAt<IReadOnlyList<HabitEmojiInferenceInput>>(1)
+                    .ToDictionary(input => input.HabitId, input => expected[input.HabitId])));
+        ScriptToolCall("""{"infer_from_title":true}""", "bulk_update_habit_emojis");
+
+        var held = await CreateHandler().Handle(new ProcessUserChatCommand(_userId,
+            "Make all emojis sensible", ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)),
+            CancellationToken.None);
+
+        held.IsSuccess.Should().BeTrue();
+        var pending = held.Value.PendingOperations.Should().ContainSingle().Subject;
+        pending.ChangeTargetCount.Should().Be(habits.Length);
+        pending.Items.Should().HaveCount(habits.Length);
+        pending.Items!.Should().AllSatisfy(item => item.Fields.Should().ContainSingle().Which.NewValue
+            .Should().Be(expected[item.EntityId!.Value]));
+        habits.Should().OnlyContain(habit => habit.Emoji == null);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var approvedItems = execution.Arguments.GetProperty("revised_items");
+        approvedItems.GetArrayLength().Should().Be(habits.Length);
+        execution.Arguments.GetProperty("infer_from_title").GetBoolean().Should().BeFalse();
+        await _emojiInference.Received(11).InferAsync(_userId,
+            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(items => items.Count <= 25), Arg.Any<CancellationToken>());
+        _emojiInference.ClearReceivedCalls();
+        _emojiInference.InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<IReadOnlyDictionary<Guid, string>>("No further inference allowed"));
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+
+        var executed = await _executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId,
+            execution.OperationId, execution.Arguments, execution.Surface, AgentAuthMethod.Jwt,
+            ConfirmationToken: confirmation.ConfirmationToken));
+
+        executed.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        habits.Should().AllSatisfy(habit => habit.Emoji.Should().Be(expected[habit.Id]));
+        var payload = JsonSerializer.SerializeToElement(executed.Operation.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(habits.Length);
+        payload.GetProperty("total_matched").GetInt32().Should().Be(habits.Length);
+        payload.GetProperty("partial").GetBoolean().Should().BeFalse();
+        await _emojiInference.DidNotReceiveWithAnyArgs().InferAsync(default, default!, default);
     }
 
     [Fact]
@@ -227,7 +287,7 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
 
     private ProcessUserChatCommandHandler CreateHandler()
     {
-        var aiDeps = new ChatAiDependencies(_aiIntentService, new AiToolRegistry([_createHabitTool]),
+        var aiDeps = new ChatAiDependencies(_aiIntentService, _toolRegistry,
             _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo,
             _tagRepo, _templateRepo, _featureFlagService);
@@ -241,13 +301,13 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             Substitute.For<ILogger<ProcessUserChatCommandHandler>>(), Substitute.For<IAppConfigService>());
     }
 
-    private void ScriptToolCall(string arguments)
+    private void ScriptToolCall(string arguments, string toolName = "create_habit")
     {
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse
             {
-                ToolCalls = [new AiToolCall("create_habit", "call_1",
+                ToolCalls = [new AiToolCall(toolName, "call_1",
                     JsonDocument.Parse(arguments).RootElement.Clone())],
                 ConversationContext = new AiConversationContext
                 {
