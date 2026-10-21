@@ -55,7 +55,7 @@ public sealed class AgentArgumentPreviewTests
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(call => { revised = Parse(call.ArgAt<string>(3)); return true; });
         var previewer = CreatePreviewer();
-        var preview = await previewer.PreviewAsync(_userId, "update_goal", args);
+        var preview = (await previewer.PreviewAsync(_userId, "update_goal", args)).Value;
         var row = preview!.Items![0].Fields.Single(field => field.Field == "description");
         row.OldValue.Should().Be("Keep");
         row.NewValue.Should().BeNull();
@@ -150,8 +150,8 @@ public sealed class AgentArgumentPreviewTests
         var previewer = new PendingOperationChangePreviewer(
             new GenericRepository<Habit>(context), _goals, _tags, _dateService, _tools);
 
-        var preview = await previewer.PreviewAsync(_userId, "assign_tags",
-            Parse($$"""{"habit_id":"{{habit.Id}}","{{field}}":{{proposed}}}"""));
+        var preview = (await previewer.PreviewAsync(_userId, "assign_tags",
+            Parse($$"""{"habit_id":"{{habit.Id}}","{{field}}":{{proposed}}}"""))).Value;
 
         var item = preview!.Items.Should().ContainSingle().Subject;
         item.EntityId.Should().Be(habit.Id);
@@ -167,7 +167,7 @@ public sealed class AgentArgumentPreviewTests
         _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string>()).Returns(true);
         var previewer = CreatePreviewer();
-        var original = await previewer.PreviewAsync(_userId, "create_habit", arguments);
+        var original = (await previewer.PreviewAsync(_userId, "create_habit", arguments)).Value;
         using var edits = JsonDocument.Parse("""{"title":"Beber mais agua"}""");
 
         var result = await CreateService(previewer).ReviseAsync(_userId, pendingId,
@@ -189,7 +189,7 @@ public sealed class AgentArgumentPreviewTests
         SetupExecution(pendingId, "create_habit", arguments);
         _store.Cancel(_userId, pendingId, Arg.Any<string>()).Returns(true);
         var previewer = CreatePreviewer();
-        var original = await previewer.PreviewAsync(_userId, "create_habit", arguments);
+        var original = (await previewer.PreviewAsync(_userId, "create_habit", arguments)).Value;
 
         var result = await CreateService(previewer).ReviseAsync(_userId, pendingId,
             new RevisePendingOperationRequest(original!.PreviewFingerprint!, []),
@@ -210,7 +210,7 @@ public sealed class AgentArgumentPreviewTests
         var arguments = Parse($$"""{"habit_id":"{{habit.Id}}","title":"Beber mais agua"}""");
         SetupExecution(pendingId, "update_habit", arguments);
         var previewer = CreatePreviewer();
-        var original = await previewer.PreviewAsync(_userId, "update_habit", arguments);
+        var original = (await previewer.PreviewAsync(_userId, "update_habit", arguments)).Value;
         using var edits = JsonDocument.Parse($$"""{"habit_id":"{{Guid.NewGuid()}}"}""");
 
         var result = await CreateService(previewer).ReviseAsync(_userId, pendingId,
@@ -284,7 +284,7 @@ public sealed class AgentArgumentPreviewTests
                 return true;
             });
         var previewer = CreatePreviewer();
-        var preview = await previewer.PreviewAsync(_userId, "update_goal", arguments);
+        var preview = (await previewer.PreviewAsync(_userId, "update_goal", arguments)).Value;
         using var edits = JsonDocument.Parse("""{"title":"Ler 20 livros"}""");
 
         var result = await CreateService(previewer).ReviseAsync(_userId, pendingId,
@@ -310,7 +310,7 @@ public sealed class AgentArgumentPreviewTests
             : Parse($$"""{"habit_id":"{{habit.Id}}","frequency_unit":"Day","frequency_quantity":1}""");
         var pendingId = Guid.NewGuid();
         SetupExecution(pendingId, operationId, arguments);
-        var preview = await CreatePreviewer().PreviewAsync(_userId, operationId, arguments);
+        var preview = (await CreatePreviewer().PreviewAsync(_userId, operationId, arguments)).Value;
         return (pendingId, preview!);
     }
 
@@ -320,8 +320,8 @@ public sealed class AgentArgumentPreviewTests
     private PendingOperationRevisionService CreateService(IPendingOperationChangePreviewer previewer) =>
         new(_store, previewer, new RevisePendingOperationRequestValidator(), _tools);
 
-    private Task<PendingOperationChangePreview?> Preview(string operationId, string json) =>
-        CreatePreviewer().PreviewAsync(_userId, operationId, Parse(json));
+    private async Task<PendingOperationChangePreview?> Preview(string operationId, string json) =>
+        (await CreatePreviewer().PreviewAsync(_userId, operationId, Parse(json))).Value;
 
     private void SetupExecution(Guid pendingId, string operationId, JsonElement arguments) =>
         _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(

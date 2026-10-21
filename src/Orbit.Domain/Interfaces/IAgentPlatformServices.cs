@@ -139,7 +139,7 @@ public interface IAgentOperationExecutor
 
 public interface IPendingOperationChangePreviewer
 {
-    Task<PendingOperationChangePreview?> PreviewAsync(
+    Task<Result<PendingOperationChangePreview?>> PreviewAsync(
         Guid userId,
         string operationId,
         JsonElement arguments,

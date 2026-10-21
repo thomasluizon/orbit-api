@@ -229,14 +229,14 @@ public partial class AgentOperationExecutor(
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
             && (execution.Operation.IsMutation || execution.Request.IncludeChangePreview))
         {
-            var attemptedPreview = await changePreviewer.TryPreviewAsync(
-                execution.Request.UserId, execution.Operation.Id, execution.Arguments, logger, cancellationToken);
+            var attemptedPreview = await PrepareConfirmationPreviewAsync(execution, pending, cancellationToken);
             if (attemptedPreview.IsFailure)
             {
                 pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
                     AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
                 return await BuildToolOutcomeResponseAsync(execution, policyDecision,
-                    new ToolResult(false, Error: attemptedPreview.Error), cancellationToken);
+                    new ToolResult(false, Error: attemptedPreview.ErrorCode ?? attemptedPreview.Error,
+                        ErrorCode: attemptedPreview.ErrorCode), cancellationToken);
             }
             var preview = attemptedPreview.Value;
 
@@ -246,7 +246,7 @@ public partial class AgentOperationExecutor(
                 pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
                     AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
                 return await BuildToolOutcomeResponseAsync(execution, policyDecision,
-                    new ToolResult(false, Error: "stale_preview"), cancellationToken);
+                    new ToolResult(false, Error: "preview_unavailable"), cancellationToken);
             }
 
             var expectedFingerprint = AgentOperationFingerprint.Compute(execution.Operation.Id,
@@ -275,6 +275,22 @@ public partial class AgentOperationExecutor(
             pending);
     }
 
+    private async Task<Result<PendingOperationChangePreview?>> PrepareConfirmationPreviewAsync(
+        OperationExecutionContext execution, PendingAgentOperation pending, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await changePreviewer.TryPreviewAsync(execution.Request.UserId, execution.Operation.Id,
+                execution.Arguments, logger, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
+                AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
+            throw;
+        }
+    }
+
     private async Task<AgentExecuteOperationResponse> ExecuteWithPolicyAsync(
         OperationExecutionContext execution,
         CancellationToken cancellationToken)
@@ -295,6 +311,11 @@ public partial class AgentOperationExecutor(
         catch (ToolOutcomeRollbackException ex)
         {
             return await BuildToolOutcomeResponseAsync(execution, ex.Decision, ex.Result, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested
+            && policyState.Decision?.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
+        {
+            throw;
         }
         catch (Exception ex)
         {

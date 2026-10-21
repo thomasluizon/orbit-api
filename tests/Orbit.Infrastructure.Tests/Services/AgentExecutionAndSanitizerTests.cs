@@ -447,9 +447,9 @@ public class AgentExecutionAndSanitizerTests
                 "step_up_required", pending));
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
         previewer.PreviewAsync(UserId, operation.Id, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns(new PendingOperationChangePreview(
+            .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview(
                 [new PendingOperationChange(Guid.Empty, "Habit", "emoji", "🔴", "✅", "emoji")], 1,
-                [new PendingOperationItem("0", null, "Habit", [], "state")], "fresh"));
+                [new PendingOperationItem("0", null, "Habit", [], "state")], "fresh")));
         var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -481,7 +481,7 @@ public class AgentExecutionAndSanitizerTests
                 "confirmation_required", pending));
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
         previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns<PendingOperationChangePreview?>(_ => throw new InvalidOperationException("Preview failed"));
+            .Returns<Result<PendingOperationChangePreview?>>(_ => throw new InvalidOperationException("Preview failed"));
         var executor = CreateExecutor(catalog, policyEvaluator: policy, changePreviewer: previewer);
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -971,7 +971,7 @@ public class AgentExecutionAndSanitizerTests
         {
             changePreviewer = Substitute.For<IPendingOperationChangePreviewer>();
             changePreviewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-                .Returns(call => AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default));
+                .Returns(call => Result.Success(AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default)));
         }
         var pendingStore = Substitute.For<IPendingAgentOperationStore>();
         pendingStore.Revise(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);

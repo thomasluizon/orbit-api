@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -101,20 +102,19 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         var ownership = Orbit.Application.Common.OwnershipValidation.AllResolved(filter!.HabitIds, habits,
             habit => habit.Id, Orbit.Application.Common.ErrorMessages.HabitNotFound);
         if (ownership.IsFailure)
-            return Result.Failure<JsonElement>(ownership.Error);
+            return ownership.PropagateError<JsonElement>();
         var inputs = habits.Where(habit => !emojis.ContainsKey(habit.Id))
-            .Select(habit => new HabitEmojiInferenceInput(habit.Id, habit.Title, habit.Description));
+            .Select(habit => new HabitEmojiInferenceInput(habit.Id, habit.Title, habit.Description)).ToArray();
+        var chunkIndex = 0;
+        var chunkCount = (inputs.Length + InferenceChunkSize - 1) / InferenceChunkSize;
         foreach (var chunk in inputs.Chunk(InferenceChunkSize))
         {
-            var inferred = await inferenceService.InferAsync(userId, chunk, ct);
+            chunkIndex++;
+            var inferred = await InferPreviewChunkAsync(userId, chunk, chunkIndex, chunkCount, habits.Count, ct);
             if (inferred.IsFailure)
-                return Result.Failure<JsonElement>(inferred.Error);
+                return inferred.PropagateError<JsonElement>();
             foreach (var input in chunk)
-            {
-                if (!inferred.Value.TryGetValue(input.HabitId, out var emoji) || !IsSingleEmojiGrapheme(emoji))
-                    return Result.Failure<JsonElement>("preview_unavailable");
-                emojis[input.HabitId] = emoji;
-            }
+                emojis[input.HabitId] = inferred.Value[input.HabitId];
         }
         return Result.Success(JsonSerializer.SerializeToElement(new
         {
@@ -122,6 +122,48 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             revised_items = habits.Select(habit => new { habit_id = habit.Id, emoji = emojis[habit.Id] }).ToArray()
         }));
     }
+
+    private async Task<Result<IReadOnlyDictionary<Guid, string>>> InferPreviewChunkAsync(
+        Guid userId, HabitEmojiInferenceInput[] chunk, int chunkIndex, int chunkCount, int targetCount,
+        CancellationToken ct)
+    {
+        Result<IReadOnlyDictionary<Guid, string>> inferred;
+        try
+        {
+            inferred = await inferenceService.InferAsync(userId, chunk, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            LogPreparationFailed(logger, "inference", ct.IsCancellationRequested ? "cancelled" : "deadline",
+                chunkIndex, chunkCount, chunk.Length, targetCount);
+            throw;
+        }
+        catch (Exception)
+        {
+            LogPreparationFailed(logger, "inference", "unknown", chunkIndex, chunkCount, chunk.Length, targetCount);
+            return Result.Failure<IReadOnlyDictionary<Guid, string>>("preview_unavailable");
+        }
+        if (inferred.IsFailure)
+        {
+            LogPreparationFailed(logger, "inference",
+                inferred.ErrorCode == "AI_DAILY_BUDGET_EXCEEDED" ? "budget_exceeded" : "unknown",
+                chunkIndex, chunkCount, chunk.Length, targetCount);
+            return inferred;
+        }
+        var ids = chunk.Select(input => input.HabitId).ToHashSet();
+        var reason = inferred.Value.Keys.Any(id => !ids.Contains(id)) ? "unexpected_mapping"
+            : chunk.Any(input => !inferred.Value.ContainsKey(input.HabitId)) ? "missing_mapping"
+            : inferred.Value.Values.Any(emoji => !IsSingleEmojiGrapheme(emoji)) ? "invalid_emoji" : null;
+        if (reason is null)
+            return inferred;
+        LogPreparationFailed(logger, "mapping", reason, chunkIndex, chunkCount, chunk.Length, targetCount);
+        return Result.Failure<IReadOnlyDictionary<Guid, string>>("preview_unavailable");
+    }
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning,
+        Message = "Habit emoji preparation failed at {Stage} with {Reason}; chunk {ChunkIndex} of {ChunkCount}, {ChunkTargetCount} of {TargetCount} targets")]
+    private static partial void LogPreparationFailed(ILogger logger, string stage, string reason,
+        int chunkIndex, int chunkCount, int chunkTargetCount, int targetCount);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

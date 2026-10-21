@@ -616,7 +616,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             var request = call.Arg<AgentExecuteOperationRequest>();
             held.Add(request);
-            var preview = await previewer.PreviewAsync(UserId, request.OperationId, request.Arguments);
+            var preview = (await previewer.PreviewAsync(UserId, request.OperationId, request.Arguments)).Value;
             var pending = new PendingAgentOperation(Guid.NewGuid(), request.OperationId, request.OperationId, request.OperationId,
                 AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10),
                 Changes: preview?.Changes, ChangeTargetCount: preview?.ChangeTargetCount, Items: preview?.Items, PreviewFingerprint: preview?.PreviewFingerprint);

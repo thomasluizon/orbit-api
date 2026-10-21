@@ -4,6 +4,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -45,6 +46,29 @@ public sealed class AiHabitEmojiInferenceServiceTests
         await usageRecorder.Received(1).RecordAsync(
             "habit_emoji_inference", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId,
             Arg.Is<AiCallTelemetry>(call => call.HasUsage && !call.IsError && call.ToolNames.Count == 0));
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unknown")]
+    [InlineData("invalid_id")]
+    [InlineData("incomplete")]
+    public async Task InferAsync_InvalidProviderMapping_IsNotAccepted(string fault)
+    {
+        var habitId = Guid.NewGuid();
+        var mappings = new Dictionary<string, string> { [habitId.ToString()] = "📚" };
+        if (fault == "missing") mappings.Clear();
+        if (fault == "unknown") mappings[Guid.NewGuid().ToString()] = "📚";
+        if (fault == "invalid_id") mappings["unrequested"] = "📚";
+        var response = ResponsesTestData.Response(JsonSerializer.Serialize(new { emojis = mappings }));
+        if (fault == "incomplete") response.Status = ResponseStatus.Incomplete;
+        var client = new AiCompletionClient(BuildResponsesClient(new JsonHandler(ModelReaderWriter.Write(response).ToString())),
+            NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
+        var service = new AiHabitEmojiInferenceService(AiBudgetTestDouble.Wrap(client), NullLogger<AiHabitEmojiInferenceService>.Instance);
+
+        var result = await service.InferAsync(Guid.NewGuid(), [new(habitId, "Read", null)]);
+
+        result.IsFailure.Should().BeTrue();
     }
 
     private static ResponsesClient BuildResponsesClient(HttpMessageHandler handler) =>

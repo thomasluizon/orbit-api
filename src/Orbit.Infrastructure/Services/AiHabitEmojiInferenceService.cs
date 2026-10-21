@@ -36,31 +36,52 @@ public sealed partial class AiHabitEmojiInferenceService(
                 purpose: "habit_emoji_inference",
                 tier: AiModelTier.SubTask,
                 userId: userId,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                requireComplete: true);
 
             if (completion?.Emojis is null)
-                return Result.Failure<IReadOnlyDictionary<Guid, string>>("AI returned no emoji mapping.");
+                return MappingFailure("missing_mapping", habits.Count);
 
             var mappings = new Dictionary<Guid, string>();
             foreach (var entry in completion.Emojis)
             {
-                if (Guid.TryParse(entry.Key, out var habitId))
-                    mappings[habitId] = entry.Value;
+                if (!Guid.TryParse(entry.Key, out var habitId) || !mappings.TryAdd(habitId, entry.Value))
+                    return MappingFailure("invalid_id", habits.Count);
             }
 
+            var requested = habits.Select(habit => habit.HabitId).ToHashSet();
+            if (!requested.SetEquals(mappings.Keys))
+                return MappingFailure("membership_mismatch", habits.Count);
             return Result.Success<IReadOnlyDictionary<Guid, string>>(mappings);
         }
         catch (AiBudgetExceededException)
         {
+            LogInferenceFailed(logger, "completion", "budget_exceeded", habits.Count);
             return Result.Failure<IReadOnlyDictionary<Guid, string>>(AiBudgetExceededException.Error);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            LogInferenceFailed(logger, ex);
-            return Result.Failure<IReadOnlyDictionary<Guid, string>>("AI emoji inference is temporarily unavailable.");
+            LogInferenceFailed(logger, "completion", cancellationToken.IsCancellationRequested ? "cancelled" : "deadline", habits.Count);
+            throw;
+        }
+        catch (JsonException)
+        {
+            return MappingFailure("invalid_json", habits.Count);
+        }
+        catch (Exception)
+        {
+            LogInferenceFailed(logger, "completion", "unknown", habits.Count);
+            return Result.Failure<IReadOnlyDictionary<Guid, string>>("preview_unavailable");
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Habit emoji inference failed")]
-    private static partial void LogInferenceFailed(ILogger logger, Exception ex);
+    private Result<IReadOnlyDictionary<Guid, string>> MappingFailure(string reason, int targetCount)
+    {
+        LogInferenceFailed(logger, "mapping", reason, targetCount);
+        return Result.Failure<IReadOnlyDictionary<Guid, string>>("preview_unavailable");
+    }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
+        Message = "Habit emoji inference failed at {Stage} with {Reason}; {ChunkTargetCount} targets")]
+    private static partial void LogInferenceFailed(ILogger logger, string stage, string reason, int chunkTargetCount);
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Common;
+using Orbit.Application.Common;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
@@ -46,7 +47,7 @@ public sealed class PendingOperationChangePreviewer(
         ScheduledRemindersField, RelativeRemindersField
     };
 
-    public async Task<PendingOperationChangePreview?> PreviewAsync(
+    public async Task<Result<PendingOperationChangePreview?>> PreviewAsync(
         Guid userId,
         string operationId,
         JsonElement arguments,
@@ -54,6 +55,14 @@ public sealed class PendingOperationChangePreviewer(
     {
         if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
             arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
+        if (RequiresEmojiInference(operationId, arguments))
+            return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
+        return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
+    }
+
+    private async Task<PendingOperationChangePreview?> PreviewChangesAsync(
+        Guid userId, string operationId, JsonElement arguments, CancellationToken cancellationToken)
+    {
         arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
         {
@@ -72,9 +81,6 @@ public sealed class PendingOperationChangePreviewer(
         {
             return await PreviewOtherAsync(userId, operationId, arguments, cancellationToken);
         }
-
-        if (RequiresEmojiInference(operationId, arguments))
-            return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
 
         if (operationId == "delete_habit")
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
@@ -150,16 +156,18 @@ public sealed class PendingOperationChangePreviewer(
         operationId == "bulk_update_habit_emojis"
         && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer;
 
-    private async Task<PendingOperationChangePreview?> PreviewInferredEmojisAsync(
+    private async Task<Result<PendingOperationChangePreview?>> PreviewInferredEmojisAsync(
         Guid userId, JsonElement arguments, CancellationToken ct)
     {
         if (toolRegistry.GetTool("bulk_update_habit_emojis") is not BulkUpdateHabitEmojisTool emojiTool)
-            return null;
+            return Result.Failure<PendingOperationChangePreview?>("preview_unavailable");
         var prepared = await emojiTool.PreparePreviewArgumentsAsync(arguments, userId, ct);
         if (prepared.IsFailure)
-            return null;
-        var preview = await PreviewAsync(userId, emojiTool.Name, prepared.Value, ct);
-        return preview is null ? null : preview with { ExecutionArguments = prepared.Value };
+            return prepared.PropagateError<PendingOperationChangePreview?>();
+        var preview = await PreviewChangesAsync(userId, emojiTool.Name, prepared.Value, ct);
+        return preview is null
+            ? Result.Failure<PendingOperationChangePreview?>("preview_unavailable")
+            : Result.Success<PendingOperationChangePreview?>(preview with { ExecutionArguments = prepared.Value });
     }
 
     private async Task<PendingOperationChangePreview?> PreviewOtherAsync(Guid userId, string operationId,

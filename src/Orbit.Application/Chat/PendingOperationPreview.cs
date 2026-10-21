@@ -22,11 +22,11 @@ public static class PendingOperationPreview
     {
         try
         {
-            return Result.Success(await previewer.PreviewAsync(userId, operationId, arguments, cancellationToken));
+            return await previewer.PreviewAsync(userId, operationId, arguments, cancellationToken);
         }
-        catch (Exception exception)
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(exception, "Pending operation change preview failed for {OperationId}", operationId);
+            logger.LogWarning("Pending operation change preview failed");
             return Result.Failure<PendingOperationChangePreview?>("preview_unavailable");
         }
     }
