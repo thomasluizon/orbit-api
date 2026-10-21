@@ -83,3 +83,23 @@ Gate rows distinguish a hard `planRequirement` from a plan-scoped quota in `quot
 Feature flag rows always set `quotaLiftedByPlan` to `null` because their `planRequirement` comes from the database column.
 The `Gating matrix drift` check generates it twice, verifies deterministic output, and publishes the `gating-matrix` artifact.
 Its provenance hash covers every C# input read. Live `AppConfigs` rows can override the compiled defaults it reports.
+
+## Generated capability inventory
+
+Run `node tools/capability-inventory.mjs` to write the ignored root artifact `capability-inventory.json`.
+It extends the existing agent capability catalog with registered chat/MCP tools, entity and nested value-object fields,
+EF mapping evidence, parameter names, output projections, and separate direct MCP and operation-gateway routes.
+Schema extraction retains nullable types, enums, item contracts and helper/composed schemas. Partial domain declarations
+and checked formatter chains retain the persisted fields and actual rendered readback when producers are split across files.
+Counts come from registration code; MCP-only tools are excluded from the exposed chat count.
+Full field readback is distinct from a count or summary. Creation without update and writes without full readback are gaps.
+Domain edit contracts also reveal writable fields with no tool parameter. Deliberate omissions carry their reason.
+
+`Capability inventory drift` runs source-mutation tests, compares the reviewed semantic snapshot, and publishes the artifact.
+The readable baseline records registrations, parameter contracts, per-field operation verdicts, routes and tracked gaps.
+Source hashes and line numbers are excluded. Evidence in the artifact and gap report identifies a path and type/member,
+so whitespace, line shifts and unrelated implementation edits do not require accepting a new capability baseline.
+After changing a registry, model, mapping, schema or projection, review the generated cells and the semantic bindings in
+`tools/capability-inventory.bindings.mjs`, then run `node tools/capability-inventory.mjs --accept`.
+Commit `tools/capability-inventory.baseline.json` and the refreshed `tools/capability-inventory.gaps.md` together.
+Run `node tools/capability-inventory.mjs --check` to verify the result. Generation never accesses user rows or encrypted values.

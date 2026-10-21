@@ -1,0 +1,46 @@
+name: Capability inventory
+
+on:
+  pull_request:
+    branches: [main, redesign/main]
+    paths:
+      - 'src/**/*.cs'
+      - 'tools/capability-inventory*'
+      - 'tools/__tests__/capability-inventory.test.mjs'
+      - '.github/workflows/capability-inventory.yml'
+  push:
+    branches: [main, redesign/main]
+    paths:
+      - 'src/**/*.cs'
+      - 'tools/capability-inventory*'
+      - 'tools/__tests__/capability-inventory.test.mjs'
+      - '.github/workflows/capability-inventory.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Capability inventory drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Test source extraction and drift detection
+        run: node --test tools/__tests__/capability-inventory.test.mjs
+      - name: Generate inventory and check reviewed capability snapshot
+        run: node tools/capability-inventory.mjs --check
+      - name: Publish capability inventory
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: capability-inventory
+          path: capability-inventory.json
+          if-no-files-found: error
+          retention-days: 14
