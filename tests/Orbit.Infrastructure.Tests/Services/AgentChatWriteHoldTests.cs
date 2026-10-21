@@ -1,4 +1,12 @@
+#pragma warning disable OPENAI001
+
 using System.Runtime.CompilerServices;
+using System.ClientModel;
+using System.ClientModel.Primitives;
+using System.Net;
+using OpenAI.Responses;
+using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Tests.AI;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
@@ -515,7 +523,7 @@ public class AgentChatWriteHoldTests : IDisposable
         };
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
         previewer.PreviewAsync(_userId, tool.Name, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns(call => AgentArgumentPreview.Build(tool.Name, call.Arg<JsonElement>(), null, default));
+            .Returns(call => Result.Success(AgentArgumentPreview.Build(tool.Name, call.Arg<JsonElement>(), null, default)));
         var executor = CreateExecutor(new AiToolRegistry([tool]), previewer);
 
         var chat = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
@@ -546,7 +554,7 @@ public class AgentChatWriteHoldTests : IDisposable
         var tools = new AiToolRegistry([new StubTool("bulk_log_habits")]);
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
         previewer.PreviewAsync(_userId, "bulk_log_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns(new PendingOperationChangePreview([], 0, [], "empty"));
+            .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview([], 0, [], "empty")));
         var executor = CreateExecutor(tools, previewer);
 
         var result = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId,
@@ -683,13 +691,236 @@ public class AgentChatWriteHoldTests : IDisposable
     public async Task RoundThree_UnavailablePreview_RefusesEveryWrite(string operationId)
     {
         var tool = new StubTool(operationId);
-        var executor = CreateExecutor(new AiToolRegistry([tool]), Substitute.For<IPendingOperationChangePreviewer>());
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<PendingOperationChangePreview?>(null));
+        var executor = CreateExecutor(new AiToolRegistry([tool]), previewer);
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, operationId,
             Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
         response.PendingOperation.Should().BeNull();
-        response.Operation.PolicyReason.Should().Be("stale_preview");
+        response.Operation.PolicyReason.Should().Be("preview_unavailable");
         tool.Calls.Should().Be(0);
         _dbContext.PendingAgentOperations.Should().OnlyContain(item => item.ConsumedAtUtc != null);
+    }
+
+    [Theory]
+    [InlineData(25, "approve")]
+    [InlineData(26, "approve")]
+    [InlineData(55, "approve")]
+    [InlineData(26, "edit")]
+    [InlineData(26, "reject")]
+    [InlineData(26, "stale")]
+    public async Task InferredIcons_AllTargets_RequireCompleteBoundApprovalAndReadBackExactly(int count, string action)
+    {
+        var today = new DateOnly(2026, 10, 19);
+        var habits = Enumerable.Range(0, count).Select(index => Habit.Create(new HabitCreateParams(_userId,
+            $"Habit {index:D3}", FrequencyUnit.Day, 1, today, Description: "Keep description", DueTime: new TimeOnly(9, 0),
+            Days: [DayOfWeek.Monday], ChecklistItems: [new("Keep checklist", true)], Emoji: "📝")).Value).ToArray();
+        var completed = Habit.Create(new HabitCreateParams(_userId, "Completed", null, null, today, Emoji: "✅")).Value;
+        completed.Log(today);
+        var foreign = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Foreign", FrequencyUnit.Day, 1, today, Emoji: "🔒")).Value;
+        _dbContext.Habits.AddRange(habits.Concat([completed, foreign]));
+        await _dbContext.SaveChangesAsync();
+        var originalState = habits.ToDictionary(habit => habit.Id, StateExceptIcon);
+        var originalVersions = habits.ToDictionary(habit => habit.Id, habit => habit.ReminderProbeVersion);
+        _dbContext.ChangeTracker.Clear();
+        var expected = habits.Select((habit, index) => (habit.Id, Emoji: index % 2 == 0 ? "📚" : "🏃"))
+            .ToDictionary(item => item.Id, item => item.Emoji);
+        var handler = new IconResponseHandler(habits.Chunk(25).Select(chunk => ResponsesTestData.Text(JsonSerializer.Serialize(new
+        {
+            emojis = chunk.ToDictionary(habit => habit.Id.ToString(), habit => expected[habit.Id])
+        }))));
+        var client = new AiCompletionClient(new ResponsesClient(new ApiKeyCredential("test-key"), new ResponsesClientOptions
+        {
+            Endpoint = new Uri("https://orbit.test/v1"),
+            Transport = new HttpClientPipelineTransport(new HttpClient(handler))
+        }), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
+        var inference = new AiHabitEmojiInferenceService(AiBudgetTestDouble.Wrap(client), NullLogger<AiHabitEmojiInferenceService>.Instance);
+        var tool = new BulkUpdateHabitEmojisTool(new GenericRepository<Habit>(_dbContext), inference,
+            new UnitOfWork(_dbContext, new DatabaseConnectionSettings()), NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var tools = new AiToolRegistry([tool]);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), dates, tools);
+        var executor = CreateExecutor(tools, previewer);
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
+            Parse("""{"emoji_mode":"infer","filter":{"all":true}}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+
+        held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        var pending = held.PendingOperation!;
+        pending.ChangeTargetCount.Should().Be(count);
+        pending.Items.Should().HaveCount(count);
+        foreach (var item in pending.Items!)
+            item.Fields.Should().Contain(field => field.Field == "emoji" && field.NewValue == expected[item.EntityId!.Value] && field.IsEditable);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Habits.Where(habit => expected.Keys.Contains(habit.Id)).ToListAsync()).Should().OnlyContain(habit => habit.Emoji == "📝");
+        handler.Calls.Should().Be((count + 24) / 25);
+        foreach (var request in handler.Requests)
+        {
+            using var json = JsonDocument.Parse(request);
+            json.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+            json.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(1024);
+            json.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        }
+        var refreshed = await revisions.RefreshAsync(_userId, pending.Id, default);
+        refreshed.IsSuccess.Should().BeTrue();
+        refreshed.Preview!.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
+        if (action == "reject")
+        {
+            var rejected = await revisions.ReviseAsync(_userId, pending.Id,
+                new RevisePendingOperationRequest(pending.PreviewFingerprint!, []), default);
+            rejected.Cancelled.Should().BeTrue();
+            _pendingOperationStore.Confirm(_userId, pending.Id).Should().BeNull();
+            handler.Calls.Should().Be((count + 24) / 25);
+            return;
+        }
+        if (action == "edit")
+        {
+            var chosen = pending.Items[0];
+            var revised = await revisions.ReviseAsync(_userId, pending.Id, new RevisePendingOperationRequest(
+                pending.PreviewFingerprint!, [new(chosen.ItemId, Parse("""{"emoji":"🌟"}"""))]), default);
+            revised.IsSuccess.Should().BeTrue(revised.Error);
+            expected = new Dictionary<Guid, string> { [chosen.EntityId!.Value] = "🌟" };
+        }
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        if (action == "stale")
+        {
+            var changed = await _dbContext.Habits.SingleAsync(habit => habit.Id == habits[0].Id);
+            changed.Update(new HabitUpdateParams("Changed title", changed.Description, changed.FrequencyUnit,
+                changed.FrequencyQuantity, changed.Days.ToList(), changed.IsBadHabit, changed.DueDate, Emoji: changed.Emoji)).IsSuccess.Should().BeTrue();
+            await _dbContext.SaveChangesAsync();
+        }
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
+            execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        response.Operation.Status.Should().Be(action == "stale" ? AgentOperationStatus.Denied : AgentOperationStatus.Succeeded);
+        if (action == "stale") response.PolicyDenial!.Reason.Should().Be("stale_preview");
+        _dbContext.ChangeTracker.Clear();
+        var readback = await _dbContext.Habits.ToListAsync();
+        foreach (var habit in readback.Where(habit => habits.Any(original => original.Id == habit.Id)))
+        {
+            habit.Emoji.Should().Be(action != "stale" && expected.TryGetValue(habit.Id, out var emoji) ? emoji : "📝");
+            if (action != "stale")
+            {
+                StateExceptIcon(habit).Should().Be(originalState[habit.Id]);
+                habit.ReminderProbeVersion.Should().Be(originalVersions[habit.Id] + (expected.ContainsKey(habit.Id) ? 1 : 0));
+            }
+        }
+        readback.Single(habit => habit.Id == foreign.Id).Emoji.Should().Be("🔒");
+        readback.Single(habit => habit.Id == completed.Id).Emoji.Should().Be("✅");
+        if (action != "stale")
+        {
+            var replay = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
+                execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+            replay.Operation.Status.Should().NotBe(AgentOperationStatus.Succeeded);
+        }
+        handler.Calls.Should().Be((count + 24) / 25);
+    }
+
+    private static string StateExceptIcon(Habit habit) => JsonSerializer.Serialize(
+        JsonSerializer.SerializeToElement(habit).EnumerateObject()
+            .Where(property => property.Name is not (nameof(Habit.Emoji) or nameof(Habit.UpdatedAtUtc) or nameof(Habit.ReminderProbeVersion)))
+            .ToDictionary(property => property.Name, property => property.Value));
+
+    private sealed class IconResponseHandler(IEnumerable<string> responses) : HttpMessageHandler
+    {
+        private readonly Queue<string> _responses = new(responses);
+        public int Calls { get; private set; }
+        public List<string> Requests { get; } = [];
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            Requests.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent(_responses.Dequeue(), System.Text.Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InferredIcons_InitialPreparationFailure_IsFailedAndCancelledWithoutStaleApproval(bool budget)
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 10, 19))).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(budget
+                ? Result.Failure<IReadOnlyDictionary<Guid, string>>(Orbit.Infrastructure.AI.AiBudgetExceededException.Error)
+                : Result.Success<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>()));
+        var work = Substitute.For<IUnitOfWork>();
+        var tools = new AiToolRegistry([new BulkUpdateHabitEmojisTool(new GenericRepository<Habit>(_dbContext),
+            inference, work, NullLogger<BulkUpdateHabitEmojisTool>.Instance)]);
+        var dates = Substitute.For<IUserDateService>();
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), dates, tools);
+        var executor = CreateExecutor(tools, previewer);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId,
+            "bulk_update_habit_emojis", Parse("""{"emoji_mode":"infer","filter":{"all":true}}"""),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        response.Operation.PolicyReason.Should().Be(budget ? "AI_DAILY_BUDGET_EXCEEDED" : "preview_unavailable");
+        response.PendingOperation.Should().BeNull();
+        response.PolicyDenial.Should().BeNull();
+        var pending = _dbContext.PendingAgentOperations.Single();
+        pending.PreviewFingerprint.Should().BeNull();
+        pending.ConfirmedAtUtc.Should().BeNull();
+        pending.ConsumedAtUtc.Should().NotBeNull();
+        _pendingOperationStore.Confirm(_userId, pending.Id).Should().BeNull();
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Habits.SingleAsync()).Emoji.Should().BeNull();
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InferredIcons_CancellationOrDeadline_CancelsTheUnboundProposal(bool callerCancelled)
+    {
+        _dbContext.Habits.Add(Habit.Create(new HabitCreateParams(_userId, "Read", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 10, 19))).Value);
+        await _dbContext.SaveChangesAsync();
+        using var cancellation = new CancellationTokenSource();
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (callerCancelled) cancellation.Cancel();
+                return Task.FromException<Result<IReadOnlyDictionary<Guid, string>>>(new OperationCanceledException(cancellation.Token));
+            });
+        var work = Substitute.For<IUnitOfWork>();
+        var tools = new AiToolRegistry([new BulkUpdateHabitEmojisTool(new GenericRepository<Habit>(_dbContext), inference,
+            work, NullLogger<BulkUpdateHabitEmojisTool>.Instance)]);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), Substitute.For<IUserDateService>(), tools);
+        var executor = CreateExecutor(tools, previewer);
+        var act = () => executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, "bulk_update_habit_emojis",
+            Parse("""{"filter":{"all":true}}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), cancellation.Token);
+
+        if (callerCancelled)
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        else
+        {
+            var response = await act();
+            response.Operation.PolicyReason.Should().Be("preview_unavailable");
+            response.PendingOperation.Should().BeNull();
+        }
+        var pending = _dbContext.PendingAgentOperations.Single();
+        pending.ConsumedAtUtc.Should().NotBeNull();
+        pending.ConfirmedAtUtc.Should().BeNull();
+        _pendingOperationStore.Confirm(_userId, pending.Id).Should().BeNull();
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -730,7 +961,7 @@ public class AgentChatWriteHoldTests : IDisposable
         {
             previewer = Substitute.For<IPendingOperationChangePreviewer>();
             previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-                .Returns(call => AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default));
+                .Returns(call => Result.Success(AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default)));
         }
 
         return new AgentOperationExecutor(

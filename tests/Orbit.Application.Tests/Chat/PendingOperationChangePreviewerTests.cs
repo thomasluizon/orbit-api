@@ -61,7 +61,7 @@ public sealed class PendingOperationChangePreviewerTests
         });
         var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
             new AiToolRegistry([new CreateSubHabitTool(Substitute.For<MediatR.IMediator>())]));
-        var preview = await previewer.PreviewAsync(UserId, "create_sub_habit", args);
+        var preview = (await previewer.PreviewAsync(UserId, "create_sub_habit", args)).Value;
         preview.Should().NotBeNull();
         var fields = preview!.Items!.Single().Fields;
         fields.Select(f => f.Field).Should().BeEquivalentTo(args.EnumerateObject().Select(p => p.Name));
@@ -70,7 +70,7 @@ public sealed class PendingOperationChangePreviewerTests
         fields.Single(f => f.Field == "parent_habit_id").NewValue.Should().Be("Parent");
         fields.Single(f => f.Field == "tag_ids").NewValue.Should().Be("Health");
         _tags.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
-        (await previewer.PreviewAsync(UserId, "create_sub_habit", args)).Should().BeNull();
+        ((await previewer.PreviewAsync(UserId, "create_sub_habit", args)).Value).Should().BeNull();
     }
 
     [Fact]
@@ -321,9 +321,9 @@ public sealed class PendingOperationChangePreviewerTests
         var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
 
-        var preview = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+        var preview = (await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
             new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
-            JsonSerializer.Deserialize<JsonElement>(arguments));
+            JsonSerializer.Deserialize<JsonElement>(arguments))).Value;
 
         preview.Should().NotBeNull();
         preview!.ChangeTargetCount.Should().Be(habits.Length);
@@ -352,11 +352,12 @@ public sealed class PendingOperationChangePreviewerTests
         var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work,
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
 
-        var preview = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+        var result = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
             new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
             JsonSerializer.Deserialize<JsonElement>("""{"infer_from_title":true}"""));
 
-        preview.Should().BeNull();
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("budget unavailable");
         count.Should().Be(2);
         habits.Should().OnlyContain(habit => habit.Emoji == null);
         await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -653,10 +654,160 @@ public sealed class PendingOperationChangePreviewerTests
                 && row.NewValue == "60 min before due");
     }
 
+    [Fact]
+    public async Task LiveIconFailureReason_BudgetFailureRemainsTypedInsteadOfBecomingAnAbsentPreview()
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<IReadOnlyDictionary<Guid, string>>(new AppError(
+                "AI_DAILY_BUDGET_EXCEEDED", "Your daily AI safety budget has been reached. Please try again tomorrow.")));
+        var work = Substitute.For<IUnitOfWork>();
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work,
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool]));
+
+        var result = await previewer.TryPreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("""{"emoji_mode":"infer","infer_from_title":true,"filter":{"all":true}}"""),
+            NullLogger<PendingOperationChangePreviewer>.Instance, default);
+
+        result.IsFailure.Should().BeTrue("an inference refusal is not a successful missing or stale preview");
+        result.ErrorCode.Should().Be("AI_DAILY_BUDGET_EXCEEDED");
+        habit.Emoji.Should().BeNull();
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LiveIconFailureReason_IncompleteMappingRemainsAPreparationFailure()
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>()));
+        var work = Substitute.For<IUnitOfWork>();
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work,
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool]));
+
+        var result = await previewer.TryPreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("""{"emoji_mode":"infer","infer_from_title":true,"filter":{"all":true}}"""),
+            NullLogger<PendingOperationChangePreviewer>.Instance, default);
+
+        result.IsFailure.Should().BeTrue("a missing inferred icon cannot be a successful absent or stale preview");
+        result.Error.Should().Be("preview_unavailable");
+        habit.Emoji.Should().BeNull();
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LiveIconFailureReason_CompleteMappingStillOffersAnExplicitUnwrittenPreview()
+    {
+        var habit = CreateHabit("Read", null);
+        Setup([habit]);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string> { [habit.Id] = "📚" }));
+        var work = Substitute.For<IUnitOfWork>();
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work,
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool]));
+
+        var result = await previewer.TryPreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("""{"emoji_mode":"infer","infer_from_title":true,"filter":{"all":true}}"""),
+            NullLogger<PendingOperationChangePreviewer>.Instance, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.Items.Should().ContainSingle();
+        result.Value.Items!.Single().Fields.Should().Contain(field => field.Field == "emoji" && field.NewValue == "📚");
+        habit.Emoji.Should().BeNull();
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("missing", "missing_mapping")]
+    [InlineData("unknown", "unexpected_mapping")]
+    [InlineData("invalid", "invalid_emoji")]
+    [InlineData("refusal", "unknown")]
+    [InlineData("throw", "unknown")]
+    public async Task InferredIcons_InvalidChunk_EmitsOnlySafePreparationReceipt(string fault, string reason)
+    {
+        var habit = CreateHabit("private title", null);
+        Setup([habit]);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        var mapping = new Dictionary<Guid, string> { [habit.Id] = "📚" };
+        if (fault == "missing") mapping.Clear();
+        if (fault == "unknown") mapping[Guid.NewGuid()] = "📚";
+        if (fault == "invalid") mapping[habit.Id] = "private provider text";
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(_ => fault == "throw" ? throw new InvalidOperationException("private exception")
+                : fault == "refusal" ? Result.Failure<IReadOnlyDictionary<Guid, string>>("preview_unavailable")
+                : Result.Success<IReadOnlyDictionary<Guid, string>>(mapping));
+        var logger = new ReceiptLogger();
+        var work = Substitute.For<IUnitOfWork>();
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, work, logger);
+        var result = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool])).TryPreviewAsync(UserId, tool.Name,
+                JsonSerializer.Deserialize<JsonElement>("{}"), NullLogger.Instance, default);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("preview_unavailable");
+        logger.Exception.Should().BeNull();
+        logger.Receipt.Where(pair => pair.Key != "{OriginalFormat}").Should().BeEquivalentTo(new Dictionary<string, object?>
+        {
+            ["Stage"] = fault is "throw" or "refusal" ? "inference" : "mapping",
+            ["Reason"] = reason,
+            ["ChunkIndex"] = 1,
+            ["ChunkCount"] = 1,
+            ["ChunkTargetCount"] = 1,
+            ["TargetCount"] = 1
+        });
+        habit.Emoji.Should().BeNull();
+        await work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InferredIcons_CallerCancellation_PropagatesWithoutAnApproval()
+    {
+        Setup([CreateHabit("Read", null)]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), cancellation.Token)
+            .Returns(Task.FromCanceled<Result<IReadOnlyDictionary<Guid, string>>>(cancellation.Token));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService, new AiToolRegistry([tool]));
+
+        var act = () => previewer.TryPreviewAsync(UserId, tool.Name, JsonSerializer.Deserialize<JsonElement>("{}"),
+            NullLogger.Instance, cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private sealed class ReceiptLogger : Microsoft.Extensions.Logging.ILogger<BulkUpdateHabitEmojisTool>
+    {
+        public IReadOnlyList<KeyValuePair<string, object?>> Receipt { get; private set; } = [];
+        public Exception? Exception { get; private set; }
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Receipt = ((IEnumerable<KeyValuePair<string, object?>>)state!).ToArray();
+            Exception = exception;
+        }
+    }
+
     private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
-        await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+        (await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
             new AiToolRegistry([])).PreviewAsync(
-            UserId, operation, JsonDocument.Parse(json).RootElement);
+            UserId, operation, JsonDocument.Parse(json).RootElement)).Value;
 
     private void Setup(IReadOnlyList<Habit> habits) =>
         _habits.FindAsync(

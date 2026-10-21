@@ -37,8 +37,11 @@ public sealed class PendingOperationRevisionService(
         if (execution.RequiresReproposal)
             return Failure("pending_operation_schema_changed");
 
-        var preview = await previewer.PreviewAsync(userId, execution.OperationId,
+        var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
+        if (previewResult.IsFailure)
+            return Failure(previewResult.ErrorCode ?? previewResult.Error);
+        var preview = previewResult.Value;
         if (preview?.Items is null || string.IsNullOrWhiteSpace(preview.PreviewFingerprint))
             return Failure("preview_unavailable");
 
@@ -69,8 +72,11 @@ public sealed class PendingOperationRevisionService(
         if (execution.RequiresReproposal)
             return Failure("pending_operation_schema_changed");
 
-        var original = await previewer.PreviewAsync(userId, execution.OperationId,
+        var originalResult = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
+        if (originalResult.IsFailure)
+            return PreparationFailure(originalResult);
+        var original = originalResult.Value;
         if (original?.Items is null || original.PreviewFingerprint != request.PreviewFingerprint)
             return Failure("stale_preview");
 
@@ -78,18 +84,8 @@ public sealed class PendingOperationRevisionService(
         if (request.Items.Any(item => !offered.ContainsKey(item.ItemId)))
             return Failure("item_not_offered");
 
-        foreach (var item in request.Items)
-        {
-            if (item.Edits is not { } edits || edits.ValueKind == JsonValueKind.Null)
-                continue;
-            if (edits.ValueKind != JsonValueKind.Object)
-                return Failure("invalid_edits");
-            var allowed = offered[item.ItemId].Fields.Where(field => field.IsEditable)
-                .Select(field => field.Field)
-                .ToHashSet(StringComparer.Ordinal);
-            if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)))
-                return Failure("field_not_offered");
-        }
+        if (EditError(request.Items, offered) is { } editError)
+            return Failure(editError);
 
         var expectedFingerprint = AgentOperationFingerprint.Compute(
             execution.OperationId, execution.Arguments.GetRawText());
@@ -108,8 +104,11 @@ public sealed class PendingOperationRevisionService(
             cancellationToken))
             return Failure("invalid_revision");
 
-        var revisedPreview = await previewer.PreviewAsync(userId, execution.OperationId,
+        var revisedPreviewResult = await previewer.PreviewAsync(userId, execution.OperationId,
             revised.Value, cancellationToken);
+        if (revisedPreviewResult.IsFailure)
+            return PreparationFailure(revisedPreviewResult);
+        var revisedPreview = revisedPreviewResult.Value;
         if (revisedPreview?.Items is null || revisedPreview.Items.Count != request.Items.Count
             || revisedPreview.Items.Any(item => !offered.TryGetValue(item.ItemId, out var previous)
                 || execution.OperationId != "bulk_create_habits"
@@ -125,6 +124,28 @@ public sealed class PendingOperationRevisionService(
         return new PendingOperationRevisionResult(true, null, pendingOperationId, revisedPreview);
     }
 
+    private static string? EditError(IReadOnlyList<RevisedPendingOperationItem> items,
+        IReadOnlyDictionary<string, PendingOperationItem> offered)
+    {
+        foreach (var item in items)
+        {
+            if (item.Edits is not { } edits || edits.ValueKind == JsonValueKind.Null)
+                continue;
+            if (edits.ValueKind != JsonValueKind.Object)
+                return "invalid_edits";
+            var allowed = offered[item.ItemId].Fields.Where(field => field.IsEditable)
+                .Select(field => field.Field)
+                .ToHashSet(StringComparer.Ordinal);
+            if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)))
+                return "field_not_offered";
+        }
+
+        return null;
+    }
+
+    private static PendingOperationRevisionResult PreparationFailure(Result result) =>
+        Failure(result.ErrorCode ?? result.Error);
+
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
@@ -133,8 +154,11 @@ public sealed class PendingOperationRevisionService(
         if (string.IsNullOrWhiteSpace(execution.PreviewFingerprint))
             return execution.Surface != AgentExecutionSurface.Chat
                 || toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
-        var current = await previewer.PreviewAsync(userId, execution.OperationId,
+        var currentResult = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
+        if (currentResult.IsFailure)
+            return false;
+        var current = currentResult.Value;
         return current?.PreviewFingerprint == execution.PreviewFingerprint;
     }
 
@@ -146,8 +170,11 @@ public sealed class PendingOperationRevisionService(
         if (execution.OperationId != "bulk_create_habits")
             return true;
 
-        var preview = await previewer.PreviewAsync(userId, execution.OperationId,
+        var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
+        if (previewResult.IsFailure)
+            return false;
+        var preview = previewResult.Value;
         return preview?.Items is { Count: > 0 } items
             && items.All(item => item.ValidationErrors is null or { Count: 0 });
     }

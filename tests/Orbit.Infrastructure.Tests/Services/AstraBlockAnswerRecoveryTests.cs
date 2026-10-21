@@ -172,7 +172,7 @@ public class AstraBlockAnswerRecoveryTests
         { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
         var held = pending.Create(user.Id, capability, "bulk_create_habits", originalArgs, "Choose",
             AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs), AgentExecutionSurface.Chat);
-        var original = await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(originalArgs));
+        var original = (await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(originalArgs))).Value;
         pending.Revise(user.Id, held.Id, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs),
             originalArgs, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs), original!.PreviewFingerprint!).Should().BeTrue();
         var response = new ChatResponse("Nothing has been saved.", [], PendingOperations:
@@ -191,7 +191,7 @@ public class AstraBlockAnswerRecoveryTests
         var expected = original;
         if (revise)
         {
-            expected = await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(revisedArgs));
+            expected = (await previewer.PreviewAsync(user.Id, "bulk_create_habits", JsonSerializer.Deserialize<JsonElement>(revisedArgs))).Value;
             pending.Revise(user.Id, held.Id, AgentOperationFingerprint.Compute("bulk_create_habits", originalArgs),
                 revisedArgs, AgentOperationFingerprint.Compute("bulk_create_habits", revisedArgs), expected!.PreviewFingerprint!).Should().BeTrue();
         }
@@ -202,8 +202,8 @@ public class AstraBlockAnswerRecoveryTests
             {
                 if ((refresh is "unavailable" or "throws") && ++refreshCalls == 1)
                     return refresh == "throws"
-                        ? Task.FromException<PendingOperationChangePreview?>(new InvalidOperationException("Preview unavailable"))
-                        : Task.FromResult<PendingOperationChangePreview?>(null);
+                        ? Task.FromException<Result<PendingOperationChangePreview?>>(new InvalidOperationException("Preview unavailable"))
+                        : Task.FromResult(Result.Success<PendingOperationChangePreview?>(null));
                 return previewer.PreviewAsync(user.Id, "bulk_create_habits", call.Arg<JsonElement>(), call.Arg<CancellationToken>());
             });
         var executor = Substitute.For<IAgentOperationExecutor>();
@@ -220,7 +220,7 @@ public class AstraBlockAnswerRecoveryTests
             Substitute.For<IValidator<RevisePendingOperationRequest>>(), new AiToolRegistry([]));
         (await revisions.CanApproveAsync(user.Id, execution, default)).Should().BeTrue();
         (await revisions.IsCurrentAsync(user.Id, execution, default)).Should().BeTrue();
-        var approvalPreview = await previewer.PreviewAsync(user.Id, execution.OperationId, execution.Arguments);
+        var approvalPreview = (await previewer.PreviewAsync(user.Id, execution.OperationId, execution.Arguments)).Value;
         approvalPreview!.PreviewFingerprint.Should().Be(expected!.PreviewFingerprint);
         if (revise && refresh != "available")
         {

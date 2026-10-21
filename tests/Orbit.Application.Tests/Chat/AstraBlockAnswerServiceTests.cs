@@ -197,8 +197,8 @@ public class AstraBlockAnswerServiceTests
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
         var previewer = Substitute.For<IPendingOperationChangePreviewer>();
         previewer.PreviewAsync(UserId, "bulk_create_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns(_ => throws ? Task.FromException<PendingOperationChangePreview?>(new InvalidOperationException("preview failed"))
-                : Task.FromResult<PendingOperationChangePreview?>(null));
+            .Returns(_ => throws ? Task.FromException<Result<PendingOperationChangePreview?>>(new InvalidOperationException("preview failed"))
+                : Task.FromResult(Result.Success<PendingOperationChangePreview?>(null)));
         var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
             _featureFlags, operations, previewer: previewer);
 

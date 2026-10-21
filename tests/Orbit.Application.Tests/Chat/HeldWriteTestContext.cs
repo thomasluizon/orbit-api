@@ -214,7 +214,7 @@ internal sealed class HeldWriteTestContext : IDisposable
         var registry = new AiToolRegistry([tool]);
         var previewer = new PendingOperationChangePreviewer(Repository<Habit>(), Repository<Goal>(),
             Repository<Tag>(), Dates, registry);
-        var preview = await previewer.PreviewAsync(UserId, tool.Name, original);
+        var preview = (await previewer.PreviewAsync(UserId, tool.Name, original)).Value;
         var service = new PendingOperationRevisionService(store, previewer,
             new RevisePendingOperationRequestValidator(), registry);
         var edits = JsonSerializer.Deserialize<JsonElement>(Expand(editsJson));

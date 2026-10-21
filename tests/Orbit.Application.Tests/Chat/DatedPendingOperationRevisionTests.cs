@@ -34,7 +34,7 @@ public sealed class DatedPendingOperationRevisionTests
             habit_ids = new[] { context.Habit.Id, other.Id },
             dates = new[] { "2026-10-18", "2026-10-19" }
         });
-        var original = await previewer.PreviewAsync(context.UserId, tool.Name, arguments);
+        var original = (await previewer.PreviewAsync(context.UserId, tool.Name, arguments)).Value;
         original!.Items.Should().HaveCount(4);
         var selected = original.Items!.Single(item => item.EntityId == context.Habit.Id
             && item.Fields.Single().NewValue == "2026-10-19");

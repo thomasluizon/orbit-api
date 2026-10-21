@@ -33,6 +33,8 @@ public class AiControllerTests
 
     public AiControllerTests()
     {
+        _changePreviewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<PendingOperationChangePreview?>(null));
         _controller = new AiController(
             _catalogService,
             _policyEvaluator,
@@ -221,7 +223,7 @@ public class AiControllerTests
         var item = new PendingOperationItem("0", null, "First", [], "item-state");
         _changePreviewer.PreviewAsync(UserId, "bulk_create_habits", arguments,
                 Arg.Any<CancellationToken>())
-            .Returns(new PendingOperationChangePreview([], 1, [item], "fresh"));
+            .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview([], 1, [item], "fresh")));
         _pendingOperationStore.Revise(UserId, pendingId, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string>(), "fresh").Returns(true);
 
@@ -353,7 +355,7 @@ public class AiControllerTests
         var previewer = new PendingOperationChangePreviewer(Substitute.For<IGenericRepository<Habit>>(),
             Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IGenericRepository<Tag>>(),
             Substitute.For<IUserDateService>(), new AiToolRegistry([]));
-        var preview = await previewer.PreviewAsync(UserId, "bulk_create_habits", arguments);
+        var preview = (await previewer.PreviewAsync(UserId, "bulk_create_habits", arguments)).Value;
         _pendingOperationStore.GetExecution(UserId, id).Returns(new PendingAgentOperationExecution(id,
             AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation,
@@ -502,8 +504,8 @@ public class AiControllerTests
                 AgentExecutionSurface.Chat,
                 AgentConfirmationRequirement.FreshConfirmation, PreviewFingerprint: "prepared"));
         _changePreviewer.PreviewAsync(UserId, "delete_habit", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns(new PendingOperationChangePreview([], 1,
-                [new PendingOperationItem("habit-123", null, "Exercise", [], "state")], "prepared"));
+            .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview([], 1,
+                [new PendingOperationItem("habit-123", null, "Exercise", [], "state")], "prepared")));
 
         var response = new AgentExecuteOperationResponse(new AgentOperationResult(
             "delete_habit",
@@ -549,7 +551,7 @@ public class AiControllerTests
                 PreviewFingerprint: "old-state"));
         _changePreviewer.PreviewAsync(UserId, "bulk_delete_habits", Arg.Any<JsonElement>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new PendingOperationChangePreview([], 0, [], "new-state"));
+            .Returns(Result.Success<PendingOperationChangePreview?>(new PendingOperationChangePreview([], 0, [], "new-state")));
 
         var result = await _controller.ExecutePendingOperation(pendingOperationId,
             new AiController.ExecutePendingOperationRequest("agc_token"), CancellationToken.None);
