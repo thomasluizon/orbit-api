@@ -19,6 +19,20 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         RuleFor(x => x.HabitId)
             .NotEmpty();
 
+        RuleFor(x => x.ParentId)
+            .NotEqual(Guid.Empty)
+            .WithCopy(ErrorCodes.TargetParentNotFound)
+            .When(x => x.ParentId.HasValue);
+
+        RuleFor(x => x.ParentId)
+            .Must((command, parentId) => parentId != command.HabitId)
+            .WithCopy(ErrorCodes.SelfParent)
+            .When(x => x.ParentId.HasValue);
+
+        RuleFor(x => x.ParentId)
+            .Must((command, parentId) => command.ClearParent != true || parentId is null)
+            .WithCopy(ErrorCodes.ValidationError);
+
         RuleFor(x => x).CustomAsync(async (command, context, cancellationToken) =>
         {
             var title = command.Title;

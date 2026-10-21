@@ -27,7 +27,9 @@ public record UpdateHabitCommand(
     string? Emoji = null,
     int? IntervalWeeks = null,
     DateOnly? StartDate = null,
-    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result>;
+    IReadOnlyList<Guid>? TagIds = null,
+    Guid? ParentId = null,
+    bool? ClearParent = null) : IRequest<Result>;
 
 public sealed record UpdateHabitFieldsCommand(
     Guid UserId,
@@ -54,8 +56,8 @@ public class UpdateHabitCommandHandler(
             request.UserId,
             payGate,
             ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds, request.TagIds,
-                (habit, today) => ResolveUpdate(request, habit, today), false, ct),
-            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
+                (habit, today) => ResolveUpdate(request, habit, today), false, request.ParentId, request.ClearParent, ct),
+            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update, state.ParentId),
             (state, ct) => ApplyUpdateAsync(request, state, ct),
             cancellationToken);
     }
@@ -66,8 +68,8 @@ public class UpdateHabitCommandHandler(
             request.UserId,
             payGate,
             ct => PrepareUpdateAsync(request.UserId, request.HabitId, null, null,
-                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, ct),
-            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
+                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, null, null, ct),
+            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update, state.ParentId),
             async (state, ct) =>
             {
                 var command = HabitUpdateValidation.ToCommand(request.UserId, request.HabitId, state.Update);
@@ -83,6 +85,8 @@ public class UpdateHabitCommandHandler(
         IReadOnlyList<Guid>? tagIds,
         Func<Habit, DateOnly, HabitUpdateParams> resolveUpdate,
         bool validateFields,
+        Guid? requestedParentId,
+        bool? clearParent,
         CancellationToken cancellationToken)
     {
         var habit = await habitRepository.FindOneTrackedAsync(
@@ -97,10 +101,12 @@ public class UpdateHabitCommandHandler(
             },
             cancellationToken);
 
-        if (habit is null)
+        if (habit is null || habit.IsDeleted)
             return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
 
         await habitRepository.ReloadAsync(habit, cancellationToken);
+        if (habit.IsDeleted)
+            return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var update = resolveUpdate(habit, today);
         if (habit.RequiresScheduleReanchor(update))
@@ -126,13 +132,10 @@ public class UpdateHabitCommandHandler(
                 return slipAlertGate.PropagateError<UpdateState>();
         }
 
-        if (update.IsGeneral.HasValue && !validateFields)
-        {
-            var related = await HabitUpdateValidation.LoadRelatedAsync([habit], userId, habitRepository, cancellationToken);
-            var generalMismatch = HabitUpdateValidation.ValidateGeneral(habit, update.IsGeneral.Value, related);
-            if (generalMismatch.IsFailure)
-                return generalMismatch.PropagateError<UpdateState>();
-        }
+        var parent = await PrepareParentAsync(userId, habit, update, requestedParentId, clearParent,
+            validateFields, cancellationToken);
+        if (parent.IsFailure)
+            return parent.PropagateError<UpdateState>();
 
         var tagLinks = await ResolveTagLinksAsync(userId, tagIds, cancellationToken);
         if (tagLinks.IsFailure)
@@ -147,7 +150,37 @@ public class UpdateHabitCommandHandler(
             goalLinks = resolved.Value;
         }
 
-        return Result.Success(new UpdateState(habit, update, today, tagLinks.Value, goalLinks));
+        return Result.Success(new UpdateState(habit, update, today, tagLinks.Value, goalLinks, parent.Value));
+    }
+
+    private async Task<Result<Guid?>> PrepareParentAsync(Guid userId, Habit habit, HabitUpdateParams update,
+        Guid? requestedParentId, bool? clearParent, bool validateFields, CancellationToken cancellationToken)
+    {
+        if (clearParent == true && requestedParentId.HasValue)
+            return Result.Failure<Guid?>(new AppError(ErrorCodes.ValidationError, ErrorCopy.English(ErrorCodes.ValidationError)));
+        var finalParentId = clearParent == true ? null : requestedParentId ?? habit.ParentHabitId;
+        var finalIsGeneral = update.IsGeneral ?? habit.IsGeneral;
+
+        if (requestedParentId.HasValue)
+        {
+            var parents = await habitRepository.FindAsync(
+                h => h.Id == requestedParentId && h.UserId == userId && !h.IsDeleted, cancellationToken);
+            var moveValidation = await MoveHabitParentCommandHandler.ValidateMoveAsync(
+                new(userId, habit.Id, requestedParentId), habit, parents.FirstOrDefault(),
+                habitRepository, appConfigService, cancellationToken, finalIsGeneral);
+            if (moveValidation.IsFailure)
+                return moveValidation.PropagateError<Guid?>();
+        }
+
+        if (!validateFields && (update.IsGeneral.HasValue || requestedParentId.HasValue || clearParent == true))
+        {
+            var related = await HabitUpdateValidation.LoadRelatedAsync([habit], userId, habitRepository, cancellationToken);
+            var generalMismatch = HabitUpdateValidation.ValidateGeneral(habit, finalIsGeneral, related, finalParentId);
+            if (generalMismatch.IsFailure)
+                return generalMismatch.PropagateError<Guid?>();
+        }
+
+        return Result.Success(finalParentId);
     }
 
     private async Task<Result<TagLinks?>> ResolveTagLinksAsync(
@@ -215,6 +248,9 @@ public class UpdateHabitCommandHandler(
         if (result.IsFailure)
             return result;
 
+        if (habit.ParentHabitId != state.ParentId)
+            habit.SetParentHabitId(state.ParentId);
+
         if (previousDueTime != habit.DueTime
             || previousReminderEnabled != habit.ReminderEnabled
             || !previousReminderTimes.SetEquals(GetReminderTimes(habit)))
@@ -254,7 +290,8 @@ public class UpdateHabitCommandHandler(
         HabitUpdateParams Update,
         DateOnly Today,
         TagLinks? TagLinks,
-        GoalLinks? GoalLinks);
+        GoalLinks? GoalLinks,
+        Guid? ParentId);
 
     private sealed record TagLinks(IReadOnlyList<Tag> Requested, int MaxTags);
 

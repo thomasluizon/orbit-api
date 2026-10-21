@@ -50,6 +50,25 @@ public class GetHabitFullDetailQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ColdDetailTracksRootChildAndMovedParent()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { habit });
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateTestUser());
+        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<HabitLog>());
+        foreach (var parent in new Guid?[] { null, Guid.NewGuid(), Guid.NewGuid(), null })
+        {
+            habit.SetParentHabitId(parent);
+            var result = await _handler.Handle(new(UserId, habit.Id), default);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Habit.ParentId.Should().Be(parent);
+        }
+    }
+
+    [Fact]
     public async Task Handle_HabitAndUserFound_ReturnsFullDetail()
     {
         var habit = CreateTestHabit();

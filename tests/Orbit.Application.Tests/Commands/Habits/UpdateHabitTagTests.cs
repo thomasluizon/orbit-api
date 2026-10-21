@@ -101,6 +101,25 @@ public sealed class UpdateHabitTagTests : IDisposable
             dates, _unitOfWork, _cache, _tags, _config);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AssociationRefusal_PreservesRequestedParentClearAndEntireEdit(bool goals)
+    {
+        _habit.SetParentHabitId(Guid.NewGuid());
+        var before = Snapshot();
+        var result = await _handler.Handle(Command() with
+        {
+            ClearParent = true,
+            TagIds = goals ? [] : [Guid.NewGuid()],
+            GoalIds = goals ? [Guid.NewGuid()] : [],
+            Options = new(ChecklistItems: [new("Changed", true)])
+        }, default);
+        result.ErrorCode.Should().Be(goals ? ErrorCodes.GoalNotFound : ErrorCodes.TagNotFound);
+        Snapshot().Should().Be(before);
+        await AssertNoSave();
+    }
+
     [Fact]
     public async Task OmittedOrNullTags_PreserveAssignmentsAndSkipTagLookup()
     {
@@ -284,6 +303,7 @@ public sealed class UpdateHabitTagTests : IDisposable
     }
     private string Snapshot() => JsonSerializer.Serialize(new
     {
+        _habit.ParentHabitId,
         _habit.Title,
         _habit.Description,
         _habit.DueDate,

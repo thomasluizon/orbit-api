@@ -81,15 +81,15 @@ public class MoveHabitParentCommandHandler(
         return await ValidateMoveAsync(request, habit, parents.FirstOrDefault(), repository, config, ct);
     }
 
-    private static async Task<Result> ValidateMoveAsync(MoveHabitParentCommand request, Habit habit, Habit? parent,
-        IGenericRepository<Habit> repository, IAppConfigService config, CancellationToken ct)
+    internal static async Task<Result> ValidateMoveAsync(MoveHabitParentCommand request, Habit habit, Habit? parent,
+        IGenericRepository<Habit> repository, IAppConfigService config, CancellationToken ct, bool? finalIsGeneral = null)
     {
         if (request.ParentId == request.HabitId)
             return Result.Failure(ErrorMessages.SelfParent);
-        if (parent is null)
+        if (request.ParentId == Guid.Empty || parent is null || parent.IsDeleted || parent.UserId != request.UserId)
             return Result.Failure(ErrorMessages.TargetParentNotFound);
 
-        if (parent.IsGeneral != habit.IsGeneral)
+        if (parent.IsGeneral != (finalIsGeneral ?? habit.IsGeneral))
             return Result.Failure(ErrorMessages.GeneralMismatchWithParent);
 
         var allHabits = await repository.FindAsync(h => h.UserId == request.UserId, ct);

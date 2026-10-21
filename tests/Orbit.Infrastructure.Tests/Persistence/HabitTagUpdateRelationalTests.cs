@@ -9,6 +9,9 @@ using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Queries;
+using Orbit.Domain.Common;
+using Orbit.Infrastructure.Tests.Controllers;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -24,15 +27,19 @@ public class HabitTagUpdateRelationalTests
     private static readonly ChecklistItem[] Checklist =
         [new("Same", true), new("Other", false), new("Same", false)];
 
-    [Fact]
-    public Task Update_Success_CommitsCompleteStateAfterDerivedGoalFlush() => ExerciseAsync("success");
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public Task Update_Success_CommitsCompleteStateAfterDerivedGoalFlush(bool clearParent) => ExerciseAsync("success", clearParent);
 
     [Theory]
-    [InlineData("storage")]
-    [InlineData("cancellation")]
-    public Task Update_FailureAfterFlush_RollsBackCompleteState(string failure) => ExerciseAsync(failure);
+    [InlineData("storage", false)]
+    [InlineData("storage", true)]
+    [InlineData("cancellation", false)]
+    [InlineData("cancellation", true)]
+    public Task Update_FailureAfterFlush_RollsBackCompleteState(string failure, bool clearParent) => ExerciseAsync(failure, clearParent);
 
-    private static async Task ExerciseAsync(string outcome)
+    private static async Task ExerciseAsync(string outcome, bool clearParent)
     {
         using var cancellation = new CancellationTokenSource();
         var probe = new FlushProbe(outcome == "cancellation" ? cancellation : null);
@@ -42,6 +49,11 @@ public class HabitTagUpdateRelationalTests
         var habit = Habit.Create(new HabitCreateParams(user.Id, "Original", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15],
             ChecklistItems: [new("Same", false), new("Same", true), new("Other", false)])).Value;
+        habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
+        habit.UpdateChecklist([new("Same", false), new("Same", true), new("Other", false)]);
+        var parent = Habit.Create(new HabitCreateParams(user.Id, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        if (clearParent) habit.SetParentHabitId(parent.Id);
+        Guid? finalParentId = clearParent ? null : parent.Id;
         var oldTag = Tag.Create(user.Id, "Old", "#ffffff").Value;
         var newTag = Tag.Create(user.Id, "New", "#ffffff").Value;
         var oldGoal = Goal.Create(user.Id, "Old goal", 10, "items").Value;
@@ -50,7 +62,7 @@ public class HabitTagUpdateRelationalTests
         habit.AddTag(oldTag);
         habit.AddGoal(oldGoal);
         seed.Users.Add(user);
-        seed.Habits.Add(habit);
+        seed.Habits.AddRange(habit, parent);
         seed.Tags.AddRange(oldTag, newTag);
         seed.Goals.AddRange(oldGoal, newGoal);
         seed.SentReminders.AddRange(SentReminder.Create(habit.Id, Today, 15),
@@ -76,6 +88,8 @@ public class HabitTagUpdateRelationalTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
         var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, Arg.Any<CancellationToken>())
+            .Returns(AppConstants.MaxHabitDepth);
         Guid? preparedTransaction = null;
         config.GetAsync(AppConfigKeys.MaxTagsPerHabit, AppConstants.MaxTagsPerHabit, Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -85,11 +99,13 @@ public class HabitTagUpdateRelationalTests
             });
         var goals = new GenericRepository<Goal>(mutation);
         var completion = new GoalCompletionService(goals, Substitute.For<IGamificationService>(), work, dates);
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var handler = new UpdateHabitCommandHandler(new GenericRepository<Habit>(mutation),
-            new GenericRepository<SentReminder>(mutation), goals, Substitute.For<IPayGateService>(), completion,
+            new GenericRepository<SentReminder>(mutation), goals, payGate, completion,
             dates, work, cache, new GenericRepository<Tag>(mutation), config);
         var command = new UpdateHabitCommand(user.Id, habit.Id, "Changed", "Details", FrequencyUnit.Day, 1,
-            DueDate: Today.AddDays(1), GoalIds: [newGoal.Id], TagIds: [newTag.Id], Emoji: "book",
+            DueDate: Today.AddDays(1), ParentId: clearParent ? null : parent.Id, ClearParent: clearParent, GoalIds: [newGoal.Id], TagIds: [newTag.Id], Emoji: "book",
             Options: new(ChecklistItems: Checklist, DueTime: new TimeOnly(10, 0),
                 ReminderEnabled: true, ReminderTimes: [30], EndDate: Today.AddDays(5)));
 
@@ -107,10 +123,13 @@ public class HabitTagUpdateRelationalTests
         using var assertions = new AssertionScope();
         if (outcome == "success")
         {
-            AssertUpdated(after.Habit, newTag.Id, newGoal.Id);
+            AssertUpdated(after.Habit, newTag.Id, newGoal.Id, finalParentId);
             after.Goals.Single(g => g.Id == newGoal.Id).CurrentValue.Should().Be(0);
             after.Goals.Single(g => g.Id == newGoal.Id).Habits.Select(h => h.Id).Should().Equal(habit.Id);
             after.Goals.Single(g => g.Id == oldGoal.Id).Habits.Should().BeEmpty();
+            after.Tags.Single(t => t.Id == newTag.Id).Habits.Select(h => h.Id).Should().Equal(habit.Id);
+            after.Tags.Single(t => t.Id == oldTag.Id).Habits.Should().BeEmpty();
+            after.Habit.Logs.Select(l => l.Id).Should().Equal(before.Habit.Logs.Select(l => l.Id));
             after.Reminders.Should().ContainSingle(r => r.Date == Today.AddDays(-1));
             cache.TryGetValue(cacheKey, out _).Should().BeFalse();
         }
@@ -133,16 +152,33 @@ public class HabitTagUpdateRelationalTests
         {
             flush.Rows.Should().BePositive();
             flush.TransactionId.Should().Be(preparedTransaction);
-            AssertUpdated(flush.State.Habit, newTag.Id, newGoal.Id);
+            AssertUpdated(flush.State.Habit, newTag.Id, newGoal.Id, finalParentId);
             flush.State.Reminders.Should().ContainSingle(r => r.Date == Today.AddDays(-1));
         }
         probe.Flushes[0].State.Goals.Single(g => g.Id == newGoal.Id).CurrentValue.Should().Be(3,
             "the first actual SQL flush precedes derived goal progress persistence");
         mutation.Database.CurrentTransaction.Should().BeNull();
+        var expectedParentId = outcome == "success" ? finalParentId : before.Habit.ParentHabitId;
+        var ordinary = await new GetHabitByIdQueryHandler(new GenericRepository<Habit>(readback),
+            new GenericRepository<HabitLog>(readback), dates).Handle(new(user.Id, habit.Id), default);
+        var full = await new GetHabitFullDetailQueryHandler(new GenericRepository<Habit>(readback),
+            new GenericRepository<HabitLog>(readback), new GenericRepository<User>(readback), dates)
+            .Handle(new(user.Id, habit.Id), default);
+        ordinary.IsSuccess.Should().BeTrue();
+        full.IsSuccess.Should().BeTrue();
+        foreach (var detail in new[] { ordinary.Value, full.Value.Habit })
+        {
+            detail.ParentId.Should().Be(expectedParentId);
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(detail, ReminderInputContractTests.MvcOptions()));
+            var value = json.RootElement.GetProperty("parentId");
+            if (expectedParentId.HasValue) value.GetGuid().Should().Be(expectedParentId.Value);
+            else value.ValueKind.Should().Be(JsonValueKind.Null);
+        }
     }
 
-    private static void AssertUpdated(Habit habit, Guid tagId, Guid goalId)
+    private static void AssertUpdated(Habit habit, Guid tagId, Guid goalId, Guid? parentId)
     {
+        habit.ParentHabitId.Should().Be(parentId);
         habit.Title.Should().Be("Changed");
         habit.Description.Should().Be("Details");
         habit.DueDate.Should().Be(Today.AddDays(1));
@@ -158,13 +194,18 @@ public class HabitTagUpdateRelationalTests
 
     private static async Task<Readback> ReadAsync(OrbitDbContext context, Guid habitId)
     {
-        var habit = await context.Habits.AsNoTracking().Include(h => h.Tags).Include(h => h.Goals)
+        var habit = await context.Habits.AsNoTracking().Include(h => h.Tags).Include(h => h.Goals).Include(h => h.Logs)
             .SingleAsync(h => h.Id == habitId);
         var goals = await context.Goals.AsNoTracking().Include(g => g.Habits).OrderBy(g => g.Title).ToArrayAsync();
+        var tags = await context.Tags.AsNoTracking().Include(t => t.Habits).OrderBy(t => t.Name).ToArrayAsync();
         var reminders = await context.SentReminders.AsNoTracking().Where(r => r.HabitId == habitId)
             .OrderBy(r => r.Date).ToArrayAsync();
         var snapshot = JsonSerializer.Serialize(new
         {
+            habit.ParentHabitId,
+            habit.Schedule,
+            habit.ScheduledStartDate,
+            habit.OriginalDayOfMonth,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -189,6 +230,8 @@ public class HabitTagUpdateRelationalTests
             habit.IsCompleted,
             habit.UpdatedAtUtc,
             habit.ReminderProbeVersion,
+            Logs = habit.Logs.Select(l => new { l.Id, l.Date, l.Value, l.IsDeleted, l.CreatedAtUtc, l.UpdatedAtUtc }),
+            TagState = tags.Select(t => new { t.Id, Habits = t.Habits.Select(h => h.Id).Order() }),
             Tags = habit.Tags.Select(t => t.Id).Order(),
             Goals = habit.Goals.Select(g => g.Id).Order(),
             GoalState = goals.Select(g => new
@@ -210,10 +253,10 @@ public class HabitTagUpdateRelationalTests
                 r.SentAtUtc
             })
         });
-        return new(habit, goals, reminders, snapshot);
+        return new(habit, goals, tags, reminders, snapshot);
     }
 
-    private sealed record Readback(Habit Habit, Goal[] Goals, SentReminder[] Reminders, string Snapshot);
+    private sealed record Readback(Habit Habit, Goal[] Goals, Tag[] Tags, SentReminder[] Reminders, string Snapshot);
     private sealed record Flush(int Rows, Guid? TransactionId, Readback State);
 
     private sealed class FlushProbe(CancellationTokenSource? cancellation) : SaveChangesInterceptor

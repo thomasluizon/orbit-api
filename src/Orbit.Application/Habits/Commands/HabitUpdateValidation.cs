@@ -39,14 +39,16 @@ internal static class HabitUpdateValidation
             && ((h.ParentHabitId.HasValue && ids.Contains(h.ParentHabitId.Value)) || parentIds.Contains(h.Id)), ct);
     }
 
-    public static Result ValidateGeneral(Habit habit, bool isGeneral, IReadOnlyList<Habit> related)
+    public static Result ValidateGeneral(Habit habit, bool isGeneral, IReadOnlyList<Habit> related) =>
+        ValidateGeneral(habit, isGeneral, related, habit.ParentHabitId);
+
+    public static Result ValidateGeneral(Habit habit, bool isGeneral, IReadOnlyList<Habit> related, Guid? finalParentId)
     {
-        if (habit.ParentHabitId is not null)
+        if (finalParentId is not null)
         {
-            var parent = related.FirstOrDefault(h => h.Id == habit.ParentHabitId);
-            return parent is not null && parent.IsGeneral != isGeneral
-                ? Result.Failure(ErrorMessages.GeneralMismatchWithParent)
-                : Result.Success();
+            var parent = related.FirstOrDefault(h => h.Id == finalParentId);
+            if (parent is not null && parent.IsGeneral != isGeneral)
+                return Result.Failure(ErrorMessages.GeneralMismatchWithParent);
         }
         return related.Any(c => c.ParentHabitId == habit.Id && c.IsGeneral != isGeneral
                 && !(c.IsCompleted && c.FrequencyUnit is null))

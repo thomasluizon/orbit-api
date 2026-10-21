@@ -31,6 +31,22 @@ keeps its own commit boundary. A transport timeout requires readback or supporte
 replay to reconcile the outcome. Deploy this producer before the paired consumer
 sends the field. Tracks thomasluizon/orbit-tickets#1605.
 
+`PUT /api/habits/{id}` also accepts optional nullable `parentId` (UUID) and
+`clearParent` (boolean). Omitted or null `parentId` preserves the existing parent
+unless `clearParent` is true. A non-null `parentId` sets the owned target; false
+or null `clearParent` does not suppress that set. True `clearParent` with a null
+or omitted `parentId` makes the habit top level. Supplying both true `clearParent`
+and a non-null `parentId` is rejected. Ownership, cycles, subtree depth, final
+General compatibility and live-root capacity are validated under the same user
+lock and transaction as the complete edit. The standalone parent endpoint retains
+its null-means-root contract and operation schemas.
+
+Ordinary habit detail and full detail append nullable UUID `parentId`. Both reads
+emit explicit null for an actual root and the authoritative parent UUID for a
+child. Absence from an older producer means unknown. Success for the combined
+update remains HTTP 204 with no body. Deploy this producer before publishing the
+paired parent-selector consumer. Tracks thomasluizon/orbit-tickets#1608.
+
 An immutable consumer selection is a full 40-character producer commit plus an
 exact catalog identity. Read the catalog at that commit, verify the identity,
 HTTP version and path, then read the artifact at the same commit. Reject unknown
