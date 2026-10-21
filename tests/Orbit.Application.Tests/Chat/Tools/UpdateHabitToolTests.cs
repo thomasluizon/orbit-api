@@ -853,7 +853,7 @@ public class UpdateHabitToolTests
         var mediator = Substitute.For<IMediator>();
         var handler = new UpdateHabitCommandHandler(repository, _sentReminders, Substitute.For<IGenericRepository<Goal>>(),
             gate, Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
-            new MemoryCache(new MemoryCacheOptions()));
+            new MemoryCache(new MemoryCacheOptions()), Substitute.For<IGenericRepository<Tag>>(), Substitute.For<IAppConfigService>());
         mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
             var command = call.Arg<UpdateHabitFieldsCommand>();

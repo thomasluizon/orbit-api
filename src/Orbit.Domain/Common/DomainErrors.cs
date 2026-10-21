@@ -45,6 +45,8 @@ public static class DomainErrors
     public static readonly AppError TagNameRequired = new("TAG_NAME_REQUIRED", "Tag name is required.");
     public static readonly AppError TagNameTooLong = new("TAG_NAME_TOO_LONG", "Tag name must be 50 characters or less.");
     public static readonly AppError TagColorRequired = new("TAG_COLOR_REQUIRED", "Tag color is required.");
+    public static readonly AppError TagNotFound = new("TAG_NOT_FOUND", "Tag not found.");
+    public static readonly AppError MaxTagsPerHabit = new("MAX_TAGS_PER_HABIT", "A habit can have at most {0} tags.");
 
     public static readonly AppError PushEndpointRequired = new("PUSH_ENDPOINT_REQUIRED", "Endpoint is required.");
     public static readonly AppError PushEndpointInvalid = new("PUSH_ENDPOINT_INVALID", "Endpoint must use a supported Web Push service.");

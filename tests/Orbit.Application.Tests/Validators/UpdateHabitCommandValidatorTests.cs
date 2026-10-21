@@ -34,6 +34,29 @@ public class UpdateHabitCommandValidatorTests
         FrequencyUnit: FrequencyUnit.Day,
         FrequencyQuantity: 1);
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public async Task Validate_TagIds_CountsSubmittedIdsIncludingDuplicates(int count)
+    {
+        var id = Guid.NewGuid();
+        var command = ValidCommand() with { TagIds = Enumerable.Repeat(id, count).ToArray() };
+        var result = await _validator.TestValidateAsync(command);
+        if (count > AppConstants.MaxTagsPerHabit)
+            result.ShouldHaveValidationErrorFor(x => x.TagIds).WithErrorCode(ValidationErrorCodes.HabitTagLimit);
+        else
+            result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public async Task Validate_TagIds_RejectsEmptyGuid()
+    {
+        var result = await _validator.TestValidateAsync(ValidCommand() with { TagIds = [Guid.Empty] });
+        result.ShouldHaveValidationErrorFor("TagIds[0]");
+    }
+
     [Fact]
     public async Task Validate_ValidCommand_NoErrors()
     {

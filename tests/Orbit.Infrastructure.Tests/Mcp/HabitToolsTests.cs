@@ -92,7 +92,8 @@ public class HabitToolsTests
         var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
             Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
             Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
-            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            Substitute.For<IGenericRepository<Tag>>(), Substitute.For<IAppConfigService>());
         _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
         var tool = new UpdateHabitTool(repository, _userDateService, _mediator);
@@ -490,7 +491,8 @@ public class HabitToolsTests
         var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
             Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
             Substitute.For<IGoalCompletionService>(), _userDateService, unitOfWork,
-            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            Substitute.For<IGenericRepository<Tag>>(), Substitute.For<IAppConfigService>());
         _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
         var tool = new UpdateHabitTool(repository, _userDateService, _mediator);

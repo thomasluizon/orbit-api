@@ -34,7 +34,7 @@ public class UpdateHabitCommandHandlerTests
             .Returns(Task.FromResult(Result.Success()));
         _handler = new UpdateHabitCommandHandler(
             _habitRepo, _sentReminderRepo, _goalRepo, _payGate, _goalCompletionService,
-            _userDateService, _unitOfWork, _cache);
+            _userDateService, _unitOfWork, _cache, Substitute.For<IGenericRepository<Tag>>(), Substitute.For<IAppConfigService>());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<Result>>>(),
                 Arg.Any<CancellationToken>())
@@ -611,6 +611,7 @@ public class UpdateHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GoalNotFound);
+        habit.Title.Should().Be("Original Title");
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

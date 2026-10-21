@@ -125,7 +125,7 @@ public partial class ReminderInputContractTests
                 Substitute.For<IGamificationService>(), goalCompletion, UnitOfWork, _cache,
                 Substitute.For<ILogger<CreateHabitCommandHandler>>());
             var update = new UpdateHabitCommandHandler(_habits, Substitute.For<IGenericRepository<SentReminder>>(),
-                goals, payGate, goalCompletion, _dates, UnitOfWork, _cache);
+                goals, payGate, goalCompletion, _dates, UnitOfWork, _cache, tags, config);
             var sub = new CreateSubHabitCommandHandler(_habits, tags, _dates, UnitOfWork, config, payGate, _cache);
             var bulk = new BulkCreateHabitsCommandHandler(new(_habits, Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>(), tags),
                 payGate, _dates, UnitOfWork, _cache, config);

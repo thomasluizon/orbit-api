@@ -54,7 +54,8 @@ public partial class HabitsController
         string? Emoji = null,
         int? IntervalWeeks = null,
         IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
-        DateOnly? StartDate = null);
+        DateOnly? StartDate = null,
+        IReadOnlyList<Guid>? TagIds = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 

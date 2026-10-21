@@ -21,6 +21,16 @@ artifact bytes retain their exact meaning. Legacy retirement needs separate
 consumer adoption work. Future compatible endpoint additions can still update
 all supported streams through ordinary generation and comparison.
 
+`PUT /api/habits/{id}` accepts optional nullable `tagIds` in both HTTP versions.
+Omission or null preserves tags, an empty array clears them, and a supplied array
+replaces the assignment together with core fields, checklist and requested goals.
+The submitted count includes duplicates for the existing tag limits; resolved
+assignments form a set. Every requested tag and goal must resolve for the owner.
+Success remains HTTP 204 with no body. Independent tag and template management
+keeps its own commit boundary. A transport timeout requires readback or supported
+replay to reconcile the outcome. Deploy this producer before the paired consumer
+sends the field. Tracks thomasluizon/orbit-tickets#1605.
+
 An immutable consumer selection is a full 40-character producer commit plus an
 exact catalog identity. Read the catalog at that commit, verify the identity,
 HTTP version and path, then read the artifact at the same commit. Reject unknown
