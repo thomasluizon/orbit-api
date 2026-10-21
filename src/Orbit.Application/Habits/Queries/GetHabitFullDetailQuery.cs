@@ -83,7 +83,8 @@ public class GetHabitFullDetailQueryHandler(
             Schedule: habit.Schedule,
             StartDate: habit.StartDate,
             ScheduledStartDate: habit.ScheduledStartDate,
-            OriginalDayOfMonth: habit.OriginalDayOfMonth);
+            OriginalDayOfMonth: habit.OriginalDayOfMonth,
+            ParentId: habit.ParentHabitId);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,

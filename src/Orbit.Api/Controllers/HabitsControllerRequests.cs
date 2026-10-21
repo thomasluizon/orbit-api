@@ -55,7 +55,9 @@ public partial class HabitsController
         int? IntervalWeeks = null,
         IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
         DateOnly? StartDate = null,
-        IReadOnlyList<Guid>? TagIds = null);
+        IReadOnlyList<Guid>? TagIds = null,
+        Guid? ParentId = null,
+        bool? ClearParent = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 

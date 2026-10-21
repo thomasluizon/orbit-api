@@ -110,9 +110,13 @@ internal static class HabitLiveRootEntry
     public static bool FromUnlog(Habit habit) =>
         !habit.IsDeleted && habit.IsCompleted && habit.ParentHabitId is null;
 
-    public static bool FromUpdate(Habit habit, HabitUpdateParams update)
+    public static bool FromUpdate(Habit habit, HabitUpdateParams update) =>
+        FromUpdate(habit, update, habit.ParentHabitId);
+
+    public static bool FromUpdate(Habit habit, HabitUpdateParams update, Guid? finalParentId)
     {
-        if (habit.IsDeleted || !habit.IsCompleted || habit.ParentHabitId is not null)
+        if (habit.IsDeleted || finalParentId is not null
+            || (!habit.IsCompleted && habit.ParentHabitId is null))
             return false;
 
         var preview = habit.PreviewUpdate(update);

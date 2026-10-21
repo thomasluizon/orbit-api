@@ -342,7 +342,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             Emoji: request.Emoji,
             IntervalWeeks: request.IntervalWeeks,
             StartDate: request.StartDate,
-            TagIds: request.TagIds);
+            TagIds: request.TagIds,
+            ParentId: request.ParentId,
+            ClearParent: request.ClearParent);
 
         var result = await mediator.Send(command, cancellationToken);
 

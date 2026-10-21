@@ -17356,6 +17356,13 @@
               "string"
             ],
             "format": "int32"
+          },
+          "parentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -21951,6 +21958,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "parentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "clearParent": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

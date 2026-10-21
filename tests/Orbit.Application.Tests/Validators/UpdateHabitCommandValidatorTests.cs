@@ -35,6 +35,32 @@ public class UpdateHabitCommandValidatorTests
         FrequencyQuantity: 1);
 
     [Theory]
+    [InlineData("empty", ErrorCodes.TargetParentNotFound)]
+    [InlineData("self", ErrorCodes.SelfParent)]
+    [InlineData("conflict", ErrorCodes.ValidationError)]
+    public async Task Validate_InvalidParent_ReportsStructuredParentError(string kind, string code)
+    {
+        var command = ValidCommand();
+        command = command with
+        {
+            ParentId = kind == "empty" ? Guid.Empty : kind == "self" ? command.HabitId : Guid.NewGuid(),
+            ClearParent = kind == "conflict"
+        };
+        var result = await _validator.TestValidateAsync(command);
+        result.ShouldHaveValidationErrorFor(x => x.ParentId).WithErrorCode(code);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Validate_NullParentWithAnyClearFlag_IsAccepted(bool? clear)
+    {
+        var result = await _validator.TestValidateAsync(ValidCommand() with { ClearParent = clear });
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(5)]

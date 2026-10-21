@@ -79,7 +79,8 @@ public record HabitDetailResponse(
     DateOnly? StartDate = null,
     IReadOnlyList<HabitTagItem>? Tags = null,
     DateOnly? ScheduledStartDate = null,
-    int? OriginalDayOfMonth = null);
+    int? OriginalDayOfMonth = null,
+    Guid? ParentId = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -155,7 +156,8 @@ public class GetHabitByIdQueryHandler(
             StartDate: habit.StartDate,
             Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             ScheduledStartDate: habit.ScheduledStartDate,
-            OriginalDayOfMonth: habit.OriginalDayOfMonth));
+            OriginalDayOfMonth: habit.OriginalDayOfMonth,
+            ParentId: habit.ParentHabitId));
     }
 }
 
