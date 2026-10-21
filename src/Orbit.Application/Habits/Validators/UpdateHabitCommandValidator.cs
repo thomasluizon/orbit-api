@@ -93,6 +93,12 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         });
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
+
+        RuleFor(x => x.TagIds)
+            .Must(ids => ids is null || ids.Count <= AppConstants.MaxTagsPerHabit)
+            .WithCopy(ValidationErrorCodes.HabitTagLimit);
+
+        RuleForEach(x => x.TagIds).NotEmpty();
     }
 
     private sealed class FieldsValidator : AbstractValidator<UpdateHabitCommand>

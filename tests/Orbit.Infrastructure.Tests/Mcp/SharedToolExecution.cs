@@ -22,7 +22,8 @@ internal static class SharedToolExecution
         var mediator = Substitute.For<IMediator>();
         var handler = new UpdateHabitCommandHandler(repository, Substitute.For<IGenericRepository<SentReminder>>(),
             Substitute.For<IGenericRepository<Goal>>(), Substitute.For<IPayGateService>(),
-            Substitute.For<IGoalCompletionService>(), dates, unitOfWork, new MemoryCache(new MemoryCacheOptions()));
+            Substitute.For<IGoalCompletionService>(), dates, unitOfWork, new MemoryCache(new MemoryCacheOptions()),
+            Substitute.For<IGenericRepository<Tag>>(), Substitute.For<IAppConfigService>());
         mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
         return new UpdateHabitTool(repository, dates, mediator);

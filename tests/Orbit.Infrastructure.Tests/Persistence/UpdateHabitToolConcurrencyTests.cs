@@ -155,7 +155,8 @@ public class UpdateHabitToolConcurrencyTests
     private static UpdateHabitCommandHandler CreateHandler(OrbitDbContext db, UnitOfWork work,
         IUserDateService dates, IPayGateService payGate, IMemoryCache cache) =>
         new(new GenericRepository<Habit>(db), new GenericRepository<SentReminder>(db), new GenericRepository<Goal>(db),
-            payGate, Substitute.For<IGoalCompletionService>(), dates, work, cache);
+            payGate, Substitute.For<IGoalCompletionService>(), dates, work, cache,
+            new GenericRepository<Tag>(db), Substitute.For<IAppConfigService>());
 
     private sealed class InterleavedTransactions : DbTransactionInterceptor
     {

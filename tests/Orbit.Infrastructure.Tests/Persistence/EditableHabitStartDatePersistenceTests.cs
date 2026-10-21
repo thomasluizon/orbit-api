@@ -119,6 +119,7 @@ public class EditableHabitStartDatePersistenceTests
         dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(Today);
         dates.GetUserWeekStartDayAsync(userId, Arg.Any<CancellationToken>()).Returns(1);
         return new(new GenericRepository<Habit>(context), new GenericRepository<SentReminder>(context),
-            new GenericRepository<Goal>(context), gate, Substitute.For<IGoalCompletionService>(), dates, work, cache);
+            new GenericRepository<Goal>(context), gate, Substitute.For<IGoalCompletionService>(), dates, work, cache,
+            new GenericRepository<Tag>(context), Substitute.For<IAppConfigService>());
     }
 }

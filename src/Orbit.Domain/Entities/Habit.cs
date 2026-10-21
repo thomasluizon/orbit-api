@@ -680,6 +680,26 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success(log);
     }
 
+    public Result Update(HabitUpdateParams p, IReadOnlyCollection<Tag>? tags, int maxTags)
+    {
+        if (tags is not null)
+        {
+            if (tags.Count > maxTags)
+                return Result.Failure(DomainErrors.MaxTagsPerHabit.Format(maxTags));
+            if (tags.Any(tag => tag.UserId != UserId || tag.IsDeleted))
+                return Result.Failure(DomainErrors.TagNotFound);
+        }
+
+        var result = Update(p);
+        if (result.IsFailure || tags is null)
+            return result;
+
+        _tags.Clear();
+        foreach (var tag in tags.DistinctBy(tag => tag.Id))
+            AddTag(tag);
+        return Result.Success();
+    }
+
     public Result Update(HabitUpdateParams p)
     {
         var validation = ValidateUpdate(p);

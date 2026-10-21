@@ -26,7 +26,8 @@ public record UpdateHabitCommand(
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null,
     int? IntervalWeeks = null,
-    DateOnly? StartDate = null) : IRequest<Result>;
+    DateOnly? StartDate = null,
+    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result>;
 
 public sealed record UpdateHabitFieldsCommand(
     Guid UserId,
@@ -41,7 +42,9 @@ public class UpdateHabitCommandHandler(
     IGoalCompletionService goalCompletionService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>,
+    IMemoryCache cache,
+    IGenericRepository<Tag> tagRepository,
+    IAppConfigService appConfigService) : IRequestHandler<UpdateHabitCommand, Result>,
     IRequestHandler<UpdateHabitFieldsCommand, Result<string>>
 {
     public async Task<Result> Handle(UpdateHabitCommand request, CancellationToken cancellationToken)
@@ -50,7 +53,7 @@ public class UpdateHabitCommandHandler(
             unitOfWork,
             request.UserId,
             payGate,
-            ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds,
+            ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds, request.TagIds,
                 (habit, today) => ResolveUpdate(request, habit, today), false, ct),
             state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
             (state, ct) => ApplyUpdateAsync(request, state, ct),
@@ -62,7 +65,7 @@ public class UpdateHabitCommandHandler(
             unitOfWork,
             request.UserId,
             payGate,
-            ct => PrepareUpdateAsync(request.UserId, request.HabitId, null,
+            ct => PrepareUpdateAsync(request.UserId, request.HabitId, null, null,
                 (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, ct),
             state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
             async (state, ct) =>
@@ -77,18 +80,22 @@ public class UpdateHabitCommandHandler(
         Guid userId,
         Guid habitId,
         IReadOnlyList<Guid>? goalIds,
+        IReadOnlyList<Guid>? tagIds,
         Func<Habit, DateOnly, HabitUpdateParams> resolveUpdate,
         bool validateFields,
         CancellationToken cancellationToken)
     {
-        var habit = goalIds is not null
-            ? await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habitId && h.UserId == userId,
-                q => q.Include(h => h.Goals),
-                cancellationToken)
-            : await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habitId && h.UserId == userId,
-                cancellationToken: cancellationToken);
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == habitId && h.UserId == userId,
+            q =>
+            {
+                if (goalIds is not null)
+                    q = q.Include(h => h.Goals);
+                if (tagIds is not null)
+                    q = q.Include(h => h.Tags);
+                return q;
+            },
+            cancellationToken);
 
         if (habit is null)
             return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
@@ -127,7 +134,40 @@ public class UpdateHabitCommandHandler(
                 return generalMismatch.PropagateError<UpdateState>();
         }
 
-        return Result.Success(new UpdateState(habit, update, today));
+        var tagLinks = await ResolveTagLinksAsync(userId, tagIds, cancellationToken);
+        if (tagLinks.IsFailure)
+            return tagLinks.PropagateError<UpdateState>();
+
+        GoalLinks? goalLinks = null;
+        if (goalIds is not null)
+        {
+            var resolved = await ResolveGoalLinksAsync(habit, userId, goalIds, cancellationToken);
+            if (resolved.IsFailure)
+                return resolved.PropagateError<UpdateState>();
+            goalLinks = resolved.Value;
+        }
+
+        return Result.Success(new UpdateState(habit, update, today, tagLinks.Value, goalLinks));
+    }
+
+    private async Task<Result<TagLinks?>> ResolveTagLinksAsync(
+        Guid userId, IReadOnlyList<Guid>? tagIds, CancellationToken cancellationToken)
+    {
+        if (tagIds is null)
+            return Result.Success<TagLinks?>(null);
+
+        var maxTags = await appConfigService.GetAsync(
+            AppConfigKeys.MaxTagsPerHabit, AppConstants.MaxTagsPerHabit, cancellationToken);
+        if (tagIds.Count > maxTags)
+            return Result.Failure<TagLinks?>(ErrorMessages.MaxTagsPerHabit.Format(maxTags));
+
+        var tags = await tagRepository.FindTrackedAsync(
+            tag => tagIds.Contains(tag.Id) && tag.UserId == userId && !tag.IsDeleted,
+            cancellationToken);
+        var resolved = OwnershipValidation.AllResolved(tagIds, tags, tag => tag.Id, ErrorMessages.TagNotFound);
+        return resolved.IsFailure
+            ? resolved.PropagateError<TagLinks?>()
+            : Result.Success<TagLinks?>(new TagLinks(tags, maxTags));
     }
 
     private static HabitUpdateParams ResolveUpdate(UpdateHabitCommand request, Habit habit, DateOnly today)
@@ -169,7 +209,8 @@ public class UpdateHabitCommandHandler(
         var previousDueTime = habit.DueTime;
         var previousReminderEnabled = habit.ReminderEnabled;
         var previousReminderTimes = GetReminderTimes(habit).ToHashSet();
-        var result = habit.Update(state.Update);
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = habit.Update(state.Update, state.TagLinks?.Requested, state.TagLinks?.MaxTags ?? AppConstants.MaxTagsPerHabit);
 
         if (result.IsFailure)
             return result;
@@ -179,20 +220,16 @@ public class UpdateHabitCommandHandler(
             || !previousReminderTimes.SetEquals(GetReminderTimes(habit)))
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
-        IReadOnlyList<Guid> affectedGoalIds = [];
-        if (request.GoalIds is not null)
+        if (state.GoalLinks is { } goalLinks)
         {
-            var goalLinkResult = await SyncGoalLinksAsync(habit, request.UserId, request.GoalIds, cancellationToken);
-            if (goalLinkResult.IsFailure)
-                return goalLinkResult.PropagateError();
-            affectedGoalIds = goalLinkResult.Value;
-        }
+            foreach (var existingGoal in habit.Goals.ToList())
+                habit.RemoveGoal(existingGoal);
+            foreach (var goal in goalLinks.Requested)
+                habit.AddGoal(goal);
 
-        if (request.GoalIds is not null)
-        {
             await goalCompletionService.SyncDerivedGoalsAsync(
                 request.UserId,
-                affectedGoalIds,
+                goalLinks.AffectedIds,
                 state.Today,
                 cancellationToken: cancellationToken);
         }
@@ -215,7 +252,13 @@ public class UpdateHabitCommandHandler(
     private sealed record UpdateState(
         Habit Habit,
         HabitUpdateParams Update,
-        DateOnly Today);
+        DateOnly Today,
+        TagLinks? TagLinks,
+        GoalLinks? GoalLinks);
+
+    private sealed record TagLinks(IReadOnlyList<Tag> Requested, int MaxTags);
+
+    private sealed record GoalLinks(IReadOnlyList<Goal> Requested, IReadOnlyList<Guid> AffectedIds);
 
     private async Task ClearTodaySentRemindersAsync(Guid userId, Guid habitId, CancellationToken cancellationToken)
     {
@@ -227,25 +270,20 @@ public class UpdateHabitCommandHandler(
             sentReminderRepository.Remove(r);
     }
 
-    private async Task<Result<IReadOnlyList<Guid>>> SyncGoalLinksAsync(
+    private async Task<Result<GoalLinks>> ResolveGoalLinksAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid> goalIds, CancellationToken cancellationToken)
     {
         var affectedGoalIds = habit.Goals.Select(g => g.Id).Concat(goalIds).ToHashSet();
         var goals = await goalRepository.FindTrackedAsync(
-            g => affectedGoalIds.Contains(g.Id) && g.UserId == userId,
+            g => affectedGoalIds.Contains(g.Id) && g.UserId == userId && !g.IsDeleted,
             q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
             cancellationToken);
 
         var requestedGoals = goals.Where(g => goalIds.Contains(g.Id)).ToList();
         var goalsResolved = OwnershipValidation.AllResolved(goalIds, requestedGoals, g => g.Id, ErrorMessages.GoalNotFound);
         if (goalsResolved.IsFailure)
-            return goalsResolved.PropagateError<IReadOnlyList<Guid>>();
+            return goalsResolved.PropagateError<GoalLinks>();
 
-        foreach (var existingGoal in habit.Goals.ToList())
-            habit.RemoveGoal(existingGoal);
-        foreach (var goal in requestedGoals)
-            habit.AddGoal(goal);
-
-        return Result.Success<IReadOnlyList<Guid>>(affectedGoalIds.ToList());
+        return Result.Success(new GoalLinks(requestedGoals, affectedGoalIds.ToList()));
     }
 }

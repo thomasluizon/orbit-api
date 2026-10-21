@@ -35,7 +35,7 @@ public class UpdateHabitGoalSyncTests
             .Returns(Task.FromResult(Result.Success()));
         _handler = new UpdateHabitCommandHandler(
             _habitRepo, _sentReminderRepo, _goalRepo, _payGate, _goalCompletionService,
-            _userDateService, _unitOfWork, _cache);
+            _userDateService, _unitOfWork, _cache, Substitute.For<IGenericRepository<Tag>>(), Substitute.For<IAppConfigService>());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<Result>>>(),
                 Arg.Any<CancellationToken>())
