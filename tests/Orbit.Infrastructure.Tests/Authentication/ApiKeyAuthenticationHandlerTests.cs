@@ -32,7 +32,6 @@ public class ApiKeyAuthenticationHandlerTests
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
         var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
-
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(payGateResult ?? Result.Success()));
         apiKeyRepo.FindTrackedAsync(
@@ -43,6 +42,7 @@ public class ApiKeyAuthenticationHandlerTests
         services.AddSingleton(apiKeyRepo);
         services.AddSingleton(payGate);
         services.AddSingleton(unitOfWork);
+        services.AddSingleton(Substitute.For<IApiKeyUsageTracker>());
         services.AddMemoryCache();
         var serviceProvider = services.BuildServiceProvider();
 
@@ -67,6 +67,85 @@ public class ApiKeyAuthenticationHandlerTests
         (Expression<Func<ApiKey, bool>>)repo.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == "FindTrackedAsync")
             .GetArguments()[0]!;
+
+    [Fact]
+    public async Task LegacyKey_RepeatedAuthentication_PreservesRollbackReadableHash()
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Legacy").Value;
+        var legacyHash = BCrypt.Net.BCrypt.HashPassword(raw);
+        legacyHash.Should().StartWith("$2");
+        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, legacyHash);
+        for (var i = 0; i < 3; i++)
+        {
+            var run = await RunHandler($"Bearer {raw}", candidates: [key]);
+
+            run.Result.Succeeded.Should().BeTrue();
+            BCrypt.Net.BCrypt.Verify(raw, key.KeyHash).Should().BeTrue();
+            key.KeyHash.Should().Be(legacyHash);
+            await run.UnitOfWork.DidNotReceive().ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>());
+            await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+            await run.ApiKeyRepo.DidNotReceive().ReloadAsync(key, Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Fact]
+    public async Task LegacyKey_WrongKey_RejectsAuthenticationWithoutWritingHash()
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Legacy").Value;
+        var legacyHash = BCrypt.Net.BCrypt.HashPassword(raw);
+        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, legacyHash);
+
+        var run = await RunHandler($"Bearer {raw[..^1]}!", candidates: [key]);
+
+        run.Result.Succeeded.Should().BeFalse();
+        key.KeyHash.Should().Be(legacyHash);
+        await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RapidCalls_DoNotWriteRecentlyUsedKey()
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Rapid").Value;
+        key.MarkUsed();
+        for (var i = 0; i < 5; i++)
+        {
+            var run = await RunHandler($"Bearer {raw}", candidates: [key]);
+            run.Result.Succeeded.Should().BeTrue();
+            await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Fact]
+    public async Task NewKey_RemainsReadableByRollbackVerifier_AndTamperingFails()
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Hash").Value;
+        BCrypt.Net.BCrypt.Verify(raw, key.KeyHash).Should().BeTrue();
+        (await RunHandler($"Bearer {raw}", candidates: [key])).Result.Succeeded.Should().BeTrue();
+        (await RunHandler($"Bearer {raw[..^1]}!", candidates: [key])).Result.Succeeded.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StagingSha256Key_AuthenticatesWithoutWritingHash(bool lowercase)
+    {
+        var (key, raw) = ApiKey.Create(Guid.NewGuid(), "Staging").Value;
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(raw)));
+        if (lowercase)
+            hash = hash.ToLowerInvariant();
+        typeof(ApiKey).GetProperty(nameof(ApiKey.KeyHash))!.SetValue(key, hash);
+
+        for (var i = 0; i < 3; i++)
+        {
+            var run = await RunHandler($"Bearer {raw}", candidates: [key]);
+
+            run.Result.Succeeded.Should().BeTrue();
+            key.KeyHash.Should().Be(hash);
+            await run.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        }
+
+        (await RunHandler($"Bearer {raw[..^1]}!", candidates: [key])).Result.Succeeded.Should().BeFalse();
+    }
 
     [Fact]
     public async Task HandleAuthenticateAsync_MissingHeader_ReturnsFail()
@@ -138,8 +217,7 @@ public class ApiKeyAuthenticationHandlerTests
         principal.FindFirst("api_key_read_only")!.Value.Should().Be("True");
         principal.FindAll("scope").Select(claim => claim.Value)
             .Should().BeEquivalentTo("habits:read", "goals:read");
-        apiKey.LastUsedAtUtc.Should().NotBeNull();
-        await run.UnitOfWork.Received(1).SaveChangesAsync();
+        await run.UnitOfWork.DidNotReceive().SaveChangesAsync();
     }
 
     [Fact]

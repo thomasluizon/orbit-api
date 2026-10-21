@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -23,6 +24,7 @@ public partial class ProcessUserChatCommandHandler
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
+        var hasUnexecutedCalls = aiResponse.HasToolCalls;
 
         if (tokenBudgetExceeded)
         {
@@ -33,12 +35,14 @@ public partial class ProcessUserChatCommandHandler
                 iteration);
         }
 
-        while (aiResponse.HasToolCalls && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
+        while (aiResponse.HasToolCalls && !aiResponse.IsTruncated
+            && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
         {
             iteration++;
             if (request.StreamSink is not null)
                 await request.StreamSink(ChatStreamEvent.Round(iteration));
 
+            hasUnexecutedCalls = false;
             var roundResult = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
@@ -48,10 +52,11 @@ public partial class ProcessUserChatCommandHandler
                 aiStreamSink,
                 cancellationToken);
 
-            if (roundResult is null)
-                break;
+            if (roundResult.ProviderError is not null)
+                return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
 
             aiResponse = roundResult.Response;
+            hasUnexecutedCalls = aiResponse.HasToolCalls;
             if (roundResult.HadToolFailure)
             {
                 hadToolFailure = true;
@@ -70,6 +75,12 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
+        if (hasUnexecutedCalls && executionResults.EvalTrace is { } remainingTrace)
+        {
+            foreach (var call in aiResponse.ToolCalls!)
+                remainingTrace.Record(call, null, null, ai.ToolRegistry.GetTool(call.Name) is IMcpOnlyAiTool);
+        }
+
         return new ToolLoopResult(
             aiResponse,
             iteration,
@@ -77,17 +88,21 @@ public partial class ProcessUserChatCommandHandler
             hadToolFailure);
     }
 
+    private static bool MustFailToolTurn(ProcessUserChatCommand request, ToolLoopResult result) =>
+        result.ProviderError is not null || (request.BlockAnswer is not null && (result.HadToolFailure || result.FinalResponse.HasToolCalls));
+
     private sealed record ToolLoopResult(
         AiResponse FinalResponse,
         int Iterations,
         bool TokenBudgetExceeded,
-        bool HadToolFailure);
+        bool HadToolFailure,
+        AppError? ProviderError = null);
 
     /// <summary>
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
     /// back to the AI. Returns the next AI response, or null if continuation failed.
     /// </summary>
-    private async Task<ToolRoundResult?> ProcessToolCallsAsync(
+    private async Task<ToolRoundResult> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
@@ -106,13 +121,28 @@ public partial class ProcessUserChatCommandHandler
 
         if (askCall is not null)
             orderedCalls.Add(askCall);
-        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, cancellationToken);
+        orderedCalls = orderedCalls.Select(call => ai.ToolRegistry.GetTool(call.Name) is { } tool
+            ? call with { Args = OptionalToolArguments.OmitOptionalNulls(call.Args, tool.GetParameterSchema()) }
+            : call).ToList();
+        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken);
+        if (executionResults.EvalTrace is { } evalTrace)
+        {
+            foreach (var call in aiResponse.ToolCalls!)
+            {
+                outcomesByCallId.TryGetValue(call.Id, out var outcome);
+                evalTrace.Record(call, outcome?.ToolResult, outcome?.TraceStatus ?? outcome?.OperationResult?.Status,
+                    ai.ToolRegistry.GetTool(call.Name) is IMcpOnlyAiTool);
+            }
+        }
 
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         var hadToolFailure = false;
         foreach (var call in orderedCalls)
         {
             var outcome = outcomesByCallId[call.Id];
+            if (executionResults.Recording is { Enabled: true } recording)
+                recording.ToolCalls.Add(new ConversationToolCall(call.Id, call.Name, call.Args.Clone(),
+                    outcome.ToolResult.Success, outcome.ToolResult.Error));
             toolResults.Add(outcome.ToolResult);
             executionResults.ToolResults.Add(outcome.ToolResult);
             executionResults.Add(
@@ -139,7 +169,8 @@ public partial class ProcessUserChatCommandHandler
         if (continueResult.IsFailure)
         {
             LogContinueWithToolResultsFailed(logger, continueResult.Error);
-            return null;
+            return new ToolRoundResult(aiResponse, ProviderError: new AppError(
+                continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
         return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value);
@@ -147,7 +178,8 @@ public partial class ProcessUserChatCommandHandler
 
     private sealed record ToolRoundResult(
         AiResponse Response,
-        bool HadToolFailure = false);
+        bool HadToolFailure = false,
+        AppError? ProviderError = null);
 
     private static AiResponse MessageResponse(string? language) => new()
     {
@@ -178,6 +210,7 @@ public partial class ProcessUserChatCommandHandler
         List<AiToolCall> orderedCalls,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
+        string? language,
         CancellationToken cancellationToken)
     {
         var readOnlyCalls = orderedCalls
@@ -186,7 +219,10 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
-        var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls);
+        var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
+        var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
+        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
+        CoalesceTagCalls(resolvedWrites, executionResults);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -204,10 +240,25 @@ public partial class ProcessUserChatCommandHandler
                 outcomesByCallId[call.Id] = RepeatedSingleEntityToolOutcome(call, bulkTool);
                 continue;
             }
-            outcomesByCallId[call.Id] = executionResults.AnsweredAtUtc is { } claim
-                ? await ExecuteBlockWriteAsync(call, request, executionResults, claim, cancellationToken)
+            var resolved = resolvedWrites[call.Id];
+            if (resolved is null || !executionResults.PreviewedCalls.Add(
+                Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText())))
+            {
+                if (resolved is not null)
+                    executionResults.MergedCallIds.Add(call.Id);
+                outcomesByCallId[call.Id] = ResolvedWithoutWrite(call, executionResults, language);
+                continue;
+            }
+            var outcome = executionResults.AnsweredAtUtc is { } claim
+                ? await ExecuteBlockWriteAsync(resolved, request, executionResults, claim, cancellationToken)
                 : await ExecuteSingleToolCallAsync(
-                    call, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+                    resolved, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+            if (outcome.ToolResult.Success)
+                executionResults.PreviousWriteCalls.Add(call);
+            else
+                executionResults.PreviewedCalls.Remove(
+                    Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText()));
+            outcomesByCallId[call.Id] = outcome with { ToolResult = outcome.ToolResult with { Name = call.Name } };
         }
 
         if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
@@ -327,6 +378,8 @@ public partial class ProcessUserChatCommandHandler
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
 
+        RegisterPendingWrite(request.UserId, tool, executionResponse, executionResults);
+
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
         {
@@ -338,11 +391,27 @@ public partial class ProcessUserChatCommandHandler
         return operationResult.Status switch
         {
             AgentOperationStatus.PendingConfirmation => new ToolCallOutcome(
-                new AiToolCallResult(call.Name, call.Id, false, null, null, "Confirmation required before this action can run."),
+                new AiToolCallResult(call.Name, call.Id, true, null, null, null, new
+                {
+                    status = "awaiting_confirmation",
+                    item_count = executionResponse.PendingOperation?.ChangeTargetCount,
+                    habit_count = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?.Select(item => item.EntityId).Distinct().Count() : (int?)null,
+                    date_count = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?.SelectMany(item => item.Fields).Where(field => field.Field == "date").Select(field => field.NewValue).Distinct().Count() : (int?)null,
+                    proposed_titles = executionResponse.PendingOperation?.Items?.Select(item => item.EntityName).Distinct().Take(10).ToArray(),
+                    proposed_values = call.Args.EnumerateObject().Where(property =>
+                        property.Value.ValueKind is JsonValueKind.Number || property.Name is "title" or "deadline" or "unit")
+                        .ToDictionary(property => property.Name, property => property.Value.Clone()),
+                    resolved_habits = executionResults.Habits.Where(habit => call.Args.GetRawText().Contains(habit.Id.ToString(), StringComparison.OrdinalIgnoreCase)).Select(habit => new { habit.Id, habit.Title }).ToArray(),
+                    dates = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?
+                        .SelectMany(item => item.Fields).Where(field => field.Field == "date")
+                        .Select(field => field.NewValue).Distinct().Order().ToArray() : null,
+                    instruction = "This is a proposal. Nothing has changed until approval. Use only the returned numbers, names, and dates."
+                }),
                 null,
                 null,
                 executionResponse.PolicyDenial,
-                executionResponse.PendingOperation),
+                executionResponse.PendingOperation,
+                AgentOperationStatus.PendingConfirmation),
             AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => new ToolCallOutcome(
                 toolResult,
                 tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error).WithToolResultMessage(call),
@@ -357,6 +426,53 @@ public partial class ProcessUserChatCommandHandler
                 executionResponse.PendingOperation)
         };
     }
+
+    private void RegisterPendingWrite(Guid userId, IAiTool tool,
+        AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
+    {
+        if (tool.IsReadOnly || response.Operation.Status != AgentOperationStatus.PendingConfirmation
+            || response.PendingOperation is not { } replacement)
+            return;
+        foreach (var (id, previous) in results.PendingWriteCalls.ToArray())
+        {
+            if (id == replacement.Id || !BulkToolRepeatGuard.IsBulkAlternative(previous.ToolName, tool.Name)
+                || !CoversPendingChanges(replacement, previous.Preview))
+                continue;
+            var stored = execution.PendingOperationStore.GetExecution(userId, id);
+            if (stored is null)
+            {
+                results.SupersedePendingOperation(id);
+                continue;
+            }
+            if (stored.PreviewFingerprint != previous.Preview.PreviewFingerprint)
+                continue;
+            var fingerprint = AgentOperationFingerprint.Compute(
+                stored.OperationId, stored.Arguments.GetRawText());
+            if (execution.PendingOperationStore.Cancel(userId, id, fingerprint))
+                results.SupersedePendingOperation(id);
+        }
+        results.PendingWriteCalls[replacement.Id] = (tool.Name, replacement);
+    }
+
+    private static bool CoversPendingChanges(PendingAgentOperation replacement, PendingAgentOperation previous)
+    {
+        if (replacement.Items is not { Count: > 0 } || previous.Items is not { Count: > 0 })
+            return false;
+        return previous.Items.All(item =>
+        {
+            var fields = item.Fields.Where(field => field.Field != "habit_id").ToArray();
+            return item.EntityId is { } entityId && fields.Length > 0
+                && replacement.Items.Any(candidate => candidate.EntityId == entityId
+                    && fields.All(field => candidate.Fields.Any(proposed => proposed.Field == field.Field
+                        && SameProposedValue(field, proposed))));
+        });
+    }
+
+    private static bool SameProposedValue(PendingOperationChange previous, PendingOperationChange replacement) =>
+        previous.ProposedValue is { } oldValue && replacement.ProposedValue is { } newValue
+            ? AgentOperationFingerprint.Canonicalize(oldValue.GetRawText())
+                == AgentOperationFingerprint.Canonicalize(newValue.GetRawText())
+            : replacement.NewValue == previous.NewValue;
 
     private static ToolCallOutcome UnknownToolOutcome(AiToolCall call)
     {
@@ -506,5 +622,6 @@ public partial class ProcessUserChatCommandHandler
         ActionResult? ActionResult,
         AgentOperationResult? OperationResult,
         AgentPolicyDenial? PolicyDenial,
-        PendingAgentOperation? PendingOperation);
+        PendingAgentOperation? PendingOperation,
+        AgentOperationStatus? TraceStatus = null);
 }

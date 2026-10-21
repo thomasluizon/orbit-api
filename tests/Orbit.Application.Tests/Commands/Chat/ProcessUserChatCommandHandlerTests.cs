@@ -56,13 +56,13 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly IHabitScheduleLogReader _scheduleLogReader = Substitute.For<IHabitScheduleLogReader>();
+    private readonly IConversationTurnRecorder _conversationRecorder = Substitute.For<IConversationTurnRecorder>();
     private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
     private static readonly string[] ExpectedOrderedToolNames = new[] { "assign_tags", "create_habit", "delete_habit" };
-    private static readonly string[] SupportToolNames = new[] { "send_support_request" };
     private static readonly string[] GamificationTodaySurfaces = new[] { "gamification", "today" };
     private static readonly string[] HabitsSurfaces = new[] { "habits" };
     private static readonly string[] OrderedPartsBlockKinds = ["habitList", "metrics"];
@@ -79,6 +79,66 @@ public partial class ProcessUserChatCommandHandlerTests
     private const string ProductionMaintenanceRejectedArguments = """
         {"title":"Perspirex Strong - Semana 2 em diante (Manutenção)","description":"Passe apenas DOMINGO À NOITE e QUARTA À NOITE. Hora e jeito: à noite, axila 100% seca, 2 passadas pra cima e 2 pra baixo. Acordou: Lave a axila com água e sabão no banho da manhã.","emoji":"🧴","frequency_unit":"Week","frequency_quantity":1,"days":["Sunday","Wednesday"],"due_date":"2026-09-15"}
         """;
+
+    private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Moderation_RefusesBeforeCallingModel(bool flagged, bool unavailable)
+    {
+        EnableRecording();
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(User.Create("Test", "test@example.com").Value);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Allowed" }));
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
+        result.IsFailure.Should().BeTrue();
+        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().AcquireAdvisoryLockAsync(default!, default);
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("I want to hurt myself", "988", true, false)]
+    [InlineData("I want to hurt myself", "988", false, true)]
+    [InlineData("Quero me machucar", "188", true, false)]
+    [InlineData("Quero me machucar", "188", false, true)]
+    public async Task CrisisDisclosure_BypassesModerationRefusal(string message, string resource, bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        EnableRecording();
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, message), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserId == UserId && turn.UserContent == message && turn.AssistantContent == result.Value.AiMessage
+            && !turn.UsedModel && turn.ToolCallsJson == "[]"));
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task ContinuationProviderFailure_FailsTurnExplicitly()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(ToolResponse("get_habits", "call_1", "{}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+        var tool = ReadTool("get_habits", new ToolResult(true, Payload: new { habits = Array.Empty<object>() }));
+        var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(UserId, "Show my habits"), default);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.AiUnavailable.Message);
+    }
 
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
@@ -123,11 +183,12 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder);
     }
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
@@ -407,12 +468,6 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private static List<string> ToolNames(IReadOnlyList<object> declarations) =>
         declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!).ToList();
-
-    private static AgentClientContext DeserializeClientContext(string json) =>
-        JsonSerializer.Deserialize<AgentClientContext>(
-            json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-        ?? throw new InvalidOperationException("Client context deserialization returned null.");
 
     [Fact]
     public async Task Handle_PayGateBlocks_ReturnsPayGateError()
@@ -825,12 +880,26 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("Model reply");
     }
 
-    [Fact]
-    public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_TruncatedAiResponse_AppendsExplicitPartialNotice(bool hasToolCalls)
     {
         SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "First part", IsTruncated = true });
-        var handler = CreateHandler();
+        SetupAiResponse(new AiResponse
+        {
+            TextMessage = "First part",
+            IsTruncated = true,
+            ToolCalls = hasToolCalls ? [new AiToolCall("update_habit", "cut_off", ParseArguments("{}"))] : null,
+            ConversationContext = TestConversationContext
+        });
+        var tool = FakeTool("update_habit");
+        tool.IsReadOnly.Returns(false);
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>()).Returns(new ToolResult(true));
+        var handler = CreateHandler(tool);
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "First part", IsTruncated = true }));
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "List everything"),
@@ -840,6 +909,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Contain("First part");
         result.Value.AiMessage.Should().Contain("cut off before completion");
         result.Value.AiMessage.Should().Contain("partial");
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
     [Fact]
@@ -1357,8 +1428,9 @@ public partial class ProcessUserChatCommandHandlerTests
         if (disabled)
         {
             blocks.Should().BeEmpty();
-            _productAnalytics.DidNotReceive().CaptureUserEvent(UserId, Arg.Any<string>(), "Free",
-                Arg.Any<IReadOnlyDictionary<string, object>>());
+            foreach (var eventName in new[] { "chat_day_summary_card_emitted", "chat_streak_card_emitted", "chat_calendar_card_emitted" })
+                _productAnalytics.DidNotReceive().CaptureUserEvent(UserId, eventName, "Free",
+                    Arg.Any<IReadOnlyDictionary<string, object>>());
             return;
         }
 
@@ -2347,7 +2419,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(mockTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var toolCall = new AiToolCall("create_habit", "call_1", toolCallArgs);
         var aiResponseWithTool = new AiResponse
         {
@@ -2541,7 +2613,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             ToolCalls =
             [
-                new AiToolCall("create_habit", "habit", ParseArguments("{}")),
+                new AiToolCall("create_habit", "habit", ParseArguments("""{"title":"Parent"}""")),
                 new AiToolCall("create_goal", "goal", ParseArguments("{}"))
             ],
             ConversationContext = TestConversationContext
@@ -2650,7 +2722,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_ToolFailure_EmitsStartedStepButNoFollowUps()
     {
         SetupUserAndPayGate();
-        SetupAiResponse(ToolResponse("create_habit", "one", "{}"));
+        SetupAiResponse(ToolResponse("create_habit", "one", """{"title":"Parent"}"""));
         var events = new List<ChatStreamEvent>();
 
         var result = await CreateHandler(CreateFailingCreateHabitTool()).Handle(new ProcessUserChatCommand(
@@ -2675,7 +2747,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _aiIntentService.ContinueWithToolResultsAsync(
                 Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(ToolResponse("create_habit", "two", "{}")));
+            .Returns(Result.Success(ToolResponse("create_habit", "two", """{"title":"Parent"}""")));
         var events = new List<ChatStreamEvent>();
 
         var result = await CreateHandler(readTool, CreateFailingCreateHabitTool()).Handle(
@@ -3095,162 +3167,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SupportEntryPointIntent_FirstTurnDeclaresSupportTool()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
-        var handler = CreateHandler(FakeTool("send_support_request"));
-        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
-
-        await handler.Handle(
-            new ProcessUserChatCommand(
-                UserId,
-                "my streak reset after I travelled",
-                ClientContext: clientContext),
-            CancellationToken.None);
-
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
-            Arg.Any<Func<AiStreamEvent, Task>?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_SupportEntryPointIntent_TrivialMessageKeepsSupportTool()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "Hello." });
-        var handler = CreateHandler(FakeTool("send_support_request"));
-        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
-
-        await handler.Handle(
-            new ProcessUserChatCommand(UserId, "hello", ClientContext: clientContext),
-            CancellationToken.None);
-
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
-            Arg.Any<Func<AiStreamEvent, Task>?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_NoEntryPointIntentWithoutPhrase_DoesNotDeclareSupportTool()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
-        var handler = CreateHandler(FakeTool("send_support_request"));
-
-        await handler.Handle(
-            new ProcessUserChatCommand(UserId, "my streak reset after I travelled"),
-            CancellationToken.None);
-
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
-            Arg.Any<Func<AiStreamEvent, Task>?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_NoEntryPointIntentWithPhrase_DeclaresSupportTool()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
-        var handler = CreateHandler(FakeTool("send_support_request"));
-
-        await handler.Handle(
-            new ProcessUserChatCommand(UserId, "Please contact the team about my streak"),
-            CancellationToken.None);
-
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
-            Arg.Any<Func<AiStreamEvent, Task>?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_SupportEntryPointIntent_DoesNotDeclareUnrelatedExtendedTools()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "I can help with that." });
-        var handler = CreateHandler(
-            FakeTool("send_support_request"),
-            FakeTool("get_calendar_overview"),
-            FakeTool("manage_subscription"));
-        var clientContext = DeserializeClientContext("""{"entryPointIntent":"support"}""");
-
-        await handler.Handle(
-            new ProcessUserChatCommand(
-                UserId,
-                "my streak reset after I travelled",
-                ClientContext: clientContext),
-            CancellationToken.None);
-
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(SupportToolNames)),
-            Arg.Any<Func<AiStreamEvent, Task>?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_UnknownEntryPointIntent_TrivialMessageDoesNotDeclareTools()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "Hello." });
-        var handler = CreateHandler(FakeTool("create_habit"));
-        var clientContext = DeserializeClientContext("""{"entryPointIntent":"unknown"}""");
-
-        await handler.Handle(
-            new ProcessUserChatCommand(UserId, "hello", ClientContext: clientContext),
-            CancellationToken.None);
-
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
-            Arg.Any<Func<AiStreamEvent, Task>?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_SupportEntryPoint_DeclaresOnlySupportAndCoreToolsOnFirstTurn()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "ok" });
-        var handler = CreateHandler(
-            FakeTool("create_habit"), FakeTool("send_support_request"), FakeTool("manage_subscription"));
-        var clientContext = JsonSerializer.Deserialize<AgentClientContext>(
-            """{"entryPointIntent":"support"}""",
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "my streak reset after I travelled", ClientContext: clientContext),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request =>
-                ToolNames(request.ToolDeclarations).SequenceEqual(new[] { "create_habit", "send_support_request" })),
-            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WithoutEntryPointOrKeyword_DoesNotDeclareSupportTool()
-    {
-        SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = "ok" });
-        var handler = CreateHandler(FakeTool("create_habit"), FakeTool("send_support_request"));
-
-        var result = await handler.Handle(
-            new ProcessUserChatCommand(UserId, "my streak reset after I travelled"),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request =>
-                ToolNames(request.ToolDeclarations).SequenceEqual(new[] { "create_habit" })),
-            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_TrivialGreeting_SkipsToolDeclarations()
+    public async Task Handle_TrivialGreeting_DeclaresAllTools()
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Hi! How can I help?" });
@@ -3259,7 +3176,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await handler.Handle(new ProcessUserChatCommand(UserId, "thanks"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
+            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(new[] { "create_habit", "delete_habit" })),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -3306,8 +3223,9 @@ public partial class ProcessUserChatCommandHandlerTests
         _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("DYNAMIC_SUPPLEMENT");
 
         string? capturedPrompt = null;
+        string? capturedDynamic = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt),
+            Arg.Do<AiToolRequest>(request => { capturedPrompt = request.SystemPrompt; capturedDynamic = request.DynamicContext; }),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
 
@@ -3323,8 +3241,9 @@ public partial class ProcessUserChatCommandHandlerTests
 
         staticSections.Should().BeGreaterThanOrEqualTo(0);
         staticSections.Should().BeLessThan(staticSupplement);
-        staticSupplement.Should().BeLessThan(dynamicSections);
-        dynamicSections.Should().BeLessThan(dynamicSupplement);
+        dynamicSections.Should().Be(-1, "volatile content must be outside the static system message");
+        dynamicSupplement.Should().Be(-1);
+        capturedDynamic.Should().Contain("DYNAMIC_SECTIONS").And.Contain("DYNAMIC_SUPPLEMENT");
     }
 
     [Theory]
@@ -3340,7 +3259,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
                 .Returns([FeatureFlagKeys.AstraPartsDisabled]);
         string? prompt = null;
-        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt),
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.DynamicContext),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
         var instructions = new[]
@@ -3366,7 +3285,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsCalendarCard: true, SupportsRecordListCard: true, SupportsAccountRowsCard: true,
                 SupportsFollowUps: true)), CancellationToken.None);
 
-        var expected = new List<string> { "static prompt", "static supplement", "dynamic prompt", "dynamic supplement" };
+        var expected = new List<string> { "dynamic prompt", "dynamic supplement" };
         if (supportsParts && !disabled)
         {
             expected.Add("Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
@@ -3390,7 +3309,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         string? capturedPrompt = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt),
+            Arg.Do<AiToolRequest>(request => capturedPrompt = request.DynamicContext),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
@@ -3450,6 +3369,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [Fact]
     public async Task Handle_ProductionCreateHabitFailure_DoesNotExposeToolSchemaArguments()
     {
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { "astra_conversation_recording" });
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetLanguage("pt-BR");
         SetupUserAndPayGate(user);
@@ -3472,6 +3393,13 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().ContainSingle();
         result.Value.Actions[0].Error.Should().Be(PortugueseToolFailureMessage);
         result.Value.Actions[0].Error.Should().NotContain("Days can only be set when frequency quantity is 1");
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserId == UserId && turn.ToolCallsJson.Contains("create_habit")
+            && turn.ToolCallsJson.Contains("Days can only be set when frequency quantity is 1")
+            && turn.ToolCallsJson.Contains("frequency_unit")));
+        result.Value.Operations.Should().ContainSingle(operation =>
+            operation.Status == AgentOperationStatus.Failed
+            && operation.PolicyReason == "Days can only be set when frequency quantity is 1.");
     }
 
     [Theory]
@@ -3947,7 +3875,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(createTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"First"}""").RootElement;
 
         var firstResponse = new AiResponse
         {
@@ -3958,7 +3886,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var secondResponse = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_2", toolCallArgs)],
+            ToolCalls = [new AiToolCall("create_habit", "call_2", JsonDocument.Parse("""{"title":"Second"}""").RootElement)],
             ConversationContext = TestConversationContext
         };
 
@@ -4018,7 +3946,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(throwingTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var aiResponseWithTool = new AiResponse
         {
             ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
@@ -4175,7 +4103,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ContinueWithToolResultsFails_StopsAndReturnsPartialResult()
+    public async Task Handle_ContinueWithToolResultsFails_ReturnsExplicitFailure()
     {
         SetupUserAndPayGate();
 
@@ -4204,8 +4132,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var command = new ProcessUserChatCommand(UserId, "Create habit");
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Actions.Should().HaveCount(1);
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("Connection lost");
     }
 
     [Fact]
@@ -4285,12 +4213,12 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(createTool, subTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var aiResponseWithTools = new AiResponse
         {
             ToolCalls =
             [
-                new AiToolCall("create_sub_habit", "call_2", toolCallArgs),
+                new AiToolCall("create_sub_habit", "call_2", ParseArguments("""{"title":"Child"}""")),
                 new AiToolCall("create_habit", "call_1", toolCallArgs)
             ],
             ConversationContext = TestConversationContext
@@ -4320,13 +4248,13 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(createTool, subTool, assignTool);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         var aiResponseWithTools = new AiResponse
         {
             ToolCalls =
             [
                 new AiToolCall("assign_tags", "call_3", toolCallArgs),
-                new AiToolCall("create_sub_habit", "call_2", toolCallArgs),
+                new AiToolCall("create_sub_habit", "call_2", ParseArguments("""{"title":"Child"}""")),
                 new AiToolCall("create_habit", "call_1", toolCallArgs)
             ],
             ConversationContext = TestConversationContext
@@ -4337,7 +4265,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
-        var command = new ProcessUserChatCommand(UserId, "Create parent, child, and tag");
+        var command = new ProcessUserChatCommand(UserId, "Create a habit with a child, and assign a tag");
         await handler.Handle(command, CancellationToken.None);
 
         executionOrder.Should().Equal("create_habit", "create_sub_habit", "assign_tags");
@@ -4545,7 +4473,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var handler = CreateHandler(firstReadOnly, secondReadOnly, firstWrite, secondWrite);
 
-        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var toolCallArgs = JsonDocument.Parse("""{"title":"Parent"}""").RootElement;
         SetupAiResponse(new AiResponse
         {
             ToolCalls =

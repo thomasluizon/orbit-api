@@ -39,7 +39,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         {
             var validation = await validator.ValidateAsync(new ValidationContext<object>(command), ct);
             if (!validation.IsValid)
-                return Result.Failure(validation.ToString());
+                return Result.Failure(validation.ToString(), validation.Errors[0].ErrorCode);
         }
 
         return await CheckHabitAsync(command, ct)
@@ -120,9 +120,19 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
             ? failure : await CheckTagNameAsync(update.UserId, update.TagId, update.Name, update.Color, ct),
         DeleteTagCommand delete => await ExistsAsync<Tag>(t => t.Id == delete.TagId && t.UserId == delete.UserId, ct),
         CreateChecklistTemplateCommand create => ChecklistTemplate.Create(create.UserId, create.Name, create.Items),
+        UpdateChecklistTemplateCommand update => await CheckTemplateUpdateAsync(update, ct),
         DeleteChecklistTemplateCommand delete => await ExistsAsync<ChecklistTemplate>(t => t.Id == delete.TemplateId && t.UserId == delete.UserId, ct),
         _ => null
     };
+
+    private async Task<Result> CheckTemplateUpdateAsync(UpdateChecklistTemplateCommand command, CancellationToken ct)
+    {
+        var templates = await Repository<ChecklistTemplate>().FindAsync(
+            t => t.Id == command.TemplateId && t.UserId == command.UserId, ct);
+        var template = templates.FirstOrDefault();
+        return template is null ? Result.Failure(ErrorMessages.TemplateNotFound)
+            : ChecklistTemplate.Create(command.UserId, command.Name ?? template.Name, command.Items ?? template.Items);
+    }
 
     private async Task<Result> CheckTagNameAsync(Guid userId, Guid? tagId, string name, string color, CancellationToken ct)
     {
@@ -134,6 +144,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
     private async Task<Result?> CheckProfileAsync(object command, CancellationToken ct) => command switch
     {
         SetTimezoneCommand timezone => CheckTimezone(timezone.TimeZone),
+        SetNameCommand => Result.Success(),
         SetLanguageCommand => Result.Success(),
         SetWeekStartDayCommand => Result.Success(),
         SetClockFormatCommand => Result.Success(),
@@ -191,7 +202,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         ConfirmAccountDeletionCommand confirm => await CheckDeletionCodeAsync(confirm, ct),
         CreateCheckoutCommand checkout => checkout.Interval is "monthly" or "yearly" ? Result.Success() : Result.Failure("Invalid interval."),
         CreatePortalSessionCommand or SendSupportCommand or ResetAccountCommand or RequestAccountDeletionCommand
-            or SetCalendarAutoSyncCommand or RunCalendarAutoSyncCommand or DismissCalendarImportCommand => Result.Success(),
+            or SetCalendarAutoSyncCommand or SetSelectedCalendarsCommand or RunCalendarAutoSyncCommand or DismissCalendarImportCommand => Result.Success(),
         _ => null
     };
 
@@ -212,7 +223,8 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
             services.GetRequiredService<IUserDateService>(), ct);
 
     private Task<Result> CheckBulkCreateAsync(BulkCreateHabitsCommand command, CancellationToken ct) =>
-        BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, services.GetRequiredService<IUserDateService>(), ct);
+        BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, services.GetRequiredService<IUserDateService>(),
+            services.GetRequiredService<IAppConfigService>(), ct);
 
     private Task<Result> CheckBulkUpdateAsync(BulkUpdateHabitsCommand command, CancellationToken ct) =>
         BulkUpdateHabitsCommandHandler.CheckArgumentsAsync(command, Repository<Habit>(), services.GetRequiredService<IUserDateService>(), ct);

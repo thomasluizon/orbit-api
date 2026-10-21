@@ -19,13 +19,18 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
-        builder.Services.AddSingleton<IAiUsageRecorder, AiUsageRecorder>();
+        builder.Services.AddSingleton<IAiRequestCostEstimator, AiRequestCostEstimator>();
+        builder.Services.AddSingleton<AiUsageRecorder>();
+        builder.Services.AddSingleton<IAiUsageRecorder, BudgetAwareAiUsageRecorder>();
+        builder.Services.AddSingleton<IAiDailyBudget, AiDailyBudget>();
+        builder.Services.AddScoped<BudgetedAiCompletionClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
         builder.Services.AddScoped<IHabitEmojiInferenceService, AiHabitEmojiInferenceService>();
         builder.Services.AddScoped<ISummaryService, AiSummaryService>();
         builder.Services.AddScoped<IRescheduleSuggestionService, AiRescheduleSuggestionService>();
         builder.Services.AddScoped<IHabitSuggestionService, AiHabitSuggestionService>();
+        builder.Services.AddScoped<IDateInterpretationService, AiDateInterpretationService>();
         builder.Services.AddScoped<IRetrospectiveService, AiRetrospectiveService>();
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
         builder.Services.AddScoped<ITagSuggestionService, AiTagSuggestionService>();
@@ -41,7 +46,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
-        builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
+        builder.Services.AddScoped<AgentOperationExecutor>();
+        builder.Services.AddScoped<Orbit.Application.Chat.Commands.IAgentMutationRunner>(sp => sp.GetRequiredService<AgentOperationExecutor>());
+        builder.Services.AddScoped<IAgentOperationExecutor, IdempotentAgentOperationExecutor>();
         builder.Services.AddScoped<IPendingOperationChangePreviewer, PendingOperationChangePreviewer>();
         builder.Services.AddScoped<IDestructiveOperationPreviewer, DestructiveOperationPreviewer>();
         builder.Services.AddScoped<PendingOperationRevisionService>();
@@ -51,6 +58,7 @@ public static partial class ServiceCollectionExtensions
     private static void AddAiChatTools(WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
+        builder.Services.AddScoped<IAiTool, UnlogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
         builder.Services.AddScoped<IAiTool, UndoSkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();
@@ -91,6 +99,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();
         builder.Services.AddScoped<IAiTool, GetChecklistTemplatesTool>();
         builder.Services.AddScoped<IAiTool, CreateChecklistTemplateTool>();
+        builder.Services.AddScoped<IAiTool, UpdateChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, DeleteChecklistTemplateTool>();
         builder.Services.AddScoped<IAiTool, GetGamificationOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetReferralOverviewTool>();

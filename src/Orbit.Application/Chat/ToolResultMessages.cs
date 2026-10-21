@@ -54,6 +54,7 @@ internal static class ToolResultMessages
             "manage_subscription" => (operation == "create_checkout" ? "checkoutCreated" : "billingPortalCreated", new()),
             "manage_calendar_sync" => (operation switch
             {
+                "set_selected_calendars" => "calendarSelectionUpdated",
                 "set_auto_sync" => $"calendarAutoSync.{enabled}",
                 "dismiss_import" => "calendarImportDismissed",
                 "dismiss_suggestion" => "calendarSuggestionDismissed",
@@ -99,6 +100,7 @@ internal static class ToolResultMessages
 
     private static (string, ToolResultMessageParams) Profile(string? operation, JsonElement args) => operation switch
     {
+        "set_name" => ("nameSet", new(EntityName: String(args, "name"))),
         "set_timezone" => ("timezoneSet", new(TimeZone: String(args, "timezone"))),
         "set_language" => ("languageSet", new(Language: String(args, "language"))),
         "set_week_start_day" => ("weekStartDaySet", new(WeekStartDay: Integer(args, "week_start_day"))),
@@ -117,6 +119,7 @@ internal static class ToolResultMessages
         "delete_habit" => "deletedHabit",
         "duplicate_habit" => "duplicatedHabit",
         "log_habit" => "loggedHabit",
+        "unlog_habit" => "unloggedHabit",
         "skip_habit" => "skippedHabit",
         "undo_skip_habit" => "undidSkipHabit",
         "move_habit" => "movedHabit",
@@ -134,6 +137,7 @@ internal static class ToolResultMessages
         "create_tag" => "createdTag",
         "update_tag" => "updatedTag",
         "create_checklist_template" => "createdChecklistTemplate",
+        "update_checklist_template" => "updatedChecklistTemplate",
         _ => "completed"
     };
 

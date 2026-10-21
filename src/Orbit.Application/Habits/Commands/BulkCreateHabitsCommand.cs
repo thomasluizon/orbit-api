@@ -1,6 +1,6 @@
 using MediatR;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -39,7 +39,20 @@ public record BulkHabitItem(
     int? IntervalWeeks = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
-public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
+public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results)
+{
+    [JsonPropertyName("applied_count")]
+    public int AppliedCount => Results.Count(item => item.Status == BulkItemStatus.Success);
+
+    [JsonPropertyName("total_matched")]
+    public int TotalMatched => Results.Count;
+
+    [JsonPropertyName("skipped_count")]
+    public int SkippedCount => TotalMatched - AppliedCount;
+
+    [JsonPropertyName("partial")]
+    public bool Partial => AppliedCount != TotalMatched;
+}
 
 public record BulkCreateItemResult(
     int Index,
@@ -57,16 +70,14 @@ public record BulkCreateHabitsRepositories(
     IGenericRepository<GoogleCalendarSyncSuggestion> Suggestions,
     IGenericRepository<Tag> Tags);
 
-public partial class BulkCreateHabitsCommandHandler(
+public class BulkCreateHabitsCommandHandler(
     BulkCreateHabitsRepositories repos,
     IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
-    ILogger<BulkCreateHabitsCommandHandler> logger) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
+    IAppConfigService appConfigService) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
 {
-    private const string DefaultTagColor = "#7c3aed";
-
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -92,14 +103,6 @@ public partial class BulkCreateHabitsCommandHandler(
         if (habitGate.IsFailure)
             return habitGate.PropagateError<BulkCreateResult>();
 
-        var hasSubHabits = request.Habits.Any(h => h.SubHabits is { Count: > 0 });
-        if (hasSubHabits)
-        {
-            var subGate = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
-            if (subGate.IsFailure)
-                return subGate.PropagateError<BulkCreateResult>();
-        }
-
         var results = new List<BulkCreateItemResult>();
 
         var existingRoots = await repos.Habits.FindAsync(
@@ -109,187 +112,75 @@ public partial class BulkCreateHabitsCommandHandler(
             ? 0
             : existingRoots.Max(h => h.Position ?? -1) + 1;
 
-        var tagsByName = await LoadTagCacheAsync(request, cancellationToken);
+        var maxDepth = await appConfigService.GetAsync(
+            AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
+        var tagsByName = new Dictionary<string, Tag>(StringComparer.OrdinalIgnoreCase);
+        var tagsLoaded = false;
+        var createdHabits = new List<Habit>();
 
         for (int i = 0; i < request.Habits.Count; i++)
         {
-            var itemResult = await CreateSingleHabit(
-                request.UserId,
-                request.Habits[i],
-                i,
-                userToday,
-                rootPositionCursor + i,
-                tagsByName,
-                cancellationToken);
-            results.Add(itemResult);
+            cancellationToken.ThrowIfCancellationRequested();
+            var item = request.Habits[i];
+            var subtree = BulkHabitSubtree.Build(
+                request.UserId, item, userToday, rootPositionCursor + i, maxDepth, cancellationToken,
+                out var field);
+            if (subtree.IsFailure)
+            {
+                results.Add(new(i, BulkItemStatus.Failed, Title: item.Title, Error: subtree.Error, Field: field));
+                continue;
+            }
+
+            if (!tagsLoaded && subtree.Value.Any(node => node.Tags.Count > 0))
+            {
+                tagsByName = await LoadTagCacheAsync(request.UserId, cancellationToken);
+                tagsLoaded = true;
+            }
+
+            foreach (var node in subtree.Value)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await AttachTagsAsync(node, tagsByName, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                await repos.Habits.AddAsync(node.Habit, cancellationToken);
+                createdHabits.Add(node.Habit);
+            }
+
+            var root = subtree.Value[0].Habit;
+            results.Add(new(i, BulkItemStatus.Success, root.Id, root.Title));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         if (request.FromSyncReview)
         {
-            await MarkSyncSuggestionsImported(request.UserId, results, cancellationToken);
+            await MarkSyncSuggestionsImported(request.UserId, createdHabits, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         return Result.Success(new BulkCreateResult(results));
     }
 
-    internal static async Task<Result> CheckArgumentsAsync(BulkCreateHabitsCommand request, IUserDateService dates, CancellationToken ct)
+    internal static async Task<Result> CheckArgumentsAsync(
+        BulkCreateHabitsCommand request, IUserDateService dates, IAppConfigService config, CancellationToken ct)
     {
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
+        var maxDepth = await config.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, ct);
         foreach (var item in request.Habits)
         {
-            var parent = BuildParent(request.UserId, item, today, 0);
-            if (parent.IsFailure)
-                return parent;
-            foreach (var child in item.SubHabits ?? [])
-            {
-                var result = BuildChild(request.UserId, item, child, parent.Value, today, 0);
-                if (result.IsFailure)
-                    return result;
-            }
+            var subtree = BulkHabitSubtree.Build(request.UserId, item, today, 0, maxDepth, ct, out _);
+            if (subtree.IsFailure)
+                return subtree;
         }
         return Result.Success();
     }
 
-    private static Result<Habit> BuildParent(Guid userId, BulkHabitItem item, DateOnly userToday, int rootPosition)
-    {
-        return Habit.Create(new HabitCreateParams(
-                userId,
-                item.Title,
-                item.FrequencyUnit,
-                item.FrequencyQuantity,
-                item.DueDate ?? userToday,
-                item.Description,
-                Emoji: item.Emoji,
-                Days: item.Days,
-                IsBadHabit: item.IsBadHabit,
-                DueTime: item.DueTime,
-                DueEndTime: item.DueEndTime,
-                ReminderEnabled: item.ReminderEnabled,
-                ReminderTimes: item.ReminderTimes,
-                IsGeneral: item.IsGeneral,
-                IsFlexible: item.IsFlexible,
-                EndDate: item.EndDate,
-                ScheduledReminders: item.ScheduledReminders,
-                RelativeReminders: item.RelativeReminders,
-                ChecklistItems: item.ChecklistItems,
-                Position: rootPosition,
-                GoogleEventId: item.GoogleEventId,
-                IntervalWeeks: item.IntervalWeeks));
-    }
-
-    private static Result<Habit> BuildChild(Guid userId, BulkHabitItem parentItem, BulkHabitItem subItem,
-        Habit parent, DateOnly userToday, int position)
-    {
-        var hasExplicitCadence = subItem.FrequencyUnit is not null
-            || subItem.FrequencyQuantity is not null
-            || subItem.IntervalWeeks is not null
-            || subItem.Days is not null;
-        var childFrequencyUnit = subItem.FrequencyUnit ?? parentItem.FrequencyUnit;
-        var childFrequencyQuantity = subItem.FrequencyQuantity ?? parentItem.FrequencyQuantity;
-        var childDays = subItem.Days;
-        if (childDays is null
-            && childFrequencyUnit == FrequencyUnit.Day
-            && childFrequencyQuantity == 1)
-        {
-            childDays = parentItem.Days;
-        }
-
-        return Habit.Create(new HabitCreateParams(
-            userId,
-            subItem.Title,
-            childFrequencyUnit,
-            childFrequencyQuantity,
-            subItem.DueDate ?? parentItem.DueDate ?? userToday,
-            subItem.Description,
-            Emoji: subItem.Emoji,
-            Days: childDays,
-            IsBadHabit: subItem.IsBadHabit,
-            DueTime: subItem.DueTime,
-            EndDate: subItem.EndDate,
-            ChecklistItems: subItem.ChecklistItems,
-            ParentHabitId: parent.Id,
-            IsGeneral: parentItem.IsGeneral,
-            IsFlexible: subItem.IsFlexible,
-            Position: position,
-            IntervalWeeks: subItem.IntervalWeeks
-                ?? (hasExplicitCadence ? null : parentItem.IntervalWeeks)));
-    }
-
-    private async Task<BulkCreateItemResult> CreateSingleHabit(
-        Guid userId, BulkHabitItem item, int index, DateOnly userToday, int rootPosition,
-        Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var habitResult = BuildParent(userId, item, userToday, rootPosition);
-
-            if (habitResult.IsFailure)
-            {
-                return new BulkCreateItemResult(
-                    Index: index,
-                    Status: BulkItemStatus.Failed,
-                    Title: item.Title,
-                    Error: habitResult.Error,
-                    Field: DetermineFieldFromError(habitResult.Error));
-            }
-
-            var parentHabit = habitResult.Value;
-            var children = new List<Habit>();
-
-            if (item.SubHabits is { Count: > 0 })
-            {
-                var subPositionCursor = 0;
-                foreach (var subItem in item.SubHabits)
-                {
-                    var childResult = BuildChild(userId, item, subItem, parentHabit, userToday, subPositionCursor++);
-
-                    if (childResult.IsFailure)
-                    {
-                        return new BulkCreateItemResult(
-                            Index: index,
-                            Status: BulkItemStatus.Failed,
-                            Title: item.Title,
-                            Error: $"Sub-habit '{subItem.Title}' failed: {childResult.Error}",
-                            Field: "SubHabits");
-                    }
-
-                    children.Add(childResult.Value);
-                }
-            }
-
-            await repos.Habits.AddAsync(parentHabit, cancellationToken);
-            await AttachTagsAsync(parentHabit, userId, item.Tags, tagsByName, cancellationToken);
-            foreach (var child in children)
-                await repos.Habits.AddAsync(child, cancellationToken);
-
-            return new BulkCreateItemResult(
-                Index: index,
-                Status: BulkItemStatus.Success,
-                HabitId: parentHabit.Id,
-                Title: parentHabit.Title);
-        }
-        catch (Exception ex)
-        {
-            LogBulkCreateItemFailed(logger, ex, index);
-            return new BulkCreateItemResult(
-                Index: index,
-                Status: BulkItemStatus.Failed,
-                Title: item.Title,
-                Error: "An error occurred processing this item");
-        }
-    }
-
     private async Task<Dictionary<string, Tag>> LoadTagCacheAsync(
-        BulkCreateHabitsCommand request, CancellationToken cancellationToken)
+        Guid userId, CancellationToken cancellationToken)
     {
         var tagsByName = new Dictionary<string, Tag>(StringComparer.OrdinalIgnoreCase);
-        if (!request.Habits.Any(h => h.Tags is { Count: > 0 }))
-            return tagsByName;
-
-        var existingTags = await repos.Tags.FindTrackedAsync(t => t.UserId == request.UserId, cancellationToken);
+        var existingTags = await repos.Tags.FindTrackedAsync(t => t.UserId == userId, cancellationToken);
         foreach (var tag in existingTags)
             tagsByName[tag.Name] = tag;
 
@@ -297,70 +188,38 @@ public partial class BulkCreateHabitsCommandHandler(
     }
 
     private async Task AttachTagsAsync(
-        Habit habit, Guid userId, IReadOnlyList<string>? tagNames,
-        Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
+        BulkHabitSubtree.Node node, Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
     {
-        if (tagNames is not { Count: > 0 })
-            return;
-
-        foreach (var rawName in tagNames)
+        foreach (var candidate in node.Tags)
         {
-            var trimmed = rawName.Trim();
-            if (trimmed.Length == 0)
-                continue;
-
-            if (!tagsByName.TryGetValue(trimmed, out var tag))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!tagsByName.TryGetValue(candidate.Name, out var tag))
             {
-                var created = Tag.Create(userId, trimmed, DefaultTagColor);
-                if (created.IsFailure)
-                    continue;
-
-                tag = created.Value;
+                tag = candidate;
                 await repos.Tags.AddAsync(tag, cancellationToken);
                 tagsByName[tag.Name] = tag;
             }
 
-            habit.AddTag(tag);
+            if (tag.UserId != node.Habit.UserId)
+                throw new InvalidOperationException(ErrorMessages.TagNotFound.Message);
+            node.Habit.AddTag(tag);
         }
-    }
-
-    private static string? DetermineFieldFromError(string error)
-    {
-        if (error.Contains("title", StringComparison.OrdinalIgnoreCase))
-            return "Title";
-        if (error.Contains("frequency", StringComparison.OrdinalIgnoreCase))
-            return "FrequencyUnit";
-        if (error.Contains("days", StringComparison.OrdinalIgnoreCase))
-            return "Days";
-        return null;
     }
 
     private async Task MarkSyncSuggestionsImported(
         Guid userId,
-        List<BulkCreateItemResult> results,
+        IReadOnlyList<Habit> createdHabits,
         CancellationToken cancellationToken)
     {
-        var createdHabitIds = results
-            .Where(r => r.Status == BulkItemStatus.Success && r.HabitId is not null)
-            .Select(r => r.HabitId!.Value)
-            .ToList();
-
-        if (createdHabitIds.Count == 0)
-            return;
-
-        var createdHabits = await repos.Habits.FindAsync(
-            h => createdHabitIds.Contains(h.Id) && h.GoogleEventId != null,
-            cancellationToken);
-
         var habitsByEventId = createdHabits
-            .Where(h => h.GoogleEventId is not null)
+            .Where(h => h.UserId == userId && h.GoogleEventId is not null)
             .ToDictionary(h => h.GoogleEventId!, h => h.Id);
 
         if (habitsByEventId.Count == 0)
             return;
 
         var eventIds = habitsByEventId.Keys.ToList();
-        var suggestions = await repos.Suggestions.FindAsync(
+        var suggestions = await repos.Suggestions.FindTrackedAsync(
             s => s.UserId == userId && eventIds.Contains(s.GoogleEventId) && s.ImportedAtUtc == null,
             cancellationToken);
 
@@ -373,7 +232,4 @@ public partial class BulkCreateHabitsCommandHandler(
                 suggestion.MarkImported(habitId, now);
         }
     }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "BulkCreate item {Index} failed")]
-    private static partial void LogBulkCreateItemFailed(ILogger logger, Exception ex, int index);
 }

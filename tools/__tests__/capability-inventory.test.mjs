@@ -88,15 +88,17 @@ test("creation without update and partial readback are gaps", () => {
   const template = field(inventory, "ChecklistTemplate", "Items").surfaces.chat
   assert.equal(template.operations.create.status, "covered")
   assert.equal(template.operations.read.status, "covered")
-  assert.ok(template.problems.includes("create-without-update"))
-  const checklist = field(inventory, "Habit", "ChecklistItems").surfaces.chat
-  assert.equal(checklist.operations.read.status, "partial")
-  assert.equal(checklist.verdict, "gap")
-  assert.equal(field(inventory, "Habit", "Description").surfaces.chat.operations.read.status, "absent")
-  assert.ok(field(inventory, "Profile", "Name").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
-  assert.ok(field(inventory, "Habit", "RelativeReminders").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
+  assert.equal(template.operations.update.status, "covered")
+  mutate("src/Orbit.Api/Extensions/ServiceCollectionExtensions.AiServices.cs", text => text.replace("builder.Services.AddScoped<IAiTool, UpdateChecklistTemplateTool>();", ""), build => {
+    assert.ok(field(build(), "ChecklistTemplate", "Items").surfaces.chat.problems.includes("create-without-update"))
+  })
+  const tags = field(inventory, "Habit", "Tags").surfaces.chat
+  assert.equal(tags.operations.read.status, "partial")
+  assert.equal(tags.verdict, "gap")
+  assert.equal(field(inventory, "Habit", "Description").surfaces.chat.operations.read.status, "covered")
+  assert.ok(field(inventory, "Habit", "StartDate").surfaces.chat.problems.includes("domain-edit-without-tool-update"))
   assert.match(gapReport(inventory), /## Field coverage gaps/)
-  assert.match(gapReport(inventory), /### Profile.Name/)
+  assert.match(gapReport(inventory), /### Habit.StartDate/)
 })
 
 test("MCP gateway coverage retains direct differences, known tickets and deliberate memory removal", () => {
@@ -107,7 +109,10 @@ test("MCP gateway coverage retains direct differences, known tickets and deliber
   for (const number of [513, 246, 396, 19, 235, 1574, 1575, 1576]) assert.ok(inventory.knownGaps.some(row => row.ticket.endsWith(`#${number}`)))
   assert.ok(!inventory.gaps.some(row => row.entity === "UserFact"))
   assert.ok(!inventory.gaps.some(row => row.entity === "PushSubscription"))
-  assert.ok(inventory.gaps.some(row => row.problems.includes("direct-update-requires-unchanged-title")))
+  assert.ok(!inventory.gaps.some(row => row.problems.includes("direct-update-requires-unchanged-title")))
+  mutate("src/Orbit.Api/Mcp/Tools/HabitTools.cs", text => text.replace('string? title = null,', 'string title,'), build => {
+    assert.ok(build().gaps.some(row => row.problems.includes("direct-update-requires-unchanged-title")))
+  })
   assert.ok(inventory.gaps.every(row => row.ticket), "Existing findings must reference the tickets that own them")
   for (const [entity, name] of [["Habit", "Position"], ["SubHabit", "Position"], ["HabitLog", "HabitId"], ["HabitLog", "Date"], ["Goal", "Position"], ["Goal", "Type"], ["Profile", "Email"], ["Profile", "MarketingEmailConsent"]]) {
     assert.ok(!inventory.gaps.some(row => row.entity === entity && row.field === name))
@@ -124,14 +129,21 @@ test("nested writable fields and filter predicates have distinct parameter paths
   const tool = inventory.registries.chat.find(row => row.name === "bulk_update_habits")
   for (const name of ["filter.all", "filter.is_general", "updates.emoji", "updates.checklist_items[].text"]) assert.ok(tool.parameters.some(row => row.name === name), name)
   const general = field(inventory, "Habit", "IsGeneral").surfaces.chat.operations.filterKeyedBulk
-  assert.equal(general.direct.length, 0, "A selector must not be counted as a write")
+  assert.ok(general.direct.every(row => row.parameter === "updates.is_general"), "A selector must not be counted as a write")
+  mutate("src/Orbit.Application/Chat/Tools/Implementations/BulkUpdateHabitsTool.cs", text => text.replace('is_general = new { type =', 'inventory_probe = new { type ='), build => {
+    assert.equal(field(build(), "Habit", "IsGeneral").surfaces.chat.operations.filterKeyedBulk.direct.length, 0)
+  })
   const mcp = inventory.registries.mcp.find(row => row.name === "bulk_update_habits")
   assert.ok(mcp.parameters.some(row => row.name === "updatesJson.emoji"))
   assert.ok(inventory.registries.chat.find(row => row.name === "bulk_create_habits").parameters.some(row => row.name === "habits[].sub_habits[].emoji"))
   assert.equal(inventory.registries.chat.find(row => row.name === "create_habit").parameters.find(row => row.name === "title").required, true)
-  assert.ok(inventory.registries.mcp.find(row => row.name === "create_habit").parameters.find(row => row.name === "isGeneral").unsupportedByExecutorSchema)
-  assert.equal(field(inventory, "Habit", "IsGeneral").surfaces.mcp.operations.create.status, "advertised-only")
-  assert.deepEqual(inventory.registries.mcp.flatMap(tool => tool.parameters.filter(parameter => parameter.unsupportedByExecutorSchema).map(parameter => [tool.name, parameter.name])), [["create_habit", "isGeneral"]])
+  assert.equal(field(inventory, "Habit", "IsGeneral").surfaces.mcp.operations.create.status, "covered")
+  assert.deepEqual(inventory.registries.mcp.flatMap(tool => tool.parameters.filter(parameter => parameter.unsupportedByExecutorSchema).map(parameter => [tool.name, parameter.name])), [])
+  mutate("src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", text => text.replace('is_general = new { type =', 'inventory_probe = new { type ='), build => {
+    const changed = build()
+    assert.equal(field(changed, "Habit", "IsGeneral").surfaces.mcp.operations.create.status, "advertised-only")
+    assert.deepEqual(changed.registries.mcp.flatMap(tool => tool.parameters.filter(parameter => parameter.unsupportedByExecutorSchema).map(parameter => [tool.name, parameter.name])), [["create_habit", "isGeneral"]])
+  })
 })
 
 test("removing a real registration removes coverage and fails the drift gate", () => {
@@ -157,7 +169,97 @@ test("removing a returned field invalidates its semantic binding", () => {
 })
 
 test("returned DTO drift is covered even outside Queries directories", () => {
-  mutate("src/Orbit.Application/Subscriptions/SubscriptionDtos.cs", text => text.replace("string Plan", "string InventoryProbe"), build => {
-    assert.throws(() => checkBaseline(build(), baseline(inventory)), /entities\.Subscription\.fields\.Plan/)
+  mutate("src/Orbit.Application/Subscriptions/SubscriptionDtos.cs", text => text.replace("DateTime? TrialEndsAt", "DateTime? InventoryProbe"), build => {
+    assert.throws(() => checkBaseline(build(), baseline(inventory)), /entities\.Subscription\.fields\.TrialEndsAt/)
   })
+})
+
+test("nullable schemas, constant enums and helper schemas retain their contracts", () => {
+  const tool = inventory.registries.chat.find(row => row.name === "update_habit")
+  assert.deepEqual(tool.parameters.find(row => row.name === "emoji").type, ["string", "null"])
+  assert.deepEqual(tool.parameters.find(row => row.name === "frequency_unit").values, ["Day", "Week", "Month", "Year"])
+  assert.ok(tool.parameters.some(row => row.name === "relative_reminders[].minutes_before"))
+  assert.deepEqual(tool.parameters.find(row => row.name === "clear_fields").items.values, ["description", "emoji", "frequency_unit", "end_date", "due_time", "due_end_time"])
+  assert.equal(inventory.registries.chat.find(row => row.name === "bulk_create_habits").parameters.find(row => row.name === "habits").items.type, "object")
+})
+
+test("MCP array parameters remain in the real signature contract", () => {
+  const tool = inventory.registries.mcp.find(row => row.name === "update_checklist_template")
+  assert.equal(tool.parameters.find(row => row.name === "items")?.type, "string[]?")
+})
+
+test("composed bulk log schemas retain filters and added dates", () => {
+  const tool = inventory.registries.chat.find(row => row.name === "bulk_log_habits")
+  for (const name of ["filter", "filter.all", "filter.habit_ids", "date", "dates"]) assert.ok(tool.parameters.some(row => row.name === name), name)
+  mutate("src/Orbit.Application/Chat/Tools/Implementations/BulkLogHabitsTool.cs", text => text.replace('["dates"] = JsonSerializer', '["inventory_probe"] = JsonSerializer'), build => {
+    assert.throws(() => checkBaseline(build(), baseline(inventory)), /registries.chat.bulk_log_habits.parameters.dates/)
+  })
+})
+
+test("current source routes template updates, names, calendar selection and dedicated undo", () => {
+  for (const surface of ["chat", "mcp"]) {
+    assert.equal(field(inventory, "ChecklistTemplate", "Items").surfaces[surface].operations.update.status, "covered")
+    assert.equal(field(inventory, "CalendarSync", "GoogleCalendarSelectedIds").surfaces[surface].operations.update.status, "covered")
+    assert.equal(field(inventory, "HabitLog", "Date").surfaces[surface].operations.delete.direct[0].tool, "unlog_habit")
+  }
+  assert.ok(field(inventory, "Profile", "Name").surfaces.mcp.operations.update.direct.some(row => row.tool === "set_name"))
+})
+
+test("habit summary readback follows returned formatting and nested members", () => {
+  for (const surface of ["chat", "mcp"]) {
+    for (const name of ["Description", "DueEndTime", "ChecklistItems.Text", "ChecklistItems.IsChecked", "RelativeReminders.MinutesBefore", "RelativeReminders.When", "RelativeReminders.Time"]) {
+      assert.equal(field(inventory, "Habit", name).surfaces[surface].operations.read.status, "covered", `${surface}.${name}`)
+    }
+  }
+  mutate("src/Orbit.Application/Habits/Queries/HabitFieldSummary.cs", text => text.replace('fields.Add($"Description: {Description}")', 'fields.Add("Description omitted")'), build => {
+    assert.throws(build, /Missing readback.*Description/)
+  })
+  mutate("src/Orbit.Application/Chat/Tools/Implementations/QueryHabitsTool.cs", text => text.replace("{labelStr}{detailSuffix}", "{labelStr}"), build => {
+    assert.throws(build, /Missing readback.*detailSuffix/)
+  })
+})
+
+test("partial domain declarations keep their field evidence", () => {
+  assert.match(field(inventory, "Profile", "SignupLanguage")?.domain.source ?? "", /User.Signup.cs#User.SignupLanguage$/)
+})
+
+test("expression properties keep their actual member evidence", () => {
+  assert.match(field(inventory, "Habit", "Tags").domain.source, /#Habit.Tags$/)
+})
+
+test("legacy nullable traits retain their contracts", () => {
+  const child = inventory.registries.chat.find(row => row.name === "create_sub_habit")
+  assert.equal(child.parameters.find(row => row.name === "frequency_unit").nullable, true)
+})
+
+test("direct JSON adapters retain nested contracts", () => {
+  assert.equal(field(inventory, "Habit", "RelativeReminders.MinutesBefore").surfaces.mcp.operations.update.direct.find(row => row.tool === "update_habit")?.parameter, "relativeReminders[].minutes_before")
+  mutate("src/Orbit.Api/Mcp/Tools/HabitTools.cs", text => text.replace('("relative_reminders", relativeReminders)', '("inventory_probe", relativeReminders)'), build => {
+    assert.equal(field(build(), "Habit", "RelativeReminders.MinutesBefore").surfaces.mcp.operations.update.direct.length, 0)
+  })
+})
+
+test("source mutations expose helper, enum, array, nullable and partial-model drift", () => {
+  for (const [path, before, after, diagnostic] of [
+    ["src/Orbit.Application/Chat/Tools/Implementations/BulkHabitToolArguments.cs", "minutes_before = new {", "inventory_probe = new {", /registries.chat.update_habit.parameters.relative_reminders/],
+    ["src/Orbit.Application/Chat/Tools/JsonSchemaTypes.cs", '"day_before", "same_day"', '"day_before", "inventory_probe"', /registries.chat.update_habit.parameters.scheduled_reminders/],
+    ["src/Orbit.Api/Mcp/Tools/ChecklistTemplateTools.cs", "string[]? items = null", "int[]? items = null", /registries.mcp.update_checklist_template.parameters.items.type/],
+    ["src/Orbit.Application/Chat/Tools/Implementations/CreateSubHabitTool.cs", "nullable = true", "nullable = false", /registries.chat.create_sub_habit.parameters.frequency_unit.nullable/],
+    ["src/Orbit.Domain/Entities/User.Signup.cs", "public string? SignupLanguage", "public string? InventoryProbe", /entities.Profile.fields.SignupLanguage/],
+  ]) mutate(path, text => text.replace(before, after), build => {
+    assert.throws(() => checkBaseline(build(), baseline(inventory)), diagnostic)
+  })
+  mutate("src/Orbit.Application/Habits/Queries/HabitFieldSummary.cs", text => text.replace('{item.Text}', '{"omitted"}'), build => {
+    assert.throws(build, /Missing readback.*item.Text/)
+  })
+  mutate("src/Orbit.Application/Habits/Queries/HabitFieldSummary.cs", text => text.replace('Description = habit.Description', 'Description = null'), build => {
+    assert.throws(build, /Missing readback.*Description = habit.Description/)
+  })
+})
+
+test("helpers inside a nested object never flatten their fields onto its parent", () => {
+  const tool = inventory.registries.chat.find(row => row.name === "create_habit")
+  assert.ok(tool.parameters.some(row => row.name === "sub_habits[].relative_reminders[].minutes_before"))
+  assert.ok(!tool.parameters.some(row => row.name === "sub_habits[].minutes_before"))
+  for (const tools of Object.values(inventory.registries)) for (const value of tools) assert.equal(new Set(value.parameters.map(row => row.name)).size, value.parameters.length, value.name)
 })

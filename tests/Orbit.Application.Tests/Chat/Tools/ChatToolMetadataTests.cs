@@ -40,13 +40,15 @@ public class ChatToolMetadataTests
         var createSubHabitTool = new CreateSubHabitTool(mediator);
         var deleteGoalTool = new DeleteGoalTool(Repo<Goal>(), unitOfWork);
         var deleteHabitTool = new DeleteHabitTool(mediator, Repo<Habit>());
-        var duplicateHabitTool = new DuplicateHabitTool(mediator);
+        var duplicateHabitTool = new DuplicateHabitTool(mediator, Repo<Habit>());
         var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);
         var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
         var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
         var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
         var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
+        var unlogHabitTool = new UnlogHabitTool(Repo<Habit>(), userDateService, unitOfWork,
+            payGateService, Substitute.For<IUserStreakService>(), goalCompletionService);
         var moveHabitTool = new MoveHabitTool(mediator, Repo<Habit>());
         var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>(), userDateService, Substitute.For<IHabitScheduleLogReader>());
@@ -57,7 +59,7 @@ public class ChatToolMetadataTests
         var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
         var updateHabitTool = new UpdateHabitTool(
-            Repo<Habit>(), userDateService, unitOfWork, Substitute.For<IPayGateService>());
+            Repo<Habit>(), userDateService, mediator);
         var listTagsTool = new ListTagsTool(mediator);
         var createTagTool = new CreateTagTool(mediator);
         var updateTagTool = new UpdateTagTool(mediator);
@@ -77,8 +79,8 @@ public class ChatToolMetadataTests
         AssertTool(bulkUpdateHabitEmojisTool, "bulk_update_habit_emojis", "emojis", "infer_from_title");
         AssertTool(bulkUpdateHabitsTool, "bulk_update_habits", "complete", "updates");
         AssertTool(bulkRescheduleHabitsTool, "bulk_reschedule_habits", "reschedule", "due_date");
-        AssertTool(bulkLogHabitsTool, "bulk_log_habits", "multiple", "habit_ids");
-        AssertTool(bulkSkipHabitsTool, "bulk_skip_habits", "multiple", "habit_ids");
+        AssertTool(bulkLogHabitsTool, "bulk_log_habits", "matching", "habit_ids");
+        AssertTool(bulkSkipHabitsTool, "bulk_skip_habits", "matching", "habit_ids");
         AssertTool(createGoalTool, "create_goal", "goal", "goal_type");
         AssertTool(createHabitTool, "create_habit", "habit", "checklist_items");
         AssertTool(createSubHabitTool, "create_sub_habit", "sub-habit", "parent_habit_id");
@@ -90,6 +92,8 @@ public class ChatToolMetadataTests
         AssertTool(getHabitMetricsTool, "get_habit_metrics", "metrics", "habit_id", expectReadOnly: true);
         AssertTool(goalReviewTool, "review_goals", "review", "properties", expectReadOnly: true);
         AssertTool(linkHabitsTool, "link_habits_to_goal", "Link", "habit_ids");
+        AssertTool(unlogHabitTool, "unlog_habit", "Undo", "habit_id");
+        JsonSerializer.Serialize(unlogHabitTool.GetParameterSchema()).Should().Contain("date");
         AssertTool(logHabitTool, "log_habit", "habit", "date");
         AssertTool(moveHabitTool, "move_habit", "parent", "new_parent_id");
         AssertTool(queryGoalsTool, "query_goals", "goals", "include_linked_habits", expectReadOnly: true);

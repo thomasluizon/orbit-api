@@ -48,9 +48,13 @@ public interface IPendingAgentOperationStore
     PendingAgentOperationConfirmation? Confirm(Guid userId, Guid pendingOperationId);
     PendingAgentOperationExecution? GetExecution(Guid userId, Guid pendingOperationId);
     bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId);
+    IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId);
+    bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId);
     bool Revise(Guid userId, Guid pendingOperationId, string expectedFingerprint,
         string argumentsJson, string operationFingerprint, string previewFingerprint);
     bool Cancel(Guid userId, Guid pendingOperationId, string expectedFingerprint);
+    PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
+        string operationFingerprint, string confirmationToken);
     bool TryConsumeFreshConfirmation(
         Guid userId,
         string capabilityId,

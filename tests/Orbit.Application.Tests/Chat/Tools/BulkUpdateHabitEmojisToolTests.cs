@@ -49,6 +49,40 @@ public class BulkUpdateHabitEmojisToolTests
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitEmojisTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_InfersSameIconsAsAbsent(string field)
+    {
+        var habit = CreateHabit("Read", "📝");
+        SetupHabits(habit);
+        var body = field == "habit_ids"
+            ? new Dictionary<string, object?> { ["filter"] = new { all = true } }
+            : new Dictionary<string, object?> { ["habit_ids"] = new[] { habit.Id } };
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        var before = OptionalParameterCases.HabitState(habit);
+        body[field] = null;
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        OptionalParameterCases.HabitState(habit).Should().Be(before);
+        await _inferenceService.Received(2).InferAsync(UserId,
+            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(inputs => inputs.Count == 1 && inputs[0].HabitId == habit.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckArgumentsAsync_InferFromTitle_AcceptsWithoutInferenceOrWrites()
+    {
+        var habit = CreateHabit("Read");
+        SetupHabits(habit);
+
+        var result = await _tool.CheckArgumentsAsync(JsonSerializer.Deserialize<JsonElement>(
+            """{"infer_from_title":true}"""), UserId, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        habit.Emoji.Should().BeNull();
+        await _inferenceService.DidNotReceiveWithAnyArgs().InferAsync(default, default!, default);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task InferFromTitle_UpdatesAllActiveHabitsWithSensibleEmojis()
     {
@@ -121,7 +155,7 @@ public class BulkUpdateHabitEmojisToolTests
         var gym = CreateHabit("Gym", emoji: "🏋️");
         SetupHabits(gym);
 
-        var result = await Execute($$$"""{"habit_ids": ["{{{gym.Id}}}"], "emoji": null, "infer_from_title": false}""");
+        var result = await Execute($$$"""{"habit_ids": ["{{{gym.Id}}}"], "emoji_mode": "clear", "infer_from_title": false}""");
 
         result.Success.Should().BeTrue();
         gym.Emoji.Should().BeNull();
@@ -231,6 +265,10 @@ public class BulkUpdateHabitEmojisToolTests
         payload.GetProperty("skipped_count").GetInt32().Should().Be(30);
         payload.GetProperty("partial").GetBoolean().Should().BeTrue();
         result.EntityName.Should().Contain("Partial result");
+        callCount.Should().Be(2);
+        habits.Count(habit => habit.Emoji == "🎯").Should().Be(25);
+        habits.Count(habit => habit.Emoji == null).Should().Be(30);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

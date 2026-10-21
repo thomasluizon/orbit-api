@@ -60,6 +60,8 @@ public class McpPlanAccessTests
                 Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => keys.Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
         var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<IActionResult>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<IActionResult>>>()(call.Arg<CancellationToken>()));
 
         string token;
         if (throughOAuth)
@@ -92,6 +94,9 @@ public class McpPlanAccessTests
         builder.Configuration["Jwt:Issuer"] = "orbit-test";
         builder.Configuration["Jwt:Audience"] = "orbit-test";
         builder.AddOrbitAuthentication();
+        var usage = Substitute.For<IApiKeyUsageTracker>();
+        builder.Services.AddSingleton(usage);
+        builder.Services.AddSingleton(Orbit.Infrastructure.Tests.ModerationTestDouble.Clean());
         builder.Services.AddSingleton(keyRepository);
         builder.Services.AddSingleton(unitOfWork);
         builder.Services.AddSingleton<IPayGateService>(payGate);
@@ -156,7 +161,7 @@ public class McpPlanAccessTests
             context.User.FindFirstValue(ClaimTypes.NameIdentifier).Should().Be(user.Id.ToString());
             context.User.FindFirstValue("auth_method").Should().Be("api_key");
             toolOutput.Should().Be("No habits found for the given date range.");
-            key.LastUsedAtUtc.Should().NotBeNull();
+            await usage.Received(1).MarkUsedAsync(key.Id, Arg.Any<CancellationToken>());
             await mediator.Received(1).Send(
                 Arg.Is<GetHabitScheduleQuery>(query => query.UserId == user.Id), Arg.Any<CancellationToken>());
         }
@@ -177,12 +182,14 @@ public class McpPlanAccessTests
     private static async Task<string> ExchangeOAuthTokenAsync(
         User user, IMediator mediator, IGenericRepository<ApiKey> keys, IUnitOfWork unitOfWork)
     {
-        using var store = new OAuthAuthorizationStore(NullLogger<OAuthAuthorizationStore>.Instance);
+        using var oauthDb = new Orbit.Infrastructure.Tests.Persistence.SqliteOrbitDbContextFactory();
+        var store = new OAuthAuthorizationStore(new Orbit.Infrastructure.Persistence.OAuthStateStore(oauthDb.Context, TimeProvider.System), TimeProvider.System);
         mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new LoginResponse(user.Id, "login-token", user.Name, user.Email)));
         var controller = new OAuthController(mediator, store, keys, unitOfWork,
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(),
             NullLogger<OAuthController>.Instance);
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         const string verifier = "mcp-client-code-verifier";
         const string redirectUri = "https://claude.ai/callback";
         var challenge = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
@@ -190,6 +197,8 @@ public class McpPlanAccessTests
             user.Email, "123456", "client-state", challenge, redirectUri, "mcp-client"), CancellationToken.None);
         var redirect = JsonSerializer.SerializeToElement(login.Should().BeOfType<OkObjectResult>().Subject.Value)
             .GetProperty("redirectUrl").GetString()!;
+        var ticket = QueryHelpers.ParseQuery(new Uri("https://api.useorbit.org" + redirect).Query)["ticket"].ToString();
+        redirect = ((RedirectResult)controller.GrantConsent(ticket, "requested")).Url;
         var code = QueryHelpers.ParseQuery(new Uri(redirect).Query)["code"].ToString();
 
         var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None);

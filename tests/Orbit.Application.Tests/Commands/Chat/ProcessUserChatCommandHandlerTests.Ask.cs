@@ -55,7 +55,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(false, false, AgentAuthMethod.Jwt)]
     [InlineData(true, true, AgentAuthMethod.Jwt)]
     [InlineData(true, false, AgentAuthMethod.ApiKey)]
-    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_IsNotOfferedAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
+    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_KeepsDeclarationAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
     {
         SetupUserAndPayGate();
         if (disabled)
@@ -70,7 +70,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk", AuthMethod: auth,
             ClientContext: new(SupportsParts: true, PartKinds: supports ? ["choice"] : [])), default);
         response.IsSuccess.Should().BeTrue();
-        initial!.ToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial!.ToolDeclarations.Should().Contain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial.DynamicContext.Should().Contain("do not call ask");
         results.Should().ContainSingle().Which.Error.Should().Contain("plain text");
         response.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
@@ -89,6 +90,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task ChoiceAnswer_ReachesModelWithStoredQuestionAndOneDailyCharge()
     {
         SetupUserAndPayGate();
+        EnableRecording();
         _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAstraBlockAnswer>>();
         var block = IssuedAstraBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
@@ -96,6 +98,8 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "Evening works." });
         var result = await CreateHandler().Handle(new(UserId, "Evening", BlockAnswer: new(block.Id, ["b"])), default);
         result.IsSuccess.Should().BeTrue();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserContent == "When?\nEvening" && turn.AssistantContent == result.Value.AiMessage && turn.UsedModel));
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request => request.UserMessage == "When?\nEvening"),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
@@ -123,6 +127,89 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be(support + "\n\n" + resource);
         await _blockStore.Received(1).MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData("I want to hurt myself", "988", true, false)]
+    [InlineData("I want to hurt myself", "988", false, true)]
+    [InlineData("Quero me machucar", "188", true, false)]
+    [InlineData("Quero me machucar", "188", false, true)]
+    public async Task ChoiceAnswer_CrisisDisclosure_BypassesModerationRefusal(string message, string resource, bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        EnableRecording();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+            [new("a", "Morning"), new("b", "Evening")], [], AllowFreeText: true));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer", BlockAnswer: new(block.Id, [], message)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.UserContent == "When?\n" + message && turn.AssistantContent == result.Value.AiMessage
+            && !turn.UsedModel && turn.ToolCallsJson == "[]"));
+        _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", null,
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 0
+                && (int)properties["tool_call_count"] == 0));
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData("I want to hurt myself", "988", true, false)]
+    [InlineData("I want to hurt myself", "988", false, true)]
+    [InlineData("Quero me machucar", "188", true, false)]
+    [InlineData("Quero me machucar", "188", false, true)]
+    [InlineData("I want to hurt myself", "988", false, false)]
+    [InlineData("Quero me machucar", "188", false, false)]
+    public async Task PickListAnswer_CrisisDisclosure_ReturnsResourcesWithoutModerationModelOrTools(
+        string message, string resource, bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate(payGatePass: false);
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var item = new AstraBlockItem("a", message, ParseArguments("{\"title\":\"Walk\"}"));
+        var block = IssuedAstraBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer", BlockAnswer: new(block.Id, ["a"])), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ChoiceAnswer_ModerationRefusal_DoesNotReserveOrDispatch(bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var block = IssuedAstraBlock.Create(UserId, new("choice", "When?",
+            [new("a", "Morning"), new("b", "Evening")], []));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(flagged, unavailable, []));
+
+        var result = await CreateHandler().Handle(new(UserId, "Morning", BlockAnswer: new(block.Id, ["a"])), default);
+
+        result.IsFailure.Should().BeTrue();
+        await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -225,7 +312,10 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(TestConversationContext,
             Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && results[0].Name == "ask"
                 && results[0].Id == "ask1" && !results[0].Success
-                && results[0].Error == "Invalid ask form, question, options, items, or action. Ask in plain text instead."),
+                && (results[0].Error ?? string.Empty).Contains("question max 120")
+                && (results[0].Error ?? string.Empty).Contains("option label max 20")
+                && (results[0].Error ?? string.Empty).Contains("option description and item detail max 24")
+                && (results[0].Error ?? string.Empty).Contains("Shorten the text and retry.")),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -247,6 +337,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Walk", BlockAnswer: new(block.Id, ["a"])), default);
         result.IsSuccess.Should().BeTrue();
         result.Value.PendingOperations.Should().ContainSingle();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            !turn.UsedModel && turn.UserContent == "Walk" && turn.ToolCallsJson.Contains("bulk_create_habits")
+            && turn.ToolCallsJson.Contains("PendingConfirmation")));
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_block_answered", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());

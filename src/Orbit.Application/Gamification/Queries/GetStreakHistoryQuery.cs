@@ -34,7 +34,7 @@ public class GetStreakHistoryQueryHandler(
         if (!unlocked)
             return Result.PayGateFailure<StreakHistoryResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
 
-        var seedFrom = request.DateFrom.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var seedFrom = request.DateFrom.AddDays(-AppConstants.StreakRepairWindowDays);
 
         var allHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
         var streakEligibleHabitIds = allHabits

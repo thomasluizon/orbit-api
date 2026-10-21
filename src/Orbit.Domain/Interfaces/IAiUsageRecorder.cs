@@ -1,3 +1,5 @@
+using Orbit.Domain.Models;
+
 namespace Orbit.Domain.Interfaces;
 
 /// <summary>
@@ -14,5 +16,7 @@ public interface IAiUsageRecorder
         long completionTokens,
         long totalTokens,
         CancellationToken cancellationToken = default,
-        Guid? userId = null);
+        Guid? userId = null,
+        AiCallTelemetry? telemetry = null,
+        long cacheWriteTokens = 0);
 }

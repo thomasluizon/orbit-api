@@ -1,6 +1,7 @@
 #pragma warning disable OPENAI001
 
 using System.ClientModel;
+using System.Diagnostics;
 using System.ClientModel.Primitives;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
@@ -22,6 +24,7 @@ public sealed partial class AiCompletionClient
     private readonly string _subTaskModel;
     private readonly ILogger<AiCompletionClient> _logger;
     private readonly IAiUsageRecorder _usageRecorder;
+    private readonly TimeProvider _timeProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,8 +35,9 @@ public sealed partial class AiCompletionClient
     public AiCompletionClient(
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
-        IAiUsageRecorder usageRecorder)
-        : this(options, logger, usageRecorder, null)
+        IAiUsageRecorder usageRecorder,
+        TimeProvider? timeProvider = null)
+        : this(options, logger, usageRecorder, null, timeProvider)
     {
     }
 
@@ -41,21 +45,29 @@ public sealed partial class AiCompletionClient
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
-        PipelineTransport? transport)
+        PipelineTransport? transport,
+        TimeProvider? timeProvider = null,
+        ClientRetryPolicy? retryPolicy = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _usageRecorder = usageRecorder;
         var settings = options.Value;
         CompletionTimeout = settings.CompletionTimeout;
         StreamingCompletionTimeout = settings.StreamingCompletionTimeout;
 
-        ResponsesClient CreateClient(int networkTimeoutSeconds) => new(new ApiKeyCredential(settings.ApiKey), new ResponsesClientOptions
+        ResponsesClient CreateClient(int networkTimeoutSeconds)
         {
-            Endpoint = new Uri(settings.BaseUrl),
-            NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
-            Transport = transport,
-            RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
-        });
+            var clientOptions = new ResponsesClientOptions
+            {
+                Endpoint = new Uri(settings.BaseUrl),
+                NetworkTimeout = TimeSpan.FromSeconds(networkTimeoutSeconds),
+                Transport = transport,
+                RetryPolicy = retryPolicy ?? new AiRetryLoggingPolicy(settings.MaxRetries, logger)
+            };
+            clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
+            return new ResponsesClient(new ApiKeyCredential(settings.ApiKey), clientOptions);
+        }
 
         _primaryModel = settings.Model;
         _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);
@@ -82,9 +94,11 @@ public sealed partial class AiCompletionClient
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
         TimeSpan? completionTimeout = null,
-        string primaryModel = "gpt-6.1-sol",
-        string subTaskModel = "gpt-6-luna")
+        string primaryModel = "gpt-6-luna",
+        string subTaskModel = "gpt-6-luna",
+        TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         CompletionTimeout = completionTimeout ?? new AiSettings().CompletionTimeout;
         StreamingCompletionTimeout = completionTimeout ?? new AiSettings().StreamingCompletionTimeout;
         _responsesClient = responsesClient;
@@ -99,6 +113,39 @@ public sealed partial class AiCompletionClient
     internal ResponsesClient StreamingResponsesClient => _streamingResponsesClient;
 
     internal string ChatModel => _primaryModel;
+
+    internal const int DefaultMaxOutputTokens = 8192;
+
+    internal string SerializeTextRequest(string systemPrompt, string userPrompt, double temperature, int maxOutputTokens,
+        AiModelTier tier, Guid? userId = null, bool json = false)
+    {
+        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
+        options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
+        if (json)
+            options.TextOptions = new ResponseTextOptions { TextFormat = ResponseTextFormat.CreateJsonObjectFormat() };
+        return ModelReaderWriter.Write(options).ToString();
+    }
+
+    internal async Task<long> CountInputTokensAsync(string requestJson, CancellationToken cancellationToken)
+    {
+        using var request = JsonDocument.Parse(requestJson);
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "model", "input", "tools", "text", "reasoning", "instructions", "tool_choice",
+            "parallel_tool_calls", "previous_response_id", "conversation", "truncation"
+        };
+        var fields = request.RootElement.EnumerateObject().Where(property => allowed.Contains(property.Name))
+            .ToDictionary(property => property.Name, property => property.Value);
+        using var content = BinaryContent.Create(BinaryData.FromObjectAsJson(fields));
+        var result = await _responsesClient.GetInputTokenCountAsync(content, "application/json",
+            new RequestOptions { CancellationToken = cancellationToken });
+        using var response = JsonDocument.Parse(result.GetRawResponse().Content);
+        var tokens = response.RootElement.GetProperty("input_tokens").GetInt64();
+        if (tokens < 0)
+            throw new InvalidOperationException("The provider returned an invalid input token count.");
+        return tokens;
+    }
 
     internal CreateResponseOptions CreateOptions(
         AiModelTier tier = AiModelTier.Primary,
@@ -149,10 +196,9 @@ public sealed partial class AiCompletionClient
 
         LogCallingTextCompletion(_logger);
 
-        var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
-        await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken);
-        EnsureSuccessful(completion.Value);
-        var text = GetAssistantOutputText(completion.Value);
+        var response = await ExecuteResponseAsync(options, purpose, cancellationToken);
+        EnsureSuccessful(response);
+        var text = GetAssistantOutputText(response);
 
         if (!string.IsNullOrWhiteSpace(text))
             LogTextCompletionSuccessful(_logger, text.Length);
@@ -168,7 +214,8 @@ public sealed partial class AiCompletionClient
         string purpose = "json",
         AiModelTier tier = AiModelTier.Primary,
         Guid? userId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireComplete = false)
     {
         using var completionCancellation = CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
@@ -182,10 +229,11 @@ public sealed partial class AiCompletionClient
 
         LogCallingJsonCompletion(_logger);
 
-        var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
-        await RecordUsageAsync(completion.Value.Usage, purpose, options.Model, cancellationToken, userId);
-        EnsureSuccessful(completion.Value);
-        var text = GetAssistantOutputText(completion.Value);
+        var response = await ExecuteResponseAsync(options, purpose, cancellationToken, userId);
+        EnsureSuccessful(response);
+        if (requireComplete && response.Status != ResponseStatus.Completed)
+            throw new InvalidOperationException("AI date interpretation did not complete.");
+        var text = GetAssistantOutputText(response);
 
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -212,44 +260,73 @@ public sealed partial class AiCompletionClient
                 .Select(part => part.Text)))
             .Where(text => !string.IsNullOrEmpty(text)));
 
-    internal CancellationTokenSource CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
+    internal CompletionCancellation CreateCompletionCancellation(CancellationToken cancellationToken, bool streaming = false)
+        => new(streaming ? StreamingCompletionTimeout : CompletionTimeout, _timeProvider, cancellationToken);
+
+    internal sealed class CompletionCancellation : IDisposable
     {
-        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cancellation.CancelAfter(streaming ? StreamingCompletionTimeout : CompletionTimeout);
-        return cancellation;
+        private readonly CancellationTokenSource _deadline;
+        private readonly CancellationTokenSource _linked;
+
+        internal CompletionCancellation(TimeSpan timeout, TimeProvider timeProvider, CancellationToken caller)
+        {
+            caller.ThrowIfCancellationRequested();
+            _deadline = new CancellationTokenSource(timeout, timeProvider);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(caller, _deadline.Token);
+        }
+
+        internal CancellationToken Token => _linked.Token;
+
+        public void Dispose()
+        {
+            _linked.Dispose();
+            _deadline.Dispose();
+        }
     }
 
-    private async Task RecordUsageAsync(
-        ResponseTokenUsage? usage,
+    private async Task<ResponseResult> ExecuteResponseAsync(
+        CreateResponseOptions options,
         string purpose,
-        string model,
         CancellationToken cancellationToken,
         Guid? userId = null)
     {
-        if (usage is null)
-            return;
-
-        var cachedTokens = usage.InputTokenDetails?.CachedTokenCount ?? 0;
-
-        LogAiTokenUsage(
-            _logger,
-            purpose,
-            model,
-            cachedTokens,
-            usage.InputTokenCount,
-            usage.OutputTokenCount,
-            usage.TotalTokenCount);
-
-        await _usageRecorder.RecordAsync(
-            purpose,
-            model,
-            cachedTokens,
-            usage.InputTokenCount,
-            usage.OutputTokenCount,
-            usage.TotalTokenCount,
-            cancellationToken,
-            userId);
+        var stopwatch = Stopwatch.StartNew();
+        ResponseResult? response = null;
+        var traceId = Guid.NewGuid().ToString("N");
+        try
+        {
+            var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
+            response = completion.Value;
+            return response;
+        }
+        finally
+        {
+            stopwatch.Stop();
+            var usage = response?.Usage;
+            var failed = response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete);
+            if (usage is not null)
+                LogAiTokenUsage(_logger, purpose, options.Model, usage.InputTokenDetails?.CachedTokenCount ?? 0,
+                    usage.InputTokenCount, usage.OutputTokenCount, usage.TotalTokenCount);
+            try
+            {
+                await _usageRecorder.RecordAsync(purpose, options.Model,
+                    usage?.InputTokenDetails?.CachedTokenCount ?? 0,
+                    usage?.InputTokenCount ?? 0, usage?.OutputTokenCount ?? 0, usage?.TotalTokenCount ?? 0,
+                    cancellationToken, userId,
+                    new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
+                        failed,
+                        [], HasUsage: usage is not null),
+                    cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0);
+            }
+            catch (Exception ex) when (failed || ex is not OperationCanceledException)
+            {
+                LogUsageRecordFailed(_logger, options.Model, purpose, ex);
+            }
+        }
     }
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to record AI usage for {Model} ({Purpose})")]
+    private static partial void LogUsageRecordFailed(ILogger logger, string model, string purpose, Exception ex);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API for text completion...")]
     private static partial void LogCallingTextCompletion(ILogger logger);

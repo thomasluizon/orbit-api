@@ -25,7 +25,13 @@ public record UpdateHabitCommand(
     UpdateHabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null,
-    int? IntervalWeeks = null) : IRequest<Result>;
+    int? IntervalWeeks = null,
+    DateOnly? StartDate = null) : IRequest<Result>;
+
+public sealed record UpdateHabitFieldsCommand(
+    Guid UserId,
+    Guid HabitId,
+    BulkHabitChanges Changes) : IRequest<Result<string>>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -35,7 +41,8 @@ public class UpdateHabitCommandHandler(
     IGoalCompletionService goalCompletionService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>
+    IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>,
+    IRequestHandler<UpdateHabitFieldsCommand, Result<string>>
 {
     public async Task<Result> Handle(UpdateHabitCommand request, CancellationToken cancellationToken)
     {
@@ -43,46 +50,90 @@ public class UpdateHabitCommandHandler(
             unitOfWork,
             request.UserId,
             payGate,
-            ct => PrepareUpdateAsync(request, ct),
+            ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds,
+                (habit, today) => ResolveUpdate(request, habit, today), false, ct),
             state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
             (state, ct) => ApplyUpdateAsync(request, state, ct),
             cancellationToken);
     }
 
+    public Task<Result<string>> Handle(UpdateHabitFieldsCommand request, CancellationToken cancellationToken) =>
+        HabitCeilingLock.ExecuteEntryAsync<UpdateState, string>(
+            unitOfWork,
+            request.UserId,
+            payGate,
+            ct => PrepareUpdateAsync(request.UserId, request.HabitId, null,
+                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, ct),
+            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
+            async (state, ct) =>
+            {
+                var command = HabitUpdateValidation.ToCommand(request.UserId, request.HabitId, state.Update);
+                var result = await ApplyUpdateAsync(command, state, ct);
+                return result.IsFailure ? result.PropagateError<string>() : Result.Success(state.Habit.Title);
+            },
+            cancellationToken);
+
     private async Task<Result<UpdateState>> PrepareUpdateAsync(
-        UpdateHabitCommand request,
+        Guid userId,
+        Guid habitId,
+        IReadOnlyList<Guid>? goalIds,
+        Func<Habit, DateOnly, HabitUpdateParams> resolveUpdate,
+        bool validateFields,
         CancellationToken cancellationToken)
     {
-        var habit = request.GoalIds is not null
+        var habit = goalIds is not null
             ? await habitRepository.FindOneTrackedAsync(
-                h => h.Id == request.HabitId && h.UserId == request.UserId,
+                h => h.Id == habitId && h.UserId == userId,
                 q => q.Include(h => h.Goals),
                 cancellationToken)
             : await habitRepository.FindOneTrackedAsync(
-                h => h.Id == request.HabitId && h.UserId == request.UserId,
+                h => h.Id == habitId && h.UserId == userId,
                 cancellationToken: cancellationToken);
 
         if (habit is null)
             return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
 
-        if (request.Options?.SlipAlertEnabled == true && !habit.SlipAlertEnabled)
+        await habitRepository.ReloadAsync(habit, cancellationToken);
+        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var update = resolveUpdate(habit, today);
+        if (habit.RequiresScheduleReanchor(update))
         {
-            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
+            update = update with { WeekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken) };
+            var through = update.ClearEndDate == true ? DateOnly.MaxValue : update.EndDate ?? habit.EndDate ?? DateOnly.MaxValue;
+            await habitRepository.FindOneTrackedAsync(
+                h => h.Id == habitId && h.UserId == userId,
+                q => q.Include(h => h.Logs.Where(log => !log.IsDeleted && log.Date >= today && log.Date <= through)),
+                cancellationToken);
+        }
+        if (validateFields)
+        {
+            var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, cancellationToken);
+            if (validation.IsFailure)
+                return validation.PropagateError<UpdateState>();
+        }
+
+        if (update.SlipAlertEnabled == true && !habit.SlipAlertEnabled)
+        {
+            var slipAlertGate = await payGate.CanUseSlipAlerts(userId, cancellationToken);
             if (slipAlertGate.IsFailure)
                 return slipAlertGate.PropagateError<UpdateState>();
         }
 
-        if (request.IsGeneral.HasValue)
+        if (update.IsGeneral.HasValue && !validateFields)
         {
-            var generalMismatch = await ValidateGeneralAgainstRelativesAsync(
-                habit, request.IsGeneral.Value, request.UserId, cancellationToken);
+            var related = await HabitUpdateValidation.LoadRelatedAsync([habit], userId, habitRepository, cancellationToken);
+            var generalMismatch = HabitUpdateValidation.ValidateGeneral(habit, update.IsGeneral.Value, related);
             if (generalMismatch.IsFailure)
                 return generalMismatch.PropagateError<UpdateState>();
         }
 
+        return Result.Success(new UpdateState(habit, update, today));
+    }
+
+    private static HabitUpdateParams ResolveUpdate(UpdateHabitCommand request, Habit habit, DateOnly today)
+    {
         var opts = request.Options ?? new UpdateHabitCommandOptions();
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var update = new HabitUpdateParams(
+        return new HabitUpdateParams(
             request.Title,
             request.Description,
             request.FrequencyUnit,
@@ -104,9 +155,9 @@ public class UpdateHabitCommandHandler(
             RelativeReminders: opts.RelativeReminders,
             Emoji: request.Emoji,
             UserToday: today,
-            IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks);
+            IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks,
+            StartDate: request.StartDate);
 
-        return Result.Success(new UpdateState(habit, update, today));
     }
 
     private async Task<Result> ApplyUpdateAsync(
@@ -165,32 +216,6 @@ public class UpdateHabitCommandHandler(
         Habit Habit,
         HabitUpdateParams Update,
         DateOnly Today);
-
-    private async Task<Result> ValidateGeneralAgainstRelativesAsync(
-        Habit habit, bool newIsGeneral, Guid userId, CancellationToken cancellationToken)
-    {
-        if (habit.ParentHabitId is not null)
-        {
-            var parent = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habit.ParentHabitId && h.UserId == userId,
-                cancellationToken: cancellationToken);
-
-            return parent is not null && parent.IsGeneral != newIsGeneral
-                ? Result.Failure(ErrorMessages.GeneralMismatchWithParent)
-                : Result.Success();
-        }
-
-        var children = await habitRepository.FindAsync(
-            h => h.ParentHabitId == habit.Id && h.UserId == userId,
-            cancellationToken);
-
-        var activeMismatchedChild = children.Any(c =>
-            c.IsGeneral != newIsGeneral && !(c.IsCompleted && c.FrequencyUnit is null));
-
-        return activeMismatchedChild
-            ? Result.Failure(ErrorMessages.GeneralMismatchWithChildren)
-            : Result.Success();
-    }
 
     private async Task ClearTodaySentRemindersAsync(Guid userId, Guid habitId, CancellationToken cancellationToken)
     {

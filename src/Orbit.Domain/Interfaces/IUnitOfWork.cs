@@ -21,6 +21,10 @@ public interface IUnitOfWork : IDisposable
         Func<CancellationToken, Task> operation,
         CancellationToken cancellationToken = default);
 
+    Task<T> ExecuteInSavepointAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default);
+
     Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>

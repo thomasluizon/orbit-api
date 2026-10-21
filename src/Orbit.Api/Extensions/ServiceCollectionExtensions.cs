@@ -191,7 +191,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.FriendFeedEvent>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ProactiveItem>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionConnection>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionTask>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionTask>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ConversationTurn>>()));
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<GoogleSignInFlow>();
         builder.Services.AddScoped<AccountReactivation>();
@@ -346,7 +347,11 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<GoogleSettings>(
             builder.Configuration.GetSection(GoogleSettings.SectionName));
 
-        builder.Services.AddSingleton<OAuthAuthorizationStore>();
+        builder.Services.AddScoped<IOAuthStateStore, Orbit.Infrastructure.Persistence.OAuthStateStore>();
+        builder.Services.AddScoped<OAuthAuthorizationStore>();
+        builder.Services.AddScoped<IApiKeyUsageTracker, Orbit.Infrastructure.Persistence.ApiKeyUsageTracker>();
+        if (!BuildTimeDocumentGeneration.IsActive)
+            builder.Services.AddHostedService<Orbit.Api.Authentication.LegacyApiKeyInventory>();
         builder.Services.AddHttpClient(GoogleTokenService.HttpClientName, client => client.Timeout = httpTimeout);
         builder.Services.AddHttpClient(GoogleAuthorizationCodeService.HttpClientName, client => client.Timeout = httpTimeout);
 

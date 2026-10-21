@@ -25,6 +25,48 @@ public class AssignTagsToolTests
         _tool = new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork);
     }
 
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(AssignTagsTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task OptionalNull_AssignsSameTagsAsAbsent(string field)
+    {
+        var habit = CreateHabit("Read");
+        var tag = Tag.Create(UserId, "Work", "#ff0000").Value;
+        SetupHabitFound(habit);
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([habit]);
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>()).Returns([tag]);
+        _tagRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), cancellationToken: Arg.Any<CancellationToken>()).Returns(tag);
+        var body = new Dictionary<string, object?>();
+        body[field == "habit_id" ? "habit_ids" : "habit_id"] = field == "habit_id" ? new[] { habit.Id } : habit.Id;
+        body[field == "tag_names" ? "tag_ids" : "tag_names"] = field == "tag_names" ? new object[] { tag.Id } : new object[] { "Work" };
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        var baseline = habit.Tags.Select(value => value.Id).ToArray();
+        body[field] = null;
+        (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
+        habit.Tags.Select(value => value.Id).Should().Equal(baseline).And.Equal(tag.Id);
+    }
+
+    [Fact]
+    public async Task RoundThree_TagBatch_LoadsAndSavesOnce()
+    {
+        var habits = new[] { CreateHabit("One"), CreateHabit("Two") };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(habits);
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits);
+        foreach (var habit in habits)
+            _habitRepo.FindOneTrackedAsync(Arg.Is<Expression<Func<Habit, bool>>>(predicate => predicate.Compile()(habit)),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        var arguments = JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id).ToArray(), tag_names = new[] { "Saúde" } });
+
+        var result = await _tool.ExecuteAsync(arguments, UserId, default);
+
+        result.Success.Should().BeTrue();
+        habits.Should().OnlyContain(habit => habit.Tags.Count == 1);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _habitRepo.Received(1).FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AssignTags_ReplacesExistingTags()
     {

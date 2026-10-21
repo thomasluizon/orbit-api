@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
+using Orbit.Application.Chat;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
@@ -30,6 +31,7 @@ public class PendingAgentOperationStore(
 
         var existing = dbContext.PendingAgentOperations
             .Where(item =>
+                item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion &&
                 item.UserId == userId &&
                 item.CapabilityId == capability.Id &&
                 item.OperationFingerprint == operationFingerprint &&
@@ -64,7 +66,8 @@ public class PendingAgentOperationStore(
         var entity = dbContext.PendingAgentOperations
             .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
 
-        if (entity is null || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue)
+        if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
+            || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue)
             return null;
 
         var confirmationToken = GenerateToken();
@@ -100,7 +103,68 @@ public class PendingAgentOperationStore(
             parsedArguments,
             entity.Surface,
             entity.ConfirmationRequirement,
-            entity.PreviewFingerprint);
+            entity.PreviewFingerprint,
+            entity.ArgumentSchemaVersion);
+    }
+
+    public IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var proposals = dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
+                && item.ExpiresAtUtc > checkedAtUtc && item.CreatedAtUtc > checkedAtUtc.AddMinutes(-10)
+                && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
+            .Select(item => item.ArgumentsJson).ToList();
+        var names = new List<PendingHabitCreation>();
+        foreach (var json in proposals)
+        {
+            var arguments = ParseArguments(json);
+            if (arguments.ValueKind != JsonValueKind.Object)
+                continue;
+            Guid? parentId = arguments.TryGetProperty("parent_habit_id", out var parent)
+                && parent.ValueKind == JsonValueKind.String && Guid.TryParse(parent.GetString(), out var parsedParent)
+                    ? parsedParent : null;
+            if (arguments.TryGetProperty("habits", out var habits) && habits.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var habit in habits.EnumerateArray())
+                    if (habit.ValueKind == JsonValueKind.Object && habit.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                        names.Add(new PendingHabitCreation(title.GetString()!, parentId));
+            }
+            else if (arguments.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+                names.Add(new PendingHabitCreation(title.GetString()!, parentId));
+        }
+        return names;
+    }
+
+    public bool SupersedeHabitCreation(Guid userId, string title, Guid? parentHabitId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var pending = dbContext.PendingAgentOperations.Where(item => item.UserId == userId
+            && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc
+            && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
+            .ToList();
+        var matching = new List<PendingAgentOperationState>();
+        foreach (var item in pending)
+        {
+            var args = ParseArguments(item.ArgumentsJson);
+            if (args.ValueKind != JsonValueKind.Object)
+                continue;
+            var parent = args.TryGetProperty("parent_habit_id", out var value)
+                && Guid.TryParse(value.ToString(), out var id) ? (Guid?)id : null;
+            if (parent != parentHabitId)
+                continue;
+            var titles = args.TryGetProperty("habits", out var habits) && habits.ValueKind == JsonValueKind.Array
+                ? habits.EnumerateArray().Where(habit => habit.ValueKind == JsonValueKind.Object)
+                    .Select(habit => habit.TryGetProperty("title", out var name) ? name.ToString() : "")
+                : args.TryGetProperty("title", out var name) ? [name.ToString()] : Array.Empty<string>();
+            if (titles.Any(name => HabitNameMatcher.Normalize(name) == HabitNameMatcher.Normalize(title)))
+            {
+                if (habits.ValueKind == JsonValueKind.Array && habits.GetArrayLength() > 1)
+                    return false;
+                matching.Add(item);
+            }
+        }
+        return matching.Count > 0 && matching.All(item => Cancel(userId, item.Id, item.OperationFingerprint));
     }
 
     public bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId)
@@ -117,7 +181,8 @@ public class PendingAgentOperationStore(
         var entity = dbContext.PendingAgentOperations.FirstOrDefault(item =>
             item.Id == pendingOperationId && item.UserId == userId);
         var checkedAtUtc = DateTime.UtcNow;
-        if (entity is null || entity.OperationFingerprint != expectedFingerprint
+        if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
+            || entity.OperationFingerprint != expectedFingerprint
             || !entity.Revise(argumentsJson, operationFingerprint, previewFingerprint, checkedAtUtc))
             return false;
 
@@ -151,6 +216,20 @@ public class PendingAgentOperationStore(
             dbContext.Entry(entity).State = EntityState.Detached;
             return false;
         }
+    }
+
+    public PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
+        string operationFingerprint, string confirmationToken)
+    {
+        var hash = HashToken(confirmationToken);
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var entity = dbContext.PendingAgentOperations.AsNoTracking().FirstOrDefault(item => item.UserId == userId
+            && item.CapabilityId == capabilityId && item.OperationFingerprint == operationFingerprint
+            && item.ConfirmationTokenHash == hash && item.ConfirmedAtUtc != null
+            && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc);
+        return entity is null ? null : new PendingAgentOperationExecution(entity.Id, entity.CapabilityId,
+            entity.OperationId, ParseArguments(entity.ArgumentsJson), entity.Surface,
+            entity.ConfirmationRequirement, entity.PreviewFingerprint, entity.ArgumentSchemaVersion);
     }
 
     public bool TryConsumeFreshConfirmation(

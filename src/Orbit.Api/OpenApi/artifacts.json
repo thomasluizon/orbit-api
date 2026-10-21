@@ -1,0 +1,38 @@
+[
+  {
+    "id": "orbit-http-v1-r1",
+    "httpVersion": "1.0",
+    "revision": "r1",
+    "documentName": "v1",
+    "path": "src/Orbit.Api/openapi.json",
+    "deprecated": true,
+    "replacement": "orbit-http-v1-r2"
+  },
+  {
+    "id": "orbit-http-v2-r1",
+    "httpVersion": "2.0",
+    "revision": "r1",
+    "documentName": "v2",
+    "path": "src/Orbit.Api/openapi_v2.json",
+    "deprecated": true,
+    "replacement": "orbit-http-v2-r2"
+  },
+  {
+    "id": "orbit-http-v1-r2",
+    "httpVersion": "1.0",
+    "revision": "r2",
+    "documentName": "v1-r2",
+    "path": "src/Orbit.Api/openapi_v1-r2.json",
+    "deprecated": false,
+    "replacement": null
+  },
+  {
+    "id": "orbit-http-v2-r2",
+    "httpVersion": "2.0",
+    "revision": "r2",
+    "documentName": "v2-r2",
+    "path": "src/Orbit.Api/openapi_v2-r2.json",
+    "deprecated": false,
+    "replacement": null
+  }
+]

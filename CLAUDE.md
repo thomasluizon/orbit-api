@@ -4,7 +4,7 @@
 
 ## Stack
 
-.NET 10, C# 14 (net10.0's default language version), PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI .NET SDK 2.14.0 Responses API with GPT-6.1 Sol (primary) and GPT-6 Luna (sub-tasks) at low reasoning, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
+.NET 10, C# 14 (net10.0's default language version), PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI .NET SDK 2.14.0 Responses API with GPT-6 Luna for chat and sub-tasks at low reasoning, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
 
 ## Architecture (one-pager)
 
@@ -89,6 +89,8 @@ Its provenance hash covers every C# input read. Live `AppConfigs` rows can overr
 Run `node tools/capability-inventory.mjs` to write the ignored root artifact `capability-inventory.json`.
 It extends the existing agent capability catalog with registered chat/MCP tools, entity and nested value-object fields,
 EF mapping evidence, parameter names, output projections, and separate direct MCP and operation-gateway routes.
+Schema extraction retains nullable types, enums, item contracts and helper/composed schemas. Partial domain declarations
+and checked formatter chains retain the persisted fields and actual rendered readback when producers are split across files.
 Counts come from registration code; MCP-only tools are excluded from the exposed chat count.
 Full field readback is distinct from a count or summary. Creation without update and writes without full readback are gaps.
 Domain edit contracts also reveal writable fields with no tool parameter. Deliberate omissions carry their reason.

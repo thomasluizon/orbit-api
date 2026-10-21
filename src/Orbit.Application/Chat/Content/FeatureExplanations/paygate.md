@@ -13,7 +13,7 @@ derived_from:
 
 # Free vs Pro
 
-Orbit has a free plan and a Pro plan. The free plan is fully usable for daily habit tracking; Pro raises the AI message limit and unlocks advanced features.
+Orbit has a free plan and a Pro plan. The free plan is fully usable for daily habit tracking; Pro raises the AI message limit and unlocks advanced features. Sub-habits are available on every plan.
 
 ## Limits on the free plan
 
@@ -24,7 +24,6 @@ Orbit has a free plan and a Pro plan. The free plan is fully usable for daily ha
 
 Upgrading to Pro unlocks:
 
-- Sub-habits
 - The daily AI summary
 - Calendar integration
 - Retrospectives

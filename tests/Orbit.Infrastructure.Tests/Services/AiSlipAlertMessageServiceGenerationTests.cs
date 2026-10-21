@@ -151,7 +151,7 @@ public class AiSlipAlertMessageServiceGenerationTests
             });
         var aiClient = new AiCompletionClient(
             chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        return new AiSlipAlertMessageService(aiClient, NullLogger<AiSlipAlertMessageService>.Instance);
+        return new AiSlipAlertMessageService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiSlipAlertMessageService>.Instance);
     }
 
     private sealed class CannedChatHandler(string content, HttpStatusCode status) : HttpMessageHandler

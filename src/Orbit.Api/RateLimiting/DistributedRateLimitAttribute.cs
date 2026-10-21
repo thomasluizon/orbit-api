@@ -61,7 +61,7 @@ public sealed partial class DistributedRateLimitFilter(
                     partition.PartitionKey,
                     context.HttpContext.RequestAborted);
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 LogRateLimitEvaluationFailed(
                     logger,

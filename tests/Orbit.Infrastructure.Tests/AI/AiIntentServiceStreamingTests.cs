@@ -8,18 +8,81 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
 public class AiIntentServiceStreamingTests
 {
+    [Fact]
+    public async Task SendWithToolsAsync_AllChatToolsHaveStrictWireDeclarations()
+    {
+        var registry = new Orbit.Application.Chat.Tools.AiToolRegistry(StrictChatToolSchemaTests.AllTools());
+        var tools = registry.GetAll().Select(tool => (object)new
+        {
+            name = tool.Name,
+            description = tool.Description,
+            parameters = tool.GetParameterSchema()
+        }).ToList();
+        var handler = new SequenceSseHandler(ResponsesTestData.Text("Done"));
+        var (service, _) = BuildService(handler);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("Review my tools", "system", tools));
+        result.IsSuccess.Should().BeTrue();
+        using var request = JsonDocument.Parse(handler.RequestBodies.Single());
+        var wireTools = request.RootElement.GetProperty("tools");
+        wireTools.EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().BeEquivalentTo(registry.GetAll().Select(tool => tool.Name));
+        foreach (var tool in wireTools.EnumerateArray())
+        {
+            tool.GetProperty("strict").GetBoolean().Should().BeTrue();
+            StrictChatToolSchemaTests.AssertStrict(tool.GetProperty("parameters"));
+        }
+        var capturePath = Environment.GetEnvironmentVariable("ORBIT_STRICT_TOOLS_CAPTURE_PATH");
+        if (!string.IsNullOrWhiteSpace(capturePath))
+            await File.WriteAllTextAsync(capturePath, wireTools.GetRawText());
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_StreamFailure_RecordsErrorWithoutUsage()
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var (service, sink) = BuildService(new DroppingHandler(""), usage);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("private text", "private context", [])
+        { Telemetry = new AiTurnTelemetry("failure-trace") }, sink.Handle);
+
+        result.IsFailure.Should().BeTrue();
+        await usage.Received(1).RecordAsync("chat", "gpt-6-luna", 0, 0, 0, 0, Arg.Any<CancellationToken>(), null,
+            Arg.Is<AiCallTelemetry>(call => call.TraceId == "failure-trace" && call.IsError && !call.HasUsage
+                && call.ToolNames.Count == 0 && call.LatencySeconds >= 0));
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_UsageTelemetry_ContainsOnlyDeclaredToolNames()
+    {
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var response = ResponsesTestData.Response("private completion with private habit name");
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("known", "log_habit",
+            BinaryData.FromString("{\"habit_name\":\"private habit name\"}")));
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("unknown", "private tool name", BinaryData.FromString("{}")));
+        var (service, _) = BuildService(new JsonHandler(ModelReaderWriter.Write(response).ToString()), usage);
+
+        await service.SendWithToolsAsync(new AiToolRequest("private user message", "private user facts",
+            [new { name = "log_habit" }]));
+
+        var metadata = (AiCallTelemetry)usage.ReceivedCalls().Single().GetArguments()[8]!;
+        metadata.ToolNames.Should().Equal("log_habit");
+        JsonSerializer.Serialize(metadata).Should().NotContain("private");
+    }
+
     [Fact]
     public async Task SendWithToolsAsync_StreamingTextRound_EmitsDeltasAndReturnsFullText()
     {
@@ -109,7 +172,7 @@ public class AiIntentServiceStreamingTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ReportedTokenCount.Should().Be(18);
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "gpt-6.1-sol", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
@@ -129,11 +192,11 @@ public class AiIntentServiceStreamingTests
         result.Value.ReportedTokenCount.Should().Be(18);
         handler.LastRequestBody.Should().Contain("\"stream\":true");
         await usageRecorder.Received(1).RecordAsync(
-            "chat", "gpt-6.1-sol", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
     }
 
     [Fact]
-    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndDoesNotRecord()
+    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndEmitsTelemetryOnly()
     {
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var response = ResponsesTestData.Response("Hello");
@@ -148,8 +211,8 @@ public class AiIntentServiceStreamingTests
 
         result.IsSuccess.Should().BeTrue();
         logger.WarningEventIds.Should().Contain(11);
-        await usageRecorder.DidNotReceiveWithAnyArgs().RecordAsync(
-            default!, default!, default, default, default, default, default, default);
+        await usageRecorder.Received(1).RecordAsync("chat", "gpt-6-luna", 0, 0, 0, 0,
+            Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Is<AiCallTelemetry>(call => !call.HasUsage && !call.IsError));
     }
 
     [Fact]
@@ -158,7 +221,7 @@ public class AiIntentServiceStreamingTests
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         usageRecorder.RecordAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>())
             .Returns(Task.FromException(new InvalidOperationException("recorder failed")));
         var body = TextStream("Hello", "Hello");
         var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body), usageRecorder);
@@ -185,7 +248,8 @@ public class AiIntentServiceStreamingTests
         var (service, sink) = BuildService(handler, usageRecorder);
 
         var first = await service.SendWithToolsAsync(
-            new AiToolRequest("create it", "system", [], userId),
+            new AiToolRequest("create it", "system", [new { name = "create_habit" }], userId)
+            { Telemetry = new AiTurnTelemetry("chat-trace", "trial") },
             streamSink: sink.Handle);
         var second = await service.ContinueWithToolResultsAsync(
             first.Value.ConversationContext!,
@@ -195,7 +259,15 @@ public class AiIntentServiceStreamingTests
         second.IsSuccess.Should().BeTrue();
         second.Value.TextMessage.Should().Be("Done");
         await usageRecorder.Received(2).RecordAsync(
-            "chat", "gpt-6.1-sol", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+            "chat", "gpt-6-luna", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
+        var calls = usageRecorder.ReceivedCalls().Select(call => (AiCallTelemetry)call.GetArguments()[8]!).ToList();
+        calls.Should().HaveCount(2);
+        calls.Should().OnlyContain(call => call.TraceId == "chat-trace" && call.Plan == "trial"
+            && call.LatencySeconds >= 0 && !call.IsError && call.HasUsage);
+        calls[0].ToolNames.Should().Equal("create_habit");
+        calls[1].ToolNames.Should().BeEmpty();
+        first.Value.ConversationContext!.Telemetry.RoundCount.Should().Be(2);
+        first.Value.ConversationContext.Telemetry.ToolCallCount.Should().Be(1);
     }
 
     [Fact]
@@ -270,13 +342,40 @@ public class AiIntentServiceStreamingTests
         logger.WarningEventIds.Should().Contain(8);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SendWithToolsAsync_LengthFinishWithUnfinishedTool_PreservesPartialStatusWithoutParsingArguments(
+        bool streaming, bool hasText)
+    {
+        var response = ResponsesTestData.Response(hasText ? "Partial reply" : null);
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new ResponseIncompleteStatusDetails { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("cut_off", "bulk_update_habits", BinaryData.FromString("{\"filter\":")));
+        HttpMessageHandler handler = streaming
+            ? new SseHandler(ResponsesTestData.Stream(response))
+            : new JsonHandler(ModelReaderWriter.Write(response).ToString());
+        var (service, sink) = BuildService(handler);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("change all descriptions", "system", []),
+            streamSink: streaming ? sink.Handle : null);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsTruncated.Should().BeTrue();
+        result.Value.TextMessage.Should().Be(hasText ? "Partial reply" : string.Empty);
+        result.Value.HasToolCalls.Should().BeFalse();
+        result.Value.ReportedTokenCount.Should().Be(3);
+    }
+
     [Fact]
     public async Task SendWithToolsAsync_WithUserId_SetsSafetyIdentifierAndCacheKey()
     {
         var handler = new JsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
@@ -294,7 +393,7 @@ public class AiIntentServiceStreamingTests
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(40)));
 
@@ -307,7 +406,7 @@ public class AiIntentServiceStreamingTests
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
@@ -353,8 +452,8 @@ public class AiIntentServiceStreamingTests
             streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
-            usage, primaryModel: "gpt-6.1-sol");
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+            usage);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
         var userId = Guid.NewGuid();
         var declaration = new { name = "query_habits", description = "Read habits", parameters = new { type = "object", properties = new { } } };
@@ -367,6 +466,12 @@ public class AiIntentServiceStreamingTests
              new AiToolCallResult("query_goals", "call_2", true, null, null, null)], sink);
 
         second.IsSuccess.Should().BeTrue();
+        foreach (var body in handler.RequestBodies)
+        {
+            using var request = JsonDocument.Parse(body);
+            request.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+            request.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        }
         using var document = JsonDocument.Parse(handler.RequestBodies[1]);
         var root = document.RootElement;
         root.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
@@ -386,16 +491,54 @@ public class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task SendWithToolsAsync_RepeatedSuccess_DisposesDeadlineAndCallerRegistrations(bool streaming)
+    {
+        var body = streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done");
+        var handler = new SequenceSseHandler(body, body);
+        var clock = new CompletionTestClock();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            usage, timeProvider: clock);
+        var service = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        using var caller = new CancellationTokenSource();
+        for (var index = 0; index < 2; index++)
+        {
+            var result = await service.SendWithToolsAsync(new AiToolRequest("user", "system", []),
+                streaming ? _ => Task.CompletedTask : null, caller.Token);
+            result.IsSuccess.Should().BeTrue();
+            clock.ActiveTimers.Should().Be(0);
+        }
+        var tokens = usage.ReceivedCalls().Select(call => (CancellationToken)call.GetArguments()[6]!).ToArray();
+        tokens.Should().HaveCount(2);
+
+        caller.Cancel();
+        clock.Advance(client.CompletionTimeout + client.StreamingCompletionTimeout);
+
+        tokens.Should().OnlyContain(token => !token.IsCancellationRequested);
+        client.CompletionTimeout.Should().Be(TimeSpan.FromSeconds(185));
+        client.StreamingCompletionTimeout.Should().Be(TimeSpan.FromSeconds(75));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SendWithToolsAsync_DefaultModels_UseShippedPrimary(bool streaming)
     {
         var handler = new SequenceSseHandler(streaming ? TextStream("Done", "Done") : ResponsesTestData.Text("Done"));
-        var (service, sink) = BuildService(handler);
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var settings = new AiSettings { ApiKey = "test-key", BaseUrl = "https://orbit.test/v1" };
+        var client = new AiCompletionClient(Options.Create(settings), NullLogger<AiCompletionClient>.Instance,
+            usage, new HttpClientPipelineTransport(new HttpClient(handler)));
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
+        var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
 
-        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streaming ? sink.Handle : null);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("look up my habits", "system", [declaration]),
+            streaming ? _ => Task.CompletedTask : null);
 
         result.IsSuccess.Should().BeTrue();
         using var document = JsonDocument.Parse(handler.RequestBodies.Single());
-        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.1-sol");
+        document.RootElement.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");
+        document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
         document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
     }
@@ -413,7 +556,7 @@ public class AiIntentServiceStreamingTests
         var usage = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
             usage, primaryModel: "gpt-4.1-mini");
-        var service = new AiIntentService(client, usage, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         var declaration = new { name = "query_habits", parameters = new { type = "object", properties = new { } } };
         Func<AiStreamEvent, Task>? sink = streaming ? _ => Task.CompletedTask : null;
 
@@ -530,7 +673,7 @@ public class AiIntentServiceStreamingTests
     {
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, NullLogger<AiIntentService>.Instance);
         return (service, new CollectingSink());
     }
 
@@ -541,7 +684,7 @@ public class AiIntentServiceStreamingTests
         usageRecorder ??= Substitute.For<IAiUsageRecorder>();
         var aiClient = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var logger = new RecordingLogger();
-        var service = new AiIntentService(aiClient, usageRecorder, logger);
+        var service = new AiIntentService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), usageRecorder, logger);
         return (service, logger);
     }
 

@@ -1,7 +1,9 @@
 using Hangfire;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire.PostgreSql;
 using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Marketing.Jobs;
+using Orbit.Application.Referrals.Jobs;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
@@ -19,6 +21,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IProactiveCheckinMessageService, AiProactiveCheckinMessageService>();
         builder.Services.AddScoped<Orbit.Application.Proactive.Services.IProactiveEngine, ProactiveEngineService>();
 
+        builder.Services.AddSingleton<ConversationTurnRecorder>();
+        builder.Services.AddSingleton<Orbit.Application.Chat.IConversationTurnRecorder>(
+            sp => sp.GetRequiredService<ConversationTurnRecorder>());
+
         if (!BuildTimeDocumentGeneration.IsActive)
         {
             var useDurableQueue = builder.Configuration.GetSection(BackgroundJobSettings.SectionName)
@@ -27,7 +33,10 @@ public static partial class ServiceCollectionExtensions
             builder.Services.AddHostedService<DataEncryptionMigrationService>();
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<ConversationTurnRecorder>());
             AddDurableJobQueue(builder);
+            builder.Services.TryAddSingleton<ScheduledJobRunner>();
+            AddScheduledJob<ConversationRetentionJob>(builder);
             builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
 
             if (useDurableQueue)
@@ -88,11 +97,12 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<CancelSubscriptionOnDeletionJob>();
         builder.Services.AddScoped<OwedSubscriptionCancellationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
+        builder.Services.AddScoped<DeliverReferralRewardJob>();
     }
 
     internal static void AddDurableRecurringJobs(WebApplicationBuilder builder)
     {
-        builder.Services.AddSingleton<ScheduledJobRunner>();
+        builder.Services.TryAddSingleton<ScheduledJobRunner>();
         AddScheduledJob<ReminderSchedulerService>(builder);
         AddScheduledJob<GoalDeadlineNotificationService>(builder);
         if (IsPeriodCloseNotificationEnabled(builder.Configuration))

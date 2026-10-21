@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MediatR;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
@@ -15,14 +16,33 @@ public sealed class BulkLogHabitsTool(
     public string Name => "bulk_log_habits";
 
     public string Description =>
-        "Log multiple habits from the complete server-side set matching a filter in one operation. Use only for habits the user explicitly described completing. Reports applied, matched, skipped, and partial counts.";
+        "Log the complete matching habit set, only as requested.";
 
-    public object GetParameterSchema() => BulkHabitToolArguments.ActionFilterSchema(
-        "Legacy array of habit IDs to log as completed.",
-        "Date to log for in YYYY-MM-DD format. Defaults to today.");
+    public object GetParameterSchema()
+    {
+        var schema = JsonSerializer.SerializeToNode(BulkHabitToolArguments.ActionFilterSchema(
+            "Habit IDs or names to resolve against existing habits. Missing names are reported, never created.",
+            "Date to log for in YYYY-MM-DD format. Defaults to today."))!.AsObject();
+        schema["properties"]!["dates"] = JsonSerializer.SerializeToNode(new
+        {
+            type = JsonSchemaTypes.Array,
+            items = new { type = JsonSchemaTypes.String },
+            maxItems = Orbit.Application.Common.AppConstants.MaxBulkOperationSize,
+            description = "At most 100 requested dates in YYYY-MM-DD format. Use one call for a date range, omitting excluded dates."
+        });
+        return schema;
+    }
 
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        if (args.TryGetProperty("dates", out _))
+        {
+            var expanded = await BulkHabitLogArguments.ExpandAsync(args, habitRepository, userDateService, userId, ct);
+            if (expanded.IsFailure)
+                return expanded;
+            args = expanded.Value;
+        }
         IReadOnlyList<BulkLogItem> items;
         if (args.TryGetProperty("revised_items", out _))
         {
@@ -53,6 +73,14 @@ public sealed class BulkLogHabitsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        if (args.TryGetProperty("dates", out _))
+        {
+            var expanded = await BulkHabitLogArguments.ExpandAsync(args, habitRepository, userDateService, userId, ct);
+            if (expanded.IsFailure)
+                return ToolResult.FromFailure(expanded);
+            args = expanded.Value;
+        }
         if (args.TryGetProperty("revised_items", out _))
         {
             var (revised, revisedError) = BulkHabitToolArguments.ParseRevisedDatedItems(args);

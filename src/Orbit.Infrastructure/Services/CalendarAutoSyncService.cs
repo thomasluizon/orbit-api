@@ -79,7 +79,8 @@ public partial class CalendarAutoSyncService(
                 && u.GoogleAccessToken != null
                 && (u.GoogleCalendarLastSyncedAt == null || u.GoogleCalendarLastSyncedAt < cutoff)
                 && (u.IsLifetimePro
-                    || (u.Plan == UserPlan.Pro && u.PlanExpiresAt != null && u.PlanExpiresAt > nowUtc)))
+                    || (u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc)
+                    || u.BonusProExpiresAtUtc > nowUtc))
             .OrderBy(u => u.GoogleCalendarLastSyncedAt ?? DateTime.MinValue)
             .Take(BatchSize)
             .Select(u => u.Id)

@@ -16,7 +16,6 @@ public class CreateSubHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAppConfigService _appConfigService = Substitute.For<IAppConfigService>();
@@ -29,10 +28,9 @@ public class CreateSubHabitCommandHandlerTests
     public CreateSubHabitCommandHandlerTests()
     {
         _handler = new CreateSubHabitCommandHandler(
-            _habitRepo, _tagRepo, _payGate, _userDateService, _unitOfWork, _appConfigService, _cache);
+            _habitRepo, _tagRepo, _userDateService, _unitOfWork, _appConfigService,
+            Substitute.For<IPayGateService>(), _cache);
 
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _appConfigService.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>())
@@ -90,20 +88,6 @@ public class CreateSubHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_PayGated_ReturnsPayGateFailure()
-    {
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Sub-habits are a Pro feature"));
-
-        var command = new CreateSubHabitCommand(UserId, Guid.NewGuid(), "Child", null);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-    }
-
-    [Fact]
     public async Task Handle_ForeignTagId_ReturnsFailureWithoutCreating()
     {
         var parent = CreateParentHabit();
@@ -116,12 +100,13 @@ public class CreateSubHabitCommandHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { parent }.AsReadOnly());
+        var foreignTag = Tag.Create(Guid.NewGuid(), "Foreign", "#123456").Value;
         _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Tag>());
+            .Returns(call => new[] { foreignTag }.Where(call.Arg<Expression<Func<Tag, bool>>>().Compile()).ToList());
 
         var command = new CreateSubHabitCommand(
             UserId, parent.Id, "Child Task", null,
-            TagIds: new List<Guid> { Guid.NewGuid() });
+            TagIds: new List<Guid> { foreignTag.Id });
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

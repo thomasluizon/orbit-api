@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\src\Orbit.Application\Orbit.Application.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Domain\Orbit.Domain.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Api\Orbit.Api.csproj" />
+    <ProjectReference Include="..\..\bench\Orbit.RateLimitProof\Orbit.RateLimitProof.csproj" />
   </ItemGroup>
 
 </Project>

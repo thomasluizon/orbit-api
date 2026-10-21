@@ -51,7 +51,8 @@ public sealed partial class ProactiveEngineService(
     internal async Task<Batch> LoadAsync(Guid? userId, DateTime nowUtc, CancellationToken ct)
     {
         var users = await db.Users.AsNoTracking().Where(u => (!userId.HasValue || u.Id == userId.Value)
-            && (u.IsLifetimePro || (u.Plan == UserPlan.Pro && u.PlanExpiresAt > nowUtc) || u.TrialEndsAt > nowUtc))
+            && (u.IsLifetimePro || u.BonusProExpiresAtUtc > nowUtc
+                || (u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc) || u.TrialEndsAt > nowUtc))
             .ToListAsync(ct);
         if (users.Count == 0) return new(users, new Dictionary<Guid, IReadOnlyList<string>>(), [], [], [], []);
         var flags = await featureFlags.GetEnabledKeysForUsersAsync(users, ct);
@@ -125,9 +126,10 @@ public sealed partial class ProactiveEngineService(
             if (fact.Trigger == ProactiveTrigger.GoalBehind && items.Any(i => i.Trigger == fact.Trigger
                 && i.GoalId == fact.GoalId && i.LocalDate > today.AddDays(-ProactiveRules.GoalCooldownDays))) continue;
 
+            using var aiUser = Orbit.Infrastructure.AI.AiCallContext.Begin(user.Id);
             var message = await messages.GenerateAsync(fact, user.Language ?? "en", ct);
             var shouldPush = !pushedToday && ProactiveRules.MayPush(fact.Trigger)
-                && (user.ProactiveAstraEnabled ?? true) && !ProactiveRules.IsQuiet(localHour);
+                && user.ProactiveAstraEnabled && !ProactiveRules.IsQuiet(localHour);
             var item = NewItem(user, today, nowUtc, fact, message);
             if (shouldPush) item.Push(nowUtc);
             var notification = shouldPush ? Notification.Create(user.Id, "Astra", item.Text, NotificationUrls.Chat) : null;

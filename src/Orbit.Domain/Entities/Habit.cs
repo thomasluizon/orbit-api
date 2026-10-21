@@ -30,7 +30,9 @@ public record HabitCreateParams(
     string? Emoji = null,
     int? IntervalWeeks = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
-    DateTime? CreatedAtUtc = null);
+    DateTime? CreatedAtUtc = null,
+    DateOnly? StartDate = null,
+    int WeekStartDay = 1);
 
 public record HabitUpdateParams(
     string Title,
@@ -54,7 +56,9 @@ public record HabitUpdateParams(
     string? Emoji = null,
     DateOnly? UserToday = null,
     int? IntervalWeeks = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    DateOnly? StartDate = null,
+    int WeekStartDay = 1);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -73,8 +77,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public bool IsCompleted { get; private set; }
     public HabitSchedule Schedule { get; private set; }
     /// <summary>
-    /// The date the habit was created to start. This creation anchor stays fixed when DueDate
-    /// moves, including to an earlier date; the clamp applies to the backfill only.
+    /// The selected calendar start, changed only by an explicit recurring start-date edit.
+    /// Moving the due-date cursor leaves this anchor unchanged.
     /// </summary>
     public DateOnly StartDate { get; private set; }
     public DateOnly DueDate { get; private set; }
@@ -227,6 +231,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (scheduleValidation is not null)
             return Result.Failure<Habit>(scheduleValidation);
 
+        var startValidation = HabitInvariants.ValidateStartDate(p.StartDate, p.IsGeneral, p.FrequencyUnit, p.EndDate);
+        if (startValidation is not null)
+            return Result.Failure<Habit>(startValidation);
+
         var dateValidation = HabitInvariants.ValidateDateOptions(
             p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.IsGeneral, p.DueDate, p.CreatedAtUtc);
         if (dateValidation is not null)
@@ -244,7 +252,26 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (relativeValidation is not null)
             return Result.Failure<Habit>(relativeValidation);
 
-        return Result.Success(new Habit
+        return CreateWithSchedule(p);
+    }
+
+    private static Result<Habit> CreateWithSchedule(HabitCreateParams p)
+    {
+        var habit = CreateValidated(p);
+        if (p.StartDate.HasValue)
+        {
+            habit.DueDate = p.StartDate.Value;
+            var alignment = habit.AlignFirstOccurrence(p.WeekStartDay);
+            if (alignment.IsFailure)
+                return Result.Failure<Habit>(DomainErrors.RecurrenceScheduleUnsatisfiable);
+        }
+        return Result.Success(habit);
+    }
+
+    private static Habit CreateValidated(HabitCreateParams p)
+    {
+        var startDate = p.StartDate ?? p.DueDate;
+        return new Habit
         {
             UserId = p.UserId,
             Title = p.Title.Trim(),
@@ -258,11 +285,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsGeneral = p.IsGeneral,
             IsFlexible = p.IsFlexible,
             DueDate = p.DueDate,
-            StartDate = p.DueDate,
+            StartDate = startDate,
             Schedule = ResolveSchedule(p.IsGeneral, p.IsFlexible, p.FrequencyUnit),
-            ScheduledStartDate = p.DueDate,
+            ScheduledStartDate = startDate,
             OriginalDayOfMonth = p.FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year
-                ? p.DueDate.Day
+                ? startDate.Day
                 : null,
             DueTime = p.DueTime,
             DueEndTime = p.DueEndTime,
@@ -279,7 +306,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             Position = p.Position,
             GoogleEventId = p.GoogleEventId,
             CreatedAtUtc = ResolveCreatedAtUtc(p.CreatedAtUtc)
-        });
+        };
     }
 
     private static HabitSchedule ResolveSchedule(bool isGeneral, bool isFlexible, FrequencyUnit? frequencyUnit) =>
@@ -583,6 +610,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public void InheritResolvedOccurrence(Habit parent)
+    {
+        if (ParentHabitId != parent.Id || UserId != parent.UserId)
+            throw new ArgumentException("The resolved occurrence must belong to this habit's parent.", nameof(parent));
+
+        DueDate = parent.DueDate;
+        IsCompleted = parent.IsCompleted;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     public Result<HabitLog> SkipFlexible(DateOnly date)
     {
         if (!IsFlexible)
@@ -650,8 +687,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return validation;
 
         var previousDueTime = DueTime;
-        ApplyRequiredUpdates(p);
+        var candidate = (Habit)MemberwiseClone();
+        var scheduleResult = candidate.ApplyRequiredUpdates(p);
+        if (scheduleResult.IsFailure)
+            return scheduleResult;
+        ApplyRequiredUpdatesFrom(candidate);
         ApplyOptionalUpdates(p);
+        if (p.StartDate.HasValue && FrequencyUnit is not null)
+            RecomputeCompletionForEndDate();
         Schedule = ResolveSchedule(IsGeneral, IsFlexible, FrequencyUnit);
 
         if (!previousDueTime.HasValue && DueTime.HasValue && p.ReminderTimes is null && RelativeReminders.Count > 0)
@@ -719,9 +762,13 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             p.DueTime, p.DueEndTime,
             effectiveIsGeneral && p.EndDate.HasValue ? p.EndDate
                 : p.ClearEndDate == true || effectiveIsGeneral ? null : (p.EndDate ?? EndDate),
-            p.FrequencyUnit, effectiveIsGeneral, p.DueDate ?? DueDate);
+            p.FrequencyUnit, effectiveIsGeneral, p.StartDate ?? p.DueDate ?? DueDate);
         if (dateValidation is not null)
             return dateValidation;
+
+        var startValidation = ValidateUpdatedStart(p, effectiveIsGeneral);
+        if (startValidation is not null)
+            return startValidation;
 
         var emojiValidation = HabitInvariants.ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
@@ -748,15 +795,33 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return HabitInvariants.ValidateReminderTimes(p.ReminderTimes);
     }
 
-    private void ApplyRequiredUpdates(HabitUpdateParams p)
+    private AppError? ValidateUpdatedStart(HabitUpdateParams p, bool effectiveIsGeneral)
+    {
+        var startValidation = HabitInvariants.ValidateStartDate(p.StartDate, effectiveIsGeneral, p.FrequencyUnit,
+            p.ClearEndDate == true ? null : p.EndDate ?? EndDate);
+        if (RequiresScheduleReanchor(p) && !p.UserToday.HasValue)
+            return DomainErrors.InvalidStartDate;
+        return startValidation;
+    }
+
+    public bool RequiresScheduleReanchor(HabitUpdateParams p) =>
+        p.StartDate.HasValue && (p.StartDate.Value != StartDate || RecurrenceChanged(p));
+
+    private bool RecurrenceChanged(HabitUpdateParams p) =>
+        FrequencyUnit != p.FrequencyUnit
+        || FrequencyQuantity != p.FrequencyQuantity
+        || IntervalWeeks != p.IntervalWeeks
+        || IsFlexible != (p.IsFlexible ?? IsFlexible)
+        || !Days.ToHashSet().SetEquals((p.IsFlexible ?? IsFlexible) ? [] : p.Days ?? []);
+
+    private Result ApplyRequiredUpdates(HabitUpdateParams p)
     {
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
         var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
-        var effectiveDueDate = p.DueDate ?? DueDate;
-        var recurrencePhaseChanged = FrequencyUnit != p.FrequencyUnit
-            || FrequencyQuantity != p.FrequencyQuantity
-            || IntervalWeeks != p.IntervalWeeks
-            || !Days.ToHashSet().SetEquals(effectiveDays);
+        var effectiveDueDate = p.StartDate.HasValue ? DueDate : p.DueDate ?? DueDate;
+        var reanchorSchedule = RequiresScheduleReanchor(p);
+        var dueChanged = effectiveDueDate != DueDate;
+        var recurrencePhaseChanged = RecurrenceChanged(p);
 
         Title = p.Title.Trim();
         Description = p.Description?.Trim();
@@ -769,16 +834,90 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DueTime = p.DueTime;
         DueEndTime = p.DueEndTime;
 
-        if (effectiveDueDate != DueDate || recurrencePhaseChanged)
+        if (reanchorSchedule)
+        {
+            var reanchor = Reanchor(p, effectiveIsFlexible);
+            if (reanchor.IsFailure)
+                return reanchor;
+        }
+        else if (effectiveDueDate != DueDate || recurrencePhaseChanged)
         {
             DueDate = effectiveDueDate;
             ScheduledStartDate = effectiveDueDate;
         }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
-            OriginalDayOfMonth = DueDate.Day;
+            OriginalDayOfMonth = reanchorSchedule ? StartDate.Day
+                : recurrencePhaseChanged || dueChanged ? effectiveDueDate.Day
+                : OriginalDayOfMonth ?? DueDate.Day;
         else
             OriginalDayOfMonth = null;
+        return Result.Success();
+    }
+
+    private Result Reanchor(HabitUpdateParams p, bool effectiveIsFlexible)
+    {
+        StartDate = p.StartDate!.Value;
+        DueDate = StartDate;
+        ScheduledStartDate = StartDate;
+        OriginalDayOfMonth = StartDate.Day;
+        IsCompleted = false;
+        EndDate = p.ClearEndDate == true ? null : p.EndDate ?? EndDate;
+        var alignment = AlignFirstOccurrence(p.WeekStartDay);
+        if (alignment.IsFailure)
+            return alignment;
+        if (!effectiveIsFlexible)
+        {
+            var catchUp = CatchUpDueDate(p.UserToday!.Value, p.WeekStartDay);
+            if (catchUp.IsFailure)
+                return catchUp;
+            while (_logs.Any(log => !log.IsDeleted && log.Date == DueDate))
+            {
+                var advance = AdvanceDueDate(DueDate, p.WeekStartDay);
+                if (advance.IsFailure)
+                    return advance;
+            }
+        }
+        else if (DueDate < p.UserToday!.Value)
+            DueDate = p.UserToday.Value;
+        return Result.Success();
+    }
+
+    private Result AlignFirstOccurrence(int weekStartDay)
+    {
+        if (Days.Count == 0)
+            return Result.Success();
+        for (var attempt = 0; attempt < DaysInWeek * (IntervalWeeks ?? 1); attempt++)
+        {
+            var active = IsInActiveWeek(DueDate, StartDate, IntervalWeeks ?? 1, weekStartDay);
+            if (active.IsFailure)
+                return Result.Failure(active.Error);
+            if (Days.Contains(DueDate.DayOfWeek) && active.Value)
+                return Result.Success();
+            if (DueDate == DateOnly.MaxValue)
+                return Result.Failure(DomainErrors.RecurrenceScheduleUnsatisfiable);
+            DueDate = DueDate.AddDays(1);
+        }
+        return Result.Failure(DomainErrors.RecurrenceScheduleUnsatisfiable);
+    }
+
+    private void ApplyRequiredUpdatesFrom(Habit candidate)
+    {
+        Title = candidate.Title;
+        Description = candidate.Description;
+        Emoji = candidate.Emoji;
+        FrequencyUnit = candidate.FrequencyUnit;
+        FrequencyQuantity = candidate.FrequencyQuantity;
+        IntervalWeeks = candidate.IntervalWeeks;
+        Days = candidate.Days;
+        IsBadHabit = candidate.IsBadHabit;
+        DueTime = candidate.DueTime;
+        DueEndTime = candidate.DueEndTime;
+        StartDate = candidate.StartDate;
+        DueDate = candidate.DueDate;
+        ScheduledStartDate = candidate.ScheduledStartDate;
+        OriginalDayOfMonth = candidate.OriginalDayOfMonth;
+        IsCompleted = candidate.IsCompleted;
     }
 
     private void ApplyOptionalUpdates(HabitUpdateParams p)
@@ -865,6 +1004,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public void SetParentHabitId(Guid? parentHabitId)
     {
+        if (parentHabitId == Id || parentHabitId == Guid.Empty)
+            throw new ArgumentException("A parent must identify a different habit.", nameof(parentHabitId));
+
         ParentHabitId = parentHabitId;
         UpdatedAtUtc = DateTime.UtcNow;
     }

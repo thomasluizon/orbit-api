@@ -95,28 +95,36 @@ public class JsonArgumentParserTests
     public void ParseFrequencyUnit_ValidValues_ReturnsEnum(string value, FrequencyUnit expected)
     {
         var el = Parse($$$"""{"frequency_unit": "{{{value}}}"}""");
-        JsonArgumentParser.ParseFrequencyUnit(el).Should().Be(expected);
+        JsonArgumentParser.ParseFrequencyUnit(el).Value.Should().Be(expected);
     }
 
     [Fact]
     public void ParseFrequencyUnit_CaseInsensitive_Works()
     {
         var el = Parse("""{"frequency_unit": "day"}""");
-        JsonArgumentParser.ParseFrequencyUnit(el).Should().Be(FrequencyUnit.Day);
+        JsonArgumentParser.ParseFrequencyUnit(el).Value.Should().Be(FrequencyUnit.Day);
     }
 
     [Fact]
-    public void ParseFrequencyUnit_InvalidValue_ReturnsNull()
+    public void ParseFrequencyUnit_InvalidValue_ReturnsFailure()
     {
         var el = Parse("""{"frequency_unit": "Invalid"}""");
-        JsonArgumentParser.ParseFrequencyUnit(el).Should().BeNull();
+        JsonArgumentParser.ParseFrequencyUnit(el).IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ParseFrequencyUnit_ExplicitOneTime_ReturnsSuccessfulNull()
+    {
+        var result = JsonArgumentParser.ParseFrequencyUnit(Parse("""{"frequency_unit":"OneTime"}"""));
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
     }
 
     [Fact]
     public void ParseFrequencyUnit_MissingProperty_ReturnsNull()
     {
         var el = Parse("{}");
-        JsonArgumentParser.ParseFrequencyUnit(el).Should().BeNull();
+        JsonArgumentParser.ParseFrequencyUnit(el).Value.Should().BeNull();
     }
 
     [Fact]
@@ -278,6 +286,19 @@ public class JsonArgumentParserTests
         success.Should().Be(expectedResult);
         if (expectedResult)
             result.Should().Be(expectedWhen);
+    }
+
+    [Theory]
+    [InlineData("same_day", ScheduledReminderWhen.SameDay)]
+    [InlineData("day_before", ScheduledReminderWhen.DayBefore)]
+    public void ChatParser_PreservesSeparateSnakeCaseInterface(string wire, ScheduledReminderWhen expected)
+    {
+        using var document = JsonDocument.Parse($$"""{"scheduled_reminders":[{"when":"{{wire}}","time":"08:00"}],"relative_reminders":[{"when":"{{wire}}","time":"08:00"},{"minutes_before":15}]}""");
+        JsonArgumentParser.ParseScheduledReminders(document.RootElement).Should()
+            .Equal(new ScheduledReminderTime(expected, new TimeOnly(8, 0)));
+        JsonArgumentParser.ParseRelativeReminders(document.RootElement).Should()
+            .Equal(new RelativeReminderTime(When: expected, Time: new TimeOnly(8, 0)), new RelativeReminderTime(MinutesBefore: 15));
+        JsonArgumentParser.TryParseScheduledReminderWhen("SameDay", out _).Should().BeFalse();
     }
 
     [Fact]

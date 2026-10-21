@@ -121,6 +121,34 @@ public sealed class UnitOfWork(
         }
     }
 
+    public async Task<T> ExecuteInSavepointAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        var transaction = context.Database.CurrentTransaction;
+        if (transaction is null)
+            return await ExecuteInTransactionAsync(operation, cancellationToken);
+        var name = $"orbit_{Guid.NewGuid():N}";
+        await transaction.CreateSavepointAsync(name, cancellationToken);
+        try
+        {
+            var result = await operation(cancellationToken);
+            await transaction.ReleaseSavepointAsync(name, cancellationToken);
+            return result;
+        }
+        catch
+        {
+            try { await transaction.RollbackToSavepointAsync(name, CancellationToken.None); }
+            finally
+            {
+                context.ChangeTracker.Clear();
+                scheduleSnapshots?.Invalidate();
+                eventCollector?.Clear();
+            }
+            throw;
+        }
+    }
+
     public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);

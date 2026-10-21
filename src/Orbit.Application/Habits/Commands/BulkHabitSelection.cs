@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -38,17 +39,23 @@ internal static class BulkHabitSelection
             query => query.Include(habit => habit.Tags),
             cancellationToken);
 
+        return Select(habits, filter);
+    }
+
+    internal static IReadOnlyList<Habit> Select(IEnumerable<Habit> habits, BulkHabitFilter filter)
+    {
         var idSet = filter.HabitIds.ToHashSet();
         var tag = filter.Tag?.Trim();
         var search = filter.Search?.Trim();
 
         return habits
+            .Where(habit => filter.IsCompleted.HasValue ? habit.IsCompleted == filter.IsCompleted.Value
+                : filter.IncludeCompleted || !habit.IsCompleted)
             .Where(habit => filter.All || idSet.Count == 0 || idSet.Contains(habit.Id))
             .Where(habit => string.IsNullOrWhiteSpace(tag)
                 || habit.Tags.Any(candidate => candidate.Name.Equals(tag, StringComparison.OrdinalIgnoreCase)))
             .Where(habit => string.IsNullOrWhiteSpace(search)
-                || habit.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || habit.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true)
+                || HabitNameMatcher.Matches(habit.Title, search))
             .Where(habit => filter.IsGeneral is null || habit.IsGeneral == filter.IsGeneral)
             .Where(habit => filter.IsBadHabit is null || habit.IsBadHabit == filter.IsBadHabit)
             .Where(habit => !filter.OneTime || habit.FrequencyUnit is null)

@@ -1,5 +1,4 @@
 using FluentValidation.TestHelper;
-using Orbit.Application.Common;
 using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Validators;
 
@@ -49,11 +48,17 @@ public class RepairStreakGapCommandValidatorTests
             .ShouldHaveValidationErrorFor(command => command.Dates);
     }
 
-    [Fact]
-    public void DatesBeyondHistoryWindow_AreInvalid()
+    [Theory]
+    [InlineData(364, true)]
+    [InlineData(365, false)]
+    public void RepairDateCount_RetainsTheOrdinaryLimit(int count, bool isValid)
     {
-        var dates = Enumerable.Range(0, AppConstants.MaxStreakLookbackDays).Select(offset => Yesterday.AddDays(-offset)).ToArray();
-        _validator.TestValidate(new RepairStreakGapCommand(Guid.NewGuid(), dates))
-            .ShouldHaveValidationErrorFor(command => command.Dates);
+        var dates = Enumerable.Range(0, count).Select(offset => Yesterday.AddDays(-offset)).ToArray();
+        var result = _validator.TestValidate(new RepairStreakGapCommand(Guid.NewGuid(), dates));
+
+        if (isValid)
+            result.ShouldNotHaveAnyValidationErrors();
+        else
+            result.ShouldHaveValidationErrorFor(command => command.Dates);
     }
 }

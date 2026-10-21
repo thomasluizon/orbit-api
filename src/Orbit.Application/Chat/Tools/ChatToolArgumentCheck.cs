@@ -8,14 +8,17 @@ internal static class ChatToolArgumentCheck
 {
     public static async Task<Result> CheckAsync(IAiTool tool, JsonElement args, Func<Task<ToolResult>> prepare)
     {
-        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        var parameterSchema = tool.GetParameterSchema();
+        args = OptionalToolArguments.OmitOptionalNulls(args, parameterSchema);
+        var schema = JsonSerializer.SerializeToElement(parameterSchema);
         if (args.ValueKind != JsonValueKind.Object
             || args.EnumerateObject().Any(field => field.Name != "preview_item_id"
                 && (!AgentArgumentSchema.Accepts(schema, field.Name, field.Value)
                     || !PreservesListEntries(field.Name, field.Value))))
             return Result.Failure("Invalid tool arguments.");
         var result = await prepare();
-        return result.Success ? Result.Success() : Result.Failure(result.Error!);
+        return result.Success ? Result.Success()
+            : result.ErrorCode is { } code ? Result.Failure(result.Error!, code) : Result.Failure(result.Error!);
     }
 
     private static bool PreservesListEntries(string field, JsonElement value)
@@ -27,7 +30,7 @@ internal static class ChatToolArgumentCheck
                 ? PreservesListEntries(field, item) : !string.IsNullOrWhiteSpace(item.GetString()));
         if (field is "text" or "title" or "unit" && value.ValueKind == JsonValueKind.String)
             return !string.IsNullOrWhiteSpace(value.GetString());
-        return field != "is_read_only" || value.ValueKind != JsonValueKind.Null;
+        return true;
     }
 
     public static async Task<ToolResult> CheckCommandAsync(IMediator mediator, object command, CancellationToken ct)

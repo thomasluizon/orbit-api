@@ -167,9 +167,8 @@ public partial class HandlePlayNotificationCommandHandler(
 
     private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>
         user.SubscriptionSource == SubscriptionSource.Stripe
-        && user.IsPro
-        && user.PlanExpiresAt.HasValue
-        && user.PlanExpiresAt.Value > state.ExpiresAt;
+        && user.HasActivePaidSubscription
+        && user.SubscriptionExpiresAtUtc > state.ExpiresAt;
 
     private static DecodedPlayNotification? DecodeNotification(string pushBody)
     {

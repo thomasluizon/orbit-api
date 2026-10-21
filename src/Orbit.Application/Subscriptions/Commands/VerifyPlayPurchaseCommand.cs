@@ -117,9 +117,8 @@ public partial class VerifyPlayPurchaseCommandHandler(
 
     private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>
         user.SubscriptionSource == SubscriptionSource.Stripe
-        && user.IsPro
-        && user.PlanExpiresAt.HasValue
-        && user.PlanExpiresAt.Value > state.ExpiresAt;
+        && user.HasActivePaidSubscription
+        && user.SubscriptionExpiresAtUtc > state.ExpiresAt;
 
     private static Result<PlayVerifyResponse> BuildResponse(User user) =>
         Result.Success(new PlayVerifyResponse(

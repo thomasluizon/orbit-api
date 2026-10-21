@@ -22,6 +22,53 @@ public class UpdateGoalToolTests
         _tool = new UpdateGoalTool(_goalRepository, _unitOfWork);
     }
 
+    [Theory]
+    [InlineData("title")]
+    [InlineData("description")]
+    [InlineData("target_value")]
+    [InlineData("unit")]
+    [InlineData("deadline")]
+    [InlineData("clear_fields")]
+    public async Task OptionalNull_PreservesGoalLikeAbsent(string field)
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "Read", 10, "books", "Keep", new DateOnly(2027, 1, 1))).Value;
+        _goalRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
+            cancellationToken: Arg.Any<CancellationToken>()).Returns(Task.FromResult<Goal?>(goal));
+        var absent = await Execute($$"""{"goal_id":"{{goal.Id}}"}""");
+        var explicitNull = await Execute($$"""{"goal_id":"{{goal.Id}}","{{field}}":null}""");
+        absent.Success.Should().BeTrue();
+        explicitNull.Success.Should().BeTrue();
+        goal.Title.Should().Be("Read");
+        goal.Description.Should().Be("Keep");
+        goal.TargetValue.Should().Be(10);
+        goal.Unit.Should().Be("books");
+        goal.Deadline.Should().Be(new DateOnly(2027, 1, 1));
+    }
+
+    [Fact]
+    public async Task ClearDeadline_RemovesOnlyTheRequestedDeadline()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "Goal X", 10, "books", "Keep", new DateOnly(2027, 1, 1))).Value;
+        _goalRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
+            cancellationToken: Arg.Any<CancellationToken>()).Returns(Task.FromResult<Goal?>(goal));
+        _goalRepository.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(new List<Goal> { goal });
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            goal_id = goal.Id,
+            deadline = (string?)null,
+            clear_fields = new[] { "deadline" }
+        });
+        (await _tool.CheckArgumentsAsync(args, UserId, default)).IsSuccess.Should().BeTrue();
+        goal.Deadline.Should().NotBeNull();
+        (await _tool.ExecuteAsync(args, UserId, default)).Success.Should().BeTrue();
+        goal.Deadline.Should().BeNull();
+        goal.Title.Should().Be("Goal X");
+        goal.Description.Should().Be("Keep");
+    }
+
     [Fact]
     public async Task ExecuteAsync_UpdatesGoalFields()
     {

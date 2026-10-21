@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
 
@@ -30,7 +31,7 @@ public sealed class AiHabitEmojiInferenceServiceTests
         var handler = new JsonHandler(body);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
-        var service = new AiHabitEmojiInferenceService(client, NullLogger<AiHabitEmojiInferenceService>.Instance);
+        var service = new AiHabitEmojiInferenceService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(client), NullLogger<AiHabitEmojiInferenceService>.Instance);
 
         var result = await service.InferAsync(
             userId,
@@ -42,7 +43,8 @@ public sealed class AiHabitEmojiInferenceServiceTests
         handler.LastRequestBody.Should().Contain("json_object");
         handler.LastRequestBody.Should().NotContain("temperature");
         await usageRecorder.Received(1).RecordAsync(
-            "habit_emoji_inference", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId);
+            "habit_emoji_inference", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId,
+            Arg.Is<AiCallTelemetry>(call => call.HasUsage && !call.IsError && call.ToolNames.Count == 0));
     }
 
     private static ResponsesClient BuildResponsesClient(HttpMessageHandler handler) =>

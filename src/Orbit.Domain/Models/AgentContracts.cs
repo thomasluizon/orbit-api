@@ -170,7 +170,11 @@ public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
     int ChangeTargetCount,
     IReadOnlyList<PendingOperationItem>? Items = null,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null)
+{
+    [JsonIgnore]
+    public JsonElement? ExecutionArguments { get; init; }
+}
 
 public record PendingAgentOperationConfirmation(
     Guid PendingOperationId,
@@ -184,7 +188,11 @@ public record PendingAgentOperationExecution(
     JsonElement Arguments,
     AgentExecutionSurface Surface,
     AgentConfirmationRequirement ConfirmationRequirement,
-    string? PreviewFingerprint = null);
+    string? PreviewFingerprint = null,
+    int ArgumentSchemaVersion = Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion)
+{
+    public bool RequiresReproposal => ArgumentSchemaVersion != Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion;
+}
 
 public record AgentStepUpChallenge(
     Guid ChallengeId,
@@ -299,6 +307,7 @@ public record AgentAuditEntry(
 
 public static class AgentCapabilityIds
 {
+    public const string HabitDateInterpret = "habits.date.interpret";
     public const string ChatInteract = "chat.interact";
     public const string CatalogCapabilitiesRead = "catalog.capabilities.read";
     public const string CatalogDataRead = "catalog.data.read";
@@ -481,3 +490,5 @@ public static class AgentScopes
         ReadSubscriptions
     ];
 }
+
+public sealed record PendingHabitCreation(string Title, Guid? ParentHabitId = null);

@@ -49,6 +49,6 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool RequiresStreakRecalculation(IEnumerable<ActionResult> actionResults)
     {
-        return actionResults.Any(action => action.Status == ActionStatus.Success && action.Type is "LogHabit" or "BulkLogHabits" or "DeleteHabit");
+        return actionResults.Any(action => action.Status == ActionStatus.Success && action.Type is "LogHabit" or "UnlogHabit" or "BulkLogHabits" or "DeleteHabit");
     }
 }

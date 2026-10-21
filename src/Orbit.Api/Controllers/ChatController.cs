@@ -29,6 +29,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private const long MaxChatRequestBytes = 10 * 1024 * 1024;
+    private const string EvalTraceHeaderName = "X-Orbit-Eval-Trace";
 
     [HttpGet("records/{kind}")]
     [ProducesResponseType<RecordListCard>(StatusCodes.Status200OK)]
@@ -65,7 +66,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         CancellationToken cancellationToken,
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null,
-        [FromForm] string? blockAnswer = null)
+        [FromForm] string? blockAnswer = null,
+        [FromHeader(Name = EvalTraceHeaderName)] string? evalTrace = null)
     {
         if (!CanAccessChat())
             return Forbid();
@@ -89,7 +91,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
-            HttpContext.TraceIdentifier, BlockAnswer: answer);
+            HttpContext.TraceIdentifier, BlockAnswer: answer,
+            EvalTraceRequested: evalTrace == "1");
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -116,7 +119,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         CancellationToken cancellationToken,
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null,
-        [FromForm] string? blockAnswer = null)
+        [FromForm] string? blockAnswer = null,
+        [FromHeader(Name = EvalTraceHeaderName)] string? evalTrace = null)
     {
         if (!CanAccessChat())
             return Forbid();
@@ -142,7 +146,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.IsReadOnlyCredential(),
             HttpContext.TraceIdentifier,
             answer is null ? streamEvent => WriteEventAsync(streamEvent, cancellationToken) : null,
-            answer);
+            answer,
+            EvalTraceRequested: evalTrace == "1");
 
         if (answer is not null)
         {

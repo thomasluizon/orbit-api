@@ -39,6 +39,55 @@ public class HabitsControllerTests
     }
 
     [Fact]
+    public async Task InterpretDate_UsesAuthenticatedAccountAndSerializesOwnedContract()
+    {
+        var reference = new DateOnly(2026, 10, 20);
+        _mediator.Send(Arg.Any<InterpretDateCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DateInterpretation(reference.AddDays(6), reference)));
+        var result = await _controller.InterpretDate(new("next holiday", "en"), CancellationToken.None);
+        var body = result.Should().BeOfType<OkObjectResult>().Subject.Value;
+        JsonSerializer.Serialize(body, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            .Should().Be("""{"date":"2026-10-26","referenceDate":"2026-10-20"}""");
+        await _mediator.Received(1).Send(Arg.Is<InterpretDateCommand>(command => command.UserId == UserId
+            && command.Phrase == "next holiday" && command.Language == "en"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateAndUpdate_ForwardExplicitStartDate()
+    {
+        var start = new DateOnly(2026, 10, 26);
+        _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(Guid.NewGuid()));
+        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        await _controller.CreateHabit(new("Read", null, Orbit.Domain.Enums.FrequencyUnit.Day, 1, StartDate: start), CancellationToken.None);
+        await _controller.UpdateHabit(Guid.NewGuid(), new("Read", null, Orbit.Domain.Enums.FrequencyUnit.Day, 1, StartDate: start), CancellationToken.None);
+        await _mediator.Received(1).Send(Arg.Is<CreateHabitCommand>(command => command.StartDate == start), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(Arg.Is<UpdateHabitCommand>(command => command.StartDate == start), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BulkMoveHabitParent_ReturnsOkWithPerItemResults(bool promote)
+    {
+        var habitId = Guid.NewGuid();
+        var foreignId = Guid.NewGuid();
+        Guid? parentId = promote ? null : Guid.NewGuid();
+        var response = new BulkMoveHabitParentResult([
+            new(0, BulkItemStatus.Success, habitId),
+            new(1, BulkItemStatus.Failed, foreignId, ErrorMessages.HabitNotFound.Message, ErrorCodes.HabitNotFound)
+        ]);
+        _mediator.Send(Arg.Any<BulkMoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(response));
+
+        var result = await _controller.BulkMoveHabitParent(new([habitId, foreignId], parentId), CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(response);
+        await _mediator.Received(1).Send(Arg.Is<BulkMoveHabitParentCommand>(command =>
+            command.UserId == UserId && command.ParentId == parentId
+            && command.HabitIds.SequenceEqual(new[] { habitId, foreignId })), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GetHabits_Success_ReturnsOk()
     {
         var filter = new HabitsController.GetHabitsFilterRequest { DateFrom = DateOnly.FromDateTime(DateTime.UtcNow), DateTo = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)) };
@@ -329,6 +378,21 @@ public class HabitsControllerTests
             .Returns(Result.Failure<IReadOnlyList<HabitLogResponse>>("Error"));
         var result = await _controller.GetLogs(Guid.NewGuid(), CancellationToken.None);
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetLogs_Range_ForwardsUserHabitAndDates()
+    {
+        var habitId = Guid.NewGuid();
+        var from = new DateOnly(2025, 1, 1);
+        var to = new DateOnly(2025, 1, 31);
+        _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>([]));
+
+        var result = await _controller.GetLogs(habitId, CancellationToken.None, from, to);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(new GetHabitLogsQuery(UserId, habitId, from, to), CancellationToken.None);
     }
 
     [Fact]

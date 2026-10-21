@@ -28,7 +28,8 @@ public partial class HabitsController
         IReadOnlyList<Guid>? GoalIds = null,
         string? Emoji = null,
         int? IntervalWeeks = null,
-        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+        DateOnly? StartDate = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -52,7 +53,8 @@ public partial class HabitsController
         IReadOnlyList<Guid>? GoalIds = null,
         string? Emoji = null,
         int? IntervalWeeks = null,
-        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+        DateOnly? StartDate = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -87,6 +89,8 @@ public partial class HabitsController
         IReadOnlyList<string>? Tags = null,
         int? IntervalWeeks = null,
         IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+
+    public record BulkMoveHabitParentRequest(IReadOnlyList<Guid> HabitIds, Guid? ParentId);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -139,6 +143,8 @@ public partial class HabitsController
         IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
 
     public record LinkGoalsRequest(List<Guid> GoalIds);
+
+    public record InterpretDateRequest(string Phrase, string Language);
 
     public record SuggestHabitSetupRequest(string Title, string Language = "en");
 }

@@ -11,7 +11,7 @@ public static class OAuthLoginPage
     public static string Render(string clientId, string redirectUri, string state,
         string codeChallenge, string codeChallengeMethod, string? nonce = null,
         string? error = null, string language = "en",
-        bool botProtectionEnabled = false, string? turnstileSiteKey = null)
+        bool botProtectionEnabled = false, string? turnstileSiteKey = null, string? scope = null)
     {
         var copy = OAuthPageStrings.For(language);
         var requestJson = OAuthPageJson.Write(new
@@ -22,6 +22,7 @@ public static class OAuthLoginPage
             codeChallenge,
             codeChallengeMethod,
             nonce,
+            scope,
             language = copy.Locale,
             error,
             botProtectionEnabled,
@@ -55,6 +56,7 @@ public static class OAuthLoginPage
             + $"&code_challenge_method={Uri.EscapeDataString(codeChallengeMethod)}";
         if (nonce is not null)
             googleStartQuery += $"&nonce={Uri.EscapeDataString(nonce)}";
+        if (scope is not null) googleStartQuery += $"&scope={Uri.EscapeDataString(scope)}";
         var googleStartUrl = System.Net.WebUtility.HtmlEncode($"/oauth/google/start?{googleStartQuery}");
 
         return $$"""

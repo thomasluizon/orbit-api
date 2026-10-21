@@ -39,8 +39,6 @@ public class CreateHabitCommandHandlerTests
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -53,6 +51,124 @@ public class CreateHabitCommandHandlerTests
                 var operation = call.ArgAt<Func<CancellationToken, Task<Result<Guid>>>>(0);
                 return operation(call.ArgAt<CancellationToken>(1));
             });
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStartAtCalendarBoundary_ReturnsDomainFailure()
+    {
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: DateOnly.MaxValue, Options: new HabitCommandOptions(Days: [DayOfWeek.Monday]));
+        (await _handler.Handle(command, CancellationToken.None)).IsFailure.Should().BeTrue();
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStart_PreservesSelectionBeforeWeekdayAlignment()
+    {
+        var selected = new DateOnly(2026, 10, 26);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            StartDate: selected, Options: new HabitCommandOptions(Days: [DayOfWeek.Wednesday]));
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.StartDate == selected
+            && habit.DueDate == selected.AddDays(2) && habit.ScheduledStartDate == selected), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(26, false)]
+    [InlineData(12, false)]
+    [InlineData(26, true)]
+    public async Task Handle_ExplicitStart_ChildrenInheritResolvedParentOccurrence(int startDay, bool legacyDueDate)
+    {
+        var selected = new DateOnly(2026, 10, startDay);
+        var today = new DateOnly(2026, 10, 20);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        var created = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Do<Habit>(created.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            SubHabits: ["Chapter"], StartDate: selected, DueDate: legacyDueDate ? selected : null,
+            Options: new HabitCommandOptions(Days: [DayOfWeek.Wednesday]));
+
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var parent = created.Single(habit => habit.ParentHabitId is null);
+        var child = created.Single(habit => habit.ParentHabitId == parent.Id);
+        parent.DueDate.Should().Be(new DateOnly(2026, 10, startDay == 26 ? 28 : 21));
+        child.DueDate.Should().Be(parent.DueDate);
+        child.StartDate.Should().Be(selected);
+        child.ScheduledStartDate.Should().Be(selected);
+        child.Days.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    public async Task Handle_HistoricalStart_ChildrenInheritResolvedTerminalState(
+        bool restrictedWeekdays, bool legacyDueDate, bool terminal)
+    {
+        var selected = new DateOnly(2026, 10, 1);
+        var today = new DateOnly(2026, 10, 20);
+        var end = new DateOnly(2026, 10, terminal ? 10 : 30);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
+        var created = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Do<Habit>(created.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            SubHabits: ["Chapter", "Notes"], StartDate: selected, DueDate: legacyDueDate ? selected : null,
+            Options: new HabitCommandOptions(EndDate: end, Days: restrictedWeekdays ? [DayOfWeek.Wednesday] : null));
+        new Orbit.Application.Habits.Validators.CreateHabitCommandValidator().Validate(command).IsValid.Should().BeTrue();
+
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var parent = created.Single(habit => habit.ParentHabitId is null);
+        parent.DueDate.Should().Be(new DateOnly(2026, 10, terminal
+            ? restrictedWeekdays ? 14 : 11
+            : restrictedWeekdays ? 21 : 20));
+        parent.IsCompleted.Should().Be(terminal);
+        var children = created.Where(habit => habit.ParentHabitId == parent.Id).ToList();
+        children.Should().HaveCount(2);
+        children.Should().AllSatisfy(child =>
+        {
+            child.DueDate.Should().Be(parent.DueDate);
+            child.IsCompleted.Should().Be(terminal);
+            child.StartDate.Should().Be(selected);
+            child.ScheduledStartDate.Should().Be(selected);
+            child.EndDate.Should().Be(end);
+            child.FrequencyUnit.Should().Be(parent.FrequencyUnit);
+            child.FrequencyQuantity.Should().Be(parent.FrequencyQuantity);
+            child.Days.Should().BeEmpty();
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_LegacyDate_ChildrenRetainExistingDueDateInheritance(bool explicitDueDate)
+    {
+        var today = new DateOnly(2026, 10, 20);
+        DateOnly? requestedDueDate = explicitDueDate ? new DateOnly(2026, 10, 26) : null;
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        var created = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Do<Habit>(created.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1,
+            SubHabits: ["Chapter"], DueDate: requestedDueDate,
+            Options: new HabitCommandOptions(Days: [DayOfWeek.Wednesday]));
+
+        (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var parent = created.Single(habit => habit.ParentHabitId is null);
+        var child = created.Single(habit => habit.ParentHabitId == parent.Id);
+        parent.DueDate.Should().Be(new DateOnly(2026, 10, explicitDueDate ? 28 : 21));
+        child.DueDate.Should().Be(requestedDueDate ?? parent.DueDate);
+        child.StartDate.Should().Be(child.DueDate);
+        child.IsCompleted.Should().BeFalse();
+        child.Days.Should().BeEmpty();
     }
 
     [Theory]
@@ -179,7 +295,6 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-        await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -245,22 +360,6 @@ public class CreateHabitCommandHandlerTests
         result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         result.Error.Should().Be("You've reached the 1000 habit limit.");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_SubHabitsPayGated_ReturnsPayGateFailure()
-    {
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Sub-habits are a Pro feature"));
-
-        var command = new CreateHabitCommand(
-            UserId, "Morning Routine", null, FrequencyUnit.Day, 1,
-            SubHabits: new List<string> { "Brush teeth" });
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]

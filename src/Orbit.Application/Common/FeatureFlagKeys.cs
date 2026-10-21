@@ -2,6 +2,8 @@ namespace Orbit.Application.Common;
 
 public static class FeatureFlagKeys
 {
+    public const string AstraEvalTrace = "astra_eval_trace";
+    public const string AstraConversationRecording = "astra_conversation_recording";
     public const string AstraAskBlocksDisabled = "astra_ask_blocks_disabled";
     public const string AstraProactiveEngineDisabled = "astra_proactive_engine_disabled";
     public const string CalendarIntegration = "calendar_integration";

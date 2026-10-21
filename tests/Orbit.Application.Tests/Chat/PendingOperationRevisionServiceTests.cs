@@ -4,6 +4,7 @@ using FluentAssertions;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
@@ -227,27 +228,42 @@ public sealed class PendingOperationRevisionServiceTests
     }
 
     [Fact]
-    public async Task ReviseAsync_InferredEmojiOperation_RejectsEditableRevision()
+    public async Task ReviseAsync_InferredEmojiOperation_EditsStoredValuesWithoutInferringAgain()
     {
         var habit = CreateHabit("First");
         SetupHabits([habit]);
         var pendingId = Guid.NewGuid();
-        var arguments = JsonDocument.Parse("""{"infer_from_title":true}""").RootElement.Clone();
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string> { [habit.Id] = "📚" }));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var tools = new AiToolRegistry([tool]);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, tools);
+        var preview = await previewer.PreviewAsync(_userId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("""{"infer_from_title":true}"""));
+        var arguments = preview!.ExecutionArguments!.Value;
         _store.GetExecution(_userId, pendingId).Returns(new PendingAgentOperationExecution(
             pendingId, AgentCapabilityIds.HabitsBulkWrite, "bulk_update_habit_emojis", arguments,
             AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
-        var service = new PendingOperationRevisionService(_store,
-            new PendingOperationChangePreviewer(_habits, _goals, _tags, _dateService, _tools),
-            new RevisePendingOperationRequestValidator(), _tools);
+        _store.Revise(_userId, pendingId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(true);
+        var service = new PendingOperationRevisionService(_store, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
 
         var result = await service.ReviseAsync(_userId, pendingId,
-            new RevisePendingOperationRequest("untrusted_fingerprint",
-                [new RevisedPendingOperationItem(habit.Id.ToString())]),
+            new RevisePendingOperationRequest(preview.PreviewFingerprint!,
+                [new RevisedPendingOperationItem(habit.Id.ToString(),
+                    JsonSerializer.Deserialize<JsonElement>("""{"emoji":"🏃"}"""))]),
             CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Be("stale_preview");
-        _store.DidNotReceiveWithAnyArgs().Revise(default, default, default!, default!, default!, default!);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Preview!.Items!.Single().Fields.Single().NewValue.Should().Be("🏃");
+        _store.Received(1).Revise(_userId, pendingId, Arg.Any<string>(),
+            Arg.Is<string>(json => JsonSerializer.Deserialize<JsonElement>(json).GetProperty("revised_items")[0]
+                .GetProperty("emoji").GetString() == "🏃"), Arg.Any<string>(), Arg.Any<string>());
+        await inference.Received(1).InferAsync(_userId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -329,7 +345,11 @@ public sealed class PendingOperationRevisionServiceTests
     public async Task ReviseAsync_InvalidCreateCanBeApprovedAfterEditingOrRemovingItem(bool remove)
     {
         SetupHabits([]);
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
         using var services = new ServiceCollection()
+            .AddSingleton(config)
             .AddSingleton<IValidator<BulkCreateHabitsCommand>>(new BulkCreateHabitsCommandValidator())
             .AddSingleton(_dateService).BuildServiceProvider();
         var mediator = Substitute.For<IMediator>();

@@ -2,6 +2,16 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using FluentValidation;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using Orbit.Application.Calendar.Commands;
+using Orbit.Application.Calendar.Validators;
+using Orbit.Application.ChecklistTemplates.Commands;
+using Orbit.Application.ChecklistTemplates.Validators;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Profile.Commands;
+using Orbit.Application.Profile.Validators;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +20,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Api.Mcp;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -296,11 +309,13 @@ public class AgentChatWriteHoldTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(true, true, AgentExecutionSurface.Chat)]
+    [InlineData(true, false, AgentExecutionSurface.Chat)]
+    [InlineData(false, true, AgentExecutionSurface.Chat)]
+    [InlineData(false, false, AgentExecutionSurface.Mcp)]
+    [InlineData(false, true, AgentExecutionSurface.Mcp)]
     public async Task ExecutePendingOperation_InitialPreview_BindsApprovalToTargetSet(
-        bool includePreview, bool addHabit)
+        bool includePreview, bool addHabit, AgentExecutionSurface surface)
     {
         var today = new DateOnly(2026, 9, 25);
         _dbContext.Habits.Add(
@@ -319,7 +334,7 @@ public class AgentChatWriteHoldTests : IDisposable
 
         var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             _userId, tool.Name, Parse("""{"filter":{"all":true}}"""),
-            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
+            surface, AgentAuthMethod.Jwt, IncludeChangePreview: includePreview));
 
         held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
         var pending = held.PendingOperation!;
@@ -338,7 +353,7 @@ public class AgentChatWriteHoldTests : IDisposable
         _dbContext.ChangeTracker.Clear();
 
         var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
-        var shouldExecute = !includePreview || !addHabit;
+        var shouldExecute = surface == AgentExecutionSurface.Mcp || !addHabit;
         (await revisions.IsCurrentAsync(_userId, execution, CancellationToken.None))
             .Should().Be(shouldExecute);
         execution.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
@@ -378,6 +393,329 @@ public class AgentChatWriteHoldTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("template", false)]
+    [InlineData("name", false)]
+    [InlineData("selection", false)]
+    [InlineData("selection", true)]
+    public async Task CapabilityParityWrites_ShowPreviewBeforeApprovalAndDispatchOnlyAfterConfirmation(string action, bool reset)
+    {
+        var template = ChecklistTemplate.Create(_userId, "Morning", ["Water"]).Value;
+        _dbContext.ChecklistTemplates.Add(template);
+        var user = await _dbContext.Users.SingleAsync(u => u.Id == _userId);
+        user.SetSelectedCalendars(["primary"]);
+        await _dbContext.SaveChangesAsync();
+        var mediator = Substitute.For<IMediator>();
+        var templates = new GenericRepository<ChecklistTemplate>(_dbContext);
+        using var services = new ServiceCollection()
+            .AddSingleton<IGenericRepository<ChecklistTemplate>>(templates)
+            .AddSingleton<IValidator<UpdateChecklistTemplateCommand>>(new UpdateChecklistTemplateCommandValidator())
+            .AddSingleton<IValidator<SetNameCommand>>(new SetNameCommandValidator())
+            .AddSingleton<IValidator<SetSelectedCalendarsCommand>>(new SetSelectedCalendarsCommandValidator())
+            .BuildServiceProvider();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => new CheckChatCommandQueryHandler(services).Handle(call.Arg<CheckChatCommandQuery>(), default));
+        mediator.Send(Arg.Any<UpdateChecklistTemplateCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        mediator.Send(Arg.Any<SetNameCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        mediator.Send(Arg.Any<SetSelectedCalendarsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        IAiTool tool = action switch
+        {
+            "template" => new UpdateChecklistTemplateTool(mediator),
+            "name" => new UpdateProfilePreferencesTool(mediator),
+            _ => new ManageCalendarSyncTool(mediator)
+        };
+        var arguments = action switch
+        {
+            "template" => JsonSerializer.SerializeToElement(new { template_id = template.Id, name = "Evening", items = new[] { "Read" } }),
+            "name" => JsonSerializer.SerializeToElement(new { action = "set_name", name = "Ana" }),
+            _ => JsonSerializer.SerializeToElement(new { action = "set_selected_calendars", calendar_ids = reset ? Array.Empty<string>() : new[] { "work" } })
+        };
+        var checkedArgs = await ((IArgumentCheckTool)tool).CheckArgumentsAsync(arguments, _userId, default);
+        checkedArgs.IsSuccess.Should().BeTrue(checkedArgs.Error);
+        mediator.ClearReceivedCalls();
+        var tools = new AiToolRegistry([tool]);
+        var previewer = new PendingOperationChangePreviewer(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<Goal>(_dbContext),
+            new GenericRepository<Tag>(_dbContext), Substitute.For<IUserDateService>(), tools,
+            new DestructiveOperationPreviewer(_dbContext), templates);
+        var executor = CreateExecutor(tools, previewer);
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+
+        held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        var pending = held.PendingOperation!;
+        pending.Items.Should().ContainSingle();
+        pending.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
+        var field = pending.Items![0].Fields.Single(change => change.Field == (action == "selection" ? "calendar_ids" : "name"));
+        if (action == "selection")
+        {
+            field.OldValue.Should().Be("[\"primary\"]");
+            field.ProposedValue!.Value.GetArrayLength().Should().Be(reset ? 0 : 1);
+        }
+        else
+        {
+            field.NewValue.Should().Be(action == "template" ? "Evening" : "Ana");
+            field.IsEditable.Should().BeTrue();
+        }
+        if (action == "template")
+            field.OldValue.Should().Be("Morning");
+        mediator.ReceivedCalls().Should().ContainSingle().Which.GetArguments()[0].Should().BeOfType<CheckChatCommandQuery>();
+        template.Name.Should().Be("Morning");
+        user.Name.Should().Be("Alex");
+        user.GetSelectedCalendarIds().Should().Equal("primary");
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var executed = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        executed.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        mediator.ReceivedCalls().Where(call => call.GetArguments()[0] is not CheckChatCommandQuery).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("name", ValidationErrorCodes.ProfileNameLength)]
+    [InlineData("template_limit", ValidationErrorCodes.TemplateItemLimit)]
+    [InlineData("template_length", ValidationErrorCodes.TemplateItemLength)]
+    [InlineData("selection", ValidationErrorCodes.CalendarSelectionLimit)]
+    public async Task CapabilityParityWrites_InvalidArgumentsAreRejectedBeforePreviewOnChatAndMcp(string action, string code)
+    {
+        var template = ChecklistTemplate.Create(_userId, "Morning", ["Water"]).Value;
+        _dbContext.ChecklistTemplates.Add(template);
+        await _dbContext.SaveChangesAsync();
+        var mediator = Substitute.For<IMediator>();
+        using var services = new ServiceCollection()
+            .AddSingleton<IGenericRepository<ChecklistTemplate>>(new GenericRepository<ChecklistTemplate>(_dbContext))
+            .AddValidatorsFromAssemblyContaining<SetNameCommandValidator>()
+            .BuildServiceProvider();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => new CheckChatCommandQueryHandler(services).Handle(call.Arg<CheckChatCommandQuery>(), default));
+        mediator.Send(Arg.Any<SetNameCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new ValidationBehavior<SetNameCommand, Result>([new SetNameCommandValidator()])
+                .Handle(call.Arg<SetNameCommand>(), _ => Task.FromResult(Result.Success()), default));
+        mediator.Send(Arg.Any<UpdateChecklistTemplateCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new ValidationBehavior<UpdateChecklistTemplateCommand, Result>([new UpdateChecklistTemplateCommandValidator()])
+                .Handle(call.Arg<UpdateChecklistTemplateCommand>(), _ => Task.FromResult(Result.Success()), default));
+        mediator.Send(Arg.Any<SetSelectedCalendarsCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new ValidationBehavior<SetSelectedCalendarsCommand, Result>([new SetSelectedCalendarsCommandValidator()])
+                .Handle(call.Arg<SetSelectedCalendarsCommand>(), _ => Task.FromResult(Result.Success()), default));
+        IAiTool tool = action switch
+        {
+            "name" => new UpdateProfilePreferencesTool(mediator),
+            "selection" => new ManageCalendarSyncTool(mediator),
+            _ => new UpdateChecklistTemplateTool(mediator)
+        };
+        var name = new string('a', 51);
+        var items = action == "template_limit" ? Enumerable.Repeat("Item", AppConstants.MaxChecklistItems + 1).ToArray()
+            : new[] { new string('a', AppConstants.MaxChecklistItemTextLength + 1) };
+        var ids = Enumerable.Range(0, AppConstants.MaxSelectedCalendars + 1).Select(i => $"calendar-{i}").ToArray();
+        var arguments = action switch
+        {
+            "name" => JsonSerializer.SerializeToElement(new { action = "set_name", name }),
+            "selection" => JsonSerializer.SerializeToElement(new { action = "set_selected_calendars", calendar_ids = ids }),
+            _ => JsonSerializer.SerializeToElement(new { template_id = template.Id, items })
+        };
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(_userId, tool.Name, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(call => AgentArgumentPreview.Build(tool.Name, call.Arg<JsonElement>(), null, default));
+        var executor = CreateExecutor(new AiToolRegistry([tool]), previewer);
+
+        var chat = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name, arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, _userId.ToString())], "Test"));
+        var bridge = new McpExecutorBridge(executor);
+        var mcp = action switch
+        {
+            "name" => await new Orbit.Api.Mcp.Tools.ProfileTools(mediator, bridge).SetName(user, name),
+            "selection" => await new Orbit.Api.Mcp.Tools.CalendarTools(mediator, bridge).SetSelectedCalendars(user, ids),
+            _ => await new Orbit.Api.Mcp.Tools.ChecklistTemplateTools(mediator, bridge)
+                .UpdateChecklistTemplate(user, template.Id.ToString(), items: items)
+        };
+
+        chat.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        chat.Operation.PolicyReason.Should().Be(code);
+        chat.PendingOperation.Should().BeNull();
+        mcp.Should().Be($"Error: {code}");
+        await previewer.DidNotReceive().PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>());
+        _dbContext.PendingAgentOperations.Should().BeEmpty();
+        mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);
+        template.Items.Should().Equal("Water");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptySelection_NeverReturnsAnApproval()
+    {
+        var tools = new AiToolRegistry([new StubTool("bulk_log_habits")]);
+        var previewer = Substitute.For<IPendingOperationChangePreviewer>();
+        previewer.PreviewAsync(_userId, "bulk_log_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(new PendingOperationChangePreview([], 0, [], "empty"));
+        var executor = CreateExecutor(tools, previewer);
+
+        var result = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId,
+            "bulk_log_habits", Parse("""{"filter":{"search":"meditação"}}"""),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+
+        result.PendingOperation.Should().BeNull();
+        result.Operation.Status.Should().NotBe(AgentOperationStatus.PendingConfirmation);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CreateApproval_JsonStorageOrderAndUnrelatedChangeDoNotMakeItStale()
+    {
+        var today = new DateOnly(2026, 10, 19);
+        var unrelated = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        _dbContext.Habits.Add(unrelated);
+        await _dbContext.SaveChangesAsync();
+        var tool = new StubTool("bulk_create_habits");
+        var tools = new AiToolRegistry([tool]);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), dates, tools);
+        var executor = CreateExecutor(tools, previewer);
+        var arguments = Parse("""{"habits":[{"title":"Novo","frequency_unit":"Day"}]}""");
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
+            arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        var stored = _dbContext.PendingAgentOperations.Single(item => item.Id == held.PendingOperation!.Id);
+        var reordered = """{"habits":[{"frequency_unit":"Day","title":"Novo"}]}""";
+        stored.Revise(reordered, AgentOperationFingerprint.Compute(tool.Name, reordered),
+            held.PendingOperation!.PreviewFingerprint!, DateTime.UtcNow).Should().BeTrue();
+        unrelated.Update(new HabitUpdateParams("Changed unrelated habit", unrelated.Description, unrelated.FrequencyUnit,
+            unrelated.FrequencyQuantity, Days: unrelated.Days.ToList(), IsBadHabit: unrelated.IsBadHabit, DueDate: unrelated.DueDate)).IsSuccess.Should().BeTrue();
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+        var execution = _pendingOperationStore.GetExecution(_userId, held.PendingOperation.Id)!;
+
+        (await revisions.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
+        var confirmation = _pendingOperationStore.Confirm(_userId, held.PendingOperation.Id)!;
+        var approved = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, execution.OperationId,
+            execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+            ConfirmationToken: confirmation.ConfirmationToken));
+
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        tool.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AssignTags_BatchApproval_ReusesOneTagAcrossExistingHabits()
+    {
+        var today = new DateOnly(2026, 10, 19);
+        var habits = new[] { "Beber água", "Academia" }.Select(title =>
+            Habit.Create(new HabitCreateParams(_userId, title, FrequencyUnit.Day, 1, today)).Value).ToArray();
+        _dbContext.Habits.AddRange(habits);
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        var tool = new Orbit.Application.Chat.Tools.Implementations.AssignTagsTool(
+            new GenericRepository<Habit>(_dbContext), new GenericRepository<Tag>(_dbContext),
+            new UnitOfWork(_dbContext, new DatabaseConnectionSettings()));
+        var arguments = JsonSerializer.SerializeToElement(new { habit_ids = habits.Select(habit => habit.Id).ToArray(), tag_names = new[] { "Saúde" } });
+
+        (await tool.CheckArgumentsAsync(arguments, _userId, default)).IsSuccess.Should().BeTrue();
+        var result = await tool.ExecuteAsync(arguments, _userId, default);
+
+        result.Success.Should().BeTrue();
+        _dbContext.ChangeTracker.Clear();
+        var saved = await _dbContext.Habits.Include(habit => habit.Tags).Where(habit => habit.UserId == _userId).ToListAsync();
+        saved.Should().HaveCount(2);
+        saved.Should().OnlyContain(habit => habit.Tags.Count == 1 && habit.Tags.Single().Name == "Saúde");
+        (await _dbContext.Tags.CountAsync(tag => tag.UserId == _userId)).Should().Be(1);
+    }
+
+    [Fact]
+    public void PendingCreateProposals_KeepParentScopeAndExcludeOtherUsersAndCancelledWrites()
+    {
+        var parentId = Guid.NewGuid();
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!;
+        var rootJson = """{"habits":[{"title":"Novo"}]}""";
+        var childJson = JsonSerializer.Serialize(new { parent_habit_id = parentId, habits = new[] { new { title = "Treino" } } });
+        var root = _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", rootJson, "Create",
+            AgentOperationFingerprint.Compute("bulk_create_habits", rootJson), AgentExecutionSurface.Chat);
+        _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", childJson, "Create children",
+            AgentOperationFingerprint.Compute("bulk_create_habits", childJson), AgentExecutionSurface.Chat);
+        _pendingOperationStore.Create(Guid.NewGuid(), capability, "bulk_create_habits", rootJson, "Other user",
+            AgentOperationFingerprint.Compute("bulk_create_habits", rootJson), AgentExecutionSurface.Chat);
+
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().BeEquivalentTo(
+            [new PendingHabitCreation("Novo"), new PendingHabitCreation("Treino", parentId)]);
+        _pendingOperationStore.Cancel(_userId, root.Id,
+            AgentOperationFingerprint.Compute("bulk_create_habits", rootJson)).Should().BeTrue();
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().Equal(new PendingHabitCreation("Treino", parentId));
+    }
+
+    [Fact]
+    public async Task ReviseDateRange_KeepingOneDate_PreservesTheOfferedItem()
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 10, 19))).Value;
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+        var tools = new AiToolRegistry([new StubTool("bulk_log_habits")]);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), Substitute.For<IUserDateService>(), tools);
+        var executor = CreateExecutor(tools, previewer);
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            revised_items = new[]
+        {
+            new { habit_id = habit.Id, date = "2026-10-18" }, new { habit_id = habit.Id, date = "2026-10-19" }
+        }
+        });
+        var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, "bulk_log_habits",
+            arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        var pending = held.PendingOperation!;
+        var chosen = pending.Items![0];
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools);
+
+        var result = await revisions.ReviseAsync(_userId, pending.Id,
+            new RevisePendingOperationRequest(pending.PreviewFingerprint!, [new(chosen.ItemId)]), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Preview!.Items.Should().ContainSingle().Which.ItemId.Should().Be(chosen.ItemId);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        execution.Arguments.GetProperty("revised_items").GetArrayLength().Should().Be(1);
+        (await revisions.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("create_goal")]
+    [InlineData("assign_tags")]
+    public async Task RoundThree_UnavailablePreview_RefusesEveryWrite(string operationId)
+    {
+        var tool = new StubTool(operationId);
+        var executor = CreateExecutor(new AiToolRegistry([tool]), Substitute.For<IPendingOperationChangePreviewer>());
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, operationId,
+            Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true));
+        response.PendingOperation.Should().BeNull();
+        response.Operation.PolicyReason.Should().Be("stale_preview");
+        tool.Calls.Should().Be(0);
+        _dbContext.PendingAgentOperations.Should().OnlyContain(item => item.ConsumedAtUtc != null);
+    }
+
+    [Fact]
+    public async Task RoundThree_MissingStoredFingerprint_CannotApprove()
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("create_goal")!;
+        var pending = _pendingOperationStore.Create(_userId, capability, "create_goal", "{}", "Create",
+            AgentOperationFingerprint.Compute("create_goal", "{}"), AgentExecutionSurface.Chat);
+        var tools = new AiToolRegistry([new StubTool("create_goal")]);
+        var revisions = new PendingOperationRevisionService(_pendingOperationStore,
+            Substitute.For<IPendingOperationChangePreviewer>(), new RevisePendingOperationRequestValidator(), tools);
+        (await revisions.IsCurrentAsync(_userId, _pendingOperationStore.GetExecution(_userId, pending.Id)!, default))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void RoundThree_ConfirmedProposals_AreNotStillPending()
+    {
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!;
+        const string args = """{"habits":[{"title":"Novo"}]}""";
+        var pending = _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", args, "Create",
+            AgentOperationFingerprint.Compute("bulk_create_habits", args), AgentExecutionSurface.Chat);
+        _pendingOperationStore.Confirm(_userId, pending.Id).Should().NotBeNull();
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().BeEmpty();
+    }
+
     private AgentOperationExecutor CreateExecutor(AiToolRegistry toolRegistry,
         IPendingOperationChangePreviewer? previewer = null)
     {
@@ -388,6 +726,13 @@ public class AgentChatWriteHoldTests : IDisposable
         stepUpBridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
 
+        if (previewer is null)
+        {
+            previewer = Substitute.For<IPendingOperationChangePreviewer>();
+            previewer.PreviewAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+                .Returns(call => AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default));
+        }
+
         return new AgentOperationExecutor(
             _catalogService,
             _policyEvaluator,
@@ -395,7 +740,7 @@ public class AgentChatWriteHoldTests : IDisposable
             ownership,
             stepUpBridge,
             toolRegistry,
-            previewer ?? Substitute.For<IPendingOperationChangePreviewer>(),
+            previewer,
             _pendingOperationStore,
             Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);

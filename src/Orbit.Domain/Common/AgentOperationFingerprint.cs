@@ -13,7 +13,7 @@ public static class AgentOperationFingerprint
         return Convert.ToHexString(bytes);
     }
 
-    private static string Canonicalize(string json)
+    public static string Canonicalize(string json)
     {
         try
         {

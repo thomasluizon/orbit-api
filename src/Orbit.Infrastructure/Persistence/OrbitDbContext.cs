@@ -50,6 +50,8 @@ public class OrbitDbContext : DbContext
     public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
+    public DbSet<AiBudgetCall> AiBudgetCalls => Set<AiBudgetCall>();
+    public DbSet<OAuthState> OAuthStates => Set<OAuthState>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
     public DbSet<IssuedAstraBlock> IssuedAstraBlocks => Set<IssuedAstraBlock>();
@@ -69,6 +71,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
+    public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<Cheer> Cheers => Set<Cheer>();
@@ -130,6 +133,21 @@ public class OrbitDbContext : DbContext
         ConfigureProcessedRequestEntity(modelBuilder);
         ConfigureAiFactExtractionBatchEntity(modelBuilder);
         ConfigureAiUsageDailyEntity(modelBuilder);
+        modelBuilder.Entity<ConversationTurn>(entity =>
+        {
+            entity.HasKey(turn => turn.Id);
+            entity.Property(turn => turn.Role).HasMaxLength(20).IsRequired();
+            entity.Property(turn => turn.Model).HasMaxLength(200);
+            entity.Property(turn => turn.ToolCallsJson).IsRequired();
+            entity.HasIndex(turn => new { turn.UserId, turn.CreatedAtUtc });
+            entity.HasIndex(turn => turn.CreatedAtUtc);
+            entity.HasIndex(turn => new { turn.TurnId, turn.Role }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
+            if (nullableEncConverter is not null)
+                entity.Property(turn => turn.Content).HasConversion(nullableEncConverter);
+            if (encConverter is not null)
+                entity.Property(turn => turn.ToolCallsJson).HasConversion(encConverter);
+        });
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -140,6 +158,21 @@ public class OrbitDbContext : DbContext
         ConfigureUserSessionEntity(modelBuilder);
         ConfigureUserSessionRefreshTokenEntity(modelBuilder);
         ConfigureApiKeyEntity(modelBuilder);
+        modelBuilder.Entity<AiBudgetCall>(entity =>
+        {
+            entity.Property<long>("ChargedTokens");
+            entity.Property(call => call.ChargedMicroDollars).HasDefaultValue(0L);
+            entity.HasIndex(call => new { call.UserId, call.LocalDate });
+            entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<OAuthState>(entity =>
+        {
+            entity.HasIndex(state => state.SecretHash).IsUnique();
+            entity.HasIndex(state => new { state.Kind, state.ExpiresAtUtc });
+            entity.Property(state => state.SecretHash).HasMaxLength(64);
+            entity.Property(state => state.Kind).HasMaxLength(30);
+            entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
+        });
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);
         ConfigurePendingClarificationEntity(modelBuilder);
@@ -387,6 +420,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(r => r.ReferrerId);
             entity.HasIndex(r => r.ReferredUserId).IsUnique();
+            entity.Property(r => r.ReferrerReward).HasDefaultValue(ReferralRewardKind.None);
+            entity.Property(r => r.ReferredReward).HasDefaultValue(ReferralRewardKind.None);
         });
     }
 
@@ -448,6 +483,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(k => k.KeyPrefix);
             entity.HasIndex(k => k.UserId);
+            entity.HasIndex(k => k.OAuthFamilyId);
+            entity.Property(k => k.IsRevoked).IsConcurrencyToken();
             entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(k => k.Name).HasMaxLength(50);
             entity.Property(k => k.KeyPrefix).HasMaxLength(12);
@@ -474,6 +511,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Summary).HasMaxLength(500);
             entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
             entity.Property(item => item.PreviewFingerprint).HasMaxLength(256);
+            entity.Property(item => item.ArgumentSchemaVersion).IsRequired();
             entity.Property(item => item.RevisionNumber).IsConcurrencyToken();
             entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
             entity.Property(item => item.ConsumedAtUtc).IsConcurrencyToken();
@@ -557,6 +595,10 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
                 AppConfig.Create("MinSupportedVersion", "1.3.11", "Minimum supported client app version; clients below this receive HTTP 426"),
+                AppConfig.Create("FreeAiCallsPerDay", "45", "Daily AI call safety budget for Free users"),
+                AppConfig.Create("ProAiCallsPerDay", "450", "Daily AI call safety budget for Pro users"),
+                AppConfig.Create("FreeAiMicroDollarsPerDay", "20000", "Daily AI safety budget for Free users in USD micro-dollars"),
+                AppConfig.Create("ProAiMicroDollarsPerDay", "120000", "Daily AI safety budget for Pro users in USD micro-dollars"),
                 AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }
@@ -622,12 +664,14 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "astra_conversation_recording", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Record encrypted Astra conversations for failure diagnosis for 30 days after privacy disclosure is published", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "push_notifications", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Push notification reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "scheduled_reminders", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Custom scheduled reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -814,8 +858,11 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
+            entity.Property(u => u.SubscriptionPlan).HasColumnName("Plan");
+            entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
+            entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 

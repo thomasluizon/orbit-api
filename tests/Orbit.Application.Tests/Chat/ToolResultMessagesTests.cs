@@ -19,6 +19,7 @@ public class ToolResultMessagesTests
     [InlineData("delete_habit", "deletedHabit")]
     [InlineData("duplicate_habit", "duplicatedHabit")]
     [InlineData("log_habit", "loggedHabit")]
+    [InlineData("unlog_habit", "unloggedHabit")]
     [InlineData("skip_habit", "skippedHabit")]
     [InlineData("undo_skip_habit", "undidSkipHabit")]
     [InlineData("move_habit", "movedHabit")]
@@ -273,6 +274,24 @@ public class ToolResultMessagesTests
         failure.Error.Should().Be("I couldn't complete that. Please try again.");
         failure.MessageKey.Should().Be("chat.toolResult.toolFailure");
         failure.Params.Should().Be(new ToolResultMessageParams());
+    }
+
+    [Theory]
+    [InlineData("update_checklist_template", "", "updatedChecklistTemplate")]
+    [InlineData("update_profile_preferences", "set_name", "nameSet")]
+    [InlineData("manage_calendar_sync", "set_selected_calendars", "calendarSelectionUpdated")]
+    public void CapabilityParityWrites_HaveSpecificResultMessages(string tool, string action, string key)
+    {
+        var arguments = JsonSerializer.Serialize(new { action, name = "Alex" });
+        var card = new ActionResult("Tool", ActionStatus.Success, EntityName: "Evening")
+            .WithToolResultMessage(Call(tool, arguments));
+        card.MessageKey.Should().Be("chat.toolResult." + key);
+        card.Params.Should().Be(tool switch
+        {
+            "update_profile_preferences" => new ToolResultMessageParams(EntityName: "Alex"),
+            "update_checklist_template" => new ToolResultMessageParams(EntityName: "Evening"),
+            _ => new ToolResultMessageParams()
+        });
     }
 
     [Fact]

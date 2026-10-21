@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { entities, aliases, actions, parameterRestrictions, payloads, outputAliases, rendered, deliberateFields } from "./capability-inventory.bindings.mjs"
+import { entities, aliases, actions, parameterRestrictions, payloads, outputAliases, rendered, readChains, deliberateFields } from "./capability-inventory.bindings.mjs"
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const operations = ["create", "read", "update", "delete", "bulk", "filterKeyedBulk"]
@@ -90,8 +90,9 @@ function sourceMember(file, offset) {
           index++
         }
         const header = file.text.slice(headerStart, index)
-        const name = header.match(/\b(\w+)(?:<[^>]*>)?\s*\(/)?.[1]
-          ?? header.split(/=>|=/)[0].trim().match(/(\w+)$/)?.[1]
+        const declaration = header.split(/=>|=/)[0]
+        const name = declaration.match(/\b(\w+)(?:<[^>]*>)?\s*\(/)?.[1]
+          ?? declaration.trim().match(/(\w+)$/)?.[1]
         const end = file.text[index] === "{" ? balanced(file.text, index) : index
         if (name) locations.push({ start, end, member: `${type.name}.${name}` })
         index = end + 1
@@ -137,6 +138,56 @@ function members(text) {
   return result
 }
 
+function schemaValues(expression, file, classMap, substitutions = {}, depth = 0) {
+  if (depth > 8) throw new Error(`Recursive schema value ${expression}`)
+  expression = expression.trim()
+  if (expression.endsWith(".Order(StringComparer.Ordinal).ToArray()")) return schemaValues(expression.slice(0, -".Order(StringComparer.Ordinal).ToArray()".length), file, classMap, substitutions, depth + 1).sort()
+  if (substitutions[expression]) return schemaValues(substitutions[expression], file, classMap, {}, depth + 1)
+  const list = expression.match(/^new(?:\[\]| HashSet<string>\(StringComparer.OrdinalIgnoreCase\))\s*\{([\s\S]*)\}$/)?.[1] ?? expression.match(/^\[([\s\S]*)\]$/)?.[1]
+  if (list !== undefined) return members(list).flatMap(item => item.text.trim().startsWith("..")
+    ? schemaValues(item.text.trim().slice(2), file, classMap, substitutions, depth + 1)
+    : [schemaValues(item.text, file, classMap, substitutions, depth + 1)])
+  if (/^("|true$|false$|null$|-?\d)/.test(expression)) return JSON.parse(expression)
+  const reference = expression.match(/^(?:[\w.]*\.)?(\w+)\.(\w+)$/)
+  const owner = reference ? classMap.get(reference[1]) : null
+  const source = owner?.file ?? file
+  const name = reference?.[2] ?? expression
+  const declaration = new RegExp(`(?:const string|readonly (?:string\\[\\]|IReadOnly(?:Set|List)<string>)) ${name}\\s*=\\s*([^;]+);`).exec(source.text)
+  if (!declaration) throw new Error(`Unresolved schema value ${expression} in ${file.path}`)
+  return schemaValues(declaration[1], source, classMap, {}, depth + 1)
+}
+
+function schemaHelper(expression, file, classMap) {
+  const call = expression.trim().match(/^(?:(\w+)\.)?(\w+Schema)\(/)
+  if (!call) return null
+  const owner = call[1] ? classMap.get(call[1]) : [...classMap.values()].find(type => type.file === file && type.text.includes(` ${call[2]}(`))
+  if (!owner) throw new Error(`Missing schema helper ${call[0]}`)
+  const declaration = new RegExp(`(?:public|private|internal) static object ${call[2]}\\(`).exec(owner.text)
+  if (!declaration) throw new Error(`Missing schema helper declaration ${call[0]}`)
+  const signatureOpen = owner.text.indexOf("(", declaration.index)
+  const signatureClose = balanced(owner.text, signatureOpen, "(", ")")
+  const open = owner.text.indexOf("{", signatureClose)
+  const argsOpen = expression.indexOf("(")
+  const args = members(expression.slice(argsOpen + 1, balanced(expression, argsOpen, "(", ")")))
+  const substitutions = Object.fromEntries(members(owner.text.slice(signatureOpen + 1, signatureClose)).map((param, index) => [param.text.trim().split(/\s+/).at(-1), args[index]?.text.trim()]))
+  return { text: owner.text.slice(open, balanced(owner.text, open) + 1), file: owner.file, offset: owner.start + open, substitutions }
+}
+
+function schemaTraits(text, file, classMap, substitutions = {}) {
+  const helper = schemaHelper(text, file, classMap)
+  if (helper) return schemaTraits(helper.text, helper.file, classMap, helper.substitutions)
+  const returned = text.match(/\breturn new\s*\{/)
+  if (returned) text = text.slice(returned.index)
+  const open = text.indexOf("{")
+  if (open < 0) return {}
+  const parts = members(text.slice(open + 1, balanced(text, open)))
+  const trait = name => parts.find(item => new RegExp(`^\\s*@?${name}\\s*=`).test(item.text))?.text.split(/=(.*)/s)[1].trim()
+  const type = trait("type") ? schemaValues(trait("type"), file, classMap, substitutions) : undefined
+  const values = trait("enum") ? schemaValues(trait("enum"), file, classMap, substitutions) : undefined
+  const items = trait("items") ? schemaTraits(trait("items"), file, classMap, substitutions) : undefined
+  return { ...(type ? { type } : {}), ...(values ? { values } : {}), ...(trait("nullable") ? { nullable: schemaValues(trait("nullable"), file, classMap, substitutions) } : {}), ...(items && Object.keys(items).length ? { items } : {}), ...(trait("default") ? { default: schemaValues(trait("default"), file, classMap, substitutions) } : {}) }
+}
+
 function parameters(text, file, offset, classMap, prefix = "", depth = 0) {
   if (depth > 8) throw new Error("Recursive schema exceeds supported depth")
   const found = []
@@ -156,23 +207,17 @@ function parameters(text, file, offset, classMap, prefix = "", depth = 0) {
     const at = offset + open + 1 + part.offset + part.text.indexOf(key[0])
     const path = prefix + name
     const nested = part.text.slice(key[0].length)
+    const traits = schemaTraits(nested, file, classMap)
+    found.push({ name: path, leaf: name, required: requiredText.includes(`"${name}"`), ...traits, ...evidence(file, at, name) })
+    const nestedOffset = offset + open + 1 + part.offset + key[0].length
+    const suffix = [traits.type].flat().includes("array") ? "[]." : "."
+    found.push(...parameters(nested, file, nestedOffset, classMap, path + suffix, depth + 1))
     const schemaOpen = nested.indexOf("{")
     const schemaParts = schemaOpen < 0 ? [] : members(nested.slice(schemaOpen + 1, balanced(nested, schemaOpen)))
-    const trait = name => schemaParts.find(item => new RegExp(`^\\s*@?${name}\\s*=`).test(item.text))?.text.split(/=(.*)/s)[1].trim()
-    const type = trait("type")?.match(/^(?:JsonSchemaTypes\.(\w+)|"(\w+)")$/)?.slice(1).find(Boolean)?.toLowerCase()
-    const values = trait("enum")?.match(/new\[\]\s*\{([^}]+)\}/)?.[1]
-    found.push({ name: path, leaf: name, required: requiredText.includes(`"${name}"`), ...(type ? { type } : {}), ...(values ? { values: members(values).map(item => JSON.parse(item.text.trim())) } : {}), ...evidence(file, at, name) })
-    const nestedOffset = offset + open + 1 + part.offset + key[0].length
-    const suffix = type === "array" ? "[]." : "."
-    found.push(...parameters(nested, file, nestedOffset, classMap, path + suffix, depth + 1))
-    const helper = nested.match(/(?:(\w+)\.)?(FilterSchema|HabitItemSchema)\(/)
+    const items = schemaParts.find(item => /^\s*items\s*=/.test(item.text))?.text.split(/=(.*)/s)[1].trim()
+    const helper = schemaHelper(nested, file, classMap) ?? (items && schemaHelper(items, file, classMap))
     if (helper) {
-      const owner = helper[1] ? classMap.get(helper[1]) : [...classMap.values()].find(type => type.file === file && type.text.includes(` ${helper[2]}(`))
-      if (!owner) throw new Error(`Missing schema helper ${helper[0]}`)
-      const method = owner.text.search(new RegExp(`(?:public|private|internal) static object ${helper[2]}\\(`))
-      if (method < 0) throw new Error(`Missing schema helper declaration ${helper[0]}`)
-      const helperOpen = owner.text.indexOf("{", method)
-      found.push(...parameters(owner.text.slice(helperOpen, balanced(owner.text, helperOpen) + 1), owner.file, owner.start + helperOpen, classMap, path + suffix, depth + 1))
+      found.push(...parameters(helper.text, helper.file, helper.offset, classMap, path + suffix, depth + 1))
     }
   }
   if (text.includes('properties["sub_habits"]')) {
@@ -194,7 +239,17 @@ function schemaParameters(type, classMap) {
   const after = method + "GetParameterSchema()".length
   if (owner.text.slice(after).trimStart().startsWith("{")) {
     const open = owner.text.indexOf("{", after)
-    return parameters(owner.text.slice(open, balanced(owner.text, open) + 1), owner.file, owner.start + open, classMap)
+    const body = owner.text.slice(open, balanced(owner.text, open) + 1)
+    const composed = body.match(/JsonSerializer.SerializeToNode\((\w+\.\w+Schema\()/)
+    if (!composed) return parameters(body, owner.file, owner.start + open, classMap)
+    const helper = schemaHelper(body.slice(composed.index + composed[0].indexOf(composed[1])), owner.file, classMap)
+    const result = parameters(helper.text, helper.file, helper.offset, classMap)
+    for (const addition of body.matchAll(/schema\["properties"\]!\["([^"]+)"\]\s*=\s*JsonSerializer.SerializeToNode\(/g)) {
+      const start = body.indexOf("{", addition.index + addition[0].length)
+      const schema = body.slice(start, balanced(body, start) + 1)
+      result.push({ name: addition[1], leaf: addition[1], required: false, ...schemaTraits(schema, owner.file, classMap), ...evidence(owner.file, owner.start + open + addition.index, addition[0]) })
+    }
+    return result
   }
   const arrow = owner.text.indexOf("=>", method)
   const expression = owner.text.slice(arrow + 2).trimStart()
@@ -246,7 +301,7 @@ function registries(files, classMap) {
         const open = text.indexOf("(", method.index)
         const close = balanced(text, open, "(", ")")
         const signature = text.slice(open + 1, close)
-        const params = [...signature.matchAll(/\[Description\((?:"(?:\\.|[^"\\])*"|\w+)\)\]\s*([\w?<>]+)\s+(\w+)(\s*=\s*[^,\n]+)?/g)].map(param => ({ name: param[2], type: param[1], required: !param[3], ...(param[3] ? { default: param[3].replace(/^\s*=\s*/, "").trim() } : {}), ...evidence(type.file, type.start + attribute.index + open + 1 + param.index, param[0]) }))
+        const params = [...signature.matchAll(/\[Description\((?:"(?:\\.|[^"\\])*"|\w+)\)\]\s*([\w?<>\[\]]+)\s+(\w+)(\s*=\s*[^,\n]+)?/g)].map(param => ({ name: param[2], type: param[1], required: !param[3], ...(param[3] ? { default: param[3].replace(/^\s*=\s*/, "").trim() } : {}), ...evidence(type.file, type.start + attribute.index + open + 1 + param.index, param[0]) }))
         mcp.push({ name: resolveName(attribute[1]), surface: "mcp", registration: evidence(file, match.index, match[0]), declaration: evidence(type.file, type.start + attribute.index, attribute[0]), parameters: params, type: { ...type, start: type.start + attribute.index, text } })
       }
     }
@@ -277,6 +332,16 @@ function registries(files, classMap) {
       if (!tool.type.file.text.includes(`JsonSerializer.Deserialize<JsonElement>(${parameter.name})`)) throw new Error(`Review JSON adapter ${tool.name}.${parameter.name}`)
       tool.parameters.push(...backing.parameters.filter(item => item.name.startsWith(`${object}.`)).map(item => ({ ...item, name: item.name.replace(object, parameter.name), adapter: parameter })))
     }
+    const jsonArguments = tool.type.text.match(/McpToolHelpers\.AddJsonArguments\(arguments,([\s\S]*?)\);/)
+    if (jsonArguments) {
+      const helper = files.get("src/Orbit.Api/Mcp/Tools/McpToolHelpers.cs")
+      if (!helper.text.includes("arguments[field] = JsonSerializer.Deserialize<JsonElement>(json!)")) throw new Error("Review AddJsonArguments forwarding")
+      for (const match of jsonArguments[1].matchAll(/\("(\w+)",\s*(\w+)\)/g)) {
+        const adapter = tool.parameters.find(parameter => parameter.name === match[2])
+        if (!adapter) throw new Error(`Missing JSON adapter parameter ${tool.name}.${match[2]}`)
+        tool.parameters.push(...backing.parameters.filter(parameter => parameter.name.startsWith(`${match[1]}[].`)).map(parameter => ({ ...parameter, name: parameter.name.replace(match[1], adapter.name), adapter })))
+      }
+    }
     if (tool.name === "bulk_create_habits") {
       const helper = files.get("src/Orbit.Api/Mcp/Tools/McpToolHelpers.cs")
       const start = helper.text.indexOf("ToBulkHabitArgs(")
@@ -301,6 +366,33 @@ function recordFields(files, name) {
 
 function readField(tool, field, files) {
   const key = `${tool.surface}:${tool.name}`
+  const chain = readChains[key]?.[field]
+  if (chain) {
+    const projectionEvidence = chain.steps.map(step => {
+      const file = files.get(step.file)
+      if (!file) throw new Error(`Missing readback source ${step.file}`)
+      const method = step.member.split(".").at(-1)
+      const declaration = new RegExp(`(?:public|private|internal) (?:(?:static|async) )*[\\w<>?]+ ${method}\\(`).exec(file.text)
+      if (!declaration) throw new Error(`Missing readback member ${step.member}`)
+      const open = file.text.indexOf("(", declaration.index)
+      let end = balanced(file.text, open, "(", ")") + 1
+      while (end < file.text.length && /\s/.test(file.text[end])) end++
+      if (file.text[end] === "{") end = balanced(file.text, end) + 1
+      else {
+        while (end < file.text.length && file.text[end] !== ";") {
+          if (file.text[end] === '"' || file.text[end] === "'") end = endQuote(file.text, end)
+          else if (file.text[end] === "{") end = balanced(file.text, end)
+          end++
+        }
+      }
+      const index = file.text.slice(declaration.index, end).indexOf(step.expression)
+      if (index < 0) throw new Error(`Missing readback ${key} ${field}: ${step.member} ${step.expression}`)
+      return evidence(file, declaration.index + index, step.expression, step.member)
+    })
+    return { tool: tool.name, status: chain.status ?? "covered", ...projectionEvidence[0], projectionEvidence }
+  }
+  const nested = field.includes(".")
+  field = field.split(".")[0]
   const projections = rendered[key]
   if (projections && [...words(projections.fields), ...words(projections.partial)].includes(field)) {
     const source = projections.file ? files.get(projections.file) : tool.type.file
@@ -314,18 +406,18 @@ function readField(tool, field, files) {
       if (words(projections.partial).includes(field)) return null
       throw new Error(`Missing rendered field ${key} ${expression}; review the binding`)
     }
-    return { tool: tool.name, status: words(projections.partial).includes(field) ? "partial" : "covered", ...evidence(source, (projections.file ? 0 : tool.type.start) + index, expression) }
+    return { tool: tool.name, status: nested || words(projections.partial).includes(field) ? "partial" : "covered", ...evidence(source, (projections.file ? 0 : tool.type.start) + index, expression) }
   }
   const records = payloads[key] ?? []
   for (const record of records) {
     const names = [field, ...(outputAliases[field] ?? [])]
     const match = recordFields(files, record).find(item => names.includes(item.name))
-    if (match) return { tool: tool.name, status: "covered", ...match, payload: record, returnedBy: tool.declaration }
+    if (match) return { tool: tool.name, status: nested ? "partial" : "covered", ...match, payload: record, returnedBy: tool.declaration }
   }
   return null
 }
 
-function modelFields(model, classMap, context) {
+function modelFields(model, classMap, context, typeParts) {
   const type = classMap.get(model)
   if (!type) throw new Error(`Missing domain entity ${model}`)
   const entityMatch = new RegExp(`modelBuilder\\.Entity<${model}>\\(entity =>`).exec(context.text)
@@ -333,12 +425,11 @@ function modelFields(model, classMap, context) {
   const configOpen = context.text.indexOf("{", entityMatch.index)
   const configEnd = balanced(context.text, configOpen)
   const config = context.text.slice(configOpen, configEnd + 1)
-  const source = type.text
   const pattern = /public\s+([\w<>?,.\[\]]+)\s+(\w+)\s*(?:\{\s*get\s*;|=>\s*_\w+\.AsReadOnly\(\))/g
-  const fields = [...source.matchAll(pattern)].map(match => {
+  const fields = typeParts.get(model).flatMap(part => [...part.text.matchAll(pattern)].map(match => {
     const configured = [...config.matchAll(new RegExp(`\\b\\w+\\.${match[2]}\\b`, "g"))].map(item => evidence(context, configOpen + item.index, item[0]))
-    return { name: match[2], type: match[1], domain: evidence(type.file, type.start + match.index, match[0]), persistence: configured.length ? configured : [evidence(context, entityMatch.index, `Entity<${model}>: EF convention mapping`)] }
-  })
+    return { name: match[2], type: match[1], domain: evidence(part.file, part.start + match.index, match[0]), persistence: configured.length ? configured : [evidence(context, entityMatch.index, `Entity<${model}>: EF convention mapping`)] }
+  }))
   const base = classMap.get("Entity")
   const id = base.text.match(/public Guid Id\b/)
   fields.unshift({ name: "Id", type: "Guid", domain: evidence(base.file, base.start + id.index, id[0]), persistence: [evidence(context, entityMatch.index, `Entity<${model}>: inherited key`)] })
@@ -389,7 +480,10 @@ export function buildInventory(root = defaultRoot) {
     return [name, { path: name, text: uncomment(readFileSync(path, "utf8").replace(/\r\n?/g, "\n")) }]
   }))
   const classMap = new Map()
+  const typeParts = new Map()
   for (const file of files.values()) for (const type of classes(file)) {
+    if (!typeParts.has(type.name)) typeParts.set(type.name, [])
+    typeParts.get(type.name).push(type)
     if (!classMap.has(type.name) || type.file.path.endsWith(`/${type.name}.cs`) || type.file.path.includes("Chat/Tools/Implementations")) classMap.set(type.name, type)
   }
   const registry = registries(files, classMap)
@@ -405,7 +499,7 @@ export function buildInventory(root = defaultRoot) {
   const rows = []
   const gaps = []
   for (const [entity, binding] of Object.entries(entities)) {
-    const fields = modelFields(binding.model, classMap, context).filter(field => !binding.select || binding.select.test(field.name))
+    const fields = modelFields(binding.model, classMap, context, typeParts).filter(field => !binding.select || binding.select.test(field.name))
     for (const field of [...fields]) {
       const nested = field.type.match(/^IReadOnlyList<(ChecklistItem|ScheduledReminderTime|RelativeReminderTime)>$/)?.[1]
       if (nested) for (const member of recordFields(files, nested)) fields.push({ name: `${field.name}.${member.name}`, type: nested, domain: member, persistence: field.persistence })
@@ -437,8 +531,7 @@ export function buildInventory(root = defaultRoot) {
         for (const operation of operations) {
           const find = tool => {
             if (operation === "read") {
-              const result = readField(tool, field.name.split(".")[0], files)
-              return result && field.name.includes(".") ? { ...result, status: "partial" } : result
+              return readField(tool, field.name, files)
             }
             if (operation === "delete") return { tool: tool.name, status: "entity-operation", ...tool.declaration }
             const allowedTools = parameterRestrictions[field.name]
@@ -477,13 +570,14 @@ export function buildInventory(root = defaultRoot) {
   const toolEvidence = names => [...registry.chat, ...registry.mcp].filter(tool => names.includes(tool.name)).map(tool => tool.declaration)
   const knownGaps = [
     { ticket: "thomasluizon/orbit-tickets#513", observation: "Emoji is accepted on MCP create/update and returned by get_habit/list_habits; inspect the Habit.Emoji cells and filter-keyed bulk cells.", evidence: toolEvidence(["create_habit", "update_habit", "get_habit", "list_habits"]) },
-    { ticket: "thomasluizon/orbit-tickets#246", observation: "No dedicated unlog_habit registration. log_habit toggles a completion off; HabitLog.delete records that route rather than declaring undo absent.", evidence: [...toolEvidence(["log_habit"]), ...absenceEvidence.chat, ...absenceEvidence.mcp] },
+    { ticket: "thomasluizon/orbit-tickets#246", observation: "unlog_habit is registered on both surfaces and explicitly removes a completion; log_habit no longer toggles. HabitLog.delete records the dedicated undo route.", evidence: toolEvidence(["log_habit", "unlog_habit"]) },
     { ticket: "thomasluizon/orbit-tickets#396", observation: "set_proactive_astra is registered on both surfaces; readback is checked separately in Profile.ProactiveAstraEnabled.", evidence: toolEvidence(["set_proactive_astra", "get_profile"]) },
     { ticket: "thomasluizon/orbit-tickets#19", observation: "Filter-keyed bulk update/reschedule/delete/log/skip routes exist. MCP log reads include partial and returned counts. Inspect parameter paths to distinguish predicates from explicit IDs.", evidence: toolEvidence(["bulk_update_habits", "bulk_reschedule_habits", "bulk_delete_habits", "bulk_log_habits", "bulk_skip_habits", "get_habit_logs", "get_all_habit_logs"]) },
     { ticket: "thomasluizon/orbit-tickets#235", observation: entities.UserFact.deliberate, evidence: [...absenceEvidence.chat, ...absenceEvidence.mcp] },
-    { ticket: "thomasluizon/orbit-tickets#1574", observation: "update_habit constructs HabitUpdateParams without DueEndTime, while Habit.Update assigns it unconditionally; an unrelated update clears the stored deadline.", evidence: [evidence(classMap.get("UpdateHabitTool").file, classMap.get("UpdateHabitTool").file.text.indexOf("private static HabitUpdateParams ResolveUpdateParams"), "ResolveUpdateParams omits DueEndTime"), evidence(classMap.get("Habit").file, classMap.get("Habit").file.text.indexOf("DueEndTime = p.DueEndTime;"), "DueEndTime = p.DueEndTime")] },
-    { ticket: "thomasluizon/orbit-tickets#1575", observation: "Habit and sub-habit field readback and update gaps, plus the required MCP update title and unsupported create_habit isGeneral adapter parameter.", evidence: toolEvidence(["query_habits", "create_habit", "create_sub_habit", "update_habit", "bulk_update_habits", "get_habit", "list_habits"]) },
-    { ticket: "thomasluizon/orbit-tickets#1576", observation: "Checklist template updates, profile name updates and calendar selection updates/readback have no complete tool route.", evidence: toolEvidence(["get_checklist_templates", "create_checklist_template", "get_profile", "update_profile_preferences", "manage_calendar_sync", "get_calendar_overview"]) },
+    { ticket: "thomasluizon/orbit-tickets#1574", observation: "Single and bulk updates resolve omitted DueEndTime from the stored habit, then apply an explicit deadline change only when supplied.", evidence: [evidence(classMap.get("HabitUpdateValidation").file, classMap.get("HabitUpdateValidation").file.text.indexOf("DueEndTime: habit.DueEndTime"), "DueEndTime: habit.DueEndTime"), evidence(classMap.get("HabitUpdateValidation").file, classMap.get("HabitUpdateValidation").file.text.indexOf("DueEndTime = changes.HasDueEndTime"), "DueEndTime = changes.HasDueEndTime ? changes.DueEndTime : update.DueEndTime")] },
+    { ticket: "thomasluizon/orbit-tickets#1575", observation: "Habit summaries render extended fields and checklist/reminder values. Update tools accept extended fields, direct MCP title is optional, and create_habit accepts is_general. Remaining relation and start-date readback gaps are listed separately.", evidence: toolEvidence(["query_habits", "create_habit", "create_sub_habit", "update_habit", "bulk_update_habits", "get_habit", "list_habits"]) },
+    { ticket: "thomasluizon/orbit-tickets#1576", observation: "Checklist template updates, profile name updates and calendar selection writes are registered. Calendar overview returns effective IsSynced flags for available calendars, not the complete persisted selection; that readback remains partial.", evidence: toolEvidence(["get_checklist_templates", "update_checklist_template", "set_name", "update_profile_preferences", "manage_calendar_sync", "set_selected_calendars", "get_calendar_overview"]) },
+    { ticket: "thomasluizon/orbit-tickets#1585", observation: "HabitUpdateParams carries StartDate, but chat/MCP update schemas and rendered habit summaries have no explicit start-date field.", evidence: [evidence(classMap.get("Habit").file, classMap.get("Habit").file.text.indexOf("public DateOnly StartDate"), "Habit.StartDate"), ...toolEvidence(["update_habit", "bulk_update_habits", "query_habits", "get_habit", "list_habits"])] },
   ]
   const requiredTitle = registry.mcp.find(tool => tool.name === "update_habit")?.parameters.find(param => param.name === "title" && param.required)
   if (requiredTitle) gaps.push({ entity: "Habit", surface: "mcp", field: "Title", problems: ["direct-update-requires-unchanged-title"], evidence: requiredTitle })
@@ -491,7 +585,8 @@ export function buildInventory(root = defaultRoot) {
     gaps.push({ entity: Object.keys(entities).find(entity => Object.values(entities[entity].tools).flat().includes(tool.name)) ?? "Adapter", surface: "mcp", field: parameter.name, tool: tool.name, problems: ["adapter-forwards-unsupported-parameter"], evidence: parameter })
   }
   for (const gap of gaps) {
-    if (["Habit", "SubHabit"].includes(gap.entity) || gap.entity === "Goal" && gap.field === "Habits") gap.ticket = "thomasluizon/orbit-tickets#1575"
+    if (["Habit", "SubHabit"].includes(gap.entity) && gap.field === "StartDate") gap.ticket = "thomasluizon/orbit-tickets#1585"
+    else if (["Habit", "SubHabit"].includes(gap.entity) || gap.entity === "Goal" && gap.field === "Habits") gap.ticket = "thomasluizon/orbit-tickets#1575"
     else if (gap.entity === "ChecklistTemplate" || gap.entity === "Profile" && gap.field === "Name" || gap.entity === "CalendarSync" && gap.field === "GoogleCalendarSelectedIds") gap.ticket = "thomasluizon/orbit-tickets#1576"
   }
   return {
@@ -508,7 +603,7 @@ const sorted = (rows, key = row => row.name) => [...rows].sort((a, b) => key(a).
 const gapKey = gap => `${gap.entity}.${gap.field}.${gap.surface}.${gap.problems.join("+")}`
 
 export function semanticSnapshot(inventory) {
-  const parameters = rows => sorted(rows).map(({ name, type, required, values, default: defaultValue, unsupportedByExecutorSchema, forwardedAs }) => ({ name, ...(type ? { type } : {}), ...(required !== undefined ? { required } : {}), ...(values ? { values: [...values].sort() } : {}), ...(defaultValue !== undefined ? { default: defaultValue } : {}), ...(unsupportedByExecutorSchema ? { unsupportedByExecutorSchema, forwardedAs } : {}) }))
+  const parameters = rows => sorted(rows).map(({ name, type, nullable, items, required, values, default: defaultValue, unsupportedByExecutorSchema, forwardedAs }) => ({ name, ...(type ? { type } : {}), ...(nullable !== undefined ? { nullable } : {}), ...(items ? { items } : {}), ...(required !== undefined ? { required } : {}), ...(values ? { values: [...values].sort() } : {}), ...(defaultValue !== undefined ? { default: defaultValue } : {}), ...(unsupportedByExecutorSchema ? { unsupportedByExecutorSchema, forwardedAs } : {}) }))
   const route = row => ({ tool: row.tool ?? row.name, ...(row.parameter ? { parameter: row.parameter } : {}), ...(row.status ? { status: row.status } : {}), ...(row.via ? { via: row.via } : {}), ...(row.action ? { action: row.action } : {}) })
   const routes = rows => sorted(rows.map(route), row => JSON.stringify(row))
   const operation = cell => ({ status: cell.status, ...(cell.reason ? { reason: cell.reason } : {}), ...(cell.direct?.length || cell.tools?.length ? { direct: routes(cell.direct ?? cell.tools) } : {}), ...(cell.viaOperations.length ? { viaOperations: routes(cell.viaOperations) } : {}) })
@@ -551,7 +646,7 @@ export function gapReport(inventory) {
     if (!grouped.has(key)) grouped.set(key, [])
     grouped.get(key).push(gap)
   }
-  const lines = ["# Capability inventory findings", "", "Generated by `node tools/capability-inventory.mjs --accept` from the reviewed API tree. Verified gaps link to their owning tickets. No account data is read.", "", "## Known gaps", ""]
+  const lines = ["# Capability inventory findings", "", "Generated by `node tools/capability-inventory.mjs --accept` from the reviewed API tree. Findings reference existing tickets; a ticket's completion state does not establish full field coverage. No account data is read.", "", "## Known gaps", ""]
   for (const gap of inventory.knownGaps) lines.push(`- ${gap.ticket}: ${gap.observation}`, `  Evidence: ${gap.evidence.map(item => `\`${item.source}\``).join(", ")}.`)
   lines.push("", "## Field coverage gaps", "")
   for (const group of grouped.values()) {

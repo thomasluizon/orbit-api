@@ -58,6 +58,25 @@ public class GetBillingDetailsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PlaySubscriberWithHistoricalStripeIds_DoesNotCallStripeOrReturnAnAmount()
+    {
+        var user = CreateTestUser();
+        var expiresAt = new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        user.SetStripeCustomerId("cus_old");
+        user.SetStripeSubscription("sub_old", expiresAt);
+        user.SetPlaySubscription("play_token", expiresAt);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _handler.Handle(new GetBillingDetailsQuery(UserId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NoActiveSubscription);
+        var readAmount = () => result.Value.BilledAmountPerPeriod;
+        readAmount.Should().Throw<InvalidOperationException>();
+        _billingService.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_UserWithSubscription_BillingProviderError_ReturnsFailure()
     {
         var user = CreateTestUser();

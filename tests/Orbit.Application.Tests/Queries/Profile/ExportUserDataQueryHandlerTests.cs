@@ -37,6 +37,7 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<ProactiveItem> _proactiveRepo = Substitute.For<IGenericRepository<ProactiveItem>>();
     private readonly IGenericRepository<NotionConnection> _notionConnections = Substitute.For<IGenericRepository<NotionConnection>>();
     private readonly IGenericRepository<NotionTask> _notionTasks = Substitute.For<IGenericRepository<NotionTask>>();
+    private readonly IGenericRepository<ConversationTurn> _conversations = Substitute.For<IGenericRepository<ConversationTurn>>();
     private readonly ExportUserDataQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -48,13 +49,14 @@ public class ExportUserDataQueryHandlerTests
             new ExportUserDataRepositories(
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo, _notionConnections, _notionTasks),
+                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo, _notionConnections, _notionTasks, _conversations),
             _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
 
+        ReturnsEmpty(_conversations);
         ReturnsEmpty(_proactiveRepo);
         ReturnsEmpty(_notionConnections);
         ReturnsEmpty(_notionTasks);
@@ -91,6 +93,20 @@ public class ExportUserDataQueryHandlerTests
         result.Value.NotionTasks!.Single().Title.Should().Be("Notion task");
         var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
         json.Should().NotContain("secret-access").And.NotContain("secret-refresh").And.NotContain("AccessToken").And.NotContain("RefreshToken");
+    }
+
+    [Fact]
+    public async Task Handle_Conversations_AreLimitedToRequestingUserAndRetentionWindow()
+    {
+        ArrangeUser(CreateTestUser());
+        var now = DateTime.UtcNow;
+        var own = ConversationTurn.Create(UserId, Guid.NewGuid(), "assistant", now, "model", "Reply", "[]").Value;
+        var foreign = ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), "user", now, null, "Private", "[]").Value;
+        var expired = ConversationTurn.Create(UserId, Guid.NewGuid(), "user", now.AddDays(-31), null, "Expired", "[]").Value;
+        _conversations.FindAsync(Arg.Any<Expression<Func<ConversationTurn, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { foreign, expired, own }.Where(call.Arg<Expression<Func<ConversationTurn, bool>>>().Compile()).ToArray());
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
+        result.Value.Conversations.Should().ContainSingle().Which.Content.Should().Be("Reply");
     }
 
     private static void ReturnsEmpty<T>(IGenericRepository<T> repository) where T : Orbit.Domain.Common.Entity
@@ -157,7 +173,8 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Email.Should().Be("test@example.com");
         result.Value.Account.Plan.Should().Be("free");
         result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.EffectiveProactivePushEnabled);
-        result.Value.Settings.StoredProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
+        result.Value.Settings.StoredProactiveAstraEnabled.Should().BeTrue();
+        result.Value.Settings.ProactiveAstraEnabled.Should().BeFalse();
         result.Value.Settings.Uses24HourClock.Should().BeNull();
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();
@@ -175,7 +192,7 @@ public class ExportUserDataQueryHandlerTests
             "exportedAtUtc", "account", "settings", "subscription", "habits", "goals", "tags",
             "notifications", "checklistTemplates", "achievements", "streakFreezes", "referrals",
             "apiKeys", "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents",
-            "proactiveItems", "notionConnection", "notionTasks");
+            "proactiveItems", "notionConnection", "notionTasks", "conversations");
     }
 
     [Fact]

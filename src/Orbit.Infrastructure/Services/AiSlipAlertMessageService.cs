@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Services.Prompts;
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiSlipAlertMessageService(
-    AiCompletionClient aiClient,
+    BudgetedAiCompletionClient aiClient,
     ILogger<AiSlipAlertMessageService> logger) : ISlipAlertMessageService
 {
     internal const string SystemPrompt =
@@ -70,6 +70,10 @@ public sealed partial class AiSlipAlertMessageService(
             return lines.Length >= 2
                 ? Result.Success((lines[0], lines[1]))
                 : Result.Success((FallbackTitle(habitTitle, peakHour, language), lines[0]));
+        }
+        catch (AiBudgetExceededException)
+        {
+            return Result.Failure<(string Title, string Body)>(AiBudgetExceededException.Error);
         }
         catch (Exception ex)
         {

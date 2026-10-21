@@ -28,7 +28,7 @@ locals {
 
   production_api_values = {
     AI__BaseUrl                         = "https://api.openai.com/v1"
-    AI__Model                           = "gpt-6.1-sol"
+    AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
@@ -60,7 +60,7 @@ locals {
     Stripe__MonthlyPriceIdBrl           = "price_1U59khGwWZvarDk3duqWRGu7"
     Stripe__MonthlyPriceIdUsd           = "price_1U59miGwWZvarDk3c7Jomocl"
     Stripe__ProProductId                = "prod_UBUPrTlZg8chuk"
-    Stripe__SuccessUrl                  = "https://app.useorbit.org/profile?subscription=success"
+    Stripe__SuccessUrl                  = "https://app.useorbit.org/upgrade?subscription=success"
     Stripe__YearlyPriceIdBrl            = "price_1U59lVGwWZvarDk3FBO8ci6L"
     Stripe__YearlyPriceIdUsd            = "price_1U59ncGwWZvarDk3Ydiw7jP7"
     Storage__S3__Bucket                 = aws_s3_bucket.uploads["production"].bucket

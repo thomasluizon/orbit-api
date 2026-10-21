@@ -46,9 +46,10 @@ public class DeletionCancellationPersistenceTests
         factory.Context.Users.Add(user);
         await factory.Context.SaveChangesAsync();
         var subscriptions = Substitute.For<SubscriptionService>();
+        var invoices = Substitute.For<InvoiceService>();
         var stripe = new StripeBillingService(new StripeServiceClients(
             new CustomerService(), new Stripe.Checkout.SessionService(), new Stripe.BillingPortal.SessionService(),
-            subscriptions, new InvoiceService(), new PriceService(), new CouponService()),
+            subscriptions, invoices, new PriceService(), new CouponService()),
             NullLogger<StripeBillingService>.Instance);
         var play = Substitute.For<IPlayBillingService>();
         var canceled = false;

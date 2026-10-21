@@ -9,7 +9,13 @@ public interface IAiTool
     string Description { get; }
     bool IsReadOnly => false;
     int Order => int.MaxValue;
+    /// <summary>
+    /// Parameters marked sensitive = true are omitted recursively by field name from evaluation
+    /// trace arguments and results. Execution receives the original arguments.
+    /// </summary>
     object GetParameterSchema();
+    /// <summary>Declares result-only fields, including sensitive = true for credentials returned by a tool.</summary>
+    object? GetResultSchema() => null;
     Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct);
 }
 

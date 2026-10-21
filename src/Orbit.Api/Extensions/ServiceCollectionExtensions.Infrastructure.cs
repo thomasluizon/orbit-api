@@ -13,6 +13,7 @@ using Microsoft.OpenApi;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
+using Orbit.Api.Serialization;
 using Orbit.Application.Common;
 using Orbit.Application.Chat;
 using Orbit.Domain.Enums;
@@ -302,6 +303,7 @@ public static partial class ServiceCollectionExtensions
             })
             .AddJsonOptions(options =>
             {
+                options.JsonSerializerOptions.Converters.Add(new ScheduledReminderWhenInputConverter());
                 options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
             });
 
@@ -328,16 +330,20 @@ public static partial class ServiceCollectionExtensions
             .AddMvc()
             .AddApiExplorer(options => options.GroupNameFormat = "'v'VVV");
 
-        builder.Services.AddOpenApi("v1", options => ConfigureOrbitOpenApi(options, "1.0"));
-        builder.Services.AddOpenApi("v2", options => ConfigureOrbitOpenApi(options, "2.0"));
+        foreach (var artifact in OpenApiArtifact.All)
+            builder.Services.AddOpenApi(artifact.DocumentName, options => ConfigureOrbitOpenApi(options, artifact));
     }
 
-    private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, string version)
+    private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, OpenApiArtifact artifact)
     {
         options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+        var group = "v" + artifact.HttpVersion.Split('.')[0];
+        options.ShouldInclude = description => description.GroupName is null || description.GroupName == group;
         options.AddDocumentTransformer((document, _, _) =>
         {
-            document.Info.Version = version;
+            document.Info.Version = artifact.HttpVersion;
+            if (artifact.Revision != "r1")
+                document.Info.Description = $"Documentation revision {artifact.Id} for HTTP API {artifact.HttpVersion}. Select this artifact with a full producer commit; request version selection is unchanged.";
             return Task.CompletedTask;
         });
         options.AddOperationTransformer((operation, context, _) =>
@@ -347,24 +353,31 @@ public static partial class ServiceCollectionExtensions
                 operation.Deprecated = true;
             return Task.CompletedTask;
         });
-        options.AddSchemaTransformer((schema, context, _) =>
+        options.AddSchemaTransformer((schema, context, _) => ConfigureOrbitSchema(schema, context, artifact.Revision == "r1"));
+        if (artifact.Revision != "r1")
+            options.AddSchemaTransformer<HabitEnumSchemaTransformer>();
+    }
+
+    private static Task ConfigureOrbitSchema(OpenApiSchema schema,
+        Microsoft.AspNetCore.OpenApi.OpenApiSchemaTransformerContext context, bool legacyRevision)
+    {
+        var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
+        if (type == typeof(HabitSchedule))
         {
-            var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
-            if (type == typeof(HabitSchedule))
-            {
-                schema.Type = JsonSchemaType.String;
-                schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
-            }
-            if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo property
-                && property.DeclaringType == typeof(ToolResultMessageParams) && property.PropertyType == typeof(int?))
-            {
-                schema.Type = JsonSchemaType.Integer | JsonSchemaType.Null;
-                schema.Pattern = null;
-            }
-            if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
-                schema.Deprecated = true;
-            return Task.CompletedTask;
-        });
+            schema.Type = JsonSchemaType.String;
+            schema.Enum = Enum.GetNames(type).Select(name => (JsonNode)JsonValue.Create(name)).ToList();
+        }
+        if (type == typeof(ScheduledReminderWhen) && legacyRevision)
+            schema.Description = "MVC responses emit SameDay or DayBefore. MVC inputs also accept same_day and day_before, case-insensitive enum names and numeric enum forms. Reminder validation still applies. This component's enum retains the domain snake_case annotation and does not describe MVC response casing.";
+        if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo property
+            && property.DeclaringType == typeof(ToolResultMessageParams) && property.PropertyType == typeof(int?))
+        {
+            schema.Type = JsonSchemaType.Integer | JsonSchemaType.Null;
+            schema.Pattern = null;
+        }
+        if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
+            schema.Deprecated = true;
+        return Task.CompletedTask;
     }
 
     private static void AddResponseCompression(WebApplicationBuilder builder)

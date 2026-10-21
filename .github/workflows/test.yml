@@ -41,12 +41,7 @@ jobs:
         run: dotnet build --no-restore
 
       - name: Fail if committed OpenAPI documents are stale
-        run: |
-          if ! git diff --exit-code -- src/Orbit.Api/openapi.json src/Orbit.Api/openapi_v2.json; then
-            echo "::error::OpenAPI documents are stale. Run 'dotnet build src/Orbit.Api' and commit both generated documents."
-            exit 1
-          fi
-          echo "OK: committed OpenAPI documents match the build output."
+        run: python3 .github/scripts/openapi_artifacts.py freshness
 
   unit-tests:
     name: Unit Tests
@@ -184,6 +179,9 @@ jobs:
       - name: The allowlist checker's own coverage
         run: node --test tools/__tests__/*.test.mjs
 
+      - name: OpenAPI publication guard tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_openapi_artifacts.py'
+
       - name: Ban permissive CORS
         run: |
           violations=$(grep -rnE '\.AllowAnyHeader\(|\.AllowAnyMethod\(' src --include='*.cs' || true)
@@ -216,14 +214,20 @@ jobs:
 
   openapi-breaking:
     name: OpenAPI Breaking-Change Gate
+    needs: [openapi-plan, openapi-streams]
     runs-on: ubuntu-latest
-    # Diffs HEAD against github.base_ref, which is empty on a push event.
-    if: github.event_name == 'pull_request'
+    if: always() && github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Require every supported stream comparison
+        env:
+          PLAN_RESULT: ${{ needs.openapi-plan.result }}
+          STREAM_RESULT: ${{ needs.openapi-streams.result }}
+        run: test "$PLAN_RESULT" = success && test "$STREAM_RESULT" = success
 
       - name: Fetch base branch
         run: git fetch origin "${{ github.base_ref }}"
@@ -231,12 +235,8 @@ jobs:
       - name: Check base spec exists
         id: base-spec
         run: |
-          if git cat-file -e "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json" 2>/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No openapi.json on origin/${{ github.base_ref }} yet; skipping breaking-change diff (first-PR bootstrap)."
-          fi
+          git cat-file -e "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
+          echo "exists=true" >> "$GITHUB_OUTPUT"
 
       - name: Detect breaking API changes
         if: steps.base-spec.outputs.exists == 'true'
@@ -244,5 +244,48 @@ jobs:
         with:
           base: "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
           revision: "src/Orbit.Api/openapi.json"
+          fail-on: ERR
+          review: false
+
+  openapi-plan:
+    name: OpenAPI artifact inventory
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      streams: ${{ steps.catalog.outputs.streams }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch target branch
+        run: git fetch origin "${{ github.base_ref }}"
+
+      - name: Validate every published stream and plan comparisons
+        id: catalog
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          streams=$(python3 .github/scripts/openapi_artifacts.py plan --base "$BASE_REF")
+          echo "streams=$streams" >> "$GITHUB_OUTPUT"
+
+  openapi-streams:
+    name: OpenAPI compatibility (${{ matrix.id }})
+    needs: openapi-plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.openapi-plan.outputs.streams) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect breaking changes against the same target stream
+        uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
+        with:
+          base: ${{ matrix.base }}
+          revision: ${{ matrix.revision }}
           fail-on: ERR
           review: false

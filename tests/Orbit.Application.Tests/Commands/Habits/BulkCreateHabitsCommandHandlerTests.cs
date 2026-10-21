@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Common;
@@ -12,14 +11,16 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
-public class BulkCreateHabitsCommandHandlerTests
+public partial class BulkCreateHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
+    private readonly IAppConfigService _config = Substitute.For<IAppConfigService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -35,20 +36,21 @@ public class BulkCreateHabitsCommandHandlerTests
     {
         _handler = new BulkCreateHabitsCommandHandler(
             new BulkCreateHabitsRepositories(_habitRepo, _suggestionRepo, _tagRepo), _payGate, _userDateService, _unitOfWork, _cache,
-            Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>());
+            _config);
+
+        _config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
 
         _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Tag>().AsReadOnly());
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit>().AsReadOnly());
-        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+        _suggestionRepo.FindTrackedAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
@@ -107,7 +109,28 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(1);
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-        await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ThreeNodeSubtree_PersistsEveryNodeWithImmediateParentIds()
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Child", null, null, null,
+                SubHabits: [new("Grandchild", null, null, null)])]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var rootResult = result.Value.Results.Should().ContainSingle().Which;
+        rootResult.Status.Should().Be(BulkItemStatus.Success);
+        saved.Should().HaveCount(3);
+        var parent = saved.Single(h => h.Title == "Parent");
+        var child = saved.Single(h => h.Title == "Child");
+        var grandchild = saved.Single(h => h.Title == "Grandchild");
+        rootResult.HabitId.Should().Be(parent.Id);
+        child.ParentHabitId.Should().Be(parent.Id);
+        grandchild.ParentHabitId.Should().Be(child.Id);
     }
 
     [Fact]
@@ -122,6 +145,108 @@ public class BulkCreateHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().ContainSingle()
             .Which.Status.Should().Be(BulkItemStatus.Failed);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(ScheduledReminderWhen.SameDay)]
+    [InlineData(ScheduledReminderWhen.DayBefore)]
+    public async Task Handle_DirectChild_PersistsOwnScheduledReminders(ScheduledReminderWhen when)
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        ScheduledReminderTime[] reminders = [new(when, new TimeOnly(8, 0))];
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            ReminderTimes: [90], ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(7, 0))],
+            SubHabits: [new("Child", null, null, null,
+                ReminderEnabled: true, ReminderTimes: [30], ScheduledReminders: reminders)]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        saved.Should().HaveCount(2);
+        var child = saved.Single(h => h.ParentHabitId != null);
+        child.ParentHabitId.Should().Be(saved.Single(h => h.ParentHabitId == null).Id);
+        child.Position.Should().Be(0);
+        child.ReminderEnabled.Should().BeTrue();
+        child.ReminderTimes.Should().Equal(30);
+        child.ScheduledReminders.Should().Equal(reminders);
+        child.GetScheduledRemindersForLegacyClients().Should().Equal(reminders);
+        child.RelativeReminders.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(ScheduledReminderWhen.SameDay)]
+    [InlineData(ScheduledReminderWhen.DayBefore)]
+    public async Task Handle_DirectChild_PersistsAndNormalizesTimedReminders(ScheduledReminderWhen when)
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        var scheduled = new ScheduledReminderTime(when, new TimeOnly(8, 0));
+        RelativeReminderTime[] relative = [new(15), new(When: when, Time: new TimeOnly(7, 0))];
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Child", null, null, null, DueTime: new TimeOnly(9, 0),
+                ReminderEnabled: true, ReminderTimes: [45], ScheduledReminders: [scheduled], RelativeReminders: relative)]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        var child = saved.Single(h => h.ParentHabitId != null);
+        child.ReminderEnabled.Should().BeTrue();
+        child.ReminderTimes.Should().Equal(45);
+        child.ScheduledReminders.Should().BeEmpty();
+        child.RelativeReminders.Should().Equal(relative.Append(RelativeReminderTime.FromScheduled(scheduled)));
+        child.GetScheduledRemindersForLegacyClients().Should().Equal(
+            new ScheduledReminderTime(when, new TimeOnly(7, 0)), scheduled);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    public async Task Handle_DirectChild_PreservesFalseEmptyAndDomainDefaults(bool timed, bool clock, bool empty)
+    {
+        var (_, saved) = CaptureTagAndHabitAdds();
+        var childItem = new BulkHabitItem("Child", null, null, null,
+            DueTime: timed ? new TimeOnly(9, 0) : null,
+            ReminderEnabled: false, ReminderTimes: empty ? [] : null,
+            ScheduledReminders: [],
+            RelativeReminders: clock ? [new(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(8, 0))] : []);
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            ReminderEnabled: true, ReminderTimes: [90],
+            ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(7, 0))],
+            SubHabits: [childItem]);
+
+        var result = await _handler.Handle(new(UserId, [item]), CancellationToken.None);
+
+        result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
+        var child = saved.Single(h => h.ParentHabitId != null);
+        child.ReminderEnabled.Should().BeFalse();
+        child.ReminderTimes.Should().Equal(empty || clock ? Array.Empty<int>() : [15]);
+        child.ScheduledReminders.Should().BeEmpty();
+        child.RelativeReminders.Should().Equal(childItem.RelativeReminders!);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidLaterChildReminder_FailsWithoutAddingAnyPartOfItem(bool preflight)
+    {
+        var item = new BulkHabitItem("Parent", null, FrequencyUnit.Day, 1,
+            SubHabits: [new("Valid", null, null, null),
+                new("Invalid reminder", null, null, null, DueTime: new TimeOnly(9, 0),
+                    RelativeReminders: [new(MinutesBefore: 15, When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(8, 0))])]);
+        var command = new BulkCreateHabitsCommand(UserId, [item]);
+
+        if (preflight)
+        {
+            var result = await BulkCreateHabitsCommandHandler.CheckArgumentsAsync(command, _userDateService, _config, CancellationToken.None);
+            result.IsFailure.Should().BeTrue();
+        }
+        else
+        {
+            var result = await _handler.Handle(command, CancellationToken.None);
+            result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Failed);
+        }
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
@@ -224,25 +349,6 @@ public class BulkCreateHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SubHabitsPayGated_ReturnsPayGateFailure()
-    {
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Sub-habits are a Pro feature"));
-
-        var items = new List<BulkHabitItem>
-        {
-            new("Routine", null, FrequencyUnit.Day, 1,
-                SubHabits: new List<BulkHabitItem> { new("Sub", null, null, null) })
-        };
-        var command = new BulkCreateHabitsCommand(UserId, items);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-    }
-
-    [Fact]
     public async Task Handle_InvalidTitle_ReportsFailedItem()
     {
         var items = new List<BulkHabitItem>
@@ -342,7 +448,7 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(2)
             .And.OnlyContain(item => item.Status == BulkItemStatus.Success);
         addedHabits.Should().HaveCount(2).And.OnlyContain(habit => habit.GoogleEventId == null);
-        await _suggestionRepo.DidNotReceive().FindAsync(
+        await _suggestionRepo.DidNotReceive().FindTrackedAsync(
             Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>());
         suggestion.ImportedAtUtc.Should().BeNull();
         suggestion.ImportedHabitId.Should().BeNull();
@@ -380,7 +486,7 @@ public class BulkCreateHabitsCommandHandlerTests
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => addedHabits
                 .Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList().AsReadOnly());
-        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+        _suggestionRepo.FindTrackedAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => suggestions
                 .Where(call.Arg<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>().Compile()).ToList().AsReadOnly());
         return addedHabits;
@@ -421,17 +527,6 @@ public class BulkCreateHabitsCommandHandlerTests
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
             Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
             Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_NoSubHabits_DoesNotCheckSubHabitGate()
-    {
-        var items = new List<BulkHabitItem> { new("Habit", null, FrequencyUnit.Day, 1) };
-        var command = new BulkCreateHabitsCommand(UserId, items);
-
-        await _handler.Handle(command, CancellationToken.None);
-
-        await _payGate.DidNotReceive().CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     private (List<Tag> AddedTags, List<Habit> AddedHabits) CaptureTagAndHabitAdds()

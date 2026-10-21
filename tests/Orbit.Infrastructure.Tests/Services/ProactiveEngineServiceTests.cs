@@ -473,7 +473,28 @@ public sealed class ProactiveEngineServiceTests
         await h.Run();
         h.Db.ProactiveItems.Count().Should().Be(1);
         h.Db.ProactiveItems.Single().PushedAtUtc.HasValue.Should().Be(pushes);
-        h.Db.Users.Single().ProactiveAstraEnabled.Should().Be(choice);
+        h.Db.Users.Single().ProactiveAstraEnabled.Should().Be(choice ?? true);
+    }
+
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public async Task BonusProEligibility_UsesIndependentExpiry(int daysUntilExpiry, bool eligible)
+    {
+        using var h = new Harness(19, lifetime: false);
+        h.User.StartTrial(h.Clock.Now.AddDays(-1));
+        var grantClock = new FixedClock(h.Clock.Now.AddDays(daysUntilExpiry - AppConstants.ReferralBonusProDays));
+        var user = User.Create("Bonus", "bonus@example.com", grantClock).Value;
+        user.StartTrial(h.Clock.Now.AddDays(-1));
+        user.GrantBonusProDays(AppConstants.ReferralBonusProDays);
+        h.Db.Users.Add(user);
+        await h.Db.SaveChangesAsync();
+        h.Db.ChangeTracker.Clear();
+
+        var batch = await h.Engine.LoadAsync(null, h.Clock.Now, CancellationToken.None);
+
+        batch.Users.Select(account => account.Id).Should().BeEquivalentTo(eligible ? new[] { user.Id } : []);
     }
 
     [Fact]

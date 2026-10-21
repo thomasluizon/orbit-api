@@ -73,8 +73,8 @@ public class UpdateChecklistToolTests
         UpdateChecklistCommand? captured = null;
         _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => { captured = callInfo.Arg<UpdateChecklistCommand>(); return Result.Success(); });
-        var habit = CreateHabit("Morning mobility");
-        SetupHabitFound(habit);
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Morning mobility");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
 
         var result = await Execute(
             $$"""{"habit_id": "{{habit.Id}}", "checklist_items": [{"text": "Warm up", "is_checked": true}, {"text": "Stretch"}]}""");
@@ -93,8 +93,8 @@ public class UpdateChecklistToolTests
         UpdateChecklistCommand? captured = null;
         _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => { captured = callInfo.Arg<UpdateChecklistCommand>(); return Result.Success(); });
-        var habit = CreateHabit("Morning mobility");
-        SetupHabitFound(habit);
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Morning mobility");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
 
         var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "checklist_items": []}""");
 
@@ -105,8 +105,8 @@ public class UpdateChecklistToolTests
     [Fact]
     public async Task CommandFails_PropagatesError()
     {
-        var habit = CreateHabit("Morning mobility");
-        SetupHabitFound(habit);
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Morning mobility");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
         _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure(ErrorMessages.HabitNotFound));
 
@@ -127,40 +127,19 @@ public class UpdateChecklistToolTests
         await _mediator.DidNotReceive().Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>());
     }
 
-    private void SetupHabitFound(Habit habit) =>
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-        .Returns(habit);
+    [Fact]
+    public async Task ForeignHabit_LookupRejectsCallerAndDoesNotExposeName()
+    {
+        var foreign = HabitToolTestFactory.CreateHabit(Guid.NewGuid(), "Private title");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, foreign);
 
-    private static Habit CreateHabit(string title) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 8, 6))).Value;
+        var result = await Execute($$"""{"habit_id": "{{foreign.Id}}", "checklist_items": []}""");
+
+        result.EntityName.Should().BeNull();
+        result.Success.Should().BeFalse();
+        await _mediator.DidNotReceive().Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>());
+    }
 
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);
-}
-
-internal static class HabitToolTestFactory
-{
-    public static MoveHabitParentTool CreateMoveHabitParentTool(
-        IMediator mediator,
-        Guid userId,
-        string title)
-    {
-        var habitRepository = Substitute.For<IGenericRepository<Habit>>();
-        var habit = Habit.Create(new HabitCreateParams(
-            userId,
-            title,
-            FrequencyUnit.Day,
-            1,
-            new DateOnly(2026, 8, 6))).Value;
-
-        habitRepository.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<CancellationToken>())
-        .Returns([habit]);
-
-        return new MoveHabitParentTool(mediator, habitRepository);
-    }
 }

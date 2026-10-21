@@ -10,8 +10,9 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public class GetCalendarOverviewToolTests
 {
-    [Fact]
-    public async Task SyncGateFailure_KeepsEventsAndOmitsSyncRow()
+    [Theory]
+    [MemberData(nameof(OptionalParameterCases.Fields), typeof(GetCalendarOverviewTool), "", MemberType = typeof(OptionalParameterCases))]
+    public async Task SyncGateFailure_KeepsEventsAndOmitsSyncRow(string field)
     {
         var mediator = Substitute.For<IMediator>();
         var userId = Guid.NewGuid();
@@ -24,6 +25,9 @@ public class GetCalendarOverviewToolTests
         mediator.Send(Arg.Any<GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure<List<CalendarSyncSuggestionItem>>("gated"));
 
+        mediator.Send(Arg.Any<GetUserCalendarsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<List<UserCalendarItem>>("gated"));
+
         var result = await new GetCalendarOverviewTool(mediator).ExecuteAsync(
             JsonDocument.Parse("{}").RootElement, userId, CancellationToken.None);
 
@@ -31,5 +35,8 @@ public class GetCalendarOverviewToolTests
         var payload = result.Payload.Should().BeOfType<CalendarOverviewPayload>().Subject;
         payload.Events.Should().ContainSingle().Which.Should().Be(item);
         payload.AutoSyncState.Should().BeNull();
+        var explicitNull = await new GetCalendarOverviewTool(mediator).ExecuteAsync(JsonSerializer.SerializeToElement(
+            new Dictionary<string, object?> { [field] = null }), userId, default);
+        explicitNull.Should().BeEquivalentTo(result);
     }
 }

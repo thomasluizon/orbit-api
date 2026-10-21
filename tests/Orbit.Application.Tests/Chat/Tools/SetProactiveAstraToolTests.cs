@@ -113,7 +113,7 @@ public sealed class SetProactiveAstraToolTests
         var result = await tool.CheckArgumentsAsync(Arguments(enabled), user.Id, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.ProactiveAstraEnabled.Should().BeNull();
+        user.ProactiveAstraEnabled.Should().BeTrue();
         await unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

@@ -8,7 +8,7 @@ public static class AppConstants
     public const int MaxHabitTitleLength = 200;
     public const int MaxHabitDescriptionLength = 10000;
     public const int MaxHabitEmojiLength = DomainConstants.MaxHabitEmojiLength;
-    public const int MaxChecklistItemTextLength = 500;
+    public const int MaxChecklistItemTextLength = Orbit.Domain.Common.DomainConstants.MaxChecklistItemTextLength;
     public const int MaxHabitDepth = 5;
     public const int MaxTagsPerHabit = 5;
     public const int DailySummaryHistoryDays = 14;
@@ -27,6 +27,8 @@ public static class AppConstants
     public const int MaxGoalDescriptionLength = 500;
     public const int MaxGoalProgressNoteLength = 500;
     public const int ReferralDiscountPercent = 10;
+    public const int ReferralBonusProDays = 7;
+    public const int ReferralRewardCap = 5;
     public const int DefaultMaxReferrals = 10;
     public const int ReferralCompletionThreshold = 3;
     public const int ReferralCompletionWindowDays = 7;
@@ -38,7 +40,7 @@ public static class AppConstants
     public const int MaxIntervalWeeks = DomainConstants.MaxIntervalWeeks;
     public const int MaxPushSubscriptionsPerUser = 5;
     public const int MaxNotificationsReturned = 50;
-    public const int MaxChecklistItems = 50;
+    public const int MaxChecklistItems = Orbit.Domain.Common.DomainConstants.MaxChecklistItems;
     public const int MaxTagNameLength = 50;
     public const int MaxUserNameLength = DomainConstants.MaxUserNameLength;
     public const int MaxLanguageLength = 10;
@@ -53,6 +55,7 @@ public static class AppConstants
     public const int PendingClarificationTtlMinutes = 30;
     public const int MaxChatHistoryLength = 50_000;
     public const int MaxChatHistoryMessages = 40;
+    public const int MaxAiModelHistoryMessages = 20;
     public const int MaxChatHistoryMessageLength = 4000;
     public const int MaxPromptHabitEntries = 300;
     public const int MaxAiHistoryTranscriptCharacters = 24_000;
@@ -70,6 +73,8 @@ public static class AppConstants
     public const int MaxStreakFreezesAccumulated = 3;
     public const int StreakDaysPerFreeze = 7;
     public const int MaxStreakLookbackDays = 365;
+    /// <summary>Two annual intervals retain a completed predecessor while a repaired yearly occurrence remains current.</summary>
+    public const int StreakRepairWindowDays = 2 * 366;
     public const int MaxSyncWindowDays = 30;
     public const int SyncCleanupMarginDays = 1;
     public const int MaxChallengeTitleLength = 200;

@@ -202,6 +202,45 @@ public class HandleWebhookCommandHandlerTests
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("customer.subscription.deleted", "canceled", null)]
+    [InlineData("customer.subscription.updated", "canceled", null)]
+    [InlineData("customer.subscription.updated", "unpaid", null)]
+    [InlineData("customer.subscription.deleted", "canceled", "payment_disputed")]
+    [InlineData("customer.subscription.updated", "canceled", "payment_failed")]
+    public async Task Handle_TerminalSubscriptionEvent_PreservesBonusUntilExpiry(
+        string eventType, string status, string? cancellationReason)
+    {
+        var clock = new BonusClock(DateTimeOffset.UtcNow);
+        var user = User.Create("Alex", "test@example.com", clock).Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        user.SetStripeSubscription("sub_test", clock.GetUtcNow().UtcDateTime.AddDays(-1));
+        user.GrantBonusProDays(7);
+        var bonusExpiry = user.BonusProExpiresAtUtc;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Expression<Func<User, bool>>>().Compile()(user) ? user : null);
+        var (json, signature) = BuildSignedEvent(eventType,
+            BuildSubscriptionJson("sub_test", status, cancellationReason));
+
+        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+        user.HasProAccess.Should().BeTrue();
+        user.IsTrialActive.Should().BeFalse();
+        user.Plan.Should().Be(UserPlan.Pro);
+        user.PlanExpiresAt.Should().Be(bonusExpiry);
+        user.StripeSubscriptionId.Should().BeNull();
+        user.SubscriptionSource.Should().BeNull();
+        user.HasActivePaidSubscription.Should().BeFalse();
+        clock.Advance(TimeSpan.FromDays(7));
+        user.HasProAccess.Should().BeFalse();
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+        user.HasProAccess.Should().BeFalse();
+        user.BonusProExpiresAtUtc.Should().Be(bonusExpiry);
+    }
+
     [Fact]
     public async Task Handle_SubscriptionDeleted_UserNotFound_DoesNotThrow()
     {
@@ -1195,6 +1234,12 @@ public class HandleWebhookCommandHandlerTests
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(WebhookSecret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes($"{timestamp}.{body}"));
         return $"t={timestamp},v1={Convert.ToHexStringLower(hash)}";
+    }
+
+    private sealed class BonusClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+        public void Advance(TimeSpan duration) => now += duration;
     }
 
     private sealed class FakeUniqueViolationException : DbException

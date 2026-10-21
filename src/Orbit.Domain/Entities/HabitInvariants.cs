@@ -45,6 +45,16 @@ internal static class HabitInvariants
         return null;
     }
 
+    public static AppError? ValidateStartDate(DateOnly? startDate, bool isGeneral,
+        FrequencyUnit? frequencyUnit, DateOnly? endDate)
+    {
+        if (!startDate.HasValue)
+            return null;
+        if (startDate == DateOnly.MinValue || isGeneral || frequencyUnit is null)
+            return DomainErrors.InvalidStartDate;
+        return endDate < startDate ? DomainErrors.EndDateBeforeStartDate : null;
+    }
+
     public static AppError? ValidateDateOptions(
         TimeOnly? dueTime, TimeOnly? dueEndTime,
         DateOnly? endDate, FrequencyUnit? frequencyUnit,
@@ -74,6 +84,9 @@ internal static class HabitInvariants
         if (scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
             return DomainErrors.MaxScheduledReminders.Format(DomainConstants.MaxScheduledReminders);
 
+        if (scheduledReminders.Any(reminder => !Enum.IsDefined(reminder.When)))
+            return DomainErrors.InvalidScheduledReminderWhen;
+
         var hasDuplicates = scheduledReminders
             .GroupBy(sr => (sr.When, sr.Time))
             .Any(g => g.Count() > 1);
@@ -91,6 +104,12 @@ internal static class HabitInvariants
 
         if (reminderTimes.Count > DomainConstants.MaxReminderTimes)
             return DomainErrors.MaxReminderTimes.Format(DomainConstants.MaxReminderTimes);
+
+        if (reminderTimes.Any(minutes => minutes is < 0 or > DomainConstants.MaxReminderMinutesBefore))
+            return DomainErrors.ReminderTimeOutOfRange.Format(DomainConstants.MaxReminderMinutesBefore);
+
+        if (reminderTimes.Distinct().Count() != reminderTimes.Count)
+            return DomainErrors.DuplicateReminderTimes;
 
         return null;
     }

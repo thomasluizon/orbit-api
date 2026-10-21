@@ -62,6 +62,41 @@ public class GetHabitByIdQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ChildCarriesReminderSettingsAndTags()
+    {
+        var parent = CreateTestHabit();
+        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1, Today,
+            DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15], SlipAlertEnabled: true,
+            RelativeReminders: [new(MinutesBefore: 30)], ParentHabitId: parent.Id)).Value;
+        child.AddTag(Tag.Create(UserId, "Health", "#123456").Value);
+        AttachChild(parent, child);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(new[] { parent });
+        var result = await _handler.Handle(new GetHabitByIdQuery(UserId, parent.Id), CancellationToken.None);
+        var mapped = result.Value.Children.Single();
+        mapped.ReminderEnabled.Should().BeTrue();
+        mapped.ReminderTimes.Should().Equal(15);
+        mapped.RelativeReminders.Should().Equal(child.RelativeReminders);
+        mapped.SlipAlertEnabled.Should().BeTrue();
+        mapped.Tags.Should().ContainSingle().Which.Name.Should().Be("Health");
+    }
+
+    [Fact]
+    public async Task Handle_MapsLinkedGoalsAndSlipAlert()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, Today,
+            SlipAlertEnabled: true)).Value;
+        var goal = Goal.Create(UserId, "Health", 10, "times").Value;
+        habit.AddGoal(goal);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { habit });
+        var result = await _handler.Handle(new GetHabitByIdQuery(UserId, habit.Id), CancellationToken.None);
+        result.Value.LinkedGoals.Should().ContainSingle().Which.Id.Should().Be(goal.Id);
+        result.Value.SlipAlertEnabled.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_HabitFound_ReturnsSuccess()
     {
         var habit = CreateTestHabit("My Daily Habit", "📚");

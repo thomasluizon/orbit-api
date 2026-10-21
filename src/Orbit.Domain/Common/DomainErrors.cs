@@ -6,6 +6,8 @@ namespace Orbit.Domain.Common;
 /// </summary>
 public static class DomainErrors
 {
+    public static readonly AppError InvalidDatePhrase = new("INVALID_DATE_PHRASE", "A date phrase of up to 200 characters and a supported language are required.");
+    public static readonly AppError InvalidStartDate = new("INVALID_START_DATE", "A valid start date requires a recurring habit and account date context.");
     public static readonly AppError UserIdRequired = new("USER_ID_REQUIRED", "User ID is required.");
     public static readonly AppError TokenHashRequired = new("TOKEN_HASH_REQUIRED", "Token hash is required.");
     public static readonly AppError SessionNotActive = new("SESSION_NOT_ACTIVE", "Session is no longer active.");
@@ -75,14 +77,17 @@ public static class DomainErrors
     public static readonly AppError RecurrenceScheduleUnsatisfiable = new("RECURRENCE_SCHEDULE_UNSATISFIABLE", "No future date satisfies this recurrence schedule.");
     public static readonly AppError FlexibleNeedsFrequencyUnit = new("FLEXIBLE_NEEDS_FREQUENCY_UNIT", "Flexible habits must have a frequency unit.");
     public static readonly AppError FlexibleHasDays = new("FLEXIBLE_HAS_DAYS", "Flexible habits cannot have specific days set.");
-    public static readonly AppError DaysRequireQuantityOne = new("DAYS_REQUIRE_QUANTITY_ONE", "Days can only be set when frequency quantity is 1.");
+    public static readonly AppError DaysRequireQuantityOne = new("DAYS_REQUIRE_QUANTITY_ONE", "Specific weekdays require frequency unit Day and frequency quantity 1.");
     public static readonly AppError EndTimeBeforeStartTime = new("END_TIME_BEFORE_START", "End time must be after start time.");
     public static readonly AppError OneTimeTaskHasEndDate = new("ONE_TIME_TASK_HAS_END_DATE", "One-time tasks cannot have an end date.");
     public static readonly AppError GeneralHabitHasEndDate = new("GENERAL_HABIT_HAS_END_DATE", "General habits cannot have an end date.");
     public static readonly AppError EndDateBeforeStartDate = new("END_DATE_BEFORE_START", "End date must be on or after the start date.");
     public static readonly AppError MaxScheduledReminders = new("MAX_SCHEDULED_REMINDERS", "A habit can have at most {0} scheduled reminders.");
     public static readonly AppError MaxReminderTimes = new("MAX_REMINDER_TIMES", "A habit can have at most {0} reminder times.");
+    public static readonly AppError ReminderTimeOutOfRange = new("VALIDATION_REMINDER_TIME_RANGE", "Set reminders from 0 to {0} minutes before the due time.");
+    public static readonly AppError DuplicateReminderTimes = new("VALIDATION_REMINDER_TIMES_UNIQUE", "Remove duplicate reminder times.");
     public static readonly AppError DuplicateScheduledReminders = new("DUPLICATE_SCHEDULED_REMINDERS", "Scheduled reminders must not contain duplicate entries.");
+    public static readonly AppError InvalidScheduledReminderWhen = new("VALIDATION_SCHEDULED_REMINDER_WHEN", "Choose the same day or the day before for each scheduled reminder.");
     public static readonly AppError InvalidRelativeReminders = new("INVALID_RELATIVE_REMINDERS", "Relative reminders must be unique and have a valid offset or local time.");
     public static readonly AppError EmojiTooLong = new("EMOJI_TOO_LONG", "Habit emoji must not exceed {0} characters.");
 

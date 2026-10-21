@@ -27,19 +27,6 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> CanCreateSubHabits(Guid userId, CancellationToken ct = default)
-    {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
-
-        var subHabitsProOnly = await appConfig.GetAsync(AppConfigKeys.SubHabitsProOnly, true, ct);
-        if (subHabitsProOnly && !user.HasProAccess)
-            return Result.PayGateFailure(ErrorMessages.ProFeature.Message);
-
-        return Result.Success();
-    }
-
     public async Task<Result> TryConsumeAiMessage(
         Guid userId,
         IUnitOfWork unitOfWork,

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
@@ -53,12 +54,13 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         var work = new UnitOfWork(context, new DatabaseConnectionSettings());
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 3, 20));
 
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<int>(1));
         _provider = new ServiceCollection()
             .AddLogging()
             .AddMemoryCache()
@@ -75,6 +77,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
                 new GenericRepository<Tag>(context)))
             .AddSingleton(_payGate)
             .AddSingleton(dates)
+            .AddSingleton(config)
             .AddSingleton<IUnitOfWork>(work)
             .BuildServiceProvider();
 
@@ -90,10 +93,13 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
+        var registry = new AiToolRegistry([tool]);
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(context),
+            new GenericRepository<Goal>(context), new GenericRepository<Tag>(context), dates, registry);
         _executor = new AgentOperationExecutor(
             catalog, policy, _audit, ownership, bridge,
-            new AiToolRegistry([tool]),
-            Substitute.For<IPendingOperationChangePreviewer>(),
+            registry,
+            previewer,
             _pending,
             work, _logger);
     }

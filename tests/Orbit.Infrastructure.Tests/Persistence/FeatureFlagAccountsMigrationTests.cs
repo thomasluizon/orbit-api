@@ -26,7 +26,23 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(31);
+        differences.Should().HaveCount(51);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
+        ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences);
+        var schemaVersion = differences.OfType<AddColumnOperation>().Should()
+            .ContainSingle(column => column.Table == "PendingAgentOperations" && column.Name == "ArgumentSchemaVersion").Subject;
+        schemaVersion.ClrType.Should().Be(typeof(int));
+        schemaVersion.IsNullable.Should().BeFalse();
+        schemaVersion.DefaultValue.Should().Be(0);
+
+        var subHabits = differences.OfType<UpdateDataOperation>().Should().ContainSingle().Subject;
+        subHabits.Table.Should().Be("AppFeatureFlags");
+        subHabits.KeyColumns.Should().Equal("Key");
+        subHabits.KeyValues[0, 0].Should().Be("sub_habits");
+        subHabits.Columns.Should().Equal("PlanRequirement");
+        subHabits.Values[0, 0].Should().BeNull();
+
         var owedCancellations = differences.OfType<CreateTableOperation>()
             .Should().ContainSingle(table => table.Name == "OwedSubscriptionCancellations").Subject;
         owedCancellations.Name.Should().Be("OwedSubscriptionCancellations");
@@ -44,13 +60,20 @@ public class FeatureFlagAccountsMigrationTests
         differences.OfType<AlterColumnOperation>().Should().ContainSingle(column =>
             column.Table == "HabitLogs" && column.Name == "IsSlip"
             && !column.IsNullable && column.OldColumn.IsNullable);
+        differences.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "Users"
+            && column.Name == "ConversationHistoryClearedAtUtc" && column.IsNullable && column.ClrType == typeof(DateTime));
         var renewalColumns = differences.OfType<AddColumnOperation>()
-            .Where(column => column.Table == "Users").ToArray();
+            .Where(column => column.Table == "Users" && column.ClrType == typeof(bool)).ToArray();
         renewalColumns.Should().HaveCount(2).And.OnlyContain(column =>
             column.ClrType == typeof(bool) && !column.IsNullable
             && Equals(column.DefaultValue, false));
         renewalColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "StripeRenewalStoppedByDeletion", "PlayRenewalStoppedByDeletion");
+        var referralColumns = differences.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Referrals" || column.Name == "BonusProExpiresAtUtc").ToArray();
+        referralColumns.Should().HaveCount(5).And.OnlyContain(column => column.IsNullable || Equals(column.DefaultValue, 0));
+        referralColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            "BonusProExpiresAtUtc", "ReferrerReward", "ReferredReward", "ReferrerRewardDeliveredAtUtc", "ReferredRewardDeliveredAtUtc");
         AssertHabitExpandColumns(differences);
         differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
@@ -91,7 +114,24 @@ public class FeatureFlagAccountsMigrationTests
             "20261019011031_ContractHabitLogSlip",
             "20261019091925_AddOwedSubscriptionCancellations",
             "20261019124138_AddAstraBlockAnswerReplay",
-            "20261019165331_ExpandHabitScheduleAndStartDate");
+            "20261019165331_ExpandHabitScheduleAndStartDate",
+            "20261019213159_HardenMcpOAuthState",
+            "20261019213536_AddDailyAiSafetyBudget",
+            "20261019223729_TrackMcpRefreshTokenFamilies",
+            "20261020005707_PriceDailyAiBudgetsInUsd",
+            "20261020014306_PersistConversationTurns",
+            "20261020023110_VersionPendingToolArguments",
+            "20261020023828_AddReferralProDayRewards",
+            "20261020030817_MakeSubHabitsFree",
+            "20261020031718_AddAstraEvalTraceFlag",
+            "20261020033359_RestoreRequiredProactiveAstraPreference",
+            "20261020041243_SeparateBonusProEntitlement",
+            "20261020134743_AllowExplicitHabitStartDate");
+        context.Database.GetMigrations().Last().Should().EndWith("_AllowExplicitHabitStartDate");
+        var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
+        preference.ClrType.Should().Be(typeof(bool));
+        preference.IsNullable.Should().BeFalse();
+        preference.GetDefaultValue().Should().Be(true);
     }
 
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)
@@ -119,6 +159,21 @@ public class FeatureFlagAccountsMigrationTests
         var seed = builder.Operations.OfType<InsertDataOperation>().Should().ContainSingle().Subject;
         seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("redesign");
         seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+    }
+
+    [Fact]
+    public void Up_AddsOnlyDisabledEvalTraceSeed()
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        typeof(AddAstraEvalTraceFlag).GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(new AddAstraEvalTraceFlag(), [builder]);
+
+        var seed = builder.Operations.Should().ContainSingle().Which.Should().BeOfType<InsertDataOperation>().Subject;
+        seed.Table.Should().Be("AppFeatureFlags");
+        seed.Values.GetLength(0).Should().Be(1);
+        seed.Values[0, Array.IndexOf(seed.Columns, "Key")].Should().Be("astra_eval_trace");
+        seed.Values[0, Array.IndexOf(seed.Columns, "Enabled")].Should().Be(false);
+        seed.Values[0, Array.IndexOf(seed.Columns, "PlanRequirement")].Should().BeNull();
     }
 
     [Fact]
