@@ -58,20 +58,12 @@ jobs:
       # keeps the reviewfrog specialist sub-agent. `model` pins openai/gpt-6.1-sol, which no curated
       # Pullfrog alias resolves to yet, so it passes through as a raw specifier and overrides the
       # repository config. With no alias there is no effort rung, so no effort is sent and the
-      # model runs at OpenAI's documented default, medium. Both steps pin the same release commit
-      # because a moving tag is an unpinned dependency.
+      # model runs at OpenAI's documented default, medium. The step pins a release commit because
+      # a moving tag is an unpinned dependency. Reviews stay on Codex: a failed Codex step fails the
+      # job, and no other engine reviews in its place.
       - name: Run agent
         id: codex
         uses: pullfrog/pullfrog@ad4283a862b8377cb525a0f5bf30f17c023b18ea # v0, release 0.1.98
-        continue-on-error: true
         with:
           prompt: ${{ inputs.prompt }}
           model: openai/gpt-6.1-sol
-      # Claude reviews ONLY when the Codex step fails, which is what an
-      # exhausted OpenAI allowance looks like. Green runs never reach this.
-      - name: Run agent (Claude fallback)
-        if: steps.codex.outcome == 'failure'
-        uses: pullfrog/pullfrog@ad4283a862b8377cb525a0f5bf30f17c023b18ea # v0, release 0.1.98
-        with:
-          prompt: ${{ inputs.prompt }}
-          model: anthropic/claude-opus-5-5
