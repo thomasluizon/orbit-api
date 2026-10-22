@@ -164,6 +164,10 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 
 ## Deployment
 
+Habit ranking uses an API-first rollout with client capability negotiation. See the
+[consumer contract](src/Orbit.Api/OpenApi/HabitRanking.md) and
+[activation runbook](infra/README.md#habit-ranking-activation).
+
 | Component | Service |
 |-----------|---------|
 | Hosting | [Render](https://render.com) (Docker, manual API releases) |

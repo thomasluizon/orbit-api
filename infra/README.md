@@ -280,3 +280,20 @@ page. On HTTP 503 `READ_QUERY_REFRESH_FAILED`, keep the prior answer and retry t
 same token. HTTP 410 requires repeating the original query. A permission denial
 requires restoring the original capability through its existing flow. Never replace
 a historical query with Today, and never generate a recap to recover a read.
+## Habit ranking activation
+
+Release the append-only API through the existing `release.yml` workflow before
+shipping the #1618 consumer. Verify the generated contract at the deployed producer
+commit and an authenticated `POST /api/chat/habit-ranking/query` followed by paging
+and refresh using its returned tokens. An empty ranking is a successful result.
+No database migration, backfill, new secret or version-floor change is required.
+The query signer uses the already configured `Jwt:SecretKey`.
+
+The client enables the block by sending `supportsParts: true` and including
+`habitRanking` in `partKinds`. Remove that kind advertisement to return readable
+text. Existing `astra_period_blocks_disabled` or `astra_parts_disabled` flags
+also disable structured ranking output. Revert the producer if counts are wrong.
+Monitor `habit_ranking_query` outcomes and `habit_ranking_block` build failures;
+HTTP 409 `HABIT_RANKING_STALE` means refresh the existing absolute query rather
+than resolve its relative period again. The exact payload and boundary policy
+are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).

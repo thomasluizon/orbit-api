@@ -122,6 +122,9 @@ public partial class ProcessUserChatCommandHandler
             prompt = AppendCardPrompt(prompt, client, PartKinds.GoalList,
                 GoalListCardBuilder.PromptInstruction, GoalListCardBuilder.PartsPromptInstruction);
 
+        if (activeToolNames.Contains("get_habit_ranking"))
+            prompt = string.Join(Environment.NewLine, prompt, HabitRankingCardBuilder.PromptInstruction);
+
         prompt = AppendPeriodCardPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
         prompt = AppendStatusCardPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
         return AppendListAndAccountPrompts(prompt, client, context.EnabledFeatureFlags, activeToolNames);
