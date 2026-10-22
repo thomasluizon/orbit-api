@@ -123,6 +123,7 @@ public class SecurityHeadersMiddlewareTests
         await middleware.InvokeAsync(context);
 
         var csp = context.Response.Headers[HeaderNames.ContentSecurityPolicy].ToString();
+        csp.Should().Contain("default-src 'self';");
         csp.Should().Contain("font-src 'self'");
         csp.Should().Contain("style-src 'self' 'unsafe-inline'");
         csp.Should().Contain("script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com;");

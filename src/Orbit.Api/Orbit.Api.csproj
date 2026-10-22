@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Branding/Assets/google-mark.svg" LogicalName="orbit.brand.google-mark.svg" />
     <EmbeddedResource Include="Branding/Assets/favicon.ico" LogicalName="orbit.brand.favicon.ico" />
     <EmbeddedResource Include="Branding/Assets/favicon.svg" LogicalName="orbit.brand.favicon.svg" />
     <EmbeddedResource Include="Branding/Assets/apple-touch-icon.png" LogicalName="orbit.brand.apple-touch-icon.png" />

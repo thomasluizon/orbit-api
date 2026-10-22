@@ -315,9 +315,9 @@ public partial class OAuthController(
         return Redirect($"/oauth/consent?ticket={Uri.EscapeDataString(consent)}");
     }
 
-    private static IActionResult InvalidGoogleState() => new ContentResult
+    private IActionResult InvalidGoogleState() => new ContentResult
     {
-        Content = "<html><body><p>This authorization request is invalid or expired. Return to your MCP client and try again.</p></body></html>",
+        Content = OAuthErrorPage.Render(ResolveLanguage()),
         ContentType = "text/html",
         StatusCode = StatusCodes.Status400BadRequest
     };

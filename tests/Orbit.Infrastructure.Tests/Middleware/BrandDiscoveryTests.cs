@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -79,6 +81,37 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
         await ((IApplicationBuilder)app).Build()(context);
         context.Response.StatusCode.Should().Be(429);
         context.Response.Headers.CacheControl.ToString().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SvgRoute_AllowsOnlyItsExactEmbeddedStylesheet()
+    {
+        await using var app = await CreateApplication();
+        var context = CreateRequest(app, "/favicon.svg");
+        await ((IApplicationBuilder)app).Build()(context);
+        var svg = XDocument.Parse(Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray()));
+        var style = svg.Descendants(XName.Get("style", "http://www.w3.org/2000/svg")).Single().Value;
+        var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(style)));
+        context.Response.Headers["Content-Security-Policy"].ToString()
+            .Should().Be($"default-src 'none'; style-src 'sha256-{hash}'; frame-ancestors 'none'");
+    }
+
+    [Fact]
+    public async Task GoogleMarkRoute_ServesTheSharedFourColourPaths()
+    {
+        await using var app = await CreateApplication();
+        var context = CreateRequest(app, "/oauth/assets/google-mark.svg");
+        await ((IApplicationBuilder)app).Build()(context);
+        context.Response.StatusCode.Should().Be(200);
+        context.Response.ContentType.Should().Be("image/svg+xml");
+        var svg = XDocument.Parse(Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray()));
+        var root = svg.Root!;
+        root.Attribute("viewBox")!.Value.Should().Be("0 0 48 48");
+        root.Attribute("width")!.Value.Should().Be("20");
+        root.Attribute("height")!.Value.Should().Be("20");
+        root.Elements().Select(path => path.Attribute("fill")!.Value)
+            .Should().Equal("#EA4335", "#4285F4", "#FBBC05", "#34A853");
+        root.Elements().Should().OnlyContain(path => path.Name.LocalName == "path");
     }
 
     [Fact]

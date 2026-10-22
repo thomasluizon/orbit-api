@@ -72,6 +72,52 @@ public class OAuthLoginPageTests : IDisposable
             .Should().BeOfType<ContentResult>().Subject.Content!;
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task EveryPage_LinksBrandIconsAndUsesTheSharedShell(string language)
+    {
+        _controller.Request.Headers.AcceptLanguage = language;
+        var consentTicket = _authStore.CreatePendingConsent(new ConsentEntry(Guid.NewGuid(), "challenge",
+            "https://claude.ai/callback", "client", "state", null, language));
+        var consent = _controller.Consent(consentTicket).Should().BeOfType<ContentResult>().Subject;
+        var invalid = (await _controller.GoogleCallback("unknown", null, null, CancellationToken.None))
+            .Should().BeOfType<ContentResult>().Subject;
+        invalid.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        invalid.ContentType.Should().Be("text/html");
+        var invalidStart = _controller.GoogleStart("client", "https://claude.ai/callback", "", "challenge", "S256")
+            .Should().BeOfType<ContentResult>().Subject;
+        var invalidConsent = _controller.Consent("missing").Should().BeOfType<ContentResult>().Subject;
+        var invalidGrant = _controller.GrantConsent("missing", "requested").Should().BeOfType<ContentResult>().Subject;
+        foreach (var errorPage in new[] { invalidStart, invalidConsent, invalidGrant })
+            errorPage.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        foreach (var page in new[] { RenderPage(language), consent.Content!, invalid.Content!,
+                     invalidStart.Content!, invalidConsent.Content!, invalidGrant.Content! })
+        {
+            page.Should().Contain($"<html lang=\"{language}\">");
+            page.Should().Contain("<link rel=\"icon\" href=\"/favicon.ico\" sizes=\"16x16 32x32 48x48\">");
+            page.Should().Contain("<link rel=\"icon\" href=\"/favicon.svg\" type=\"image/svg+xml\" sizes=\"any\">");
+            page.Should().Contain("<link rel=\"apple-touch-icon\" href=\"/apple-touch-icon.png\" sizes=\"180x180\">");
+            page.Should().Contain("<main class=\"card\">");
+            page.Should().Contain(OAuthPageStyles.Css);
+        }
+        invalid.Content.Should().Contain(language == "pt-BR"
+            ? "Esta solicitação de autorização é inválida ou expirou."
+            : "This authorization request is invalid or expired.");
+        invalid.Content.Should().Contain(language == "pt-BR"
+            ? "Volte ao seu cliente MCP e tente novamente."
+            : "Return to your MCP client and try again.");
+        invalid.Content.Should().NotContain("<form").And.NotContain("<script");
+    }
+
+    [Fact]
+    public void GoogleButton_UsesTheSharedDecorativeMarkAndBrandSpacing()
+    {
+        var page = RenderPage();
+        page.Should().Contain("<img src=\"/oauth/assets/google-mark.svg\" width=\"20\" height=\"20\" alt=\"\" aria-hidden=\"true\">");
+        page.Should().Contain(".btn-google { padding-inline: var(--s-3); gap: 10px; }");
+    }
+
     [Fact]
     public void Page_DrawsTheOrbitalMarkWithTheAccentOnItsMoon()
     {

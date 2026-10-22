@@ -547,14 +547,25 @@ public class OAuthControllerTests : IDisposable
         await _mediator.DidNotReceive().Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task GoogleCallback_RejectsExpiredState()
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task GoogleCallback_RejectsExpiredState(string language)
     {
         var state = CreatePendingGoogleRequest().GoogleState;
         _timeProvider.Advance(TimeSpan.FromMinutes(6));
+        _controller.Request.Headers.AcceptLanguage = language;
 
-        (await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None))
-            .Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        var page = (await _controller.GoogleCallback(state, "google-code", null, CancellationToken.None))
+            .Should().BeOfType<ContentResult>().Subject;
+        page.StatusCode.Should().Be(400);
+        page.ContentType.Should().Be("text/html");
+        page.Content.Should().Contain($"<html lang=\"{language}\">");
+        page.Content.Should().Contain("<main class=\"card\">");
+        page.Content.Should().Contain(OAuthPageStyles.Css);
+        page.Content.Should().Contain(language == "pt-BR"
+            ? "Volte ao seu cliente MCP e tente novamente."
+            : "Return to your MCP client and try again.");
         await _mediator.DidNotReceive().Send(Arg.Any<GoogleCodeAuthCommand>(), Arg.Any<CancellationToken>());
     }
 
