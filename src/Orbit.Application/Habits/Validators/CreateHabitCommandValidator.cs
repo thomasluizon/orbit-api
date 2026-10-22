@@ -12,6 +12,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .NotEmpty();
 
         SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
+        SharedHabitRules.AddPolarityRules(this, x => x.Title, x => x.IsBadHabit);
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 

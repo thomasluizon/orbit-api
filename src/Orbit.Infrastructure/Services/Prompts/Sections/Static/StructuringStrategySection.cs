@@ -1,4 +1,5 @@
 using System.Text;
+using Orbit.Application.Chat;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Static;
 
@@ -56,6 +57,8 @@ public class StructuringStrategySection : IPromptSection
             - Asking multiple clarifying questions when one would unblock you
             - Silently guessing days of the week when the user did not specify them
             """);
+        sb.AppendLine("## Orbit habit model");
+        sb.AppendLine(HabitModelInstructions.All);
         return sb.ToString();
     }
 }

@@ -13,7 +13,7 @@ public class BulkCreateHabitsTool(
     public string Name => "bulk_create_habits";
 
     public string Description =>
-        "Create multiple habits with inline sub-habits.";
+        "Create multiple habits with inline sub-habits." + "\n" + HabitModelInstructions.All;
 
     public object GetParameterSchema() => new
     {
@@ -24,7 +24,7 @@ public class BulkCreateHabitsTool(
             habits = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Habits to create.",
+                description = HabitModelInstructions.Batch,
                 items = HabitItemSchema(includeSubHabits: true)
             }
         },
@@ -50,9 +50,17 @@ public class BulkCreateHabitsTool(
         if (!args.TryGetProperty("habits", out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
 
+        var semantics = new Validators.HabitProposalValidator().Validate(new Validators.HabitProposal(string.Empty, args));
+        if (!semantics.IsValid)
+            return new ToolResult(false, Error: semantics.Errors[0].ErrorMessage, ErrorCode: semantics.Errors[0].ErrorCode);
         var items = new List<BulkHabitItem>();
         foreach (var habitEl in habitsEl.EnumerateArray())
         {
+            if (habitEl.ValueKind != JsonValueKind.Object)
+                return new ToolResult(false, Error: "Each habit must be an object.");
+            var fieldError = BulkHabitToolArguments.CheckCreateHabitFields(habitEl);
+            if (fieldError is not null)
+                return new ToolResult(false, Error: fieldError);
             var item = ParseBulkHabitItem(habitEl);
             if (item is null)
                 return new ToolResult(false, Error: "Each habit requires a non-empty title.");
@@ -73,8 +81,8 @@ public class BulkCreateHabitsTool(
             {
                 var childCommand = new CreateSubHabitCommand(userId, parentId, item.Title, item.Description,
                     item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate,
-                    new HabitCommandOptions(Days: item.Days, DueTime: item.DueTime, IsFlexible: item.IsFlexible,
-                        ChecklistItems: item.ChecklistItems), Emoji: item.Emoji, InheritParentFrequency: true,
+                    new HabitCommandOptions(Days: item.Days, DueTime: item.DueTime, DueEndTime: item.DueEndTime,
+                        IsFlexible: item.IsFlexible, EndDate: item.EndDate, ChecklistItems: item.ChecklistItems), Emoji: item.Emoji, InheritParentFrequency: item.InheritParentFrequency,
                     IntervalWeeks: item.IntervalWeeks);
                 if (checkOnly)
                 {
@@ -128,7 +136,8 @@ public class BulkCreateHabitsTool(
         if (parsedFrequency.IsFailure)
             return null;
         var frequencyUnit = parsedFrequency.Value;
-        var frequencyQuantity = JsonArgumentParser.GetOptionalInt(el, "frequency_quantity")
+        var oneTime = JsonArgumentParser.GetOptionalString(el, "frequency_unit") == "OneTime";
+        var frequencyQuantity = oneTime ? null : JsonArgumentParser.GetOptionalInt(el, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : (int?)null);
 
         return new BulkHabitItem(
@@ -136,17 +145,19 @@ public class BulkCreateHabitsTool(
             JsonArgumentParser.GetOptionalString(el, "description"),
             frequencyUnit,
             frequencyQuantity,
-            Days: JsonArgumentParser.ParseDays(el),
+            Days: oneTime ? null : JsonArgumentParser.ParseDays(el),
             IsBadHabit: JsonArgumentParser.GetOptionalBool(el, "is_bad_habit") ?? false,
             DueDate: JsonArgumentParser.ParseDateOnly(el, "due_date"),
             DueTime: JsonArgumentParser.ParseTimeOnly(el, "due_time"),
+            DueEndTime: JsonArgumentParser.ParseTimeOnly(el, "due_end_time"),
             IsGeneral: JsonArgumentParser.GetOptionalBool(el, "is_general") ?? false,
             EndDate: JsonArgumentParser.ParseDateOnly(el, "end_date"),
             IsFlexible: JsonArgumentParser.GetOptionalBool(el, "is_flexible") ?? false,
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(el),
             SubHabits: subHabits,
             Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"),
-            IntervalWeeks: JsonArgumentParser.GetOptionalInt(el, "interval_weeks"));
+            IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, "interval_weeks"))
+        { InheritParentFrequency = !oneTime };
     }
 
     private static object HabitItemSchema(bool includeSubHabits)
@@ -156,14 +167,15 @@ public class BulkCreateHabitsTool(
             [TitleProperty] = new { type = JsonSchemaTypes.String },
             ["description"] = new { type = JsonSchemaTypes.String },
             ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
-            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Recurrence unit. Omit for one-time tasks.", @enum = JsonSchemaTypes.FrequencyUnitEnum },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = HabitModelInstructions.Schedule, @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
             ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date." },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
-            ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
+            ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline." },
+            ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
             ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a general habit with no schedule. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },
             ["checklist_items"] = new

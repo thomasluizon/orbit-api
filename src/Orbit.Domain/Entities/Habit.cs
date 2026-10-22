@@ -222,6 +222,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure<Habit>(DomainErrors.TitleRequired);
 
+        var polarityValidation = HabitSemantics.ValidatePolarity(p.Title, p.IsBadHabit);
+        if (polarityValidation is not null)
+            return Result.Failure<Habit>(polarityValidation);
+
         var emojiValidation = HabitInvariants.ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
             return Result.Failure<Habit>(emojiValidation);
@@ -760,6 +764,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure(DomainErrors.TitleRequired);
+
+        var polarityValidation = HabitSemantics.ValidatePolarity(p.Title, p.IsBadHabit);
+        if (polarityValidation is not null)
+            return Result.Failure(polarityValidation);
 
         var validationError = ValidateUpdateParams(p);
         if (validationError is not null)

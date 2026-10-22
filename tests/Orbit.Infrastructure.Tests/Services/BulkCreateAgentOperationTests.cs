@@ -248,6 +248,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         _logger.Entries.Should().NotContain(entry => entry.Message.Contains(first) || entry.Message.Contains(second));
         response.PendingOperation.Should().NotBeNull();
         response.PendingOperation!.Items.Should().ContainSingle().Which.EntityName.Should().Be(second);
+        response.PendingOperation.Items![0].ValidationErrors.Should().Contain(error => error.ErrorCode == "END_DATE_BEFORE_START");
         var retry = _pending.GetExecution(_userId, response.PendingOperation.Id);
         retry.Should().NotBeNull();
         retry!.Arguments.GetProperty("habits").GetArrayLength().Should().Be(1);
@@ -273,6 +274,42 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         using var afterRetry = _factory.CreateContext();
         afterRetry.Habits.Should().HaveCount(2);
         afterRetry.Habits.Count(habit => habit.Title == first).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("Exame de colesterol", "Outros exames de sangue", "Não tomar multivitamínico", "Não ir ao Muay Thai")]
+    [InlineData("Cholesterol exam", "Other blood tests", "Don't take multivitamins", "Don't go to Muay Thai")]
+    public async Task ExamBatch_ApprovalPersistsOneTimeEventsAndBoundedPreparation(string first, string second, string vitamins, string training)
+    {
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            habits = new object[]
+            {
+                new { title = first, frequency_unit = "OneTime", due_date = "2026-10-26", due_time = "15:50" },
+                new { title = second, frequency_unit = "OneTime", due_date = "2026-10-30", due_time = "13:30" },
+                new { title = vitamins, frequency_unit = "Day", due_date = "2026-10-27", end_date = "2026-10-30", is_bad_habit = false },
+                new { title = training, frequency_unit = "Day", due_date = "2026-10-29", end_date = "2026-10-30", is_bad_habit = false }
+            }
+        });
+        var request = await ConfirmAsync(arguments);
+        var preview = await _previewer.PreviewAsync(_userId, request.OperationId, arguments);
+        preview.Value!.Items.Should().HaveCount(4);
+        preview.Value.Items![0].Fields.Should().Contain(field => field.Field == "due_date" && field.ValueType == "date");
+        var response = await _executor.ExecuteAsync(request);
+        response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        var saved = verify.Habits.OrderBy(habit => habit.Position).ToList();
+        saved.Should().HaveCount(4);
+        saved.Take(2).Should().AllSatisfy(habit => habit.FrequencyUnit.Should().BeNull());
+        saved[0].DueDate.Should().Be(new DateOnly(2026, 10, 26));
+        saved[0].DueTime.Should().Be(new TimeOnly(15, 50));
+        saved[1].DueDate.Should().Be(new DateOnly(2026, 10, 30));
+        saved[1].DueTime.Should().Be(new TimeOnly(13, 30));
+        saved.Skip(2).Should().AllSatisfy(habit =>
+        {
+            habit.EndDate.Should().Be(new DateOnly(2026, 10, 30));
+            habit.IsBadHabit.Should().BeFalse();
+        });
     }
 
     private void AssertApprovable()

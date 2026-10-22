@@ -197,6 +197,14 @@
             "required": false
           },
           {
+            "name": "habits[].due_end_time",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false
+          },
+          {
             "name": "habits[].due_time",
             "type": "string",
             "required": false
@@ -232,6 +240,7 @@
             "values": [
               "Day",
               "Month",
+              "OneTime",
               "Week",
               "Year"
             ]
@@ -306,6 +315,14 @@
             "required": false
           },
           {
+            "name": "habits[].sub_habits[].due_end_time",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false
+          },
+          {
             "name": "habits[].sub_habits[].due_time",
             "type": "string",
             "required": false
@@ -341,6 +358,7 @@
             "values": [
               "Day",
               "Month",
+              "OneTime",
               "Week",
               "Year"
             ]
@@ -16061,6 +16079,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_end_time",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.due_end_time",
                       "status": "covered"
@@ -16158,6 +16181,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_end_time",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.due_end_time",
@@ -34322,6 +34351,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_end_time",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.due_end_time",
                       "status": "covered"
@@ -34426,6 +34460,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_end_time",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.due_end_time",

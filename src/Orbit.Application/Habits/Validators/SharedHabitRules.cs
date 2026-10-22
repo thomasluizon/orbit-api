@@ -24,6 +24,15 @@ public static class SharedHabitRules
             lengthRule.WithFieldCopy(ValidationCopyKeys.HabitTitleLength);
     }
 
+    public static void AddPolarityRules<T>(AbstractValidator<T> validator,
+        System.Linq.Expressions.Expression<Func<T, string>> title, Func<T, bool> isBadHabit)
+    {
+        validator.RuleFor(title)
+            .Must((item, name) => Domain.Entities.HabitSemantics.ValidatePolarity(name, isBadHabit(item)) is null)
+            .WithMessage(Domain.Common.DomainErrors.BadHabitNegatedName.Message)
+            .WithErrorCode(Domain.Common.DomainErrors.BadHabitNegatedName.Code);
+    }
+
     public static void AddDescriptionRules<T>(IRuleBuilder<T, string?> rule, bool isChild = false)
     {
         rule.MaximumLength(AppConstants.MaxHabitDescriptionLength)

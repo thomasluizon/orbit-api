@@ -37,7 +37,10 @@ public record BulkHabitItem(
     string? Emoji = null,
     IReadOnlyList<string>? Tags = null,
     int? IntervalWeeks = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null)
+{
+    internal bool InheritParentFrequency { get; init; } = true;
+}
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results)
 {

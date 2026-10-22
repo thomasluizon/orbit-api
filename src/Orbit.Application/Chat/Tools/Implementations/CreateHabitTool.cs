@@ -27,7 +27,7 @@ public class CreateHabitTool(
     public int Order => 0;
 
     public string Description =>
-        "Use frequency_unit: OneTime for one-time tasks; null leaves recurrence unspecified and may require clarification. Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking.";
+        "Use frequency_unit: OneTime for one-time tasks; null leaves recurrence unspecified and may require clarification. Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking." + "\n" + HabitModelInstructions.All;
 
     public object GetParameterSchema() => new
     {
@@ -40,7 +40,7 @@ public class CreateHabitTool(
             frequency_unit = new
             {
                 type = new[] { JsonSchemaTypes.String, "null" },
-                description = "OneTime for explicit one-time tasks; null leaves recurrence unspecified.",
+                description = HabitModelInstructions.Schedule,
                 @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum
             },
             frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "How often (e.g. every 2 days). Defaults to 1." },
@@ -57,7 +57,7 @@ public class CreateHabitTool(
             due_end_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline. For 'before 15h' without a fixed start, set 15:00 and omit due_time." },
             is_general = new { type = JsonSchemaTypes.Boolean, description = "General habit without a schedule. Children inherit this value." },
             relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip pattern alerts. Defaults to true for bad habits." },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable reminders" },

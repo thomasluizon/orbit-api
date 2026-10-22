@@ -209,8 +209,14 @@ internal static class BulkHabitToolArguments
             ?? ParseFrequency(fields).Error;
     }
 
-    public static string? CheckCreateHabitFields(JsonElement fields) =>
-        CheckHabitFields(fields);
+    public static string? CheckCreateHabitFields(JsonElement fields)
+    {
+        var fieldError = CheckHabitFields(fields);
+        if (fieldError is not null)
+            return fieldError;
+        var semantics = new Validators.HabitProposalValidator().Validate(new Validators.HabitProposal(string.Empty, fields));
+        return semantics.IsValid ? null : semantics.Errors[0].ErrorMessage;
+    }
 
     public static object FilterSchema() => new
     {
