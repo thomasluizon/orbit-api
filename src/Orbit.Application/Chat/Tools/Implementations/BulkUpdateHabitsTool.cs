@@ -11,7 +11,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
     public string Name => "bulk_update_habits";
 
     public string Description =>
-        "Update the complete matching habit set in one call. Null keeps values; use clear_fields to clear them.";
+        "Update the complete matching habit set in one call. Null keeps values; use clear_fields to clear them." + "\n" + HabitModelInstructions.All;
 
     public object GetParameterSchema() => new
     {

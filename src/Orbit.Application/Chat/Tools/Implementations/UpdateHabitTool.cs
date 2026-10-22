@@ -17,7 +17,7 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update habit fields. Null keeps values; clear_fields removes them (frequency_unit makes a one-time task). Use is_flexible for windows and bulk tools for multiple habits.";
+        "Update habit fields. Null keeps values; clear_fields removes them (frequency_unit makes a one-time task). Use is_flexible for windows and bulk tools for multiple habits." + "\n" + HabitModelInstructions.All;
 
     public object GetParameterSchema() => new
     {
@@ -49,7 +49,7 @@ public class UpdateHabitTool(
             is_general = new { type = JsonSchemaTypes.Boolean, description = "General habit without a schedule. Children must match their parent." },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alerts. Requires Pro." },
             relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit" },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking. Cannot have days set." },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable or disable reminders" },
             reminder_times = new

@@ -34,7 +34,8 @@ public class AiController(
     IAgentAuditService auditService,
     IAgentOperationExecutor operationExecutor,
     PendingOperationRevisionService revisionService,
-    IValidator<ResolveClarificationRequest> resolveClarificationValidator) : ControllerBase
+    IValidator<ResolveClarificationRequest> resolveClarificationValidator,
+    ILogger<AiController>? logger = null) : ControllerBase
 {
     [HttpGet("capabilities")]
     public Task<IActionResult> GetCapabilitiesMetadata(CancellationToken cancellationToken) =>
@@ -179,7 +180,10 @@ public class AiController(
         var userId = HttpContext.GetUserId();
         var execution = pendingStores.OperationStore.GetExecution(userId, id);
         if (execution?.RequiresReproposal == true)
+        {
+            LogPendingRejection(id, execution.OperationId, "pending_operation_schema_changed");
             return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
+        }
         var invalid = execution is not null
             && !await revisionService.CanApproveAsync(userId, execution, cancellationToken);
         var confirmation = invalid ? null : pendingStores.OperationStore.Confirm(userId, id);
@@ -197,6 +201,8 @@ public class AiController(
             TargetId: id.ToString(),
             Error: invalid ? "validation_error" : confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
 
+        if (confirmation is null)
+            LogPendingRejection(id, execution?.OperationId ?? "unknown", invalid ? "validation_error" : "pending_operation_not_found");
         if (invalid)
             return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
 
@@ -291,6 +297,7 @@ public class AiController(
         var pendingExecution = pendingStores.OperationStore.GetExecution(userId, id);
         if (pendingExecution is null)
         {
+            LogPendingRejection(id, "unknown", "pending_operation_not_found");
             await auditService.RecordAsync(new AgentAuditEntry(
                 userId,
                 AgentCapabilityIds.ChatInteract,
@@ -309,13 +316,22 @@ public class AiController(
         }
 
         if (pendingExecution.RequiresReproposal)
+        {
+            LogPendingRejection(id, pendingExecution.OperationId, "pending_operation_schema_changed");
             return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
+        }
 
         if (!await revisionService.CanApproveAsync(userId, pendingExecution, cancellationToken))
+        {
+            LogPendingRejection(id, pendingExecution.OperationId, "validation_error");
             return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
+        }
 
         if (!await revisionService.IsCurrentAsync(userId, pendingExecution, cancellationToken))
+        {
+            LogPendingRejection(id, pendingExecution.OperationId, "stale_preview");
             return Conflict(new { error = "stale_preview" });
+        }
 
         var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             userId,
@@ -512,6 +528,10 @@ public class AiController(
 
         return JsonDocument.Parse(baseNode.ToJsonString()).RootElement.Clone();
     }
+
+    private void LogPendingRejection(Guid pendingOperationId, string operationId, string reasonCode) =>
+        logger?.LogWarning("Pending operation {PendingOperationId} for {OperationId} rejected with {ReasonCode} (correlation {CorrelationId})",
+            pendingOperationId, operationId, reasonCode, HttpContext.TraceIdentifier);
 
     private static void DeepMerge(JsonObject target, JsonObject patch)
     {

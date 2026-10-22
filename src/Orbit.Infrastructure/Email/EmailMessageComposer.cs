@@ -30,7 +30,7 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
     public EmailMessage ComposeVerificationCode(string toEmail, string code, string language)
     {
         var isPtBr = LocaleHelper.IsPortuguese(language);
-        var copy = EmailCopy.VerificationCode(isPtBr);
+        var copy = EmailCopy.VerificationCode(isPtBr, code);
         var signInUrl = $"{frontendBaseUrl}/login?email={WebUtility.UrlEncode(toEmail)}&code={code}";
 
         var tokens = new Dictionary<string, string>

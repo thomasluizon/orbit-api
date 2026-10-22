@@ -37,7 +37,10 @@ public record BulkHabitItem(
     string? Emoji = null,
     IReadOnlyList<string>? Tags = null,
     int? IntervalWeeks = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null)
+{
+    internal bool InheritParentFrequency { get; init; } = true;
+}
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results)
 {
@@ -60,7 +63,8 @@ public record BulkCreateItemResult(
     Guid? HabitId = null,
     string? Title = null,
     string? Error = null,
-    string? Field = null);
+    string? Field = null,
+    string? ErrorCode = null);
 
 public enum BulkItemStatus { Success, Failed }
 
@@ -127,7 +131,7 @@ public class BulkCreateHabitsCommandHandler(
                 out var field);
             if (subtree.IsFailure)
             {
-                results.Add(new(i, BulkItemStatus.Failed, Title: item.Title, Error: subtree.Error, Field: field));
+                results.Add(new(i, BulkItemStatus.Failed, Title: item.Title, Error: subtree.Error, Field: field, ErrorCode: subtree.ErrorCode));
                 continue;
             }
 
