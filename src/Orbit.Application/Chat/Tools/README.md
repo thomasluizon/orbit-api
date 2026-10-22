@@ -198,7 +198,10 @@ answer and retry the same token. Never substitute today's query after a failure.
 Each row has the log id, `logDate` and its actual `value`; these are record markers,
 not measured amounts. Results sort by date descending, then id, and use the exact
 refresh route for paging. Goal rows preserve their requested status/search filters.
-Calendar blocks preserve connection and sync state. Key rows retain safe prefixes
+Calendar blocks preserve connection/sync state and append the actual `calendars`
+and `suggestions` arrays. Suggestion cutoffs and calendar selection remain bound
+to the original query. Profile rows include the queried preference values, and
+plan allowance rows use the subscription result. Key rows retain safe prefixes
 and state only, with the existing step-up checks. Chat reads do not provision
 referral codes, reconcile achievements, persist calendar connection state, create
 recaps or shares, or write habit logs. Missing referral codes and links stay empty.

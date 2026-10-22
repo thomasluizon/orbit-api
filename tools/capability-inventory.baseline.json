@@ -1847,6 +1847,11 @@
         "name": "get_calendar_overview",
         "parameters": [
           {
+            "name": "as_of",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "calendar_ids",
             "type": [
               "array",

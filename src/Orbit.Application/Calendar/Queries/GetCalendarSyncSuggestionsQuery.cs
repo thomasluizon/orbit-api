@@ -10,7 +10,8 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Calendar.Queries;
 
-public record GetCalendarSyncSuggestionsQuery(Guid UserId) : IRequest<Result<List<CalendarSyncSuggestionItem>>>;
+public record GetCalendarSyncSuggestionsQuery(Guid UserId, DateOnly? AsOf = null, DateOnly? DateTo = null,
+    IReadOnlyList<string>? CalendarIds = null, bool UseCurrentSelection = true) : IRequest<Result<List<CalendarSyncSuggestionItem>>>;
 
 public record CalendarSyncSuggestionItem(
     Guid Id,
@@ -36,7 +37,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         if (user is null)
             return Result.Failure<List<CalendarSyncSuggestionItem>>(ErrorMessages.UserNotFound);
 
-        var selectedCalendarIds = user.GetSelectedCalendarIds();
+        var selectedCalendarIds = request.UseCurrentSelection ? user.GetSelectedCalendarIds() : request.CalendarIds;
         var selectedCalendars = selectedCalendarIds is null
             ? null
             : new HashSet<string>(selectedCalendarIds, StringComparer.Ordinal);
@@ -48,7 +49,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         if (suggestions.Count == 0)
             return Result.Success(new List<CalendarSyncSuggestionItem>());
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var userToday = request.AsOf ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId,
             cancellationToken);
@@ -70,7 +71,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         foreach (var suggestion in suggestions.OrderBy(s => s.StartDateUtc))
         {
             var item = TryBuildSuggestionItem(
-                suggestion, userToday, importedEventIds, selectedCalendars, timeZone, request.UserId);
+                suggestion, userToday, request.DateTo, importedEventIds, selectedCalendars, timeZone, request.UserId);
             if (item is not null)
             {
                 candidates.Add((
@@ -94,7 +95,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
 
     private CalendarSyncSuggestionItem? TryBuildSuggestionItem(
         GoogleCalendarSyncSuggestion suggestion,
-        DateOnly userToday,
+        DateOnly userToday, DateOnly? dateTo,
         HashSet<string> importedEventIds,
         HashSet<string>? selectedCalendars,
         TimeZoneInfo timeZone,
@@ -107,7 +108,8 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         if (sourceEvent.HasUnrepresentableRecurrenceAfterProjection(timeZone)) return null;
 
         var eventItem = sourceEvent.ProjectTo(timeZone);
-        if (ResolveStartDate(eventItem, suggestion.StartDateUtc, timeZone) < userToday) return null;
+        var startDate = ResolveStartDate(eventItem, suggestion.StartDateUtc, timeZone);
+        if (startDate < userToday || dateTo.HasValue && startDate > dateTo.Value) return null;
         if (selectedCalendars is not null
             && !string.IsNullOrEmpty(eventItem.CalendarId)
             && !selectedCalendars.Contains(eventItem.CalendarId)) return null;

@@ -36,6 +36,8 @@ public record CalendarCard(
     IReadOnlyList<CalendarCardEvent> Events,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CalendarCardSync? Sync,
     string SurfaceId = "calendar",
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Orbit.Application.Calendar.Queries.UserCalendarItem>? Calendars = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Orbit.Application.Calendar.Queries.CalendarSyncSuggestionItem>? Suggestions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
 
 public static class StatusCardBuilder
@@ -104,6 +106,6 @@ public static class StatusCardBuilder
         var sync = payload.AutoSyncState is { } state
             ? new CalendarCardSync(state.Enabled, state.Status.ToString(), state.LastSyncedAt, state.HasGoogleConnection)
             : null;
-        return new CalendarCard(events, sync);
+        return new CalendarCard(events, sync, Calendars: payload.Calendars, Suggestions: payload.Suggestions);
     }
 }

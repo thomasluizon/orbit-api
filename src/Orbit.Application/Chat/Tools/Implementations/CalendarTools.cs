@@ -27,6 +27,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            as_of = new { type = JsonSchemaTypes.String },
             calendar_ids = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } },
             date_from = new { type = JsonSchemaTypes.String },
             date_to = new { type = JsonSchemaTypes.String },
@@ -73,7 +74,9 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         }
 
         var suggestions = includeSuggestions
-            ? await mediator.Send(new GetCalendarSyncSuggestionsQuery(userId), ct)
+            ? await mediator.Send(new GetCalendarSyncSuggestionsQuery(userId,
+                JsonArgumentParser.ParseDateOnly(args, "date_from") ?? JsonArgumentParser.ParseDateOnly(args, "as_of"),
+                JsonArgumentParser.ParseDateOnly(args, "date_to"), selectedIds, UseCurrentSelection: !hasSelection), ct)
             : Result.Success(new List<CalendarSyncSuggestionItem>());
         if (suggestions.IsFailure && suggestions.ErrorCode != Result.PayGateErrorCode)
             return ToolResult.FromFailure(suggestions);

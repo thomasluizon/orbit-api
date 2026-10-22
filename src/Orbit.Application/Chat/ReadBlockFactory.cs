@@ -49,13 +49,14 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             node["date_to"] ??= tool == "get_daily_summary" ? node["date_from"]!.DeepClone() : Iso(to);
         }
         ApplyDefaults(tool, node);
-        if (tool is "query_goals" or "review_goals" or "get_gamification_overview")
+        if (tool is "query_goals" or "review_goals" or "get_gamification_overview" or "get_calendar_overview")
             node["as_of"] ??= Iso(today);
         if (tool == "get_calendar_overview")
         {
             var user = await users.GetByIdAsync(userId, ct);
             if (!node.ContainsKey("calendar_ids")) node["calendar_ids"] = JsonSerializer.SerializeToNode(user?.GetSelectedCalendarIds());
             var zone = await dates.GetUserTimeZoneAsync(userId, ct);
+            if (node["date_to"] is not null) node["date_from"] ??= Iso(today);
             if (node["date_from"]?.GetValue<string>() is { } fromText && DateOnly.TryParseExact(fromText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate))
             {
                 var toDate = JsonArgumentParser.ParseDateOnly(args, "date_to") ?? fromDate;

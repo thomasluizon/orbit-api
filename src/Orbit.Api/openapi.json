@@ -15672,6 +15672,24 @@
             "type": "string",
             "default": "calendar"
           },
+          "calendars": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/UserCalendarItem"
+            }
+          },
+          "suggestions": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CalendarSyncSuggestionItem"
+            }
+          },
           "read": {
             "oneOf": [
               {
@@ -15879,6 +15897,31 @@
                 "$ref": "#/components/schemas/HabitLogResponse"
               }
             }
+          }
+        }
+      },
+      "CalendarSyncSuggestionItem": {
+        "required": [
+          "id",
+          "googleEventId",
+          "event",
+          "discoveredAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "googleEventId": {
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/components/schemas/CalendarEventItem"
+          },
+          "discoveredAtUtc": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -20611,6 +20654,24 @@
             "type": "string",
             "default": "calendar"
           },
+          "calendars": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/UserCalendarItem"
+            }
+          },
+          "suggestions": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CalendarSyncSuggestionItem"
+            }
+          },
           "read": {
             "oneOf": [
               {
@@ -23834,6 +23895,40 @@
           "earnedAtUtc": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "UserCalendarItem": {
+        "required": [
+          "id",
+          "name",
+          "accessRole",
+          "primary",
+          "backgroundColor",
+          "isSynced"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "accessRole": {
+            "type": "string"
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "backgroundColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isSynced": {
+            "type": "boolean"
           }
         }
       },

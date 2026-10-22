@@ -63,7 +63,8 @@ public static class AccountRowsCardBuilder
             new("planExpiry", Iso(status.PlanExpiresAt), "date"),
             new("interval", status.SubscriptionInterval, "enum"),
             new("source", status.Source, "enum"),
-            new("lifetime", status.IsLifetimePro.ToString().ToLowerInvariant(), "boolean")
+            new("lifetime", status.IsLifetimePro.ToString().ToLowerInvariant(), "boolean"),
+            new("astraAllowance", $"{status.AiMessagesUsed}/{status.AiMessagesLimit}", "count")
         ]);
 
     private static string? Iso(DateTime? date) => date?.ToString("O", CultureInfo.InvariantCulture);

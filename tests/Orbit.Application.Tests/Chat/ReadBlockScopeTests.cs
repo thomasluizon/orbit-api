@@ -234,6 +234,38 @@ public sealed class ReadBlockScopeTests
         retried.Value.Read.QueryId.Should().Be(read.QueryId);
     }
 
+
+    [Fact]
+    public async Task CalendarRefreshCarriesQueriedCollectionsAndRetainsSuggestionScope()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var item = new Orbit.Application.Calendar.Queries.CalendarEventItem("event", "Appointment", null,
+            "2026-04-01", null, null, false, null, []);
+        var suggestion = new Orbit.Application.Calendar.Queries.CalendarSyncSuggestionItem(Guid.NewGuid(), item.Id, item, DateTime.UnixEpoch);
+        var calendar = new Orbit.Application.Calendar.Queries.UserCalendarItem("calendar", "Main", "owner", true, null, true);
+        mediator.Send(Arg.Any<Orbit.Application.Calendar.Queries.GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<Orbit.Application.Calendar.Queries.CalendarEventItem> { item }));
+        mediator.Send(Arg.Any<Orbit.Application.Calendar.Queries.GetCalendarAutoSyncStateQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new Orbit.Application.Calendar.Queries.CalendarAutoSyncStateResponse(true, Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle, null, true)));
+        mediator.Send(Arg.Any<Orbit.Application.Calendar.Queries.GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<Orbit.Application.Calendar.Queries.CalendarSyncSuggestionItem> { suggestion }));
+        mediator.Send(Arg.Any<Orbit.Application.Calendar.Queries.GetUserCalendarsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<Orbit.Application.Calendar.Queries.UserCalendarItem> { calendar }));
+        var tool = new GetCalendarOverviewTool(mediator);
+        var executor = Executor(tool);
+        var args = Json("{\"date_from\":\"2026-04-01\",\"date_to\":\"2026-04-02\",\"calendar_ids\":[\"calendar\"]}");
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, args, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var read = initial.Operation.ReadBlock!;
+        var card = read.Block.Should().BeOfType<CalendarCard>().Subject;
+        card.Suggestions.Should().ContainSingle().Which.Should().Be(suggestion);
+        card.Calendars.Should().ContainSingle().Which.Should().Be(calendar);
+        _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_day.AddDays(10));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        (await refresh.Handle(new(_userId, read.Read.RefreshToken, new(SupportsCalendarCard: true)), default)).IsSuccess.Should().BeTrue();
+        await mediator.Received(2).Send(Arg.Is<Orbit.Application.Calendar.Queries.GetCalendarSyncSuggestionsQuery>(q =>
+            q.AsOf == _day && q.DateTo == _day.AddDays(1) && !q.UseCurrentSelection && q.CalendarIds!.Single() == "calendar"), Arg.Any<CancellationToken>());
+    }
+
     private AgentOperationExecutor Executor(IAiTool tool) => CreateExecutor(tool, _blocks);
 
     internal static AgentOperationExecutor CreateExecutor(IAiTool tool, ReadBlockFactory blocks)
