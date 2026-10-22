@@ -323,6 +323,7 @@ public static class AgentCapabilityIds
     public const string HabitMetricsRead = "habits.metrics.read";
     public const string DailySummaryRead = "habits.daily-summary.read";
     public const string RetrospectiveRead = "habits.retrospective.read";
+    public const string HabitRankingRead = "habits.ranking.read";
     public const string GoalsRead = "goals.read";
     public const string GoalsWrite = "goals.write";
     public const string GoalsDelete = "goals.delete";

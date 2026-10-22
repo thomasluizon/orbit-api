@@ -93,12 +93,13 @@ public record ResponseCards(
     CalendarCard? Calendar = null,
     IReadOnlyList<RecordListCard>? RecordLists = null,
     AccountRowsCard? AccountRows = null,
-    IReadOnlyList<ChatResponsePart>? Parts = null)
+    IReadOnlyList<ChatResponsePart>? Parts = null,
+    HabitRankingCard? HabitRanking = null)
 {
     public bool HasAnyCard => HabitList is not null || GoalList is not null
         || MetricsCard is not null || PeriodInsight is not null || DaySummary is not null
         || Streak is not null || Calendar is not null || RecordLists is { Count: > 0 }
-        || AccountRows is not null || Parts?.OfType<ChatBlockPart>().Any() == true;
+        || AccountRows is not null || HabitRanking is not null || Parts?.OfType<ChatBlockPart>().Any() == true;
 }
 
 public record ActionResult(
@@ -171,6 +172,7 @@ public partial class ProcessUserChatCommandHandler(
         public const string GoalList = "goalList";
         public const string Metrics = "metrics";
         public const string PeriodInsight = "periodInsight";
+        public const string HabitRanking = HabitRankingCardBuilder.Kind;
         public const string DaySummary = "daySummary";
         public const string Streak = "streak";
         public const string Calendar = "calendar";
@@ -357,7 +359,11 @@ public partial class ProcessUserChatCommandHandler(
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))
+        {
+            if (request.BlockAnswer is null && HasOnlySuccessfulRankingReads(executionResults))
+                return Result.Success(CompleteRankingWithoutNarrative(request, context, executionResults));
             return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
+        }
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
@@ -391,6 +397,8 @@ public partial class ProcessUserChatCommandHandler(
         var aiMessage = groundedReply.Message;
         followUps = groundedReply.FollowUps;
         cards = ApplyGroundingToCards(cards, aiMessage);
+        cards = EnsureHabitRankingResult(cards, request, context, executionResults);
+        aiMessage = cards.AiMessage;
         if (executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
 
@@ -707,6 +715,7 @@ public partial class ProcessUserChatCommandHandler(
                 PartKinds.GoalList => cards.GoalList,
                 PartKinds.Metrics => cards.MetricsCard,
                 PartKinds.PeriodInsight => cards.PeriodInsight,
+                PartKinds.HabitRanking => cards.HabitRanking,
                 PartKinds.DaySummary => cards.DaySummary,
                 PartKinds.Streak => cards.Streak,
                 PartKinds.Calendar => cards.Calendar,
@@ -734,6 +743,7 @@ public partial class ProcessUserChatCommandHandler(
         "[[orbit:goals]]" => PartKinds.GoalList,
         "[[orbit:metrics]]" => PartKinds.Metrics,
         "[[orbit:insight]]" => PartKinds.PeriodInsight,
+        HabitRankingCardBuilder.Directive => PartKinds.HabitRanking,
         "[[orbit:day]]" => PartKinds.DaySummary,
         "[[orbit:streak]]" => PartKinds.Streak,
         "[[orbit:calendar]]" => PartKinds.Calendar,
@@ -823,6 +833,8 @@ public partial class ProcessUserChatCommandHandler(
                 executionResults.LastSuccessfulPayload<RetrospectiveResponse>("get_retrospective"));
         }
 
+        var habitRanking = BuildRequestedHabitRanking(aiMessage, request, context, executionResults);
+
         var (daySummary, streak, calendar) = await BuildStatusCardsAsync(
             aiMessage, request, context, executionResults, cancellationToken);
         var recordLists = BuildRecordLists(aiMessage, request, context, executionResults);
@@ -831,7 +843,7 @@ public partial class ProcessUserChatCommandHandler(
 
         aiMessage = StripAllDirectives(aiMessage);
         return new ResponseCards(aiMessage, habitList, goalList, metricsCard, periodInsight,
-            daySummary, streak, calendar, recordLists, accountRows);
+            daySummary, streak, calendar, recordLists, accountRows, HabitRanking: habitRanking);
     }
 
     private async Task<AccountRowsCard?> TryBuildAccountRowsAsync(
