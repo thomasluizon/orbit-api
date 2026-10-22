@@ -12,4 +12,5 @@ public sealed record ConversationTurnCapture(
     string UserContent,
     string? AssistantContent,
     string ToolCallsJson,
-    bool UsedModel);
+    bool UsedModel,
+    string? ResponseJson = null);

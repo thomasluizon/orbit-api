@@ -1,5 +1,28 @@
 # Orbit infrastructure
 
+## Astra answer composition activation
+
+Deploy the query-bound read and ranking producers before this composition producer. Startup
+applies `PersistComposedChatResponses`, which adds encrypted recording storage and seeds
+`astra_block_first` off. It needs no model setting, secret, quota change or backfill.
+
+In the existing admin feature flag screen, add evaluation accounts to `astra_block_first`.
+The backing API is `POST /api/admin/feature-flags`; use `list` and `enable_for_accounts` with the exact key and account emails.
+Verify `GET /api/config` reports that account's flag enabled and a parts-capable chat response
+leads with the requested supported kind. Confirm legacy and missing-kind fallbacks separately.
+Keep global activation off until #26 records passing English and Portuguese real-pipeline
+composition cases and #1620 supports the consumer contract.
+
+Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
+build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and
+existing model-call telemetry. Do not attach prompt/completion text or arguments.
+
+Rollback in the same screen: use `disable_for_everyone` for `astra_block_first` and `disable_for_accounts` for its account overrides.
+Read the account's resolved config back and verify negotiated directive assembly returns.
+Feature resolution caches for 30 seconds. Contracts and approval gates stay deployed;
+model selection and quotas are independent. See the complete
+[composition contract](../src/Orbit.Api/OpenApi/AnswerComposition.md).
+
 The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging API, web service, and landing site. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the configuration inputs and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
 
 `uploads.tf` creates a private, encrypted S3 uploads bucket and a scoped IAM user in each environment. S3 is the only upload, read, and erasure provider. Terraform stores each user's access key in SecureString parameters at `/orbit/<environment>/api/Storage__S3__AccessKeyId` and `/orbit/<environment>/api/Storage__S3__SecretAccessKey`, then passes them to the API environment group. The S3 upload URL expires after 10 minutes. The stable API read URL redirects to a private S3 read URL that expires after 10 minutes. The API checks that the owner still exists before issuing a read redirect and sends `Cache-Control: no-store`. The API allows 600 read redirects per object per minute, so image pages and viewers sharing an IP have separate budgets for each object. Account erasure drains the user's `{userId}/` prefix in the S3 uploads bucket before removing the user row. Startup requires `Storage__S3__Bucket`, `Storage__S3__Region`, `Storage__S3__PublicBaseUrl`, `Storage__S3__AccessKeyId`, and `Storage__S3__SecretAccessKey`. Storage failures leave the account scheduled for another deletion run.

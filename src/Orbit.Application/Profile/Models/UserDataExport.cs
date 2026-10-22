@@ -32,7 +32,8 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedConversationTurn>? Conversations = null);
 
 public sealed record ExportedConversationTurn(Guid TurnId, string Role, DateTime CreatedAtUtc,
-    string? Model, string? Content, IReadOnlyList<Orbit.Application.Chat.ConversationToolCall> ToolCalls);
+    string? Model, string? Content, IReadOnlyList<Orbit.Application.Chat.ConversationToolCall> ToolCalls,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ResponseJson = null);
 
 public sealed record ExportedNotionConnection(string? WorkspaceName, string Status, DateTime CreatedAtUtc, DateTime? LastPollAtUtc);
 

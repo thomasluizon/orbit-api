@@ -575,6 +575,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasData(
                         new
                         {
+                            Key = "astra_block_first",
+                            Description = "Compose negotiated Astra answers from successful typed results",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "astra_eval_trace",
                             Description = "Opt-in tool-call traces for Astra evaluation accounts",
                             Enabled = false,
@@ -1027,6 +1034,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Model")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ResponseJson")
+                        .HasColumnType("text");
 
                     b.Property<string>("Role")
                         .IsRequired()

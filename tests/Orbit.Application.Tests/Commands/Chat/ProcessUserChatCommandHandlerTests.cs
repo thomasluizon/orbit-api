@@ -3320,13 +3320,13 @@ public partial class ProcessUserChatCommandHandlerTests
             expected.Add("Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
             if (declaresKinds)
                 expected.AddRange(instructions.Select(item => item.Parts));
-            expected.Add("After the reply's text and blocks, end with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
+            expected.Add("Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
         }
         else
         {
             expected.Add(subtypeInstruction);
             expected.AddRange(instructions.Select(item => item.Legacy));
-            expected.Add("After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
+            expected.Add("Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
         }
         prompt.Should().Be(string.Join(Environment.NewLine, expected));
     }

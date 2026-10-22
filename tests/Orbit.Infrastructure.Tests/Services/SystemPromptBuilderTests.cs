@@ -9,6 +9,21 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class SystemPromptBuilderTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_FormatUsesNegotiatedComposition(bool blockFirst)
+    {
+        var prompt = new SystemPromptBuilder().BuildStatic(new PromptBuildRequest([], BlockFirstComposition: blockFirst));
+        if (blockFirst)
+        {
+            prompt.Should().Contain("Successful data answers lead with their typed block");
+            prompt.Should().NotContain("Use bullet points with newlines for readability");
+        }
+        else
+            prompt.Should().Contain("Use bullet points with newlines for readability");
+    }
+
     private static readonly Guid TestUserId = Guid.NewGuid();
 
     [Fact]

@@ -15,6 +15,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
         private readonly HashSet<Guid> _supersededPendingIds = [];
+        private readonly HashSet<(Guid Id, AgentOperationStatus Status)> _reportedPendingOutcomes = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public ConversationRecordingState? Recording { get; init; }
@@ -76,6 +77,12 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
+        public void AddRelatedSurface(string? surface)
+        {
+            if (surface is not null && _seenRelatedSurfaces.Add(surface))
+                _relatedSurfaces.Add(surface);
+        }
+
         public T? LastSuccessfulPayload<T>(string toolName, Func<T, bool>? predicate = null) where T : class =>
             OperationResults.LastOrDefault(operation => operation.OperationId == toolName
                 && operation.Status == AgentOperationStatus.Succeeded && operation.Payload is T payload
@@ -107,6 +114,9 @@ public partial class ProcessUserChatCommandHandler
             PendingAgentOperation? pendingOperation)
         {
             _calledToolNames.Add(toolName);
+            if ((pendingOperation?.Id ?? operationResult?.PendingOperationId) is { } pendingId
+                && operationResult is not null && !_reportedPendingOutcomes.Add((pendingId, operationResult.Status)))
+                return;
 
             if (actionResult is not null)
                 ActionResults.Add(actionResult);

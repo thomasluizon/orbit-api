@@ -6,6 +6,18 @@ namespace Orbit.Domain.Tests.Entities;
 public class ConversationTurnTests
 {
     [Theory]
+    [InlineData("assistant", "{\"parts\":[]}", true)]
+    [InlineData("assistant", "[]", false)]
+    [InlineData("assistant", "invalid", false)]
+    [InlineData("user", "{}", false)]
+    public void Create_ResponseRequiresAssistantAndJsonObject(string role, string json, bool accepted)
+    {
+        var result = ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), role, DateTime.UtcNow, null, "hello", "[]", json);
+        result.IsSuccess.Should().Be(accepted);
+        if (accepted) result.Value.ResponseJson.Should().Be(json);
+    }
+
+    [Theory]
     [InlineData("user")]
     [InlineData("assistant")]
     public void Create_SupportedRoles_StoresMetadata(string role)

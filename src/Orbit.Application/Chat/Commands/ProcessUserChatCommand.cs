@@ -67,7 +67,8 @@ public record ChatResponse(
     AccountRowsCard? AccountRows = null,
     IReadOnlyList<string>? FollowUps = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -96,6 +97,8 @@ public record ResponseCards(
     IReadOnlyList<ChatResponsePart>? Parts = null,
     HabitRankingCard? HabitRanking = null)
 {
+    public bool ServerComposedText { get; init; }
+
     public bool HasAnyCard => HabitList is not null || GoalList is not null
         || MetricsCard is not null || PeriodInsight is not null || DaySummary is not null
         || Streak is not null || Calendar is not null || RecordLists is { Count: > 0 }
@@ -325,9 +328,9 @@ public partial class ProcessUserChatCommandHandler(
             : aiStreamFilter.HandleAsync;
 
         var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
-        var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request);
+        var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request, composition);
         if (cachedFaqAnswer is not null)
-            return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
+            return Result.Success(ComposeCachedFaq(cachedFaqAnswer, request, composition));
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, cancellationToken);
@@ -361,6 +364,8 @@ public partial class ProcessUserChatCommandHandler(
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))
         {
+            if (CanCompleteComposition(request, context, executionResults))
+                return Result.Success(CompleteCompositionWithoutNarrative(request, context, executionResults));
             if (request.BlockAnswer is null && HasOnlySuccessfulRankingReads(executionResults))
                 return Result.Success(CompleteRankingWithoutNarrative(request, context, executionResults));
             if (request.BlockAnswer is null && HasOnlySuccessfulFocusedReads(executionResults))
@@ -422,7 +427,8 @@ public partial class ProcessUserChatCommandHandler(
             cards.RecordLists,
             cards.AccountRows,
             followUps,
-            cards.Parts)
+            cards.Parts,
+            FollowUpContext: BuildFollowUpContext(request, context, executionResults, followUps))
         { GroundingFacts = facts });
     }
 

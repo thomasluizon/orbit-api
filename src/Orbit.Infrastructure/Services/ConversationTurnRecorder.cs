@@ -102,7 +102,7 @@ public sealed class ConversationTurnRecorder(
                     var userTurn = ConversationTurn.Create(turn.UserId, turn.TurnId, "user", turn.CreatedAtUtc,
                         null, turn.UserContent, "[]");
                     var assistantTurn = ConversationTurn.Create(turn.UserId, turn.TurnId, "assistant", turn.CreatedAtUtc,
-                        turn.UsedModel ? aiSettings.Value.Model : null, turn.AssistantContent, turn.ToolCallsJson);
+                        turn.UsedModel ? aiSettings.Value.Model : null, turn.AssistantContent, turn.ToolCallsJson, turn.ResponseJson);
                     if (userTurn.IsFailure || assistantTurn.IsFailure)
                     {
                         logger.LogWarning("Conversation entity validation failed; turn dropped");

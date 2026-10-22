@@ -271,7 +271,8 @@ public record AgentClientContext(
     bool? SupportsParts = null,
     IReadOnlyList<string>? PartKinds = null,
     bool? SupportsDatedHabitListCard = null,
-    bool? SupportsHabitHistoryCard = null);
+    bool? SupportsHabitHistoryCard = null,
+    bool? SupportsFollowUpContext = null);
 
 public record AgentContextSnapshot(
     string Plan,
