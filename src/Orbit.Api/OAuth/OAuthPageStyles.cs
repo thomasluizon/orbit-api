@@ -214,6 +214,8 @@ h1 {
   text-decoration: none;
   transition: background var(--dur-fast) var(--ease-standard), transform 150ms var(--ease-standard);
 }
+.btn-google { padding-inline: var(--s-3); gap: 10px; }
+.btn-google img { flex-shrink: 0; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--primary); color: var(--fg-on-primary); }
 .btn-ghost { background: transparent; color: var(--fg-1); box-shadow: inset 0 0 0 1.5px var(--hairline-strong); }

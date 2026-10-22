@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Branding/Assets/google-mark.svg" LogicalName="orbit.brand.google-mark.svg" />
+    <EmbeddedResource Include="Branding/Assets/favicon.ico" LogicalName="orbit.brand.favicon.ico" />
+    <EmbeddedResource Include="Branding/Assets/favicon.svg" LogicalName="orbit.brand.favicon.svg" />
+    <EmbeddedResource Include="Branding/Assets/apple-touch-icon.png" LogicalName="orbit.brand.apple-touch-icon.png" />
+    <EmbeddedResource Include="Branding/Assets/orbit-icon-512.png" LogicalName="orbit.brand.orbit-icon-512.png" />
     <EmbeddedResource Include="OpenApi/artifacts.json" LogicalName="orbit.openapi.artifacts.json" />
     <EmbeddedResource Include="OAuth/Assets/geist-latin.woff2" LogicalName="orbit.oauth.geist-latin.woff2" />
     <EmbeddedResource Include="OAuth/Assets/geist-mono-latin.woff2" LogicalName="orbit.oauth.geist-mono-latin.woff2" />

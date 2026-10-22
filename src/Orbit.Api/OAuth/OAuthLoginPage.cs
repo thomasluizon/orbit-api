@@ -62,17 +62,7 @@ public static class OAuthLoginPage
         return $$"""
 <!DOCTYPE html>
 <html lang="{{copy.Locale}}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark light">
-<meta name="robots" content="noindex">
-<title>{{copy.DocumentTitle}}</title>
-<link rel="preload" href="/oauth/assets/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
-<style>
-{{OAuthPageStyles.Css}}
-</style>
-</head>
+{{OAuthPageHead.Render(copy.DocumentTitle)}}
 <body>
 <main class="card">
 {{OAuthPageStyles.Mark}}
@@ -92,7 +82,7 @@ public static class OAuthLoginPage
 </div>
 <button type="button" class="btn btn-primary" id="send-code">{{copy.ContinueLabel}}</button>
 <div class="divider" aria-hidden="true"><span data-rule></span><span data-label>{{copy.OrLabel}}</span><span data-rule></span></div>
-<a class="btn btn-ghost" id="google" href="{{googleStartUrl}}">{{copy.GoogleLabel}}</a>
+<a class="btn btn-ghost btn-google" id="google" href="{{googleStartUrl}}"><img src="/oauth/assets/google-mark.svg" width="20" height="20" alt="" aria-hidden="true">{{copy.GoogleLabel}}</a>
 </section>
 <section class="step hidden" id="step-code">
 <button type="button" class="btn btn-ghost btn-sm" id="change-email">{{copy.ChangeEmailLabel}}</button>
