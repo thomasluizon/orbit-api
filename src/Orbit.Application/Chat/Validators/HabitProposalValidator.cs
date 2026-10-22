@@ -121,7 +121,7 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
     [GeneratedRegex(@"\b(?:\d+|three|two|one|três|tres|dois|um)\s*(?:dias?|days?|horas?|hours?)\s*(?:antes|before)\b|\b(?:até|ate|until|before|antes)\s+(?:(?:o|a|the)\s+)?(?:exame|exam|test|coleta|collection)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BoundedPeriod();
 
-    [GeneratedRegex(@"\b(?:todo\s+dia|todos\s+os\s+dias|diari[oa]|diariamente|semanal|mensal|anual|daily|weekly|monthly|yearly|every\s+(?:day|week|month|year|\d+\s+days)|cada\s+\d+\s+dias)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\b(?:todo\s+dia|todos\s+os\s+dias|diari[oa]|diariamente|semanal|mensal|anual|daily|weekly|monthly|yearly|every\s+(?:day|week|month|year|\d+\s+days)|cada\s+\d+\s+dias|(?:tod[oa]|every|each)\s+(?:(?:as|os)\s+)?(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|[2-6][aª]s)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Repetition();
 
     internal static bool RequestsRepetition(string message) => Repetition().IsMatch(message);

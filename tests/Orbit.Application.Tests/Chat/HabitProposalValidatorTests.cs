@@ -101,6 +101,21 @@ public class HabitProposalValidatorTests
     }
 
     [Theory]
+    [InlineData("Quero estudar todo domingo, e tenho exame no dia 30/10")]
+    [InlineData("I study every Sunday, and have an exam on 10/30")]
+    public void ExplicitWeekdayRecurrence_RemainsRecurringBesideDatedEvent(string message)
+    {
+        var proposal = JsonSerializer.SerializeToElement(new
+        {
+            title = "Study",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            days = new[] { "Sunday" }
+        });
+        new HabitProposalValidator().Validate(new HabitProposal(message, proposal)).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
     [InlineData("quero parar de fumar", "Fumar")]
     [InlineData("I want to stop smoking", "Smoking")]
     [InlineData("I want to drink less soda", "Drinking soda")]

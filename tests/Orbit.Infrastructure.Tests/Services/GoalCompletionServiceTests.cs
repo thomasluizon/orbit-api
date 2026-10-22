@@ -35,7 +35,7 @@ public class GoalCompletionServiceTests
         var user = User.Create("Local User", "local@example.com").Value;
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
         var habit = Habit.Create(new HabitCreateParams(
-            user.Id, "Avoid scrolling", FrequencyUnit.Day, 1,
+            user.Id, "Scrolling", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-1), IsBadHabit: true)).Value;
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id, "Two quiet days", 2, "days", Type: GoalType.Streak)).Value;

@@ -606,9 +606,10 @@ public sealed class PendingOperationChangePreviewer(
                     error.ErrorCode, error.ErrorMessage)).ToList();
             var intrinsic = BulkHabitSubtree.Build(userId, command.Habits[index], today, index,
                 int.MaxValue, cancellationToken, out var invalidField);
-            if (intrinsic.IsFailure && errors.All(error => error.ErrorCode != intrinsic.ErrorCode))
+            var intrinsicField = JsonNamingPolicy.SnakeCaseLower.ConvertName(invalidField ?? "title");
+            if (intrinsic.IsFailure && errors.All(error => error.Field != intrinsicField))
                 errors.Add(new PendingOperationValidationError(
-                    JsonNamingPolicy.SnakeCaseLower.ConvertName(invalidField ?? "title"),
+                    intrinsicField,
                     intrinsic.ErrorCode ?? "item_rejected", intrinsic.Error));
             var name = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;

@@ -148,7 +148,7 @@ public class GoalStreakSyncServiceTests
     {
         var goal = CreateStreakGoal(30);
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "No caffeine", FrequencyUnit.Day, 1,
+            UserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         goal.AddHabit(habit);
 
