@@ -27,6 +27,12 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
         {
             headers[ContentSecurityPolicyHeader] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'";
         }
+        else if (HttpMethods.IsGet(context.Request.Method) &&
+                 (context.Request.Path == "/api/marketing/unsubscribe" ||
+                  context.Request.Path == "/api/marketing/unsubscribe/"))
+        {
+            headers[ContentSecurityPolicyHeader] = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; frame-ancestors 'none'";
+        }
         else if (!context.Request.Path.StartsWithSegments("/scalar") &&
                  !context.Request.Path.StartsWithSegments("/openapi"))
         {

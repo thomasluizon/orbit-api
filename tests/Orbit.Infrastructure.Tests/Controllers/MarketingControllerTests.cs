@@ -1,8 +1,12 @@
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Net.Http.Headers;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Api.Middleware;
 using Orbit.Api.OAuth;
 using Orbit.Application.Marketing.Commands;
 using Orbit.Domain.Common;
@@ -17,6 +21,50 @@ public class MarketingControllerTests
     public MarketingControllerTests()
     {
         _controller = new MarketingController(_mediator);
+    }
+
+    [Theory]
+    [InlineData("en", true, "/api/marketing/unsubscribe")]
+    [InlineData("pt-BR", true, "/api/marketing/unsubscribe")]
+    [InlineData("en", false, "/api/marketing/unsubscribe")]
+    [InlineData("pt-BR", false, "/api/marketing/unsubscribe")]
+    [InlineData("en", true, "/api/marketing/unsubscribe/")]
+    public async Task Unsubscribe_ThroughSecurityHeaders_AllowsOnlyMessagePageResources(
+        string language, bool success, string path)
+    {
+        _mediator.Send(Arg.Any<UnsubscribeMarketingCommand>(), Arg.Any<CancellationToken>())
+            .Returns(success ? Result.Success() : Result.Failure("Invalid token"));
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllers();
+        await using var provider = services.BuildServiceProvider();
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = path;
+        context.RequestServices = provider;
+        using var body = new MemoryStream();
+        context.Response.Body = body;
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+        var middleware = new SecurityHeadersMiddleware(async _ =>
+        {
+            var result = await _controller.Unsubscribe("token", language, CancellationToken.None);
+            await result.ExecuteResultAsync(_controller.ControllerContext);
+        });
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(success ? 200 : 400);
+        context.Response.ContentType.Should().StartWith("text/html");
+        body.Position = 0;
+        using var reader = new StreamReader(body);
+        var html = await reader.ReadToEndAsync();
+        html.Should().Contain($"<html lang=\"{language}\">")
+            .And.Contain($"<style>\n{OAuthPageStyles.Css}\n</style>")
+            .And.Contain(OAuthPageStyles.Mark)
+            .And.Contain("href=\"/oauth/assets/geist-latin.woff2\"")
+            .And.Contain("href=\"/favicon.svg\"");
+        context.Response.Headers[HeaderNames.ContentSecurityPolicy].ToString().Should().Be(
+            "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; frame-ancestors 'none'");
     }
 
     [Theory]
