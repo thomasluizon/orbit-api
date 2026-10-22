@@ -41,6 +41,37 @@ public class UpdateHabitToolTests
         _tool = CreateTool(_habitRepo, _unitOfWork, _payGate);
     }
 
+    [Theory]
+    [InlineData("Não tomar multivitamínico", "Não tomar multivitamínico até o exame")]
+    [InlineData("Don't take multivitamins", "Don't take multivitamins before the exam")]
+    public async Task CommitmentCorrection_KeepsOneTimeScheduleAndOtherFields(string original, string renamed)
+    {
+        var checklist = new List<ChecklistItem> { new("Prepare", false) };
+        var habit = Habit.Create(new HabitCreateParams(UserId, original, null, null,
+            new DateOnly(2026, 10, 29), Description: "At home", DueTime: new TimeOnly(13, 30),
+            ReminderEnabled: true, ReminderTimes: [60], ChecklistItems: checklist, Emoji: "🩺")).Value;
+        SetupHabitFound(habit);
+        var result = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        {
+            habit_id = habit.Id,
+            title = renamed,
+            is_bad_habit = false
+        }), UserId, default);
+
+        result.Success.Should().BeTrue();
+        habit.Title.Should().Be(renamed);
+        habit.FrequencyUnit.Should().BeNull();
+        habit.FrequencyQuantity.Should().BeNull();
+        habit.EndDate.Should().BeNull();
+        habit.DueDate.Should().Be(new DateOnly(2026, 10, 29));
+        habit.DueTime.Should().Be(new TimeOnly(13, 30));
+        habit.Description.Should().Be("At home");
+        habit.ReminderEnabled.Should().BeTrue();
+        habit.ReminderTimes.Should().Equal(60);
+        habit.ChecklistItems.Should().Equal(checklist);
+        habit.Emoji.Should().Be("🩺");
+    }
+
     [Fact]
     public async Task DueTimeChange_ClearsOnlyTodaysSentReminder()
     {

@@ -1,4 +1,7 @@
+using System.Net;
+using System.Text.RegularExpressions;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Orbit.Infrastructure.Email;
 
 namespace Orbit.Infrastructure.Tests.Email;
@@ -8,8 +11,8 @@ public sealed class EmailMessageComposerTests
     private readonly EmailMessageComposer _composer = new("https://app.useorbit.org");
 
     [Theory]
-    [InlineData("en", "Your Orbit sign-in code", "It works for the next 5 minutes.")]
-    [InlineData("pt-BR", "Seu código de acesso do Orbit", "Ele vale pelos próximos 5 minutos.")]
+    [InlineData("en", "123456 is your Orbit sign-in code", "It works for the next 5 minutes.")]
+    [InlineData("pt-BR", "123456 é seu código de acesso ao Orbit", "Ele vale pelos próximos 5 minutos.")]
     public void VerificationCodeRendersLocalizedSubjectAndBothParts(string language, string subject, string preheader)
     {
         var message = _composer.ComposeVerificationCode("a+b@example.com", "123456", language);
@@ -18,6 +21,32 @@ public sealed class EmailMessageComposerTests
         message.Html.Should().Contain(preheader).And.Contain("logo-no-bg.png")
             .And.Contain("email=a%2Bb%40example.com&code=123456").And.NotContain("{{");
         message.Text.Should().Contain("123456");
+    }
+
+    [Theory]
+    [InlineData("en", "123456", "Your sign-in code")]
+    [InlineData("pt-BR", "123456", "Seu código de acesso")]
+    [InlineData("en", "012345", "Your sign-in code")]
+    [InlineData("pt-BR", "012345", "Seu código de acesso")]
+    [InlineData("en", "000000", "Your sign-in code")]
+    [InlineData("pt-BR", "000000", "Seu código de acesso")]
+    public void VerificationCodeIsUnambiguousLiveText(string language, string code, string label)
+    {
+        var message = _composer.ComposeVerificationCode("a+b@example.com", code, language);
+
+        using var scope = new AssertionScope();
+        message.Subject.Should().StartWith(code + " ");
+        message.Html.Should().MatchRegex($@"{Regex.Escape(label)}:</p>\s*<span\b[^>]*>{code}</span>");
+        message.Text.Should().Contain($"{label}: {code}");
+
+        var htmlBody = message.Html[message.Html.IndexOf("<body", StringComparison.Ordinal)..];
+        var htmlText = WebUtility.HtmlDecode(Regex.Replace(htmlBody, "<[^>]+>", " "));
+        foreach (var part in new[] { message.Subject, htmlText, message.Text ?? string.Empty })
+        {
+            Regex.Matches(part, @"\d+").Select(match => match.Value)
+                .Where(value => value.Length == code.Length).Distinct()
+                .Should().Equal(code);
+        }
     }
 
     [Theory]

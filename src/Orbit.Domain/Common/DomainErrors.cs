@@ -62,6 +62,7 @@ public static class DomainErrors
     public static readonly AppError ApiKeyExpiryInPast = new("API_KEY_EXPIRY_IN_PAST", "API key expiry must be in the future.");
     public static readonly AppError ApiKeyScopesInvalid = new("API_KEY_SCOPES_INVALID", "API key scopes must be non-empty strings.");
 
+    public static readonly AppError BadHabitNegatedName = new("BAD_HABIT_NEGATED_NAME", "Name an avoid habit for the behaviour itself; use a positive commitment for an abstention.");
     public static readonly AppError TitleRequired = new("TITLE_REQUIRED", "Title is required.");
     public static readonly AppError InvalidCreatedAtUtc = new("INVALID_CREATED_AT_UTC", "Creation time must be a past UTC instant.");
     public static readonly AppError CannotLogCompletedHabit = new("HABIT_ALREADY_COMPLETED", "Cannot log a completed habit.");

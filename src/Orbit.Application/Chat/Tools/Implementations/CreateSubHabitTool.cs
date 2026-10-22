@@ -14,7 +14,7 @@ public class CreateSubHabitTool(
     public int Order => 1;
 
     public string Description =>
-        "Create a sub-habit under an existing parent, with a requested or relevant emoji.";
+        "Create a sub-habit under an existing parent, with a requested or relevant emoji." + "\n" + HabitModelInstructions.All;
 
     public object GetParameterSchema() => new
     {
@@ -42,7 +42,7 @@ public class CreateSubHabitTool(
             },
             due_time = new { type = JsonSchemaTypes.String, description = "HH:mm" },
             due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm end time" },
-            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "True for habits the user wants to AVOID" },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Set true for reminder notifications" },
             reminder_times = new { type = JsonSchemaTypes.Array, description = "Minutes before dueTime to send reminders", items = new { type = JsonSchemaTypes.Integer } },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alert notifications" },
