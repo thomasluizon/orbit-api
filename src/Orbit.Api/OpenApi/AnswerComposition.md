@@ -8,10 +8,13 @@ after kill flags, advertised `partKinds`, and existing card/subtype capabilities
 the flag restores negotiated directive assembly. Legacy clients keep FORMAT and all fields.
 
 Successful typed results supply blocks and query identities. Directives cannot establish
-success or determine the leading position. Explicit subjects select relevant reads; focused
-metrics and period reads precede prerequisite lists. Otherwise the first successful read
-leads. Rankings use the complete count result. Additional blocks require an explicit compound
-request; additional scopes require dates or a plural selection. Query IDs and scopes deduplicate.
+success or determine the leading position. Tool-call structure selects answers without request
+keywords. A lookup is a prerequisite when all its typed entity IDs first appear in that result
+and supply arguments to later tool rounds. Calls in the same round cannot consume each other's
+results. Other successful reads render in recorded operation order, including independent reads
+alongside a pending preview or write outcome. Rankings use the complete count result and retain
+their produced position. Only equivalent query families, kinds and canonical scopes deduplicate;
+different entity IDs, date windows and metrics remain distinct, including history scopes.
 The server neither queries an implicit dashboard nor derives numbers from prose.
 
 | Family | Leading surface | Named consumer |

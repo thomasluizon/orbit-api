@@ -16,6 +16,8 @@ using Orbit.Application.Profile.Queries;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Tags.Queries;
 using Orbit.Application.Chat.Tools;
+using Orbit.Domain.Entities;
+using System.Linq.Expressions;
 using System.Text.Json;
 
 namespace Orbit.Application.Tests.Commands.Chat;
@@ -196,7 +198,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Composition_OnlyExplicitSubjectsProduceAdditionalBlocks()
+    public async Task Composition_PreservesIndependentReadsWithoutSubjectKeywords()
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -213,11 +215,203 @@ public partial class ProcessUserChatCommandHandlerTests
         });
         ContinueWithReadDirective("[[orbit:read:metrics]]\nExtra dashboard prose.\n[[orbit:read:goals]]");
 
-        var result = await handler.Handle(new(UserId, "Show habits and goals", ClientContext: new(
+        var result = await handler.Handle(new(UserId, "Help me check everything", ClientContext: new(
             SupportsParts: true, PartKinds: ["habitList", "goalList", "metrics"], SupportsHabitListCard: true,
             SupportsGoalListCard: true, SupportsMetricsCard: true)), default);
 
-        result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("habitList", "goalList");
+        result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("habitList", "goalList", "metrics");
+    }
+
+    [Fact]
+    public async Task Composition_StreakAnswerExcludesItsPrerequisiteHabitLookup()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var habit = CreateHabit("Reading");
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
+        var lookup = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var metrics = ScopedCompositionTool("get_habit_metrics");
+        var handler = CreateHandler(lookup, metrics);
+        UseProductionReadExecutor(lookup, metrics);
+        SetupAiResponse(ToolResponse(lookup.Name, "lookup", "{\"search\":\"Reading\"}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => Result.Success(call.Arg<IReadOnlyList<AiToolCallResult>>()[0].Name == lookup.Name
+                ? ToolResponse(metrics.Name, "answer", JsonSerializer.Serialize(new { habit_id = habit.Id }))
+                : new AiResponse { TextMessage = "The streak is 3." }));
+
+        var result = await handler.Handle(new(UserId, "What is the streak for my Reading habit?", ClientContext: new(
+            SupportsParts: true, PartKinds: ["habitList", "metrics"], SupportsHabitListCard: true,
+            SupportsMetricsCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var part = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
+        part.Kind.Should().Be("metrics");
+        part.Block.Should().BeOfType<MetricsCard>().Which.HabitId.Should().Be(habit.Id);
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+    }
+
+    [Theory]
+    [InlineData("get_habit_metrics", "Show metrics for Reading and Running")]
+    [InlineData("get_habit_metrics", "Show metrics for both Reading and Running")]
+    [InlineData("get_habit_history", "Show history for Reading and Running")]
+    [InlineData("get_habit_history", "Show history for both Reading and Running")]
+    public async Task Composition_KeepsDistinctHabitScopes(string toolName, string message)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var tool = ScopedCompositionTool(toolName);
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        var from = Today.AddDays(-6).ToString("yyyy-MM-dd");
+        var to = Today.ToString("yyyy-MM-dd");
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new(toolName, "first", JsonSerializer.SerializeToElement(new { habit_id = first, date_from = from, date_to = to })),
+                new(toolName, "second", JsonSerializer.SerializeToElement(new { habit_id = second, date_from = from, date_to = to }))],
+            ConversationContext = TestConversationContext
+        });
+        ContinueWithReadDirective("Model prose without directives.");
+
+        var result = await handler.Handle(new(UserId, message, ClientContext: new(SupportsParts: true,
+            PartKinds: ["metrics", "recordList"], SupportsMetricsCard: true, SupportsRecordListCard: true,
+            SupportsHabitHistoryCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var reads = result.Value.Parts!.OfType<ChatBlockPart>().Select(part => ReadBlockTelemetry.Describe(part.Block).Read!).ToArray();
+        reads.Should().HaveCount(2);
+        reads.Select(read => read.Scope.GetProperty("habit_id").GetGuid()).Should().Equal(first, second);
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Composition_PreviewKeepsIndependentRead(bool previewFirst)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var write = FakeTool("create_habit");
+        var read = CompositionTool("query_habits");
+        var handler = CreateHandler(write, read);
+        var blocks = UseProductionReadExecutor(read);
+        var executor = Orbit.Application.Tests.Chat.ReadBlockScopeTests.CreateExecutor(read, blocks);
+        var pending = new PendingAgentOperation(Guid.NewGuid(), "habits.write", "Create", "Create Reading",
+            AgentRiskClass.High, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(5));
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<AgentExecuteOperationRequest>().OperationId == write.Name
+                ? Task.FromResult(new AgentExecuteOperationResponse(new(write.Name, write.Name, AgentRiskClass.High,
+                    AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), pending))
+                : executor.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), call.Arg<CancellationToken>()));
+        var createCall = new AiToolCall(write.Name, "preview", ParseArguments("{\"title\":\"Reading\"}"));
+        var readCall = new AiToolCall(read.Name, "list", ParseArguments("{}"));
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = previewFirst ? [createCall, readCall] : [readCall, createCall],
+            ConversationContext = TestConversationContext
+        });
+        ContinueWithReadDirective("Created Reading. Here are your habits.");
+
+        var result = await handler.Handle(new(UserId, "Create a Reading habit and show my existing habits", ClientContext: new(
+            SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true, SupportsPendingOperationChanges: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pending.Id);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("habitList");
+        result.Value.Operations.Should().ContainSingle().Which.OperationId.Should().Be(read.Name);
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
+        await _operationExecutor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
+            request.OperationId == write.Name && request.IncludeChangePreview), Arg.Any<CancellationToken>());
+        await write.DidNotReceive().ExecuteAsync(Arg.Any<JsonElement>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("get_habit_metrics", false)]
+    [InlineData("get_habit_metrics", true)]
+    [InlineData("get_habit_history", false)]
+    [InlineData("get_habit_history", true)]
+    public async Task Composition_DeduplicatesOnlyEquivalentDateScopes(string toolName, bool equivalent)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var id = Guid.NewGuid();
+        var tool = ScopedCompositionTool(toolName);
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        var first = JsonSerializer.SerializeToElement(new
+        { habit_id = id, date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") });
+        var second = JsonSerializer.SerializeToElement(new
+        { date_to = Today.ToString("yyyy-MM-dd"), date_from = Today.AddDays(equivalent ? -6 : -13).ToString("yyyy-MM-dd"), habit_id = id });
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new(toolName, "first", first), new(toolName, "second", second)],
+            ConversationContext = TestConversationContext
+        });
+        ContinueWithReadDirective("No directives.");
+        var events = new List<ChatStreamEvent>();
+
+        var result = await handler.Handle(new(UserId, "Show history and metrics", ClientContext: new(SupportsParts: true,
+            PartKinds: ["metrics", "recordList"], SupportsMetricsCard: true, SupportsRecordListCard: true, SupportsHabitHistoryCard: true),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var reads = result.Value.Parts!.OfType<ChatBlockPart>().Select(part => ReadBlockTelemetry.Describe(part.Block).Read!).ToArray();
+        reads.Should().HaveCount(equivalent ? 1 : 2);
+        reads.Select(read => read.Scope.GetProperty("date_from").GetString()).Should().Equal(equivalent
+            ? [first.GetProperty("date_from").GetString()] : [first.GetProperty("date_from").GetString(), second.GetProperty("date_from").GetString()]);
+        events.Where(item => item.Type == "delta").Should().BeEmpty();
+        var json = JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions);
+        var replay = JsonSerializer.Deserialize<ChatResponse>(json, ChatStreamEvent.SerializerOptions)!;
+        ChatStreamEvent.Final(replay).ToJson().Should().Be(ChatStreamEvent.Final(result.Value).ToJson());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Composition_IndependentRankingAndReadKeepProducedOrder(bool rankingFirst)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var ranking = await ProduceRankingAsync();
+        var rankingTool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));
+        var read = CompositionTool("query_habits");
+        var handler = CreateHandler(read, rankingTool);
+        UseProductionReadExecutor(read, rankingTool);
+        var rankingCall = new AiToolCall(rankingTool.Name, "ranking", ParseArguments("{}"));
+        var readCall = new AiToolCall(read.Name, "list", ParseArguments("{}"));
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = rankingFirst ? [rankingCall, readCall] : [readCall, rankingCall],
+            ConversationContext = TestConversationContext
+        });
+        ContinueWithReadDirective("Model omitted the blocks.");
+
+        var result = await handler.Handle(new(UserId, "Help me check everything", ClientContext: new(SupportsParts: true,
+            PartKinds: ["habitList", "habitRanking"], SupportsHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal(rankingFirst
+            ? ["habitRanking", "habitList"] : ["habitList", "habitRanking"]);
+    }
+
+    private IAiTool ScopedCompositionTool(string toolName)
+    {
+        if (toolName == "get_habit_metrics")
+        {
+            _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>()).Returns(call => Result.Success(
+                new HabitMetrics(3, 8, 50, 60, 20, Today, call.Arg<GetHabitMetricsQuery>().HabitId, "Reading")));
+            return new GetHabitMetricsTool(_mediator);
+        }
+        _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>([]));
+        return new GetHabitHistoryTool(_mediator);
     }
 
     [Fact]

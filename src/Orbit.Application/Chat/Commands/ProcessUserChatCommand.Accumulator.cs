@@ -50,6 +50,7 @@ public partial class ProcessUserChatCommandHandler
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];
+        public List<IReadOnlyList<AiToolCall>> CompositionRounds { get; } = [];
 
         /// <summary>
         /// Distinct names of every tool invoked this turn, used to decide whether the turn is safe to

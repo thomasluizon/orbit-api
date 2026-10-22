@@ -1,7 +1,9 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Orbit.Application.Common;
 using Orbit.Application.Chat.Grounding;
 using Orbit.Application.Habits.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
@@ -65,9 +67,9 @@ public partial class ProcessUserChatCommandHandler
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)
-            .DistinctBy(read => read.Read.QueryId).ToList();
+            .ToList();
         var hasOutcome = results.PendingOperations.Count > 0 || results.ActionResults.Count > 0;
-        var built = BuildCompositionParts(candidates, request, context, results, hasOutcome, language);
+        var built = BuildCompositionParts(candidates, request, context, results, language);
         foreach (var read in candidates.Where(read => read.Read.TotalCount == 0))
             results.AddRelatedSurface(SurfaceForRead(read));
         var parts = built.Parts;
@@ -142,25 +144,33 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static CompositionParts BuildCompositionParts(List<QueryReadBlock> candidates,
-        ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, bool hasOutcome, string? language)
+        ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, string? language)
     {
-        var built = new CompositionParts
-        { Duplicates = results.OperationResults.Count(operation => operation.ReadBlock is not null) - candidates.Count };
+        var built = new CompositionParts();
         var parts = built.Parts;
         if (results.AskBlock is { } ask)
-            parts.Add(ask);
-        else if (!hasOutcome)
         {
-            var ranking = results.LastSuccessfulPayload<HabitRankingResponse>("get_habit_ranking");
-            if (ranking is not null)
-                AddRankingPart(built, ranking, request, context, language);
-            var selected = SelectCompositionReads(candidates, request.Message);
-            if (ranking is not null && !RequestsMultipleSubjects(request.Message)) selected = [];
-            var seenSubjects = new HashSet<string>(StringComparer.Ordinal);
-            var seenFamilies = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var read in selected)
+            parts.Add(ask);
+            return built;
+        }
+
+        var selected = SelectCompositionReads(candidates, results).Select(read => read.Read.QueryId).ToHashSet();
+        var seenScopes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var operation in results.OperationResults.Where(operation => operation.Status == AgentOperationStatus.Succeeded))
+        {
+            if (operation.Payload is HabitRankingResponse ranking)
             {
-                if (!seenSubjects.Add(ReadSubject(read)) || !AllowAdditionalScope(seenFamilies, read, request.Message))
+                if (!seenScopes.Add("habitRanking:" + ranking.QueryId + ":" + ranking.Offset))
+                {
+                    built.Duplicates++;
+                    continue;
+                }
+                AddRankingPart(built, ranking, request, context, language);
+            }
+            else if (operation.ReadBlock is { } read && selected.Contains(read.Read.QueryId))
+            {
+                var scope = read.Kind + ":" + AgentOperationFingerprint.Compute(read.Read.QueryFamily, read.Read.Scope.GetRawText());
+                if (!seenScopes.Add(scope))
                 {
                     built.Duplicates++;
                     continue;
@@ -174,8 +184,6 @@ public partial class ProcessUserChatCommandHandler
                     parts.Add(new ChatTextPart(string.IsNullOrWhiteSpace(text) ? ToolFailureMessage(language) : text));
                 }
             }
-
-
         }
 
         return built;
@@ -185,28 +193,63 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, string? language)
     {
         var card = HabitRankingCardBuilder.Build(ranking);
-        built.BuildFailure = card is null;
+        built.BuildFailure |= card is null;
         if (card is not null && HabitRankingCardBuilder.IsSupported(request.ClientContext)
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
             built.Parts.Add(new ChatBlockPart(PartKinds.HabitRanking, card));
         else
         {
-            built.Fallback = built.BuildFailure ? "build_failure" : "missing_capability";
-            built.Parts.Add(new ChatTextPart(built.BuildFailure ? ToolFailureMessage(language)
+            built.Fallback = card is null ? "build_failure" : "missing_capability";
+            built.Parts.Add(new ChatTextPart(card is null ? ToolFailureMessage(language)
                 : HabitRankingCardBuilder.Readable(ranking, language)));
         }
     }
 
-    private static List<QueryReadBlock> SelectCompositionReads(List<QueryReadBlock> candidates, string message)
+    private static IEnumerable<QueryReadBlock> SelectCompositionReads(List<QueryReadBlock> candidates, ToolExecutionAccumulator results)
     {
-        var explicitReads = candidates.Where(read => MentionsSubject(message, read))
-            .OrderByDescending(read => read.Kind is "metrics" or "periodTotal" or "periodComparison").ToList();
-        if (explicitReads.Count == 0) return candidates.Take(1).ToList();
-        return RequestsMultipleSubjects(message) ? explicitReads : explicitReads.Take(1).ToList();
+        var prerequisites = new HashSet<Guid>();
+        for (var round = 0; round < results.CompositionRounds.Count - 1; round++)
+        {
+            var laterInputs = results.CompositionRounds.Skip(round + 1).SelectMany(calls => calls)
+                .SelectMany(call => ArgumentEntityIds(call.Args)).ToHashSet();
+            var knownInputs = results.CompositionRounds.Take(round + 1).SelectMany(calls => calls)
+                .SelectMany(call => ArgumentEntityIds(call.Args)).ToHashSet();
+            foreach (var call in results.CompositionRounds[round])
+            {
+                if (!results.QueryReads.TryGetValue(call.Id, out var read)) continue;
+                var ids = LookupEntityIds(read);
+                if (ids.Count > 0 && ids.IsSubsetOf(laterInputs) && !ids.Overlaps(knownInputs))
+                    prerequisites.Add(read.Read.QueryId);
+            }
+        }
+        return candidates.Where(read => !prerequisites.Contains(read.Read.QueryId));
     }
 
-    private static bool RequestsMultipleSubjects(string message) => message.Contains(',')
-        || Mentions(message, "and|also|e|tamb[eé]m|both|two|three|ambos|ambas|dois|duas|tr[eê]s");
+    private static HashSet<Guid> LookupEntityIds(QueryReadBlock read)
+    {
+        IEnumerable<string> ids = read.Block switch
+        {
+            HabitListCard card => card.Items.Select(item => item.Id),
+            GoalListCard card => card.Items.Select(item => item.Id),
+            RecordListCard card => card.Items.Select(item => item.Id),
+            _ => []
+        };
+        var parsed = new HashSet<Guid>();
+        foreach (var id in ids)
+        {
+            if (!Guid.TryParse(id, out var value)) return [];
+            parsed.Add(value);
+        }
+        return parsed;
+    }
+
+    private static IEnumerable<Guid> ArgumentEntityIds(JsonElement args) => args.ValueKind switch
+    {
+        JsonValueKind.Object => args.EnumerateObject().SelectMany(property => ArgumentEntityIds(property.Value)),
+        JsonValueKind.Array => args.EnumerateArray().SelectMany(ArgumentEntityIds),
+        JsonValueKind.String when args.TryGetGuid(out var id) => [id],
+        _ => []
+    };
 
     private static string? CompositionStatus(ToolExecutionAccumulator results, bool hasOutcome,
         bool missingProjection, bool truncated, string? language)
@@ -288,25 +331,4 @@ public partial class ProcessUserChatCommandHandler
         _ => "(?!)"
     });
 
-    private static string ReadSubject(QueryReadBlock read) => read.Kind + ":" + (read.Block switch
-    {
-        RecordListCard records => records.Kind,
-        AccountRowsCard account => account.Kind,
-        _ => Orbit.Domain.Common.AgentOperationFingerprint.Canonicalize(read.Read.Scope.GetRawText())
-    });
-
-    private static bool AllowAdditionalScope(HashSet<string> families, QueryReadBlock read, string message)
-    {
-        var family = read.Kind + (read.Block switch
-        {
-            RecordListCard records => records.Kind,
-            AccountRowsCard account => account.Kind,
-            _ => string.Empty
-        });
-        return families.Add(family) || Mentions(message, "both|two|three|ambos|ambas|dois|duas|tr[eê]s")
-            || read.Read.Scope.EnumerateObject().Any(property => property.Value.ValueKind == System.Text.Json.JsonValueKind.String
-                && DateOnly.TryParse(property.Value.GetString(), System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None, out _)
-                && message.Contains(property.Value.GetString()!, StringComparison.Ordinal));
-    }
 }
