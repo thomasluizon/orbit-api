@@ -765,8 +765,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure(DomainErrors.TitleRequired);
 
-        var polarityValidation = HabitSemantics.ValidatePolarity(p.Title, p.IsBadHabit);
-        if (polarityValidation is not null)
+        if ((p.Title.Trim() != Title || p.IsBadHabit != IsBadHabit)
+            && HabitSemantics.ValidatePolarity(p.Title, p.IsBadHabit) is { } polarityValidation)
             return Result.Failure(polarityValidation);
 
         var validationError = ValidateUpdateParams(p);

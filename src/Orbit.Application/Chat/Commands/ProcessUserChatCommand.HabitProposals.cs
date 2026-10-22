@@ -78,7 +78,7 @@ public partial class ProcessUserChatCommandHandler
             .Select(group => group.ToArray()).ToArray();
         foreach (var group in groups)
         {
-            if (group.Length < 2)
+            if (group.Length < 2 || group.Any(call => !HasEquivalentBulkSemantics(call)))
                 continue;
             var items = group.SelectMany(call => call.Name == "bulk_create_habits"
                 ? call.Args.GetProperty("habits").EnumerateArray().ToArray() : [call.Args]).ToArray();
@@ -96,5 +96,20 @@ public partial class ProcessUserChatCommandHandler
                 results.MergedCallIds.Add(call.Id);
             }
         }
+    }
+
+    private static bool HasEquivalentBulkSemantics(AiToolCall call)
+    {
+        if (call.Name == "bulk_create_habits")
+            return true;
+
+        var arguments = call.Args;
+        var unit = JsonArgumentParser.GetOptionalString(arguments, "frequency_unit");
+        return unit is not null
+            && !arguments.TryGetProperty("sub_habits", out _)
+            && !arguments.TryGetProperty("days", out _)
+            && JsonArgumentParser.GetOptionalBool(arguments, "is_bad_habit") != true
+            && (unit != "OneTime" || (!arguments.TryGetProperty("frequency_quantity", out _)
+                && !arguments.TryGetProperty("interval_weeks", out _)));
     }
 }

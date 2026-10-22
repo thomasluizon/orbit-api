@@ -39,14 +39,13 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
         var bounded = BoundedPeriod().IsMatch(source);
         var repeated = Repetition().IsMatch(source);
         var end = JsonArgumentParser.ParseDateOnly(item, "end_date");
-        var start = JsonArgumentParser.ParseDateOnly(item, "due_date");
         if (bounded && (!end.HasValue || bad))
             Reject("end_date", "TEMPORARY_HABIT_REQUIRES_END", "Temporary preparation must be a positive Task or have an explicit event end date.");
         if (bounded && end is { } cutoff && MatchesReferencedEvent(source, cutoff) == false)
             Reject("end_date", "TEMPORARY_HABIT_EVENT_CUTOFF", "Temporary preparation must end on the referenced event date.");
-        var datedEvent = EventName().IsMatch(title) && !HabitSemantics.HasNegatedName(title)
-            && !BoundedPeriod().IsMatch(title + " " + description);
-        if (!repeated && HasDate().IsMatch(source) && (datedEvent || !bounded || !end.HasValue || start >= end))
+        var datedInstruction = title.Length > 0 && source.StartsWith(title, StringComparison.OrdinalIgnoreCase)
+            && SingleInstructionDate().IsMatch(source[title.Length..]);
+        if (!repeated && HasDate().IsMatch(source) && (datedInstruction || SingleOccurrence().IsMatch(source)))
             Reject("frequency_unit", "DATED_INSTRUCTION_REQUIRES_TASK", "A single dated event or instruction is a one-time Task. Repetition requires an explicit request.");
 
         void Reject(string field, string code, string error) =>
@@ -126,11 +125,14 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
 
     internal static bool RequestsRepetition(string message) => Repetition().IsMatch(message);
 
-    [GeneratedRegex(@"\b(?:exames?|exams?|blood\s+tests?|appointments?|consultas?|dentista|dentist|meetings?|reuni[ãa]o|flights?|voos?)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex EventName();
+    [GeneratedRegex(@"\b(?:one[ -]time|one[ -]off|uma\s+(?:[uú]nica|s[oó])\s+vez|uma\s+vez\s+s[oó])\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SingleOccurrence();
 
     [GeneratedRegex(@"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|tomorrow|amanhã|amanha|hoje|today)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex HasDate();
+
+    [GeneratedRegex(@"^\s+(?:(?:on|dia|no\s+dia)\s+)?(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|tomorrow|amanhã|amanha|hoje|today)(?:\s+(?:at|às|as)\s+\d{1,2}(?::|h)\d{2})?[.!?]*\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SingleInstructionDate();
 
     [GeneratedRegex(@"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{4})?)\b", RegexOptions.CultureInvariant)]
     private static partial Regex EventDate();

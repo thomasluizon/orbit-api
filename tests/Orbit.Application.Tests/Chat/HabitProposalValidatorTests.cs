@@ -116,6 +116,44 @@ public class HabitProposalValidatorTests
     }
 
     [Theory]
+    [InlineData("Start running tomorrow, every other day", "Day", 2, false)]
+    [InlineData("Começar a correr amanhã, dia sim dia não", "Day", 2, false)]
+    [InlineData("Start running tomorrow, three times a week", "Week", 3, true)]
+    [InlineData("Começar a correr amanhã, três vezes por semana", "Week", 3, true)]
+    public void ExplicitStartDate_DoesNotTurnUnrecognizedCadenceIntoSingleEvent(
+        string message, string unit, int quantity, bool flexible)
+    {
+        var proposal = JsonSerializer.SerializeToElement(new
+        {
+            title = "Run",
+            frequency_unit = unit,
+            frequency_quantity = quantity,
+            is_flexible = flexible,
+            due_date = "2026-10-23"
+        });
+
+        new HabitProposalValidator().Validate(new HabitProposal(message, proposal)).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Blood tests tomorrow, every other day", "Blood tests")]
+    [InlineData("Exames amanhã, dia sim dia não", "Exames")]
+    [InlineData("Don't eat sugar tomorrow, every other day", "Don't eat sugar")]
+    [InlineData("Não comer açúcar amanhã, dia sim dia não", "Não comer açúcar")]
+    public void RecurringEventOrCommitmentName_DoesNotProveSingleOccurrence(string message, string title)
+    {
+        var proposal = JsonSerializer.SerializeToElement(new
+        {
+            title,
+            frequency_unit = "Day",
+            frequency_quantity = 2,
+            due_date = "2026-10-23"
+        });
+
+        new HabitProposalValidator().Validate(new HabitProposal(message, proposal)).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
     [InlineData("quero parar de fumar", "Fumar")]
     [InlineData("I want to stop smoking", "Smoking")]
     [InlineData("I want to drink less soda", "Drinking soda")]
