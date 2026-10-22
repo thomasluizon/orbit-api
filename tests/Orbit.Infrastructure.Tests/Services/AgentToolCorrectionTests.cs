@@ -20,7 +20,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class AgentToolCorrectionTests : IDisposable
+public sealed partial class AgentToolCorrectionTests : IDisposable
 {
     private readonly OrbitDbContext _db;
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());

@@ -201,21 +201,19 @@ public class CreateHabitTool(
             foreach (var child in childNodes.OfType<JsonObject>())
                 NormalizeMinuteTimes(child);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        node["due_date"] ??= today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var normalized = JsonSerializer.SerializeToElement(node);
         if (!ChatToolArgumentCheck.HasValidShape(this, normalized)
             || (await CheckArgumentsAsync(normalized, userId, ct)).IsFailure)
             return null;
 
-        var parameters = BuildParentParameters(normalized, userId, normalized.GetProperty(TitleProperty).GetString()!, today).Value;
-        var parent = Habit.Create(parameters).Value;
-        var children = new List<HabitCreationIntent>();
+        var creation = BuildCreationIntent(normalized, userId, today);
+        if (creation is null)
+            return null;
+        node["due_date"] ??= today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (node["sub_habits"] is JsonArray nodes)
-            foreach (var child in nodes.OfType<JsonObject>())
+            foreach (var (child, intent) in nodes.OfType<JsonObject>().Zip(creation.Children))
             {
-                var sub = JsonSerializer.SerializeToElement(child);
-                var definition = BuildChildParameters(sub, userId, parent, today).Value;
-                children.Add(PreparedCreation(sub, definition with { ParentHabitId = null }, []));
+                var definition = intent.Definition;
                 child["due_date"] = definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 child["frequency_unit"] = definition.FrequencyUnit?.ToString() ?? "OneTime";
                 if (definition.FrequencyQuantity is { } quantity)
@@ -226,12 +224,33 @@ public class CreateHabitTool(
                     child["interval_weeks"] = interval;
             }
         normalized = JsonSerializer.SerializeToElement(node);
-        if ((await CheckArgumentsAsync(normalized, userId, ct)).IsFailure)
+        if ((await CheckArgumentsAsync(normalized, userId, ct)).IsFailure
+            || !creation.Equals(BuildCreationIntent(normalized, userId, today)))
             return null;
-        return PreparedToolIntent.Create(PreparedCreation(normalized, parameters, children), normalized) with
+        return PreparedToolIntent.Create(creation, normalized) with
         {
             ArgumentValidation = await CheckArgumentsAsync(args, userId, ct)
         };
+    }
+
+    private static HabitCreationIntent? BuildCreationIntent(JsonElement args, Guid userId, DateOnly today)
+    {
+        var parameters = BuildParentParameters(args, userId, args.GetProperty(TitleProperty).GetString()!, today);
+        if (parameters.IsFailure)
+            return null;
+        var parent = Habit.Create(parameters.Value);
+        if (parent.IsFailure)
+            return null;
+        var children = new List<HabitCreationIntent>();
+        if (args.TryGetProperty("sub_habits", out var nodes))
+            foreach (var sub in nodes.EnumerateArray())
+            {
+                var definition = BuildChildParameters(sub, userId, parent.Value, today);
+                if (definition.IsFailure || Habit.Create(definition.Value).IsFailure)
+                    return null;
+                children.Add(PreparedCreation(sub, definition.Value with { ParentHabitId = null }, []));
+            }
+        return PreparedCreation(args, parameters.Value, children);
     }
 
     private static void NormalizeMinuteTimes(JsonObject node)
@@ -246,7 +265,7 @@ public class CreateHabitTool(
     private static HabitCreationIntent PreparedCreation(JsonElement args, HabitCreateParams definition,
         IEnumerable<HabitCreationIntent> children) => new(definition with
         {
-            Days = definition.Days is { } days ? PreparedToolIntent.Values(days) : null,
+            Days = PreparedToolIntent.Values(definition.Days ?? []),
             ReminderTimes = definition.ReminderTimes is { } times ? PreparedToolIntent.Values(times) : null,
             ChecklistItems = definition.ChecklistItems is { } checklist ? PreparedToolIntent.Values(checklist) : null,
             ScheduledReminders = definition.ScheduledReminders is { } scheduled ? PreparedToolIntent.Values(scheduled) : null,

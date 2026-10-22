@@ -54,6 +54,11 @@ provider response field. Approved operations keep their existing payload binding
 After successful preparation and validation, the gateway uses the tool's prepared
 arguments for preview or execution. This freezes omitted user-local dates and child
 inheritance before another read of "today" could change the requested schedule.
+Habit preparation establishes the complete original creation tree before making
+those defaults explicit. It rebuilds the materialized tree through the same domain
+builders and requires equal semantic values. An unsupported weekday request cannot
+become a certified one-time task merely by acquiring a default date. Failed domain
+construction and defaults that discard an original value remain uncertified.
 
 ## Useful correction classes
 
