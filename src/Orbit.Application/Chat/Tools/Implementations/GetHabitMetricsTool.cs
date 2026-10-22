@@ -30,7 +30,9 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
         if (!Guid.TryParse(habitId, out var parsedId))
             return new ToolResult(false, Error: "habit_id must be a valid GUID.");
 
-        var result = await mediator.Send(new GetHabitMetricsQuery(userId, parsedId, JsonArgumentParser.ParseDateOnly(args, "date_from"), JsonArgumentParser.ParseDateOnly(args, "date_to")), ct);
+        var result = await mediator.Send(new GetHabitMetricsQuery(userId, parsedId,
+            JsonArgumentParser.ParseDateOnly(args, "date_from"), JsonArgumentParser.ParseDateOnly(args, "date_to"),
+            JsonArgumentParser.ParseDateOnly(args, "as_of")), ct);
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)

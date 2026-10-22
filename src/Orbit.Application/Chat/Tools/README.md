@@ -75,7 +75,16 @@ The chat builder carries the successful typed result into its block. Each read t
 call gets its own query identity. A continuation result's `readDirective`, for example
 `[[orbit:read:call_1]]`, refers only to that call. An unqualified legacy directive
 cannot choose between differently scoped results. Existing formatted strings and
-legacy card properties remain supported. Tracks thomasluizon/orbit-tickets#1616.
+legacy card properties remain supported. Ambiguity suppresses only that binding;
+independent successful reads retain their cards, and the dated facts remain readable.
+
+A `habitList` with `scope: "date"` additionally requires
+`supportsDatedHabitListCard: true`. This promises parsing, display and actions that
+use the returned absolute `date`. The original `supportsHabitListCard` flag and
+`partKinds: ["habitList"]` alone do not establish that support. Without the new flag,
+legacy and parts responses contain dated text from the actual rows, without live
+habit controls. Existing `today` and `all` cards retain their original negotiation.
+Tracks thomasluizon/orbit-tickets#1616.
 
 ## Period metric definitions
 
@@ -108,7 +117,10 @@ count metric. Neither marker values nor their sums establish measured quantities
 
 `get_habit_metrics` retains every lifetime field and appends `period`,
 `periodSeries` and `sourceRevision`. Its optional `date_from` and `date_to` select
-the period; omission resolves to the 30 local days ending today. The metrics block
+the period; omission resolves to the 30 local days ending today. The query also captures
+`as_of` once for the existing rolling weekly/monthly rates and current streak;
+refresh retains that anchor. Its revision includes account timezone and week-start
+settings as well as habit and log sources. The metrics block
 retains its lifetime `totalCompletions`, `currentStreak` and `bestStreak`, while
 `periodMetrics` and its series carry the explicitly scoped facts.
 
@@ -117,6 +129,9 @@ retains its lifetime `totalCompletions`, `currentStreak` and `bestStreak`, while
 Both new kinds require `supportsParts: true` and their exact kind in `partKinds`.
 `AstraPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
 floor requirement. Without advertisement, tools can still ground ordinary text.
+Successful focused analytics survive an unavailable AI continuation: advertised
+blocks or deterministic text retain each query's exact windows, named counts and
+units. A failed source query remains a failure.
 
 `periodTotal` contains `metric`, `unit`, `value`, `metrics`, `series`, nullable
 `habitId` and `read`. `metrics.window` names the exact resolved dates and the metrics
@@ -177,7 +192,10 @@ the original query's result, rather than an invented full-data claim.
 ```
 
 Success returns `{ kind, block, read }`. For existing kinds, send their existing
-card capability boolean as well. Set `page: true` only with `nextCursor`. Refresh
+card capability boolean as well. Dated habit lists also require
+`supportsDatedHabitListCard: true`; habit history also requires
+`supportsHabitHistoryCard: true`. Every refresh rechecks these capabilities, including
+when a formerly current-day query becomes historical after local midnight. Set `page: true` only with `nextCursor`. Refresh
 starts the original query at its first page. Paging preserves the query identity
 and rejects a changed source revision with HTTP 409 (`READ_QUERY_STALE`); refresh
 the original token before paging again. Refresh retains the query identity and can
@@ -195,6 +213,10 @@ failure returns HTTP 503 (`READ_QUERY_REFRESH_FAILED`); retain the visible prior
 answer and retry the same token. Never substitute today's query after a failure.
 
 `get_habit_history` uses the existing `recordList` kind with `kind: "habitHistory"`.
+It additionally requires `supportsHabitHistoryCard: true`; the existing
+`supportsRecordListCard` and `partKinds: ["recordList"]` alone are insufficient.
+Without subtype support, both legacy and parts replies retain readable log dates
+and record markers in text.
 Each row has the log id, `logDate` and its actual `value`; these are record markers,
 not measured amounts. Results sort by date descending, then id, and use the exact
 refresh route for paging. Goal rows preserve their requested status/search filters.

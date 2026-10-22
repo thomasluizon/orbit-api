@@ -3308,10 +3308,15 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsFollowUps: true)), CancellationToken.None);
 
         var expected = new List<string> { "dynamic prompt", "dynamic supplement" };
+        var subtypeInstruction = "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
+            + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
+            + "Dated habit lists supported: False. Habit history supported: False. "
+            + "For an unsupported subtype, answer from the queried facts in text.";
         if (supportsParts && !disabled)
         {
             if (declaresKinds)
                 expected.Add("When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. get_period_analytics returns periodTotal or periodComparison; emit it only when that kind is explicitly advertised. get_habit_history uses recordList. New period kinds supported: ");
+            expected.Add(subtypeInstruction);
             expected.Add("Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
             if (declaresKinds)
                 expected.AddRange(instructions.Select(item => item.Parts));
@@ -3319,6 +3324,7 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         else
         {
+            expected.Add(subtypeInstruction);
             expected.AddRange(instructions.Select(item => item.Legacy));
             expected.Add("After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
         }

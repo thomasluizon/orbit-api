@@ -138,12 +138,95 @@ public partial class ProcessUserChatCommandHandler
         return reads.Count == 1 ? reads[0] : null;
     }
 
-    private static bool HasAmbiguousRead(string? message, ToolExecutionAccumulator results)
+    private static string? ReplaceUnavailableReadDirectives(string? message, ToolExecutionAccumulator results,
+        AgentClientContext? client, IReadOnlyList<string> flags)
     {
-        if (message is null) return false;
-        var directives = System.Text.RegularExpressions.Regex.Matches(message, @"\[\[orbit:[a-z:]+\]\]",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
-        return directives.Any(match => ReadCandidates(match.Value, results).Count > 1);
+        if (message is null) return null;
+        return System.Text.RegularExpressions.Regex.Replace(message, @"\[\[orbit:(?:read:[A-Za-z0-9_-]+|[a-z:]+)\]\]", match =>
+        {
+            var candidates = ResolveQueryRead(match.Value, results) is { } bound
+                ? new List<QueryReadBlock> { bound } : ReadCandidates(match.Value, results);
+            return candidates.Count > 1 || candidates.Count == 1 && !ReadEnabled(candidates[0], client, flags)
+                ? string.Join("\n\n", candidates.Select(read => ReadFallback(read.Block))) : match.Value;
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+    }
+
+    internal static bool ReadSubtypeEnabled(object block, AgentClientContext? client) => block switch
+    {
+        HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
+        RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
+        _ => true
+    };
+
+    private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
+        ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client);
+
+    private static string ReadFallback(object block) => block switch
+    {
+        HabitListCard card => string.Join("\n", new[] { card.Date?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? card.Scope }
+            .Concat(card.Items.Count == 0 ? ["0"] : card.Items.Select(item => $"{item.Title} ({item.Status})"))),
+        RecordListCard { Kind: "habitHistory" } card => string.Join("\n", new[]
+            { $"{card.Read?.Scope.GetProperty("date_from").GetString()} to {card.Read?.Scope.GetProperty("date_to").GetString()}: {card.TotalCount} records" }
+            .Concat(card.Items.Select(item => $"{item.Title}: {item.Value}"))),
+        PeriodTotalCard card => $"{card.Metric}: {card.Value} {card.Unit} ({card.Metrics.Window.From:yyyy-MM-dd} to {card.Metrics.Window.To:yyyy-MM-dd})",
+        PeriodComparisonCard card => $"{card.Metric}: {card.CurrentValue} {card.Unit} ({card.Current.Window.From:yyyy-MM-dd} to {card.Current.Window.To:yyyy-MM-dd}); "
+            + $"{card.BaselineValue} {card.Unit} ({card.Baseline.Window.From:yyyy-MM-dd} to {card.Baseline.Window.To:yyyy-MM-dd}); delta {card.AbsoluteDelta} {card.Unit}",
+        MetricsCard { PeriodMetrics: { } period } card => $"{card.HabitTitle}\npositiveLogRecords: {period.PositiveLogRecords} records ({period.Window.From:yyyy-MM-dd} to {period.Window.To:yyyy-MM-dd})"
+            + (card.Period == "habit" ? $"\nLifetime completions: {card.TotalCompletions}" : string.Empty),
+        MetricsCard card => $"{card.Period}: {card.TotalCompletions} records",
+        _ => string.Empty
+    };
+
+    private static ResponseCards RetainCompatibleCards(ResponseCards cards, AgentClientContext? client)
+    {
+        if (cards.HabitList is { } habit && !ReadSubtypeEnabled(habit, client))
+            cards = cards with
+            {
+                HabitList = null,
+                AiMessage = string.Join("\n\n", new[] { cards.AiMessage, ReadFallback(habit) }
+                .Where(text => !string.IsNullOrWhiteSpace(text)))
+            };
+        return cards;
+    }
+
+    private static bool HasOnlySuccessfulFocusedReads(ToolExecutionAccumulator results) =>
+        results.QueryReads.Count > 0 && results.OperationResults.Count > 0
+        && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
+            && operation.OperationId is "get_period_analytics" or "get_habit_metrics");
+
+    private ResponseCards EnsureFocusedReadResults(ResponseCards cards, ProcessUserChatCommand request,
+        ChatContext context, ToolExecutionAccumulator results)
+    {
+        foreach (var read in results.QueryReads.Values.Where(read => read.Read.QueryFamily is "get_period_analytics" or "get_habit_metrics"))
+        {
+            var present = cards.Parts?.OfType<ChatBlockPart>().Any(part => ReadBlockTelemetry.Describe(part.Block).Read?.QueryId == read.Read.QueryId) == true
+                || cards.MetricsCard?.Read?.QueryId == read.Read.QueryId;
+            if (present) continue;
+            if (request.ClientContext?.SupportsParts == true && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
+                && (cards.Parts?.OfType<ChatBlockPart>().Count() ?? 0) < 3)
+                cards = cards with
+                {
+                    Parts = (cards.Parts ?? []).Append(new ChatBlockPart(read.Kind,
+                    ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)).ToArray()
+                };
+            else if (ReadFallback(read.Block) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
+                cards = cards with
+                {
+                    AiMessage = string.Join("\n\n", new[] { cards.AiMessage, text }.Where(value => !string.IsNullOrWhiteSpace(value))),
+                    Parts = request.ClientContext?.SupportsParts == true
+                        ? (cards.Parts ?? []).Append(new ChatTextPart(text)).ToArray() : null
+                };
+        }
+        return cards;
+    }
+
+    private ChatResponse CompleteFocusedReadsWithoutNarrative(ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results)
+    {
+        var cards = EnsureFocusedReadResults(new ResponseCards(null), request, context, results);
+        CaptureReadMetadata(request.UserId, cards);
+        return new ChatResponse(cards.AiMessage, [], results.OperationResults, CorrelationId: request.CorrelationId,
+            Parts: cards.Parts);
     }
 
     private static List<QueryReadBlock> ReadCandidates(string directive, ToolExecutionAccumulator results)

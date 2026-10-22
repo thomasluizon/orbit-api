@@ -270,7 +270,12 @@ Run `npm ci --prefix infra` and `npm test --prefix infra` for the infrastructure
 Chat read contracts and failure handling are documented in
 [the read-tool contract](../src/Orbit.Application/Chat/Tools/README.md#exact-read-metadata-and-recovery).
 Deploy the append-only API before the paired client advertises `periodTotal` or
-`periodComparison`. The existing `AstraPeriodBlocksDisabled` feature flag disables
+`periodComparison`. Dated `habitList` output additionally needs
+`supportsDatedHabitListCard: true`; `habitHistory` record lists need
+`supportsHabitHistoryCard: true`. Each advertisement promises compatible parsing,
+display and date-correct interactions; unadvertised subtypes fall back to queried
+text. Refresh rechecks the subtype and may return HTTP 403 after a local-date
+rollover for a client without dated support. The existing `AstraPeriodBlocksDisabled` feature flag disables
 those producers; no fleet-floor change or new secret is required. Read tokens use
 the shared `Jwt:SecretKey`; rotating that key expires outstanding queries and
 requires repeating the original request.

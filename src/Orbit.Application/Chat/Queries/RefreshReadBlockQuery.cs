@@ -43,7 +43,8 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
             return Result.Failure<QueryReadBlock>("This exact query is unavailable. Repeat the original request.", errorCode: "READ_QUERY_EXPIRED");
         var enabled = await flags.GetEnabledKeysForUserAsync(request.UserId, ct);
         if (!Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler.ReadKindEnabled(ticket.Kind,
-            request.ClientContext, enabled))
+            request.ClientContext, enabled)
+            || ticket.Tool == "get_habit_history" && request.ClientContext?.SupportsHabitHistoryCard != true)
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
         if (request.Page && ticket.Offset <= 0)
             return Result.Failure<QueryReadBlock>("Use the exact query's next cursor.", errorCode: "READ_QUERY_PAGE_INVALID");
@@ -62,6 +63,8 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
         var block = blocks.Capture(ticket.Tool, arguments, request.UserId, response.Operation.Payload, ticket);
         if (block is null || block.Kind != ticket.Kind)
             return Result.Failure<QueryReadBlock>("The exact query could not be refreshed. Retry this query.", errorCode: "READ_QUERY_REFRESH_FAILED");
+        if (!Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler.ReadSubtypeEnabled(block.Block, request.ClientContext))
+            return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
         if (request.Page && block.Read.Revision != ticket.Revision)
             return Result.Failure<QueryReadBlock>("The source changed. Refresh the original query before paging.", errorCode: "READ_QUERY_STALE");
         return Result.Success(block);

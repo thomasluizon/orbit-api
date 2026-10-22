@@ -9,7 +9,8 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Habits.Queries;
 
-public record GetHabitMetricsQuery(Guid UserId, Guid HabitId, DateOnly? DateFrom = null, DateOnly? DateTo = null) : IRequest<Result<HabitMetrics>>;
+public record GetHabitMetricsQuery(Guid UserId, Guid HabitId, DateOnly? DateFrom = null, DateOnly? DateTo = null,
+    DateOnly? AsOf = null) : IRequest<Result<HabitMetrics>>;
 
 public class GetHabitMetricsQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -32,7 +33,7 @@ public class GetHabitMetricsQueryHandler(
         var userTimeZone = user.TimeZone is not null
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
             : TimeZoneInfo.Utc;
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = request.AsOf ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var metrics = HabitMetricsCalculator.Calculate(
             habit,
             today,
@@ -48,6 +49,8 @@ public class GetHabitMetricsQueryHandler(
             PeriodSeries = new(series.Granularity, series.Points.Select(p => new PeriodMetricBucket(p.StartDate, p.EndDate, p.Scheduled, p.Completed, p.CompletionRate)).ToList()),
             SourceRevision = Orbit.Application.Chat.ReadRevision.Hash(new
             {
+                user.TimeZone,
+                user.WeekStartDay,
                 habit.Id,
                 habit.UpdatedAtUtc,
                 Logs = habit.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id).Select(l => new { l.Id, l.Date, l.Value, l.UpdatedAtUtc })

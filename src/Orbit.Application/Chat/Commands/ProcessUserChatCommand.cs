@@ -362,6 +362,8 @@ public partial class ProcessUserChatCommandHandler(
         {
             if (request.BlockAnswer is null && HasOnlySuccessfulRankingReads(executionResults))
                 return Result.Success(CompleteRankingWithoutNarrative(request, context, executionResults));
+            if (request.BlockAnswer is null && HasOnlySuccessfulFocusedReads(executionResults))
+                return Result.Success(CompleteFocusedReadsWithoutNarrative(request, context, executionResults));
             return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
         }
         if (toolLoopResult.HadToolFailure)
@@ -398,6 +400,7 @@ public partial class ProcessUserChatCommandHandler(
         followUps = groundedReply.FollowUps;
         cards = ApplyGroundingToCards(cards, aiMessage);
         cards = EnsureHabitRankingResult(cards, request, context, executionResults);
+        cards = EnsureFocusedReadResults(cards, request, context, executionResults);
         aiMessage = cards.AiMessage;
         if (executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
@@ -707,16 +710,19 @@ public partial class ProcessUserChatCommandHandler(
 
             var bound = ResolveQueryRead(directive, results);
             var kind = bound?.Kind ?? DirectivePartKind(directive);
-            if (kind is null || request.ClientContext?.PartKinds?.Contains(kind, StringComparer.Ordinal) != true)
-                continue;
-
             if (bound is not null)
             {
-                if (!ReadKindEnabled(kind, request.ClientContext, context.EnabledFeatureFlags)) continue;
-                parts.Add(new ChatBlockPart(kind, ForClient(bound, request.ClientContext, context.EnabledFeatureFlags).Block));
+                if (!ReadEnabled(bound, request.ClientContext, context.EnabledFeatureFlags))
+                {
+                    if (ReadFallback(bound.Block) is { Length: > 0 } fallback) parts.Add(new ChatTextPart(fallback));
+                    continue;
+                }
+                parts.Add(new ChatBlockPart(bound.Kind, ForClient(bound, request.ClientContext, context.EnabledFeatureFlags).Block));
                 blockCount++;
                 continue;
             }
+            if (kind is null || request.ClientContext?.PartKinds?.Contains(kind, StringComparer.Ordinal) != true)
+                continue;
             if (directive.StartsWith("[[orbit:read:", StringComparison.OrdinalIgnoreCase)) continue;
             var cards = await TryBuildResponseCardsAsync(directive, request, context, results, cancellationToken);
             object? block = kind switch
@@ -734,7 +740,10 @@ public partial class ProcessUserChatCommandHandler(
                 _ => null
             };
             if (block is null)
+            {
+                if (!string.IsNullOrWhiteSpace(cards.AiMessage)) parts.Add(new ChatTextPart(cards.AiMessage));
                 continue;
+            }
 
             parts.Add(new ChatBlockPart(kind, block));
             blockCount++;
@@ -769,12 +778,11 @@ public partial class ProcessUserChatCommandHandler(
     {
         try
         {
+            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags);
             var boundRead = ResolveQueryRead(aiMessage, executionResults);
-            if (boundRead is not null && ReadKindEnabled(boundRead.Kind, request.ClientContext, context.EnabledFeatureFlags))
+            if (boundRead is not null && ReadEnabled(boundRead, request.ClientContext, context.EnabledFeatureFlags))
                 return ResponseFromRead(StripAllDirectives(aiMessage), ForClient(boundRead, request.ClientContext, context.EnabledFeatureFlags));
-            if (HasAmbiguousRead(aiMessage, executionResults))
-                return new ResponseCards(StripAllDirectives(aiMessage));
-            return await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken);
+            return RetainCompatibleCards(await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken), request.ClientContext);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -112,6 +112,11 @@ public partial class ProcessUserChatCommandHandler
                 + "get_period_analytics returns periodTotal or periodComparison; emit it only when that kind is explicitly advertised. "
                 + "get_habit_history uses recordList. New period kinds supported: "
                 + string.Join(", ", client.PartKinds?.Where(k => k is "periodTotal" or "periodComparison") ?? []));
+        prompt = string.Join(Environment.NewLine, prompt,
+            "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
+            + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
+            + $"Dated habit lists supported: {client?.SupportsDatedHabitListCard == true}. Habit history supported: {client?.SupportsHabitHistoryCard == true}. "
+            + "For an unsupported subtype, answer from the queried facts in text.");
         if (client?.SupportsParts == true)
             prompt = string.Join(Environment.NewLine, prompt,
                 "Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");

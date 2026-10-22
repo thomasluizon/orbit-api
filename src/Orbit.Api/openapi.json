@@ -14847,6 +14847,18 @@
             "items": {
               "type": "string"
             }
+          },
+          "supportsDatedHabitListCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsHabitHistoryCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

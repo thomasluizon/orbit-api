@@ -83,14 +83,14 @@ public sealed class ReadBlockScopeTests
         card.Items.Select(i => i.LogDate).Should().Equal(_day.AddDays(2), _day.AddDays(1));
         card.Items.Should().OnlyContain(i => i.Value == 1);
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
-        var page = await refresh.Handle(new(_userId, read.Read.NextCursor!, new(SupportsRecordListCard: true), Page: true), default);
+        var page = await refresh.Handle(new(_userId, read.Read.NextCursor!, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true), Page: true), default);
         page.IsSuccess.Should().BeTrue();
         page.Value.Read.QueryId.Should().Be(read.Read.QueryId);
         page.Value.Block.Should().BeOfType<RecordListCard>().Which.Items.Single().LogDate.Should().Be(_day);
         rows[0].SoftDelete();
-        var stale = await refresh.Handle(new(_userId, read.Read.NextCursor!, new(SupportsRecordListCard: true), Page: true), default);
+        var stale = await refresh.Handle(new(_userId, read.Read.NextCursor!, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true), Page: true), default);
         stale.ErrorCode.Should().Be("READ_QUERY_STALE");
-        var updated = await refresh.Handle(new(_userId, read.Read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        var updated = await refresh.Handle(new(_userId, read.Read.RefreshToken, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true)), default);
         updated.IsSuccess.Should().BeTrue();
         updated.Value.Read.Revision.Should().NotBe(read.Read.Revision);
         updated.Value.Read.TotalCount.Should().Be(2);
@@ -110,9 +110,9 @@ public sealed class ReadBlockScopeTests
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, null), default);
         var token = initial.Operation.ReadBlock!.Read.RefreshToken;
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
-        (await refresh.Handle(new(Guid.NewGuid(), token, new(SupportsRecordListCard: true)), default)).ErrorCode.Should().Be("READ_QUERY_EXPIRED");
-        (await refresh.Handle(new(_userId, token + "x", new(SupportsRecordListCard: true)), default)).ErrorCode.Should().Be("READ_QUERY_EXPIRED");
-        var revoked = await refresh.Handle(new(_userId, token, new(SupportsRecordListCard: true),
+        (await refresh.Handle(new(Guid.NewGuid(), token, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true)), default)).ErrorCode.Should().Be("READ_QUERY_EXPIRED");
+        (await refresh.Handle(new(_userId, token + "x", new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true)), default)).ErrorCode.Should().Be("READ_QUERY_EXPIRED");
+        var revoked = await refresh.Handle(new(_userId, token, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true),
             AuthMethod: AgentAuthMethod.ApiKey, GrantedScopes: []), default);
         revoked.IsFailure.Should().BeTrue();
         await tool.Received(1).ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>());
@@ -153,6 +153,69 @@ public sealed class ReadBlockScopeTests
         await mediator.Received(1).Send(Arg.Is<GetDailySummaryQuery>(q => !q.GenerateNarrative && q.DateFrom == _day && q.DateTo == _day), Arg.Any<CancellationToken>());
     }
 
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task RefreshRechecksSubtypeSupportAndKeepsAbsoluteDay(bool history, bool supports)
+    {
+        var args = history ? Json("{\"date_from\":\"2026-04-01\",\"date_to\":\"2026-04-02\"}")
+            : Json("{\"date\":\"2026-04-01\"}");
+        object payload = history ? new HabitHistoryRead(0, [], "revision") : new HabitListCard("date", [], _day);
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(history ? "get_habit_history" : "query_habits");
+        tool.IsReadOnly.Returns(true);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, Payload: payload));
+        var executor = Executor(tool);
+        var read = _blocks.Capture(tool.Name, args, _userId, payload)!;
+        _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_day.AddDays(1));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var result = await refresh.Handle(new(_userId, read.Read.RefreshToken, new(SupportsHabitListCard: true,
+            SupportsRecordListCard: true, SupportsDatedHabitListCard: supports, SupportsHabitHistoryCard: supports)), default);
+        result.IsSuccess.Should().Be(supports);
+        if (supports)
+            result.Value.Read.Scope.GetProperty(history ? "date_from" : "date").GetString().Should().Be("2026-04-01");
+        else
+            result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+    }
+
+    [Fact]
+    public async Task MetricsRefreshPinsLegacyRollingRatesAndTracksAccountSettings()
+    {
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1, _day)).Value;
+        habit.Log(_day);
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        habits.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        var user = User.Create("Test", "test@example.com").Value;
+        var users = Substitute.For<IGenericRepository<User>>();
+        users.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
+        var query = new GetHabitMetricsQueryHandler(habits, users, _dates);
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(c => query.Handle(c.Arg<GetHabitMetricsQuery>(), c.Arg<CancellationToken>()));
+        var tool = new GetHabitMetricsTool(mediator);
+        var executor = Executor(tool);
+        var first = await executor.ExecuteAsync(new(_userId, tool.Name,
+            JsonSerializer.SerializeToElement(new { habit_id = habit.Id }), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var read = first.Operation.ReadBlock!;
+        var original = (MetricsCard)read.Block;
+        _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_day.AddDays(40));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var result = await refresh.Handle(new(_userId, read.Read.RefreshToken, new(SupportsMetricsCard: true)), default);
+        result.IsSuccess.Should().BeTrue();
+        var refreshed = (MetricsCard)result.Value.Block;
+        refreshed.WeeklyCompletionRate.Should().Be(original.WeeklyCompletionRate);
+        refreshed.MonthlyCompletionRate.Should().Be(original.MonthlyCompletionRate);
+        refreshed.PeriodMetrics.Should().BeEquivalentTo(original.PeriodMetrics);
+        user.SetTimeZone("Pacific/Auckland").IsSuccess.Should().BeTrue();
+        var changed = await refresh.Handle(new(_userId, read.Read.RefreshToken, new(SupportsMetricsCard: true)), default);
+        changed.Value.Read.Revision.Should().NotBe(read.Read.Revision);
+    }
 
     [Fact]
     public async Task CalendarDisconnectedCarriesSyncStateAndRecovery()
@@ -207,7 +270,7 @@ public sealed class ReadBlockScopeTests
         mediator.Send(Arg.Any<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<IReadOnlyList<Orbit.Application.ApiKeys.Queries.ApiKeyResponse>>(Orbit.Application.Common.ErrorMessages.ApiKeyCreationChallengeRequired));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
-        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true)), default);
         result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.ApiKeyCreationChallengeRequired.Code);
         await mediator.Received(2).Send(Arg.Is<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(q => q.BypassCache && q.UserId == _userId), Arg.Any<CancellationToken>());
     }
@@ -225,11 +288,11 @@ public sealed class ReadBlockScopeTests
         var read = initial.Operation.ReadBlock!.Read;
         tool.ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>()).Returns(new ToolResult(false, Error: "Source unavailable"));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
-        var failed = await refresh.Handle(new(_userId, read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        var failed = await refresh.Handle(new(_userId, read.RefreshToken, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true)), default);
         failed.ErrorCode.Should().Be("READ_QUERY_REFRESH_FAILED");
         _tokens.Read(read.RefreshToken, _userId)!.Arguments.GetProperty("date_from").GetString().Should().Be("2026-04-01");
         tool.ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>()).Returns(new ToolResult(true, Payload: new HabitHistoryRead(0, [], "empty")));
-        var retried = await refresh.Handle(new(_userId, read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        var retried = await refresh.Handle(new(_userId, read.RefreshToken, new(SupportsRecordListCard: true, SupportsHabitHistoryCard: true)), default);
         retried.IsSuccess.Should().BeTrue();
         retried.Value.Read.QueryId.Should().Be(read.QueryId);
     }
