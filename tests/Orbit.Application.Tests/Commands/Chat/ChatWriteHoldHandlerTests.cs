@@ -31,7 +31,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
-public sealed class ChatWriteHoldHandlerTests : IDisposable
+public sealed partial class ChatWriteHoldHandlerTests : IDisposable
 {
     private static readonly DateOnly Today = new(2026, 4, 3);
 
@@ -566,14 +566,14 @@ public sealed class ChatWriteHoldHandlerTests : IDisposable
             && habit.ReminderTimes.SequenceEqual(new[] { 15 })), Arg.Any<CancellationToken>());
     }
 
-    private ProcessUserChatCommandHandler CreateHandler(IAgentOperationExecutor? executor = null)
+    private ProcessUserChatCommandHandler CreateHandler(IAgentOperationExecutor? executor = null, IPayGateService? payGate = null)
     {
         var aiDeps = new ChatAiDependencies(_aiIntentService, _toolRegistry,
             _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo,
             _tagRepo, _templateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, executor ?? _executor,
+            _userDateService, _userStreakService, payGate ?? _payGate, _unitOfWork, _scopeFactory, executor ?? _executor,
             _clarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator,
             _productAnalytics, _scheduleLogReader, Substitute.For<IIssuedAstraBlockStore>(),
             _pendingOperationStore);

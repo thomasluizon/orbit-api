@@ -169,12 +169,50 @@ public partial class ProcessUserChatCommandHandler
             LogContinueWithToolResultsFailed(logger, continueResult.Error);
             if (correction is not null)
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
+            if (RecoverBudgetDeniedContinuation(continueResult.ErrorCode, request, executionResults, language, cancellationToken) is { } recovery)
+                return new ToolRoundResult(recovery);
             return new ToolRoundResult(aiResponse, ProviderError: new AppError(
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
         return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value,
             Correction: correction);
+    }
+
+    private AiResponse? RecoverBudgetDeniedContinuation(string? errorCode, ProcessUserChatCommand request,
+        ToolExecutionAccumulator results, string? language, CancellationToken cancellationToken)
+    {
+        if (errorCode != "AI_DAILY_BUDGET_EXCEEDED" || request.BlockAnswer is not null)
+            return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var hasSavedActions = results.ActionResults.Any(action => action.Status == ActionStatus.Success
+            && action.Params is not { Count: <= 0 } and not { Partial: true, Count: null }
+            && results.OperationResults.Any(operation => operation.Status == AgentOperationStatus.Succeeded
+                && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }
+                && ToolNameToPascalCase(operation.OperationId) == action.Type
+                && operation.TargetId == action.EntityId?.ToString()));
+        var invalidPending = results.PendingOperations.Where(pending =>
+            !IsCurrentPendingOutcome(request.UserId, pending, results)).ToArray();
+        if (!hasSavedActions && invalidPending.Length == results.PendingOperations.Count)
+            return null;
+        foreach (var pending in invalidPending)
+            results.SupersedePendingOperation(pending.Id);
+        return new AiResponse { TextMessage = CommittedWriteMessage(language, hasSavedActions) };
+    }
+
+    private bool IsCurrentPendingOutcome(Guid userId, PendingAgentOperation pending, ToolExecutionAccumulator results)
+    {
+        if (pending.Items is not { Count: > 0 } || pending.ChangeTargetCount is not > 0
+            || string.IsNullOrWhiteSpace(pending.PreviewFingerprint)
+            || !results.PendingWriteCalls.TryGetValue(pending.Id, out var bound)
+            || !execution.PendingOperationStore.IsAwaitingConfirmation(userId, pending.Id))
+            return false;
+        var stored = execution.PendingOperationStore.GetExecution(userId, pending.Id);
+        return stored is { RequiresReproposal: false, Surface: AgentExecutionSurface.Chat }
+            && stored.OperationId == bound.ToolName
+            && stored.CapabilityId == pending.CapabilityId
+            && stored.ConfirmationRequirement == pending.ConfirmationRequirement
+            && stored.PreviewFingerprint == pending.PreviewFingerprint;
     }
 
     private List<AiToolCallResult> RecordToolRound(AiResponse response, IReadOnlyList<AiToolCall> orderedCalls,
