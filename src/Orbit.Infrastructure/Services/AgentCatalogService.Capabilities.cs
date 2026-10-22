@@ -66,6 +66,7 @@ public partial class AgentCatalogService
                 [
                     "ChatController.ProcessChat",
                     "ChatController.ProcessChatStream",
+                    "ChatController.RefreshReadBlock",
                     "ChatController.Transcribe",
                     "AiController.ConfirmPendingOperation",
                     "AiController.RefreshPendingOperationPreview",

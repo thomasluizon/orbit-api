@@ -72,9 +72,9 @@ public class GetDailySummaryQueryHandler(
             effectiveLanguage,
             SummaryTimeBucket(currentLocalTime));
 
-        var fromCache = request.GenerateNarrative && cache.TryGetValue(cacheKey, out DailySummaryContent? cachedContent)
-            && cachedContent is not null;
-        cache.TryGetValue(cacheKey, out DailySummaryContent? cached);
+        cache.TryGetValue(cacheKey, out ScopedSummary? cached);
+        var fromCache = request.GenerateNarrative && cached is not null
+            && cached.From == request.DateFrom && cached.To == request.DateTo;
 
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
@@ -99,27 +99,10 @@ public class GetDailySummaryQueryHandler(
         var lastBadHabitSlipDates = await LoadLastBadHabitSlipDates(
             summaryHabits, userToday, cancellationToken);
 
-        var (period, _) = PeriodAnalyticsCalculator.Calculate(summaryHabits.Where(h => h.ParentHabitId is null).ToList(),
-            new(request.DateFrom, request.DateTo), userTimeZone, user.WeekStartDay);
-        var snapshot = Orbit.Application.Chat.HabitTodaySnapshot.FromLoadedHabits(summaryHabits, request.DateFrom);
-        var rows = Orbit.Application.Chat.HabitListCardBuilder.Build(summaryHabits, request.DateFrom,
-            "today", snapshot, supportsDoneStatus: true).Items;
-        var readCard = new Orbit.Application.Chat.DaySummaryCard(request.DateFrom, period.ScheduledDates,
-            period.MetScheduledDates, period.CompletionRate.HasValue ? (int)Math.Round(period.CompletionRate.Value) : null,
-            snapshot.OverdueIds.Count, user.CurrentStreak, Rows: rows, TotalRows: rows.Count, DateTo: request.DateTo);
-        var revision = Orbit.Application.Chat.ReadRevision.Hash(new
-        {
-            period,
-            rows,
-            Sources = summaryHabits.OrderBy(h => h.Id).Select(h => new
-            {
-                h.Id,
-                h.UpdatedAtUtc,
-                Logs = h.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Date).ThenBy(l => l.Value).Select(l => new { l.Date, l.Value })
-            })
-        });
+        var (readCard, revision) = DailySummaryReadProjection.Project(summaryHabits,
+            request.DateFrom, request.DateTo, userTimeZone, user.WeekStartDay, user.CurrentStreak);
         if (!request.GenerateNarrative || fromCache)
-            return Result.Success(new DailySummaryResponse(fromCache ? cached!.Summary : string.Empty,
+            return Result.Success(new DailySummaryResponse(fromCache ? cached!.Content.Summary : string.Empty,
                 string.Empty, fromCache, readCard, revision));
 
         var summaryResult = await summaryService.GenerateSummaryAsync(
@@ -150,11 +133,13 @@ public class GetDailySummaryQueryHandler(
             AbsoluteExpiration = expiry
         };
 
-        cache.Set(cacheKey, summaryResult.Value, cacheOptions);
+        cache.Set(cacheKey, new ScopedSummary(request.DateFrom, request.DateTo, summaryResult.Value), cacheOptions);
 
         return Result.Success(new DailySummaryResponse(
             summaryResult.Value.Summary, string.Empty, FromCache: false, readCard, revision));
     }
+
+    private sealed record ScopedSummary(DateOnly From, DateOnly To, DailySummaryContent Content);
 
     private static IReadOnlyList<HabitSummaryLogWindow> BuildLogWindows(
         IEnumerable<Habit> habits, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday, int weekStartDay)

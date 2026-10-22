@@ -55,13 +55,18 @@ public sealed class GetPeriodAnalyticsQueryHandler(
             comparison = new(request.Metric, unit, current, previous, value, previousValue, value - previousValue,
                 previousValue == 0 ? null : (decimal)(value - previousValue) / previousValue, request.HabitId);
         }
-        var revision = ReadRevision.Hash(selected.Select(h => new
+        var revision = ReadRevision.Hash(new
         {
-            h.Id,
-            h.UpdatedAtUtc,
-            Logs = h.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id)
+            user.TimeZone,
+            user.WeekStartDay,
+            Habits = selected.Select(h => new
+            {
+                h.Id,
+                h.UpdatedAtUtc,
+                Logs = h.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id)
                 .Select(l => new { l.Id, l.Date, l.Value, l.UpdatedAtUtc })
-        }));
+            })
+        });
         return Result.Success(new PeriodAnalyticsResponse(
             new(request.Metric, unit, value, current, series, request.HabitId), comparison, revision));
     }

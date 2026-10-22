@@ -32,7 +32,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private const string EvalTraceHeaderName = "X-Orbit-Eval-Trace";
 
     [HttpPost("reads/refresh")]
-    [ProducesResponseType<QueryReadBlock>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ReadBlockRefreshResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -44,7 +44,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         var result = await mediator.Send(new RefreshReadBlockQuery(HttpContext.GetUserId(), request.Token,
             request.ClientContext, request.Page, HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(), HttpContext.User.IsReadOnlyCredential()), cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v));
+        return result.ToPayGateAwareResult(v => Ok(ReadBlockRefreshResponse.From(v)));
     }
 
     [HttpGet("records/{kind}")]

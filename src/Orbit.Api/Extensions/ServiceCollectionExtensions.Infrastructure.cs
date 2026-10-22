@@ -362,6 +362,8 @@ public static partial class ServiceCollectionExtensions
         Microsoft.AspNetCore.OpenApi.OpenApiSchemaTransformerContext context, bool legacyRevision)
     {
         var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
+        if (type == typeof(Orbit.Application.Chat.ReadBlockCard))
+            schema.Discriminator = null;
         if (type == typeof(HabitSchedule))
         {
             schema.Type = JsonSchemaType.String;

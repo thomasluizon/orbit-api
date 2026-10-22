@@ -65,7 +65,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task MetricsRead_DoesNotCreateRecapOrReferral()
     {
         SetupUserAndPayGate();
-        SetupRecap(Metrics(totalScheduled: 1));
+        SetupProgress(Metrics(totalScheduled: 1));
         SetupAiResponse(new AiResponse { TextMessage = "[[orbit:metrics]]" });
         await CreateHandler().Handle(new(UserId, "My week",
             ClientContext: new AgentClientContext(SupportsMetricsCard: true)), default);
@@ -80,7 +80,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         var tokens = new Orbit.Infrastructure.Services.ReadQueryTokenService(Microsoft.Extensions.Options.Options.Create(
             new Orbit.Infrastructure.Configuration.JwtSettings { SecretKey = "test-read-query-signing-key-with-32-bytes", Issuer = "test", Audience = "test" }));
-        var blocks = new ReadBlockFactory(_userDateService, tokens);
+        var blocks = new ReadBlockFactory(_userDateService, tokens, _userRepo);
         var executor = Orbit.Application.Tests.Chat.ReadBlockScopeTests.CreateExecutor(tool, blocks);
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
             .Returns(c => executor.ExecuteAsync(c.Arg<AgentExecuteOperationRequest>(), c.Arg<CancellationToken>()));

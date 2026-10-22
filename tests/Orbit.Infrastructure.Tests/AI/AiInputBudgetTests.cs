@@ -87,7 +87,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf("\"tools\":", StringComparison.Ordinal).Should().BeLessThan(body.IndexOf("\"input\":", StringComparison.Ordinal));
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
-            names.Should().HaveCount(65).And.Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
+            names.Should().HaveCount(67).And.Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
             var currentPrefix = CacheablePrefix(root);
             prefix ??= currentPrefix;
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefix));

@@ -567,4 +567,21 @@ public class GetDailySummaryQueryHandlerTests
             public void Dispose() => owner.LastAbsoluteExpiration = AbsoluteExpiration;
         }
     }
+    [Fact]
+    public async Task CachedSummaryCannotCrossTheOriginalEndDate()
+    {
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateTestUser());
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([]);
+        _summaryService.GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(), Arg.Any<CancellationToken>())
+            .Returns(c => Result.Success(new DailySummaryContent(c.Arg<DailySummaryContext>().DateTo.ToString("yyyy-MM-dd"), string.Empty)));
+        await _handler.Handle(new(UserId, Today, Today, "en"), default);
+        var result = await _handler.Handle(new(UserId, Today, Today.AddDays(1), "en"), default);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.FromCache.Should().BeFalse();
+        result.Value.Summary.Should().Be(Today.AddDays(1).ToString("yyyy-MM-dd"));
+        result.Value.ReadCard!.DateTo.Should().Be(Today.AddDays(1));
+    }
+
 }

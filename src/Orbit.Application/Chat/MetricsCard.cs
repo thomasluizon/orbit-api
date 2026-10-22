@@ -23,7 +23,7 @@ public record MetricsCard(
     decimal? MonthlyCompletionRate = null,
     DateOnly? LastCompletedDate = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] PeriodHabitMetrics? PeriodMetrics = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ReadBlockMetadata? Read = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ReadBlockMetadata? Read = null) : ReadBlockCard;
 
 public static partial class MetricsCardBuilder
 {
@@ -75,7 +75,7 @@ public static partial class MetricsCardBuilder
         var metrics = total.Metrics;
         return new("week", (int)Math.Round(metrics.CompletionRate ?? 0), total.Value,
             metrics.ScheduledDates, metrics.DistinctLoggedDates, metrics.CurrentStreak, metrics.BestStreak,
-            total.Value > 0 || metrics.ScheduledDates > 0, "progress", total.Series, PeriodMetrics: metrics);
+            total.Value > 0 || metrics.ScheduledDates > 0, "progress", total.Series.Points.Count == 0 ? null : total.Series, PeriodMetrics: metrics);
     }
 
     public static MetricsCard BuildHabit(HabitMetrics metrics) => new(

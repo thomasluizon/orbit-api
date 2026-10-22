@@ -11,7 +11,7 @@ public record DaySummaryCard(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<HabitListCardItem>? Rows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalRows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? DateTo = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? DateTo = null) : ReadBlockCard;
 
 public record StreakAchievement(string Id, string IconKey, DateTime EarnedAt);
 
@@ -23,7 +23,8 @@ public record StreakCard(
     IReadOnlyList<StreakAchievement> RecentAchievements,
     string SurfaceId = "progress",
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StreakAchievementDisc>? AchievementDiscs = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GamificationOverviewPayload? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
 
 public record CalendarCardEvent(string Title, string Start, string? End, bool IsAllDay,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id = null,
@@ -35,7 +36,7 @@ public record CalendarCard(
     IReadOnlyList<CalendarCardEvent> Events,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CalendarCardSync? Sync,
     string SurfaceId = "calendar",
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
 
 public static class StatusCardBuilder
 {
@@ -76,7 +77,7 @@ public static class StatusCardBuilder
                 .Take(6)
                 .Select(item => new StreakAchievement(item.Id, item.IconKey, item.EarnedAtUtc!.Value))
                 .ToList(),
-            AchievementDiscs: discs);
+            AchievementDiscs: discs, State: payload);
     }
 
     public static CalendarCard? BuildCalendar(CalendarOverviewPayload? payload)

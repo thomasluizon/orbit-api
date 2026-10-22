@@ -10,7 +10,7 @@ public record AccountRowsCard(
     string Kind, IReadOnlyList<AccountRow> Rows,
     string? ReferralCode = null, string? ReferralLink = null,
     string SurfaceId = "profile",
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
 
 public static class AccountRowsCardBuilder
 {
@@ -58,7 +58,7 @@ public static class AccountRowsCardBuilder
     public static AccountRowsCard? Plan(Orbit.Application.Chat.Tools.Implementations.SubscriptionOverviewPayload payload) =>
         payload.Status is not { } status ? null : new("plan",
         [
-            new("plan", status.Plan, "enum"),
+            new("plan", status.Plan == "free" ? "Free" : "Pro", "enum"),
             new("trialEnd", Iso(status.TrialEndsAt), "date"),
             new("planExpiry", Iso(status.PlanExpiresAt), "date"),
             new("interval", status.SubscriptionInterval, "enum"),

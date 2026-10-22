@@ -25,16 +25,15 @@ public class GetReferralDashboardQueryHandler(
 {
     public async Task<Result<ReferralDashboardResponse>> Handle(GetReferralDashboardQuery request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
-        if (user is null)
-            return Result.Failure<ReferralDashboardResponse>(ErrorMessages.UserNotFound);
-        var code = user.ReferralCode ?? string.Empty;
+        Result<string>? createdCode = null;
         if (request.CreateCodeIfMissing)
         {
-            var codeResult = await mediator.Send(new GetOrCreateReferralCodeCommand(request.UserId), cancellationToken);
-            if (codeResult.IsFailure) return codeResult.PropagateError<ReferralDashboardResponse>();
-            code = codeResult.Value;
+            createdCode = await mediator.Send(new GetOrCreateReferralCodeCommand(request.UserId), cancellationToken);
+            if (createdCode.IsFailure) return createdCode.PropagateError<ReferralDashboardResponse>();
         }
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        if (user is null) return Result.Failure<ReferralDashboardResponse>(ErrorMessages.UserNotFound);
+        var code = createdCode?.Value ?? user.ReferralCode ?? string.Empty;
         var link = code.Length == 0 ? string.Empty : $"{frontendSettings.Value.BaseUrl}/r/{code}";
 
         var referrals = await referralRepository.FindAsync(

@@ -11,11 +11,12 @@ using Orbit.Application.Profile.Queries;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Tags.Queries;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
-public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenService tokens)
+public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenService tokens, IGenericRepository<User> users)
 {
     public static bool Supports(string tool) => tool is "query_habits" or "query_goals" or "review_goals"
         or "get_habit_metrics" or "get_period_analytics" or "get_habit_history" or "get_daily_summary"
@@ -26,6 +27,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
     public async Task<JsonElement> ResolveAsync(string tool, JsonElement args, Guid userId, CancellationToken ct)
     {
         var node = JsonNode.Parse(args.GetRawText())!.AsObject();
+        ValidateDates(args);
         var today = await dates.GetUserTodayAsync(userId, ct);
         string Iso(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (tool == "query_habits" && node["date"]?.GetValue<string>() is { } date)
@@ -46,10 +48,13 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             node["date_from"] ??= Iso(from);
             node["date_to"] ??= tool == "get_daily_summary" ? node["date_from"]!.DeepClone() : Iso(to);
         }
+        ApplyDefaults(tool, node);
         if (tool is "query_goals" or "review_goals" or "get_gamification_overview")
             node["as_of"] ??= Iso(today);
         if (tool == "get_calendar_overview")
         {
+            var user = await users.GetByIdAsync(userId, ct);
+            if (!node.ContainsKey("calendar_ids")) node["calendar_ids"] = JsonSerializer.SerializeToNode(user?.GetSelectedCalendarIds());
             var zone = await dates.GetUserTimeZoneAsync(userId, ct);
             if (node["date_from"]?.GetValue<string>() is { } fromText && DateOnly.TryParseExact(fromText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate))
             {
@@ -65,6 +70,40 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             }
         }
         return JsonSerializer.SerializeToElement(node);
+    }
+
+    private static void ValidateDates(JsonElement args)
+    {
+        foreach (var key in new[] { "date", "date_from", "date_to", "baseline_from", "baseline_to", "as_of" })
+        {
+            if (!args.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null) continue;
+            if (value.ValueKind != JsonValueKind.String) throw new ArgumentException("Read dates must be strings.");
+            var text = value.GetString();
+            if (key == "date" && string.Equals(text, "today", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                throw new ArgumentException("Read dates must be absolute ISO dates.");
+        }
+    }
+
+    private static void ApplyDefaults(string tool, JsonObject node)
+    {
+        if (tool is "query_habits" or "query_goals" or "get_habit_history" or "get_notifications" or "review_goals")
+        {
+            node["offset"] ??= 0;
+            node["limit"] ??= tool is "query_habits" or "query_goals" ? 50 : tool == "get_notifications" ? 10 : 20;
+        }
+        if (tool == "query_habits")
+        {
+            node["include_overdue"] ??= false;
+            node["include_sub_habits"] ??= true;
+            node["include_metrics"] ??= false;
+        }
+        if (tool == "query_goals") node["include_completed"] ??= false;
+        if (tool == "get_calendar_overview")
+        {
+            node["include_events"] ??= true; node["include_calendars"] ??= true;
+            node["include_auto_sync_state"] ??= true; node["include_suggestions"] ??= true;
+        }
     }
 
     public QueryReadBlock? Capture(string tool, JsonElement args, Guid userId, object? payload,
@@ -119,9 +158,20 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         GetNotificationsResponse notifications => RecordProjection(RecordListCardBuilder.BuildNotificationPage(notifications, userId, offset), notifications.SourceRevision),
         IReadOnlyList<TagResponse> tags => RecordProjection(RecordListCardBuilder.BuildTags(tags, userId, offset)),
         IReadOnlyList<ChecklistTemplateResponse> templates => RecordProjection(RecordListCardBuilder.BuildTemplates(templates, userId, offset)),
-        IReadOnlyList<ApiKeyResponse> keys => RecordProjection(RecordListCardBuilder.BuildKeys(keys, TimeProvider.System.GetUtcNow().UtcDateTime, userId, offset)),
+        IReadOnlyList<ApiKeyResponse> keys => KeyProjection(keys, userId, offset),
         _ => null
     };
+
+    private static Projection KeyProjection(IReadOnlyList<ApiKeyResponse> keys, Guid userId, int offset)
+    {
+        var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var revision = ReadRevision.Hash(new
+        {
+            Keys = keys,
+            States = keys.Select(k => new { k.Id, Expired = k.ExpiresAtUtc <= nowAtUtc })
+        });
+        return RecordProjection(RecordListCardBuilder.BuildKeys(keys, nowAtUtc, userId, offset), revision);
+    }
 
     private static Projection RecordProjection(RecordListCard card, string? revision = null) =>
         new("recordList", card, revision, Total: card.TotalCount, Count: card.Items.Count);
@@ -150,7 +200,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         DaySummaryCard card => card with { Read = read },
         StreakCard card => card with { Read = read },
         CalendarCard card => card with { Read = read },
-        RecordListCard card => card with { Read = read, NextCursor = read.NextCursor },
+        RecordListCard card => card with { Read = read },
         AccountRowsCard card => card with { Read = read },
         PeriodTotalCard card => card with { Read = read },
         PeriodComparisonCard card => card with { Read = read },

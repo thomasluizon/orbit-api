@@ -2,7 +2,18 @@ using Orbit.Application.Calendar.Queries;
 
 namespace Orbit.Application.Calendar.Services;
 
-public sealed record CalendarReadWindow(DateTime FromAtUtc, DateTime ToAtUtc);
+public sealed record CalendarReadWindow
+{
+    public DateTime FromAtUtc { get; }
+    public DateTime ToAtUtc { get; }
+    public CalendarReadWindow(DateTime fromAtUtc, DateTime toAtUtc)
+    {
+        if (toAtUtc <= fromAtUtc || toAtUtc - fromAtUtc > TimeSpan.FromDays(3660))
+            throw new ArgumentException("A calendar read requires an ordered, bounded window.");
+        FromAtUtc = fromAtUtc;
+        ToAtUtc = toAtUtc;
+    }
+}
 
 public interface ICalendarEventFetcher
 {

@@ -339,7 +339,7 @@ public record CalendarEventItem(
 }
 
 public record GetCalendarEventsQuery(Guid UserId, bool IncludeImported = false, CalendarReadWindow? Window = null,
-    IReadOnlyList<string>? CalendarIds = null, bool PersistConnectionState = true) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
+    IReadOnlyList<string>? CalendarIds = null, bool PersistConnectionState = true, bool UseCurrentSelection = true) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
 /// <summary>Groups the repositories the calendar events query touches to keep the handler constructor small.</summary>
 public record GetCalendarEventsRepositories(
@@ -374,7 +374,7 @@ public partial class GetCalendarEventsQueryHandler(
         try
         {
             var fetched = await eventFetcher.FetchAsync(
-                accessToken, request.CalendarIds ?? user.GetSelectedCalendarIds(), updatedMin: null, cancellationToken, request.Window);
+                accessToken, request.UseCurrentSelection ? user.GetSelectedCalendarIds() : request.CalendarIds, updatedMin: null, cancellationToken, request.Window);
 
             var importedEventIds = request.IncludeImported
                 ? null

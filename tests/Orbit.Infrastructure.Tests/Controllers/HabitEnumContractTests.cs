@@ -196,6 +196,12 @@ public partial class HabitEnumContractTests(ITestOutputHelper output)
     private static void AssertEnumProperties(JsonElement value, JsonElement schema, JsonElement document)
     {
         schema = Resolve(schema, document);
+        if (value.ValueKind == JsonValueKind.Object && schema.TryGetProperty("oneOf", out var alternatives))
+        {
+            var objectBranches = alternatives.EnumerateArray().Select(branch => Resolve(branch, document))
+                .Where(branch => branch.TryGetProperty("properties", out _)).ToList();
+            if (objectBranches.Count == 1) schema = objectBranches[0];
+        }
         if (value.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in value.EnumerateArray()) AssertEnumProperties(item, schema.GetProperty("items"), document);

@@ -39,7 +39,7 @@ public sealed class ReadBlockScopeTests
         _dates.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         _dates.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"));
         _flags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
-        _blocks = new(_dates, _tokens);
+        _blocks = new(_dates, _tokens, Substitute.For<IGenericRepository<User>>());
     }
 
     [Fact]
@@ -151,6 +151,87 @@ public sealed class ReadBlockScopeTests
             new(SupportsDaySummaryCard: true)), default);
         result.IsSuccess.Should().BeTrue();
         await mediator.Received(1).Send(Arg.Is<GetDailySummaryQuery>(q => !q.GenerateNarrative && q.DateFrom == _day && q.DateTo == _day), Arg.Any<CancellationToken>());
+    }
+
+
+    [Fact]
+    public async Task CalendarDisconnectedCarriesSyncStateAndRecovery()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(NSubstitute.Arg.Any<Orbit.Application.Calendar.Queries.GetCalendarEventsQuery>(), NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<List<Orbit.Application.Calendar.Queries.CalendarEventItem>>(Orbit.Application.Common.ErrorMessages.CalendarNotConnected));
+        mediator.Send(NSubstitute.Arg.Any<Orbit.Application.Calendar.Queries.GetCalendarAutoSyncStateQuery>(), NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new Orbit.Application.Calendar.Queries.CalendarAutoSyncStateResponse(false,
+                Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle, null, false)));
+        mediator.Send(NSubstitute.Arg.Any<Orbit.Application.Calendar.Queries.GetCalendarSyncSuggestionsQuery>(), NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new List<Orbit.Application.Calendar.Queries.CalendarSyncSuggestionItem>()));
+        mediator.Send(NSubstitute.Arg.Any<Orbit.Application.Calendar.Queries.GetUserCalendarsQuery>(), NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<List<Orbit.Application.Calendar.Queries.UserCalendarItem>>(Orbit.Application.Common.ErrorMessages.CalendarNotConnected));
+        var tool = new GetCalendarOverviewTool(mediator);
+        var result = await Executor(tool).ExecuteAsync(new(_userId, tool.Name, Json("{}"),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var read = result.Operation.ReadBlock!;
+        read.Read.Completeness.Should().Be("partial");
+        read.Read.Recovery.Should().Be("reconnect");
+        var card = read.Block.Should().BeOfType<CalendarCard>().Subject;
+        card.Events.Should().BeEmpty();
+        card.Sync!.HasGoogleConnection.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TokensExpireAndRefreshContractsSerializeDeclaredBlockTypes()
+    {
+        var ticket = new ReadQueryTicket(_userId, Guid.NewGuid(), "get_period_analytics", Json("{}"), "periodTotal", "zero", DateTime.UnixEpoch);
+        _tokens.Read(_tokens.Issue(ticket), _userId).Should().BeNull();
+        var metric = new PeriodHabitMetrics(new(_day, _day), 0, 0, 0, 0, null, 0, 0);
+        var read = _blocks.Capture("get_period_analytics", Json("{}"), _userId,
+            new PeriodAnalyticsResponse(new("positiveLogRecords", "records", 0, metric, new("day", [])), null, "zero"))!;
+        var response = JsonSerializer.SerializeToElement(ReadBlockRefreshResponse.From(read), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        response.GetProperty("block").TryGetProperty("$type", out _).Should().BeFalse();
+        response.GetProperty("block").GetProperty("metric").GetString().Should().Be("positiveLogRecords");
+        response.GetProperty("block").GetProperty("metrics").GetProperty("completionRate").ValueKind.Should().Be(JsonValueKind.Null);
+        var invalid = () => new Orbit.Application.Calendar.Services.CalendarReadWindow(DateTime.UnixEpoch, DateTime.UnixEpoch);
+        invalid.Should().Throw<ArgumentException>();
+    }
+
+
+    [Fact]
+    public async Task KeyRefreshPreservesTheStepUpBoundary()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<Orbit.Application.ApiKeys.Queries.ApiKeyResponse>>([]));
+        var tool = new GetApiKeysTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        mediator.Send(Arg.Any<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<IReadOnlyList<Orbit.Application.ApiKeys.Queries.ApiKeyResponse>>(Orbit.Application.Common.ErrorMessages.ApiKeyCreationChallengeRequired));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.ApiKeyCreationChallengeRequired.Code);
+        await mediator.Received(2).Send(Arg.Is<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(q => q.BypassCache && q.UserId == _userId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FailedRefreshKeepsTheOriginalQueryRecoverable()
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns("get_habit_history"); tool.IsReadOnly.Returns(true);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, Payload: new HabitHistoryRead(0, [], "empty")));
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{\"date_from\":\"2026-04-01\",\"date_to\":\"2026-04-02\"}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var read = initial.Operation.ReadBlock!.Read;
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>()).Returns(new ToolResult(false, Error: "Source unavailable"));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var failed = await refresh.Handle(new(_userId, read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        failed.ErrorCode.Should().Be("READ_QUERY_REFRESH_FAILED");
+        _tokens.Read(read.RefreshToken, _userId)!.Arguments.GetProperty("date_from").GetString().Should().Be("2026-04-01");
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), _userId, Arg.Any<CancellationToken>()).Returns(new ToolResult(true, Payload: new HabitHistoryRead(0, [], "empty")));
+        var retried = await refresh.Handle(new(_userId, read.RefreshToken, new(SupportsRecordListCard: true)), default);
+        retried.IsSuccess.Should().BeTrue();
+        retried.Value.Read.QueryId.Should().Be(read.QueryId);
     }
 
     private AgentOperationExecutor Executor(IAiTool tool) => CreateExecutor(tool, _blocks);

@@ -300,4 +300,15 @@ public class GetAchievementsQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
     }
+    [Fact]
+    public async Task ChatReadModeDoesNotReconcileAchievements()
+    {
+        var user = CreateProUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _achievementRepo.FindAsync(Arg.Any<Expression<Func<UserAchievement, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        var result = await _handler.Handle(new(UserId, ReconcileAchievements: false), default);
+        result.IsSuccess.Should().BeTrue();
+        await _gamificationService.DidNotReceiveWithAnyArgs().ReconcileFoundingAchievementsAsync(default, default);
+    }
+
 }

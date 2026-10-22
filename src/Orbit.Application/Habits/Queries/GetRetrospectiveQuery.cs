@@ -82,7 +82,8 @@ public class GetRetrospectiveQueryHandler(
             request.DateFrom,
             request.Language);
 
-        if (request.GenerateNarrative && cache.TryGetValue(cacheKey, out RetrospectiveResponse? cached) && cached is not null)
+        if (request.GenerateNarrative && cache.TryGetValue(cacheKey, out RetrospectiveResponse? cached) && cached is not null
+            && cached.DateFrom == request.DateFrom && cached.DateTo == request.DateTo)
             return Result.Success(cached with { FromCache = true });
 
         var habits = await habitRepository.FindAsync(

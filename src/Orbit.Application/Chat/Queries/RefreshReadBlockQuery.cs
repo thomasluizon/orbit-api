@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Common;
@@ -15,9 +17,26 @@ public sealed record RefreshReadBlockQuery(Guid UserId, string Token, AgentClien
     : IRequest<Result<QueryReadBlock>>;
 
 public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, IAgentOperationExecutor executor,
-    ReadBlockFactory blocks, IFeatureFlagService flags) : IRequestHandler<RefreshReadBlockQuery, Result<QueryReadBlock>>
+    ReadBlockFactory blocks, IFeatureFlagService flags, IProductAnalytics? analytics = null, ILogger<RefreshReadBlockQueryHandler>? logger = null) : IRequestHandler<RefreshReadBlockQuery, Result<QueryReadBlock>>
 {
     public async Task<Result<QueryReadBlock>> Handle(RefreshReadBlockQuery request, CancellationToken ct)
+    {
+        var result = await RefreshAsync(request, ct);
+        if (analytics is not null)
+        {
+            var ticket = tokens.Read(request.Token, request.UserId);
+            var read = result.IsSuccess ? result.Value.Read : new ReadBlockMetadata(Guid.Empty, ticket?.Tool ?? "unknown",
+                default, string.Empty, "unknown", string.Empty);
+            var metric = ticket?.Arguments.TryGetProperty("metric", out var value) == true && value.ValueKind == JsonValueKind.String
+                ? value.GetString() : null;
+            ReadBlockTelemetry.Capture(analytics, logger ?? NullLogger<RefreshReadBlockQueryHandler>.Instance, request.UserId,
+                "chat_read_refresh", read, ticket?.Kind ?? "unknown", metric,
+                result.IsSuccess ? "succeeded" : result.ErrorCode == ErrorMessages.NoPermission.Code ? "scopeMismatch" : "failed");
+        }
+        return result;
+    }
+
+    private async Task<Result<QueryReadBlock>> RefreshAsync(RefreshReadBlockQuery request, CancellationToken ct)
     {
         var ticket = tokens.Read(request.Token, request.UserId);
         if (ticket is null || !ReadBlockFactory.Supports(ticket.Tool))
@@ -34,6 +53,8 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
         var arguments = JsonSerializer.SerializeToElement(args);
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(request.UserId, ticket.Tool,
             arguments, AgentExecutionSurface.Chat, request.AuthMethod, request.GrantedScopes, request.ReadOnlyCredential), ct);
+        if (response.Operation.Status != AgentOperationStatus.Succeeded && response.Operation.ErrorCode is { } sourceError)
+            return Result.Failure<QueryReadBlock>(response.Operation.PolicyReason ?? "The original read is unavailable.", sourceError);
         if (response.Operation.Status is AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy)
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
         if (response.Operation.Status != AgentOperationStatus.Succeeded)

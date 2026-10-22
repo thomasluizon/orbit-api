@@ -27,6 +27,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            calendar_ids = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } },
             date_from = new { type = JsonSchemaTypes.String },
             date_to = new { type = JsonSchemaTypes.String },
             window_from_utc = new { type = JsonSchemaTypes.String },
@@ -45,12 +46,12 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         var includeAutoSyncState = JsonArgumentParser.GetOptionalBool(args, "include_auto_sync_state") ?? true;
         var includeSuggestions = JsonArgumentParser.GetOptionalBool(args, "include_suggestions") ?? true;
 
-        CalendarReadWindow? window = null;
-        if (DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_from_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var fromAtUtc)
-            && DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_to_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var toAtUtc))
-            window = new(fromAtUtc, toAtUtc);
+        var window = ParseWindow(args);
+        var hasSelection = args.TryGetProperty("calendar_ids", out var selection);
+        var selectedIds = selection.ValueKind == JsonValueKind.Array
+            ? selection.EnumerateArray().Select(id => id.GetString()!).ToList() : null;
         var events = includeEvents
-            ? await mediator.Send(new GetCalendarEventsQuery(userId, Window: window, PersistConnectionState: false), ct)
+            ? await mediator.Send(new GetCalendarEventsQuery(userId, Window: window, CalendarIds: selectedIds, PersistConnectionState: false, UseCurrentSelection: !hasSelection), ct)
             : Result.Success(new List<CalendarEventItem>());
         string? recovery = null;
         if (events.IsFailure)
@@ -88,6 +89,11 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
             suggestions.IsSuccess ? suggestions.Value : [],
             includeCalendars && calendars.IsSuccess ? calendars.Value : null, recovery));
     }
+    private static CalendarReadWindow? ParseWindow(JsonElement args) =>
+        DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_from_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var fromAtUtc)
+        && DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_to_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var toAtUtc)
+            ? new(fromAtUtc, toAtUtc) : null;
+
 }
 
 public class ManageCalendarSyncTool(IMediator mediator) : IPreparedIntentTool

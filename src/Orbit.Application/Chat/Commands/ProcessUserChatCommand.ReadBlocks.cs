@@ -59,8 +59,24 @@ public partial class ProcessUserChatCommandHandler
 
 public partial class ProcessUserChatCommandHandler
 {
+    private void CaptureReadMetadata(Guid userId, ResponseCards cards)
+    {
+        IEnumerable<object> blocks = cards.Parts is { } parts
+            ? parts.OfType<ChatBlockPart>().Select(part => part.Block)
+            : new object?[] { cards.HabitList, cards.GoalList, cards.MetricsCard, cards.PeriodInsight,
+                cards.DaySummary, cards.Streak, cards.Calendar, cards.AccountRows }.OfType<object>()
+                .Concat(cards.RecordLists ?? []);
+        foreach (var block in blocks)
+        {
+            var (read, kind, metric) = ReadBlockTelemetry.Describe(block);
+            if (read is not null)
+                ReadBlockTelemetry.Capture(execution.ProductAnalytics, logger, userId, "chat_read_block_emitted", read, kind, metric);
+        }
+    }
+
     private static QueryReadBlock ForClient(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) => read.Block switch
     {
+        DaySummaryCard card when client?.SupportsHabitListDoneStatus != true => read with { Block = AdaptDay(card, client?.SupportsHabitListDoneStatus) ?? card },
         HabitListCard card when client?.SupportsHabitListDoneStatus != true => read with
         {
             Block = card with
@@ -71,24 +87,31 @@ public partial class ProcessUserChatCommandHandler
         _ => read
     };
 
-    private static ResponseCards CarryQueryReads(ResponseCards cards, ToolExecutionAccumulator results) => cards with
-    {
-        HabitList = BoundCard(cards.HabitList, results, "habitList"),
-        GoalList = BoundCard(cards.GoalList, results, "goalList"),
-        MetricsCard = BoundCard(cards.MetricsCard, results, "metrics"),
-        PeriodInsight = BoundCard(cards.PeriodInsight, results, "periodInsight"),
-        DaySummary = BoundCard(cards.DaySummary, results, "daySummary"),
-        Streak = BoundCard(cards.Streak, results, "streak"),
-        Calendar = BoundCard(cards.Calendar, results, "calendar")
-    };
+    private static DaySummaryCard? AdaptDay(DaySummaryCard? card, bool? supportsDone) => card is null || supportsDone == true
+        ? card : card with { Rows = card.Rows?.Select(row => row.Status == "done" ? row with { Status = "none" } : row).ToList() };
 
-    private static T? BoundCard<T>(T? original, ToolExecutionAccumulator results, string kind) where T : class =>
-        original is null ? null : SingleRead<T>(results, kind) ?? original;
+    private static ResponseCards CarryQueryReads(ResponseCards cards, ToolExecutionAccumulator results,
+        AgentClientContext? client, IReadOnlyList<string> flags) => cards with
+        {
+            HabitList = BoundCard(cards.HabitList, results, "habitList", client, flags),
+            GoalList = BoundCard(cards.GoalList, results, "goalList", client, flags),
+            MetricsCard = BoundCard(cards.MetricsCard, results, "metrics", client, flags),
+            PeriodInsight = BoundCard(cards.PeriodInsight, results, "periodInsight", client, flags),
+            DaySummary = BoundCard(cards.DaySummary, results, "daySummary", client, flags),
+            Streak = BoundCard(cards.Streak, results, "streak", client, flags),
+            Calendar = BoundCard(cards.Calendar, results, "calendar", client, flags),
+            RecordLists = cards.RecordLists?.Select(card => ReadCandidates("[[orbit:records:" + card.Kind + "]]", results)
+                .SingleOrDefault()?.Block as RecordListCard ?? card).ToList(),
+            AccountRows = cards.AccountRows is { } account ? ReadCandidates("[[orbit:account:" + account.Kind + "]]", results)
+            .SingleOrDefault()?.Block as AccountRowsCard ?? account : null
+        };
 
-    private static T? SingleRead<T>(ToolExecutionAccumulator results, string kind) where T : class
+    private static T? BoundCard<T>(T? original, ToolExecutionAccumulator results, string kind,
+        AgentClientContext? client, IReadOnlyList<string> flags) where T : class
     {
+        if (original is null) return null;
         var reads = results.QueryReads.Values.Where(read => read.Kind == kind).ToList();
-        return reads.Count == 1 ? reads[0].Block as T : null;
+        return reads.Count == 1 ? ForClient(reads[0], client, flags).Block as T ?? original : original;
     }
 
     private static QueryReadBlock? ResolveQueryRead(string? directive, ToolExecutionAccumulator results)
@@ -115,11 +138,24 @@ public partial class ProcessUserChatCommandHandler
         return reads.Count == 1 ? reads[0] : null;
     }
 
-    private static bool HasAmbiguousRead(string? directive, ToolExecutionAccumulator results)
+    private static bool HasAmbiguousRead(string? message, ToolExecutionAccumulator results)
     {
-        if (directive is null) return false;
-        var kind = DirectivePartKind(directive.Trim());
-        return kind is not null && results.QueryReads.Values.Count(read => read.Kind == kind) > 1;
+        if (message is null) return false;
+        var directives = System.Text.RegularExpressions.Regex.Matches(message, @"\[\[orbit:[a-z:]+\]\]",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        return directives.Any(match => ReadCandidates(match.Value, results).Count > 1);
+    }
+
+    private static List<QueryReadBlock> ReadCandidates(string directive, ToolExecutionAccumulator results)
+    {
+        var kind = DirectivePartKind(directive);
+        var reads = results.QueryReads.Values.Where(read => read.Kind == kind);
+        return reads.Where(read => read.Block switch
+        {
+            RecordListCard card => directive.Contains(":" + card.Kind + "]]", StringComparison.OrdinalIgnoreCase),
+            AccountRowsCard card => directive.Contains(":" + card.Kind + "]]", StringComparison.OrdinalIgnoreCase),
+            _ => true
+        }).ToList();
     }
 
     internal static bool ReadKindEnabled(string kind, AgentClientContext? client, IReadOnlyList<string> flags)

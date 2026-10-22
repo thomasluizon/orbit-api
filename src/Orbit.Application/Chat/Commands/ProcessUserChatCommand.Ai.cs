@@ -106,7 +106,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyCollection<string> activeToolNames)
     {
         var client = request.ClientContext;
-        if (client?.SupportsParts == true)
+        if (client?.SupportsParts == true && client.PartKinds is { Count: > 0 })
             prompt = string.Join(Environment.NewLine, prompt,
                 "When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. "
                 + "get_period_analytics returns periodTotal or periodComparison; emit it only when that kind is explicitly advertised. "

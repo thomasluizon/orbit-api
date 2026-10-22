@@ -585,6 +585,7 @@ public partial class ProcessUserChatCommandHandler(
     private void CaptureResponseCardEvents(
         ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
     {
+        CaptureReadMetadata(request.UserId, cards);
         void Capture(string eventName, string kind) =>
             CaptureCardEvent(request, context, eventName, kind, cards.Parts);
 
@@ -833,7 +834,7 @@ public partial class ProcessUserChatCommandHandler(
 
         aiMessage = StripAllDirectives(aiMessage);
         return CarryQueryReads(new ResponseCards(aiMessage, habitList, goalList, metricsCard, periodInsight,
-            daySummary, streak, calendar, recordLists, accountRows), executionResults);
+            daySummary, streak, calendar, recordLists, accountRows), executionResults, request.ClientContext, context.EnabledFeatureFlags);
     }
 
     private static AccountRowsCard? BuildAccountRows(
@@ -911,7 +912,7 @@ public partial class ProcessUserChatCommandHandler(
             && aiMessage?.Contains(StatusCardBuilder.DayDirective, StringComparison.OrdinalIgnoreCase) == true
             && executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary") is not null)
         {
-            day = executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary")?.ReadCard;
+            day = AdaptDay(executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary")?.ReadCard, request.ClientContext?.SupportsHabitListDoneStatus);
         }
 
         var streak = request.ClientContext?.SupportsStreakCard == true
@@ -1049,9 +1050,6 @@ public partial class ProcessUserChatCommandHandler(
         long totalReportedTokens,
         int maxTokens,
         int toolIterations);
-
-    [LoggerMessage(EventId = 29, Level = LogLevel.Warning, Message = "Metrics card could not be built: {Error}")]
-    private static partial void LogMetricsCardBuildFailed(ILogger logger, string? error);
 
     [LoggerMessage(EventId = 30, Level = LogLevel.Warning, Message = "Metrics card computation failed")]
     private static partial void LogMetricsCardBuildThrew(ILogger logger, Exception ex);

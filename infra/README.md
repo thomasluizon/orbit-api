@@ -264,3 +264,19 @@ The pinned Cloudflare provider's live [Worker script schema](https://github.com/
 A real `terraform providers schema -json` invocation against the installed pinned providers confirmed that `render_web_service.id` and `.url` are computed strings and `runtime_source.image` accepts `image_url`, `digest`, `tag`, and `registry_credential_id`, with no auto-deploy field. Reproduce in a backend-disabled scratch root containing `versions.tf`'s provider declarations without its S3 backend, or against the initialized backend. No Render API response fields are read by this change.
 
 Run `npm ci --prefix infra` and `npm test --prefix infra` for the infrastructure tests. The routing tests execute the deployed module in Miniflare with outbound requests intercepted and Cloudflare metadata fetching disabled. The [Miniflare testing documentation](https://developers.cloudflare.com/workers/testing/miniflare/) confirms the simulator's test API. Installed `miniflare/dist/src/index.d.ts` confirms `outboundService` accepts a Request callback returning a Response, `bindings` supplies environment values, and `dispatchFetch` invokes the Worker. Its implementation in `dist/src/index.js` dispatches outbound requests to that callback. These requests, rather than invented API fixtures, supply the assertions. The locked test dependencies override `undici` and `sharp` to patched versions; no testing dependency is bundled into the Worker uploaded by Terraform.
+
+## Exact chat read recovery
+
+Chat read contracts and failure handling are documented in
+[the read-tool contract](../src/Orbit.Application/Chat/Tools/README.md#exact-read-metadata-and-recovery).
+Deploy the append-only API before the paired client advertises `periodTotal` or
+`periodComparison`. The existing `AstraPeriodBlocksDisabled` feature flag disables
+those producers; no fleet-floor change or new secret is required. Read tokens use
+the shared `Jwt:SecretKey`; rotating that key expires outstanding queries and
+requires repeating the original request.
+
+On HTTP 409 `READ_QUERY_STALE`, refresh the original query before asking for another
+page. On HTTP 503 `READ_QUERY_REFRESH_FAILED`, keep the prior answer and retry the
+same token. HTTP 410 requires repeating the original query. A permission denial
+requires restoring the original capability through its existing flow. Never replace
+a historical query with Today, and never generate a recap to recover a read.

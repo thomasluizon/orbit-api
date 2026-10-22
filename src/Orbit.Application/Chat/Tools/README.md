@@ -71,13 +71,138 @@ The scope is `date` for a historical or future schedule, `today` for the resolve
 current day, and `all` for an undated query. An undated query retains its filters;
 `all` does not mean the payload contains every habit.
 
-The chat builder uses that payload for a single query. A failed query or multiple
-habit queries cannot fall back to live context or select the last result for an
-unqualified directive. Explicit query identity, history, paging, refresh and focused
-period analytics remain part of thomasluizon/orbit-tickets#1616. The dated-row fix
-alone does not complete that ticket.
+The chat builder carries the successful typed result into its block. Each read tool
+call gets its own query identity. A continuation result's `readDirective`, for example
+`[[orbit:read:call_1]]`, refers only to that call. An unqualified legacy directive
+cannot choose between differently scoped results. Existing formatted strings and
+legacy card properties remain supported. Tracks thomasluizon/orbit-tickets#1616.
 
-Habit logs contain completion or skip markers. `Habit.Log` writes a value of one
-and no measurement unit is stored. A marker sum cannot establish minutes, distance,
-volume or another measured quantity; the measured-value portion of #1616 requires
-an owner decision before its contract can be implemented.
+## Period metric definitions
+
+`get_period_analytics` requires `date_from`, `date_to` and `metric`. Dates are
+inclusive user-local days, resolved before the query is issued. `habit_id`, `search`,
+`tag` and `is_bad_habit` optionally constrain the source. An aggregate includes root
+habits; an explicitly selected child is measured independently. A calendar-month
+request supplies the month's first and last days. The existing retrospective enums
+keep their rolling definitions; `month` still means the last 30 days.
+
+| Metric | Unit | Definition |
+| --- | --- | --- |
+| `positiveLogRecords` | `records` | Number of nondeleted positive log records in the window, including unscheduled records. |
+| `distinctLoggedDates` | `days` | Number of distinct local dates with positive records across the selected habits. |
+| `metScheduledDates` | `days` | Number of scheduled habit/date pairs with a positive record on that date. |
+| `scheduledDates` | `days` | Scheduled habit/date pairs, bounded by account-local creation, recurrence and end dates. General and bad habits have no positive-adherence denominator. |
+
+`PeriodHabitMetrics` contains `window: { from, to }`, all four counts,
+`completionRate` (0 through 100, null without scheduled dates), `currentStreak`,
+`bestStreak` and `streakScope: "period"`. These streaks count consecutive dates
+with positive activity inside the requested window. Current streak ends at the
+window's last date. They are distinct from lifetime habit and account streaks.
+The series uses daily buckets through 31 days, then weeks aligned to the account's
+week-start preference, with clipped first and last buckets. Summed series counts
+match the scheduled and met counts.
+
+Habit logs contain completion or skip markers, with no measurement quantity or
+unit. Minutes, pages, litres and similar requests use the closest supported named
+count metric. Neither marker values nor their sums establish measured quantities.
+
+`get_habit_metrics` retains every lifetime field and appends `period`,
+`periodSeries` and `sourceRevision`. Its optional `date_from` and `date_to` select
+the period; omission resolves to the 30 local days ending today. The metrics block
+retains its lifetime `totalCompletions`, `currentStreak` and `bestStreak`, while
+`periodMetrics` and its series carry the explicitly scoped facts.
+
+## Total and comparison blocks
+
+Both new kinds require `supportsParts: true` and their exact kind in `partKinds`.
+`AstraPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
+floor requirement. Without advertisement, tools can still ground ordinary text.
+
+`periodTotal` contains `metric`, `unit`, `value`, `metrics`, `series`, nullable
+`habitId` and `read`. `metrics.window` names the exact resolved dates and the metrics
+include both the met numerator and scheduled denominator.
+
+Supplying both `baseline_from` and `baseline_to` produces `periodComparison`:
+`metric`, `unit`, `current`, `baseline`, `currentValue`, `baselineValue`,
+`absoluteDelta`, nullable `relativeDelta`, nullable `habitId` and `read`.
+`current` and `baseline` are complete `PeriodHabitMetrics` values with their own
+windows and denominators. Absolute delta is current minus baseline. Relative delta
+is that delta divided by baseline, expressed as a ratio rather than a percentage.
+A zero baseline yields null. A decrease yields a negative delta. These calculations
+have no dependency on optional AI narrative generation.
+
+## Exact read metadata and recovery
+
+All affected card types append optional `read` metadata. `AgentOperationResult`
+optionally carries `readBlock: { kind, block, read }`. The metadata is:
+
+```json
+{
+  "queryId": "a UUID unique to this originating read",
+  "queryFamily": "the fixed originating tool identifier",
+  "scope": { "date_from": "YYYY-MM-DD", "date_to": "YYYY-MM-DD", "metric": "positiveLogRecords" },
+  "revision": "a hash of the source projection",
+  "completeness": "complete",
+  "refreshToken": "opaque authenticated query token",
+  "nextCursor": null,
+  "totalCount": null,
+  "recovery": null
+}
+```
+
+Scope contains resolved absolute dates and the original target and filters. Calendar
+scope includes the original UTC window and calendar selection. Its date inputs
+resolve midnight in the account's timezone; omitted dates capture the existing
+forward feed window once. State reads such as account settings continue querying
+the same state fields. Lifetime fields remain lifetime reads alongside a fixed
+period, rather than becoming historical snapshots of account settings.
+
+Revisions hash source membership and facts, including counts and identifiers where
+the source exposes them. Deleting a source can change the revision even if the
+remaining maximum update timestamp is unchanged. Answer time is never a source
+revision. Reference-list chat reads bypass reference caches. Cached retrospective
+narratives are marked `stale`; exact refresh calculates facts without generating
+another narrative. Calendar disconnection is `partial` with `recovery: "reconnect"`.
+A paged result is `partial` with an authenticated `nextCursor`. Partial refers to
+the original query's result, rather than an invented full-data claim.
+
+`POST /api/chat/reads/refresh` accepts:
+
+```json
+{
+  "token": "read.refreshToken or read.nextCursor",
+  "page": false,
+  "clientContext": { "supportsParts": true, "partKinds": ["periodTotal"] }
+}
+```
+
+Success returns `{ kind, block, read }`. For existing kinds, send their existing
+card capability boolean as well. Set `page: true` only with `nextCursor`. Refresh
+starts the original query at its first page. Paging preserves the query identity
+and rejects a changed source revision with HTTP 409 (`READ_QUERY_STALE`); refresh
+the original token before paging again. Refresh retains the query identity and can
+return a changed revision. It cannot change the metric, windows, filters or target.
+Each request authenticates the caller and repeats the original operation policy,
+ownership, plan, scope and feature checks. A token grants no extra authority.
+
+Tokens are bound to the user, authenticated with a domain-separated key derived
+from `Jwt:SecretKey`, and expire after 30 days. All API instances use the existing
+shared JWT configuration. Key rotation invalidates outstanding read tokens.
+Invalid, expired or cross-user tokens return HTTP 410 (`READ_QUERY_EXPIRED`);
+repeat the original request. Permission changes return HTTP 403. A removed target returns HTTP 404, and key
+reads preserve their HTTP 428 step-up requirement. A source or refresh
+failure returns HTTP 503 (`READ_QUERY_REFRESH_FAILED`); retain the visible prior
+answer and retry the same token. Never substitute today's query after a failure.
+
+`get_habit_history` uses the existing `recordList` kind with `kind: "habitHistory"`.
+Each row has the log id, `logDate` and its actual `value`; these are record markers,
+not measured amounts. Results sort by date descending, then id, and use the exact
+refresh route for paging. Goal rows preserve their requested status/search filters.
+Calendar blocks preserve connection and sync state. Key rows retain safe prefixes
+and state only, with the existing step-up checks. Chat reads do not provision
+referral codes, reconcile achievements, persist calendar connection state, create
+recaps or shares, or write habit logs. Missing referral codes and links stay empty.
+
+The paired renderer work belongs to thomasluizon/orbit-tickets#1619. Deploy these
+append-only producer contracts before that consumer advertises the new kinds.
+#1617 owns composition policy and #26 owns bilingual pipeline composition checks.
