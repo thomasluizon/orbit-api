@@ -240,6 +240,11 @@ Staging reads Stripe test-mode product and price IDs from SSM and uses staging r
 
 ## Production web design routing
 
+The [redesign flag reader inventory](redesign-flag-audit.md) records the remaining
+cookie route, disabled Android update channels, compatibility constraints, and
+coordinated retirement checks for thomasluizon/orbit-tickets#1626. Keep the flag
+while those readers and older-client requirements remain.
+
 `web-routing.tf` attaches `orbit-web-routing` to `app.useorbit.org/*`. Only the `app_cname` record is proxied. Its DNS target and the current service's `app.useorbit.org` custom domain remain the fallback: removing the Worker route sends every request to the current build, including requests carrying the design cookie. Keep `dns_app_target = "orbit-web-3qmv.onrender.com"` and `web_custom_domains = ["app.useorbit.org"]` in the existing ignored `local.tfvars`.
 
 An exact `orbit_design=redesign` cookie selects `orbit-web-redesign`; every other value selects the current service. The current route forwards the original request to the DNS origin without changing its public Host. The redesign route uses the redesign Render hostname for its URL and Host, sets `X-Forwarded-Host: app.useorbit.org` and `X-Forwarded-Proto: https`, and preserves the path, query, method, streaming body, and other headers. Responses pass through with their status, body, cookies, and redirect headers. Each origin has its own fetch URL and cache key; the Worker adds no shared response cache. The cookie selects a UI build and grants no API permissions.
