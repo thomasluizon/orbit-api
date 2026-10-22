@@ -28,7 +28,9 @@ public partial class ProcessUserChatCommandHandler
                 && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags));
             if (read is null) continue;
             var label = question.Length <= 40 ? question : question[..37].TrimEnd() + "...";
-            var item = new ChatFollowUp(label, question, read.Read.QueryFamily, SurfaceForRead(read), read.Read.QueryId);
+            var surface = SurfaceForRead(read);
+            var target = surface is not null && ChatFollowUp.IsTarget(surface) ? surface : null;
+            var item = new ChatFollowUp(label, question, read.Read.QueryFamily, target, read.Read.QueryId);
             if (validator.Validate(item).IsValid) items.Add(item);
         }
         return items.Count == 0 ? null : items;
