@@ -11,6 +11,10 @@ Select a full producer commit and a supported identity from
 `get_habit_ranking` is a read-only chat tool. It does not call retrospective
 narrative, streak recalculation, recap persistence, sharing or mutation commands.
 The registered capability is `habits.ranking.read`, requiring `read_habits`.
+The MCP tool has the same `get_habit_ranking` name and accepts a nested `query`
+object with camelCase fields matching the HTTP/query contracts, including
+`queryToken`, `cursor` and `refresh`. It dispatches the same read-only handler
+and returns the response as JSON, preserving capability parity.
 
 The tool accepts `date_from` and `date_to_exclusive`, or `window` and `months`.
 There is no implicit time window: ask the person to resolve a missing window.

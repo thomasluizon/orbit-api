@@ -343,6 +343,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: true,
                 AgentConfirmationRequirement.None,
                 ChatToolNames: ["get_habit_ranking"],
+                McpToolNames: ["get_habit_ranking"],
                 ControllerActionKeys: ["ChatController.QueryHabitRanking", "ChatController.GetHabitRankingPage"])
         ];
     }

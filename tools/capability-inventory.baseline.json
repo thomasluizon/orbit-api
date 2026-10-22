@@ -4503,6 +4503,16 @@
         ]
       },
       {
+        "name": "get_habit_ranking",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "HabitRankingReadRequest",
+            "required": true
+          }
+        ]
+      },
+      {
         "name": "get_notification_page",
         "parameters": [
           {
@@ -6060,7 +6070,11 @@
         },
         "mcp": {
           "verdict": "covered",
-          "direct": [],
+          "direct": [
+            {
+              "tool": "get_habit_ranking"
+            }
+          ],
           "viaOperations": [
             {
               "tool": "get_habit_ranking",
