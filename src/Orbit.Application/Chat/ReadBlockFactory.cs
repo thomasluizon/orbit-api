@@ -152,7 +152,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         RetrospectiveResponse retrospective => new("periodInsight", PeriodInsightCardBuilder.Build(retrospective),
             retrospective.SourceRevision, retrospective.FromCache),
         CalendarOverviewPayload calendar => CalendarProjection(calendar, offset),
-        GamificationOverviewPayload gamification => new("streak", StatusCardBuilder.BuildStreak(gamification)),
+        GamificationOverviewPayload gamification => GamificationProjection(gamification),
         ProfileResponse profile => new("accountRows", AccountRowsCardBuilder.Profile(profile)),
         SubscriptionOverviewPayload subscription => new("accountRows", AccountRowsCardBuilder.Plan(subscription)),
         ReferralDashboardResponse referral => new("accountRows", AccountRowsCardBuilder.Referral(referral)),
@@ -173,6 +173,13 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         });
         return RecordProjection(RecordListCardBuilder.BuildKeys(keys, nowAtUtc, userId, offset), revision);
     }
+
+    private static Projection? GamificationProjection(GamificationOverviewPayload payload) =>
+        StatusCardBuilder.BuildStreak(payload) is { } streak
+            ? new("streak", streak)
+            : payload is { Profile: null, Achievements: null, Streak: null }
+                ? null
+                : new("gamification", new GamificationCard(payload));
 
     private static Projection RecordProjection(RecordListCard card, string? revision = null) =>
         new("recordList", card, revision, Total: card.TotalCount, Count: card.Items.Count);
@@ -200,6 +207,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         PeriodInsightCard card => card with { Read = read },
         DaySummaryCard card => card with { Read = read },
         StreakCard card => card with { Read = read },
+        GamificationCard card => card with { Read = read },
         CalendarCard card => card with { Read = read },
         RecordListCard card => card with { Read = read },
         AccountRowsCard card => card with { Read = read },

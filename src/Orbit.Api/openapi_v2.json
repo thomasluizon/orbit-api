@@ -21296,6 +21296,9 @@
             "$ref": "#/components/schemas/ReadBlockCardStreakCard"
           },
           {
+            "$ref": "#/components/schemas/ReadBlockCardGamificationCard"
+          },
+          {
             "$ref": "#/components/schemas/ReadBlockCardCalendarCard"
           },
           {
@@ -21504,6 +21507,30 @@
               "string"
             ],
             "format": "date"
+          }
+        }
+      },
+      "ReadBlockCardGamificationCard": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GamificationOverviewPayload"
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "progress"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
           }
         }
       },

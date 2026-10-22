@@ -253,9 +253,8 @@ public partial class ProcessUserChatCommandHandler
             "goalList" => client?.SupportsGoalListCard == true,
             "metrics" => client?.SupportsMetricsCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraPeriodBlocksDisabled),
             "periodInsight" => client?.SupportsPeriodInsightCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraPeriodBlocksDisabled),
-            "daySummary" => client?.SupportsDaySummaryCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
-            "streak" => client?.SupportsStreakCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
-            "calendar" => client?.SupportsCalendarCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
+            "daySummary" or "streak" or "calendar" or "gamification" => StatusCardBuilder.IsSupported(kind, client)
+                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
             "recordList" => client?.SupportsRecordListCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraRecordListsDisabled),
             "accountRows" => client?.SupportsAccountRowsCard == true && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraAccountRowsDisabled),
             _ => false
