@@ -60,3 +60,24 @@ They forward to `McpExecutorBridge` → `IAgentOperationExecutor`, which resolve
 (read-only-credential denial, ownership pre-check, confirmation gating) and writes an
 `AgentAuditLogs` row. Chat and MCP therefore share one implementation and one policy surface
 per capability; read-only MCP tools stay on MediatR.
+
+
+## Typed habit query results
+
+`query_habits` retains its formatted `EntityName` and also returns a `HabitListCard`
+payload from the same filtered schedule result. Rows preserve order, hierarchy and
+queried completion status. The optional `date` is the resolved user-local query day.
+The scope is `date` for a historical or future schedule, `today` for the resolved
+current day, and `all` for an undated query. An undated query retains its filters;
+`all` does not mean the payload contains every habit.
+
+The chat builder uses that payload for a single query. A failed query or multiple
+habit queries cannot fall back to live context or select the last result for an
+unqualified directive. Explicit query identity, history, paging, refresh and focused
+period analytics remain part of thomasluizon/orbit-tickets#1616. The dated-row fix
+alone does not complete that ticket.
+
+Habit logs contain completion or skip markers. `Habit.Log` writes a value of one
+and no measurement unit is stored. A marker sum cannot establish minutes, distance,
+volume or another measured quantity; the measured-value portion of #1616 requires
+an owner decision before its contract can be implemented.

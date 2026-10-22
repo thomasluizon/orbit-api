@@ -83,11 +83,32 @@ public class QueryHabitsTool(
             .Take(limit)
             .ToList();
 
-        if (results.Count == 0 && query.Schedule is null)
-            return new ToolResult(true, EntityName: "No habits found matching the given filters.");
+        var output = results.Count == 0 && query.Schedule is null
+            ? "No habits found matching the given filters."
+            : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule);
+        var rows = new List<HabitListCardItem>();
+        foreach (var root in results)
+            AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs);
+        return new ToolResult(true, EntityName: output,
+            Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date", rows,
+                query.Schedule?.Date));
+    }
 
-        var output = BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule);
-        return new ToolResult(true, EntityName: output);
+    private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,
+        IReadOnlyList<Habit> habits, ScheduleContext? schedule, DateOnly today, bool includeSubs)
+    {
+        var status = schedule is not null
+            ? schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
+                : schedule.Facts.OverdueIds.Contains(habit.Id) ? HabitListCardBuilder.StatusOverdue
+                : HabitListCardBuilder.StatusToday
+            : habit.IsGeneral ? HabitListCardBuilder.StatusGeneral
+                : GetResponseCompletion(habit, today) ? HabitListCardBuilder.StatusDone
+                : habit.DueDate < today ? HabitListCardBuilder.StatusOverdue
+                : habit.DueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
+        rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status));
+        if (includeSubs)
+            foreach (var child in habits.Where(item => item.ParentHabitId == habit.Id).OrderBy(item => item.Position))
+                AppendReadRows(child, depth + 1, rows, habits, schedule, today, true);
     }
 
     private static HabitFilters ParseFilters(JsonElement args, DateOnly today)

@@ -774,13 +774,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             aiMessage = strippedMessage;
             if (request.ClientContext?.SupportsHabitListCard == true)
-                habitList = HabitListCardBuilder.Build(
-                    habitListScope == HabitListCardBuilder.ScopeToday ? context.TodayHabits : context.ActiveHabits,
-                    context.UserToday,
-                    habitListScope,
-                    context.TodayFacts,
-                    request.ClientContext.SupportsHabitListDoneStatus == true,
-                    remaining);
+                habitList = BuildHabitListFromQuery(request, context, executionResults, habitListScope, remaining);
         }
 
         GoalListCard? goalList = null;

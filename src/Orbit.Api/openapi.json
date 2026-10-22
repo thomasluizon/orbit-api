@@ -17247,6 +17247,13 @@
             "items": {
               "$ref": "#/components/schemas/HabitListCardItem"
             }
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },

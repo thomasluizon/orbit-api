@@ -1,9 +1,11 @@
 using System.Text.RegularExpressions;
+using System.Text.Json.Serialization;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Chat;
 
-public record HabitListCard(string Scope, IReadOnlyList<HabitListCardItem> Items);
+public record HabitListCard(string Scope, IReadOnlyList<HabitListCardItem> Items,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? Date = null);
 
 public record HabitListCardItem(
     string Id,
