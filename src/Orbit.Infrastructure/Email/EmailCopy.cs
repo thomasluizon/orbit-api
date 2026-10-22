@@ -32,14 +32,14 @@ public static class EmailCopy
     public sealed record SupportCopy(
         string Heading, string FromLabel, string SubjectLabel, string Footer);
 
-    public static VerificationCodeCopy VerificationCode(bool isPtBr)
+    public static VerificationCodeCopy VerificationCode(bool isPtBr, string code)
     {
         var intro = isPtBr
             ? "Você pediu para entrar no Orbit. Use o código abaixo, ou toque no botão. Ele vale pelos próximos 5 minutos."
             : "You asked to sign in to Orbit. Use the code below, or tap the button. It works for the next 5 minutes.";
 
         return new VerificationCodeCopy(
-            Subject: isPtBr ? "Seu código de acesso do Orbit" : "Your Orbit sign-in code",
+            Subject: isPtBr ? $"{code} é seu código de acesso ao Orbit" : $"{code} is your Orbit sign-in code",
             Heading: isPtBr ? "Seu código de acesso" : "Your sign-in code",
             Intro: intro,
             Cta: isPtBr ? "Entrar" : "Sign in",
