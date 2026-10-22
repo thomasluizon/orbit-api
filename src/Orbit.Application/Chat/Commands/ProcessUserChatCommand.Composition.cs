@@ -122,7 +122,6 @@ public partial class ProcessUserChatCommandHandler
             cards = EnsureHabitRankingResult(cards, request, context, executionResults);
             cards = EnsureFocusedReadResults(cards, request, context, executionResults);
         }
-        aiMessage = cards.AiMessage;
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
 
@@ -293,7 +292,7 @@ public partial class ProcessUserChatCommandHandler
     {
         RecordListCard records => records.Kind,
         AccountRowsCard account => account.Kind,
-        _ => read.Read.Scope.GetRawText()
+        _ => Orbit.Domain.Common.AgentOperationFingerprint.Canonicalize(read.Read.Scope.GetRawText())
     });
 
     private static bool AllowAdditionalScope(HashSet<string> families, QueryReadBlock read, string message)

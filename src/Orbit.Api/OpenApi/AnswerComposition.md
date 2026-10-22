@@ -78,6 +78,9 @@ Final SSE and synchronous delivery use the same response. Existing block-answer 
 that response. Recording additionally stores the final serialized response in encrypted
 `ConversationTurns.ResponseJson`, under the existing opt-in, retention and size limits.
 Legacy assistant text remains available. History never proves execution or grounds facts.
+Replay renegotiates stored blocks against current client capabilities and family kill flags;
+unsupported kinds use typed readable fallbacks. FORMAT lives in the dynamic prompt so the
+shared static prefix remains request invariant.
 
 `AnswerCompositionTests` drives real assembly and the production read factory across read
 families, legacy/missing-kind negotiation, misplaced/omitted directives, duplicate prose,

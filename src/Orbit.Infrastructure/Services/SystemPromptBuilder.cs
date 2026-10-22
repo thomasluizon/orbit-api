@@ -37,7 +37,11 @@ public class SystemPromptBuilder : ISystemPromptBuilder
 
     public string BuildStatic(PromptBuildRequest request) => Render(_staticSections, ToContext(request));
 
-    public string BuildDynamic(PromptBuildRequest request) => Render(_dynamicSections, ToContext(request));
+    public string BuildDynamic(PromptBuildRequest request)
+    {
+        var context = ToContext(request);
+        return Render(_dynamicSections, context) + Environment.NewLine + GlobalRulesSection.BuildFormat(context);
+    }
 
     private static string Render(IEnumerable<IPromptSection> sections, PromptContext context)
     {

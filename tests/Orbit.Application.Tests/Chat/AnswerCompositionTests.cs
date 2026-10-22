@@ -220,6 +220,26 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("habitList", "goalList");
     }
 
+    [Fact]
+    public async Task Composition_DeduplicatesEquivalentQueryScopes()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var tool = CompositionTool("query_habits");
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new(tool.Name, "first", ParseArguments("{\"offset\":0,\"limit\":50}")),
+                new(tool.Name, "again", ParseArguments("{\"limit\":50,\"offset\":0}"))],
+            ConversationContext = TestConversationContext
+        });
+        ContinueWithReadDirective("Here are both lists.");
+        var result = await handler.Handle(new(UserId, "Show both habits", ClientContext: new(
+            SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
+        result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle();
+    }
+
     [Theory]
     [InlineData("create_habit")]
     [InlineData("bulk_update_habits")]

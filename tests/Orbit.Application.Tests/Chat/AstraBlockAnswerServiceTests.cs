@@ -43,6 +43,25 @@ public class AstraBlockAnswerServiceTests
         BlockAnswer: new AstraBlockAnswer(id, ids, text));
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replay_RequiresCurrentlyAdvertisedKinds(bool supportsParts)
+    {
+        var block = Choice();
+        var answer = new AstraBlockAnswer(block.Id, ["a"]);
+        block.MarkAnswered(block.CreatedAtUtc);
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.AnswerJson))!.SetValue(block, IssuedAstraBlock.SerializeAnswer(answer));
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.ResponseJson))!.SetValue(block,
+            JsonSerializer.Serialize(new ChatResponse(null, [], Parts: [new ChatBlockPart("habitList", new HabitListCard("all", []))]),
+                ChatStreamEvent.SerializerOptions));
+        var result = await Service.PrepareAsync(Request(block.Id, ["a"]) with
+        { ClientContext = new(SupportsParts: supportsParts, PartKinds: ["unknown"], SupportsHabitListCard: true) }, default);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Response!.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
+        result.Value.Response.AiMessage.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
     [InlineData("unknown", "ASTRA_BLOCK_UNKNOWN_SELECTION")]
     [InlineData("many", "ASTRA_BLOCK_SINGLE_SELECTION")]
     [InlineData("none", "ASTRA_BLOCK_EMPTY_SELECTION")]

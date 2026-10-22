@@ -14,7 +14,7 @@ public class SystemPromptBuilderTests
     [InlineData(false)]
     public void Build_FormatUsesNegotiatedComposition(bool blockFirst)
     {
-        var prompt = new SystemPromptBuilder().BuildStatic(new PromptBuildRequest([], BlockFirstComposition: blockFirst));
+        var prompt = new SystemPromptBuilder().BuildDynamic(new PromptBuildRequest([], UserToday: new DateOnly(2026, 4, 3), BlockFirstComposition: blockFirst));
         if (blockFirst)
         {
             prompt.Should().Contain("Successful data answers lead with their typed block");
@@ -261,7 +261,7 @@ public class SystemPromptBuilderTests
     {
         var builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var withHabit = new PromptBuildRequest([habit]);
+        var withHabit = new PromptBuildRequest([habit], BlockFirstComposition: true);
         var empty = new PromptBuildRequest(Array.Empty<Habit>());
 
         var staticPrompt = builder.BuildStatic(withHabit);

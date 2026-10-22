@@ -161,7 +161,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client);
 
-    private static string ReadFallback(object block) => block switch
+    internal static string ReadFallback(object block) => block switch
     {
         HabitListCard card => string.Join("\n", new[] { card.Date?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? card.Scope }
             .Concat(card.Items.Count == 0 ? ["0"] : card.Items.Select(item => $"{item.Title} ({item.Status})"))),
