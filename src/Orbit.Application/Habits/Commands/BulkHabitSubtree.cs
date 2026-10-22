@@ -34,7 +34,7 @@ internal static class BulkHabitSubtree
             var habit = BuildHabit(userId, next.Item, next.Parent, today, next.Position);
             if (habit.IsFailure)
             {
-                field = next.Parent is null ? DetermineField(habit.Error) : "SubHabits";
+                field = next.Parent is null ? DetermineField(habit.ErrorCode, habit.Error) : "SubHabits";
                 return Failure(habit, next.Item, next.Parent);
             }
 
@@ -79,11 +79,11 @@ internal static class BulkHabitSubtree
             || item.FrequencyQuantity is not null
             || item.IntervalWeeks is not null
             || item.Days is not null;
-        var frequencyUnit = item.FrequencyUnit ?? parent?.FrequencyUnit;
-        var frequencyQuantity = item.FrequencyQuantity ?? parent?.FrequencyQuantity;
+        var frequencyUnit = item.FrequencyUnit ?? (item.InheritParentFrequency ? parent?.FrequencyUnit : null);
+        var frequencyQuantity = item.FrequencyQuantity ?? (item.InheritParentFrequency ? parent?.FrequencyQuantity : null);
         var days = item.Days;
         if (days is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
-            days = parent?.Days.ToList();
+            days = item.InheritParentFrequency ? parent?.Days.ToList() : null;
 
         return Habit.Create(new HabitCreateParams(
             userId, item.Title, frequencyUnit, frequencyQuantity,
@@ -104,11 +104,21 @@ internal static class BulkHabitSubtree
             IsFlexible: item.IsFlexible,
             Position: position,
             GoogleEventId: item.GoogleEventId,
-            IntervalWeeks: item.IntervalWeeks ?? (hasExplicitCadence ? null : parent?.IntervalWeeks)));
+            IntervalWeeks: item.IntervalWeeks ?? (hasExplicitCadence || !item.InheritParentFrequency ? null : parent?.IntervalWeeks)));
     }
 
-    private static string? DetermineField(string error)
+    private static string? DetermineField(string? code, string error)
     {
+        if (code == DomainErrors.FrequencyQuantityInvalid.Code)
+            return nameof(BulkHabitItem.FrequencyQuantity);
+        if (code == DomainErrors.IntervalWeeksInvalid.Code)
+            return nameof(BulkHabitItem.IntervalWeeks);
+        if (code == DomainErrors.EndDateBeforeStartDate.Code || code == DomainErrors.OneTimeTaskHasEndDate.Code)
+            return nameof(BulkHabitItem.EndDate);
+        if (code == DomainErrors.EndTimeBeforeStartTime.Code)
+            return nameof(BulkHabitItem.DueEndTime);
+        if (code == DomainErrors.BadHabitNegatedName.Code)
+            return nameof(BulkHabitItem.IsBadHabit);
         if (error.Contains("title", StringComparison.OrdinalIgnoreCase))
             return "Title";
         if (error.Contains("frequency", StringComparison.OrdinalIgnoreCase))

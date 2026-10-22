@@ -19,6 +19,36 @@ public class BulkCreateHabitsToolTests
     public BulkCreateHabitsToolTests() => _tool = new BulkCreateHabitsTool(_mediator);
 
     [Fact]
+    public async Task ExplicitOneTime_IsAcceptedByTheBatchArgumentCheck()
+    {
+        _mediator.Send(Arg.Any<Orbit.Application.Chat.Tools.CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "Exam", frequency_unit = "OneTime", due_date = "2026-10-30", due_time = "13:30" } }
+        });
+        (await _tool.CheckArgumentsAsync(args, UserId, default)).IsSuccess.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Day", true)]
+    [InlineData("OneTime", false)]
+    public async Task ExistingParent_KeepsChildBoundsAndExplicitOneTime(string frequency, bool inherits)
+    {
+        CreateSubHabitCommand? command = null;
+        _mediator.Send(Arg.Do<CreateSubHabitCommand>(value => command = value), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Guid.NewGuid()));
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            parent_habit_id = Guid.NewGuid(),
+            habits = new[] { new { title = "Prepare", frequency_unit = frequency, due_date = "2026-10-27", end_date = frequency == "Day" ? "2026-10-30" : null } }
+        });
+        (await _tool.ExecuteAsync(args, UserId, default)).Success.Should().BeTrue();
+        command!.InheritParentFrequency.Should().Be(inherits);
+        command.Options!.EndDate.Should().Be(frequency == "Day" ? new DateOnly(2026, 10, 30) : null);
+    }
+
+    [Fact]
     public async Task NullParent_CreatesTheSameRootsAsAbsentParent()
     {
         var commands = new List<BulkCreateHabitsCommand>();

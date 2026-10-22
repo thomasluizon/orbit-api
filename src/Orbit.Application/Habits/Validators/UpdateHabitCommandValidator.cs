@@ -125,6 +125,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
                 maximumLengthCode: isChild
                     ? ValidationErrorCodes.SubHabitTitleLength
                     : null);
+            SharedHabitRules.AddPolarityRules(this, x => x.Title, x => x.IsBadHabit);
             SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description), isChild);
             SharedHabitRules.AddEmojiRules(RuleFor(x => x.Emoji), isChild);
         }

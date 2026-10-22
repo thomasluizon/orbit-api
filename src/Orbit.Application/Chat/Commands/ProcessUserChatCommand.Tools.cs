@@ -309,6 +309,7 @@ public partial class ProcessUserChatCommandHandler
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
+        PrepareHabitProposals(resolvedWrites, request, executionResults, language);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -642,7 +643,7 @@ public partial class ProcessUserChatCommandHandler
         }
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
         {
-            LogToolFailed(logger, call.Name, operationResult.PolicyReason);
+            LogToolFailed(logger, call.Name, operationResult.ErrorCode ?? operationResult.Status.ToString());
             if (isClarification)
                 LogClarificationDroppedOnFailedTool(logger, call.Name, operationResult.PolicyReason);
         }

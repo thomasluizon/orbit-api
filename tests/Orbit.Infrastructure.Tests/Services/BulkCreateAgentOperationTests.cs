@@ -10,6 +10,7 @@ using NSubstitute;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Validators;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
@@ -33,6 +34,8 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
     private readonly PendingAgentOperationStore _pending;
     private readonly AgentOperationExecutor _executor;
     private readonly ServiceProvider _provider;
+    private readonly PendingOperationChangePreviewer _previewer;
+    private readonly AiToolRegistry _registry;
     private readonly Guid _userId;
     private AgentAuditEntry? _lastAudit;
     private readonly RecordingLogger _logger = new();
@@ -93,13 +96,13 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
-        var registry = new AiToolRegistry([tool]);
-        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(context),
-            new GenericRepository<Goal>(context), new GenericRepository<Tag>(context), dates, registry);
+        _registry = new AiToolRegistry([tool]);
+        _previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(context),
+            new GenericRepository<Goal>(context), new GenericRepository<Tag>(context), dates, _registry);
         _executor = new AgentOperationExecutor(
             catalog, policy, _audit, ownership, bridge,
-            registry,
-            previewer,
+            _registry,
+            _previewer,
             _pending,
             work, _logger);
     }
@@ -218,6 +221,120 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         using var verify = _factory.CreateContext();
         verify.Habits.Should().ContainSingle();
         verify.PendingAgentOperations.Single().ConsumedAtUtc.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("Exame de colesterol", "Outros exames de sangue")]
+    [InlineData("Cholesterol exam", "Other blood tests")]
+    public async Task PartialFailure_LogsReasonAndOffersOnlyFailedItemForRetry(string first, string second)
+    {
+        var request = await ConfirmAsync(JsonSerializer.SerializeToElement(new
+        {
+            habits = new object[]
+            {
+                new { title = first, due_date = "2026-10-26", due_time = "15:50" },
+                new { title = second, frequency_unit = "Day", due_date = "2026-10-30", end_date = "2026-10-29" }
+            }
+        }));
+
+        var response = await _executor.ExecuteAsync(request);
+
+        var results = response.Operation.Payload.Should().BeOfType<BulkCreateResult>().Subject;
+        results.AppliedCount.Should().Be(1);
+        results.Results[1].Title.Should().Be(second);
+        results.Results[1].Error.Should().NotBeNullOrWhiteSpace();
+        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Warning
+            && entry.Message.Contains("bulk_create_habits") && entry.Message.Contains("END_DATE_BEFORE_START"));
+        _logger.Entries.Should().NotContain(entry => entry.Message.Contains(first) || entry.Message.Contains(second));
+        response.PendingOperation.Should().NotBeNull();
+        response.PendingOperation!.Items.Should().ContainSingle().Which.EntityName.Should().Be(second);
+        response.PendingOperation.Items![0].ValidationErrors.Should().Contain(error => error.ErrorCode == "END_DATE_BEFORE_START");
+        var retry = _pending.GetExecution(_userId, response.PendingOperation.Id);
+        retry.Should().NotBeNull();
+        retry!.Arguments.GetProperty("habits").GetArrayLength().Should().Be(1);
+        using var verify = _factory.CreateContext();
+        verify.Habits.Should().ContainSingle().Which.Title.Should().Be(first);
+
+        var revisions = new PendingOperationRevisionService(_pending, _previewer,
+            new RevisePendingOperationRequestValidator(), _registry);
+        var refreshed = await revisions.RefreshAsync(_userId, retry.PendingOperationId, CancellationToken.None);
+        var revision = await revisions.ReviseAsync(_userId, retry.PendingOperationId,
+            new RevisePendingOperationRequest(refreshed.Preview!.PreviewFingerprint!,
+                [new RevisedPendingOperationItem(refreshed.Preview.Items![0].ItemId,
+                    JsonSerializer.SerializeToElement(new { end_date = "2026-10-31" }))]), CancellationToken.None);
+        revision.IsSuccess.Should().BeTrue();
+        var confirmation = _pending.Confirm(_userId, retry.PendingOperationId)!;
+        var retried = await _executor.ExecuteAsync(request with
+        {
+            Arguments = _pending.GetExecution(_userId, retry.PendingOperationId)!.Arguments,
+            ConfirmationToken = confirmation.ConfirmationToken
+        });
+        retried.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        retried.PendingOperation.Should().BeNull();
+        using var afterRetry = _factory.CreateContext();
+        afterRetry.Habits.Should().HaveCount(2);
+        afterRetry.Habits.Count(habit => habit.Title == first).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("Exame de colesterol", "Outros exames de sangue", "Não tomar multivitamínico", "Não ir ao Muay Thai")]
+    [InlineData("Cholesterol exam", "Other blood tests", "Don't take multivitamins", "Don't go to Muay Thai")]
+    public async Task ExamBatch_ApprovalPersistsOneTimeEventsAndBoundedPreparation(string first, string second, string vitamins, string training)
+    {
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            habits = new object[]
+            {
+                new { title = first, frequency_unit = "OneTime", due_date = "2026-10-26", due_time = "15:50" },
+                new { title = second, frequency_unit = "OneTime", due_date = "2026-10-30", due_time = "13:30" },
+                new { title = vitamins, frequency_unit = "Day", due_date = "2026-10-27", end_date = "2026-10-30", is_bad_habit = false },
+                new { title = training, frequency_unit = "Day", due_date = "2026-10-29", end_date = "2026-10-30", is_bad_habit = false }
+            }
+        });
+        var request = await ConfirmAsync(arguments);
+        var preview = await _previewer.PreviewAsync(_userId, request.OperationId, arguments);
+        preview.Value!.Items.Should().HaveCount(4);
+        preview.Value.Items![0].Fields.Should().Contain(field => field.Field == "due_date" && field.ValueType == "date");
+        var response = await _executor.ExecuteAsync(request);
+        response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        var saved = verify.Habits.OrderBy(habit => habit.Position).ToList();
+        saved.Should().HaveCount(4);
+        saved.Take(2).Should().AllSatisfy(habit => habit.FrequencyUnit.Should().BeNull());
+        saved[0].DueDate.Should().Be(new DateOnly(2026, 10, 26));
+        saved[0].DueTime.Should().Be(new TimeOnly(15, 50));
+        saved[1].DueDate.Should().Be(new DateOnly(2026, 10, 30));
+        saved[1].DueTime.Should().Be(new TimeOnly(13, 30));
+        saved.Skip(2).Should().AllSatisfy(habit =>
+        {
+            habit.EndDate.Should().Be(new DateOnly(2026, 10, 30));
+            habit.IsBadHabit.Should().BeFalse();
+        });
+    }
+
+    [Fact]
+    public async Task OneTimeChild_DoesNotInheritRecurringExamPreparationSchedule()
+    {
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            habits = new[]
+            {
+                new
+                {
+                    title = "Exam preparation", frequency_unit = "Day", due_date = "2026-10-27", end_date = "2026-10-30",
+                    sub_habits = new[] { new { title = "Blood test", frequency_unit = "OneTime", due_date = "2026-10-30", due_time = "13:30" } }
+                }
+            }
+        });
+        var request = await ConfirmAsync(arguments);
+        (await _executor.ExecuteAsync(request)).Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        var child = verify.Habits.Single(habit => habit.ParentHabitId != null);
+        child.FrequencyUnit.Should().BeNull();
+        child.FrequencyQuantity.Should().BeNull();
+        child.EndDate.Should().BeNull();
+        child.DueDate.Should().Be(new DateOnly(2026, 10, 30));
+        child.DueTime.Should().Be(new TimeOnly(13, 30));
     }
 
     private void AssertApprovable()
