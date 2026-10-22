@@ -113,7 +113,7 @@ public sealed class StagingSeedService(OrbitDbContext db)
         new("Annual health review", FrequencyUnit.Year, 1),
         new("Exercise three times", FrequencyUnit.Week, 3, IsFlexible: true),
         new("Submit a document", null, null),
-        new("Avoid sugary drinks", FrequencyUnit.Day, 1, IsBad: true),
+        new("Drink sugary drinks", FrequencyUnit.Day, 1, IsBad: true),
         new("Capture ideas", null, null, IsGeneral: true),
         new("Morning routine", FrequencyUnit.Day, 1, Checklist: [new ChecklistItem("Prepare breakfast", false), new ChecklistItem("Plan the day", false)]),
         new("Stretch for five minutes", FrequencyUnit.Day, 1, Parent: "Morning routine")

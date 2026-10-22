@@ -26,6 +26,7 @@ internal sealed class BulkHabitItemValidator : AbstractValidator<BulkHabitItem>
     internal BulkHabitItemValidator(bool isRoot)
     {
         SharedHabitRules.AddTitleRules(RuleFor(h => h.Title));
+        SharedHabitRules.AddPolarityRules(this, x => x.Title, x => x.IsBadHabit);
         SharedHabitRules.AddDescriptionRules(RuleFor(h => h.Description), isChild: !isRoot);
         SharedHabitRules.AddEmojiRules(RuleFor(h => h.Emoji));
         SharedHabitRules.AddChecklistItemRules(RuleFor(h => h.ChecklistItems));

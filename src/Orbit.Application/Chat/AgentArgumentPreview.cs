@@ -123,7 +123,7 @@ public static class AgentArgumentPreview
         return null;
     }
 
-    private static string ResolveValueType(string field, JsonElement value)
+    internal static string ResolveValueType(string field, JsonElement value)
     {
         if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
             return "boolean";

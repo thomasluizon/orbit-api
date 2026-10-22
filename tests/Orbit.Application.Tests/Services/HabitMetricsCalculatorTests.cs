@@ -265,7 +265,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_BadHabitScheduledInFuture_HasNoMetricsYet()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
@@ -295,7 +295,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_LegacyBadHabitScheduledInFuture_HasNoMetricsYet()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
@@ -331,7 +331,7 @@ public class HabitMetricsCalculatorTests
         int frequencyQuantity)
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, frequencyQuantity,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, frequencyQuantity,
             IsBadHabit: true, DueDate: Today.AddDays(1))).Value;
         habit.Log(Today, advanceDueDate: false);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -350,7 +350,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_BadHabitScheduledToday_StartsWithOneCleanDay()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
@@ -366,7 +366,7 @@ public class HabitMetricsCalculatorTests
     {
         var newStart = Today.AddDays(2);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
 
         habit.Update(new HabitUpdateParams(
@@ -391,7 +391,7 @@ public class HabitMetricsCalculatorTests
     {
         var newStart = Today.AddDays(5);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(2))).Value;
 
         habit.Update(new HabitUpdateParams(
@@ -418,7 +418,7 @@ public class HabitMetricsCalculatorTests
     {
         var newStart = Today.AddDays(-1);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
         habit.Update(new HabitUpdateParams(
@@ -443,7 +443,7 @@ public class HabitMetricsCalculatorTests
     {
         var newStart = Today.AddDays(2);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
         habit.Update(new HabitUpdateParams(
@@ -470,7 +470,7 @@ public class HabitMetricsCalculatorTests
     {
         var startDate = Today.AddDays(-5);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: startDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -490,7 +490,7 @@ public class HabitMetricsCalculatorTests
     {
         var createdDate = Today.AddDays(-5);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, createdDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -510,7 +510,7 @@ public class HabitMetricsCalculatorTests
         var scheduledStart = Today.AddDays(1);
         var evaluationDate = scheduledStart.AddDays(1);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: scheduledStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -528,7 +528,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_LegacyBadHabitLoggedOnDueDate_CapturesStartBeforeAdvance()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -551,7 +551,7 @@ public class HabitMetricsCalculatorTests
     {
         var scheduledStart = Today.AddDays(-5);
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", unit, 1,
+            ValidUserId, "Drink caffeine", unit, 1,
             IsBadHabit: true, DueDate: scheduledStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, scheduledStart.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -632,7 +632,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_BadHabitWithPreStartLog_HasNoMetricsYet()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         habit.Log(Today, advanceDueDate: false);
 

@@ -593,6 +593,7 @@ public sealed class PendingOperationChangePreviewer(
         if (arguments.TryGetProperty("parent_habit_id", out _) && parent.Count != 1)
             return null;
         var parentFingerprint = parent.Count == 1 ? FingerprintHabit(parent[0]) : string.Empty;
+        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var items = habits.EnumerateArray().Select((habit, index) =>
         {
             var prefix = $"Habits[{index}].";
@@ -603,6 +604,13 @@ public sealed class PendingOperationChangePreviewer(
                     JsonNamingPolicy.SnakeCaseLower.ConvertName(error.PropertyName.StartsWith(prefix, StringComparison.Ordinal)
                         ? error.PropertyName[prefix.Length..] : error.PropertyName),
                     error.ErrorCode, error.ErrorMessage)).ToList();
+            var intrinsic = BulkHabitSubtree.Build(userId, command.Habits[index], today, index,
+                int.MaxValue, cancellationToken, out var invalidField);
+            var intrinsicField = JsonNamingPolicy.SnakeCaseLower.ConvertName(invalidField ?? "title");
+            if (intrinsic.IsFailure && errors.All(error => error.Field != intrinsicField))
+                errors.Add(new PendingOperationValidationError(
+                    intrinsicField,
+                    intrinsic.ErrorCode ?? "item_rejected", intrinsic.Error));
             var name = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("title", out var title) ? title.ToString() : string.Empty;
             var fields = habit.ValueKind == JsonValueKind.Object
@@ -610,7 +618,7 @@ public sealed class PendingOperationChangePreviewer(
                     .OrderBy(property => property.Name != "title")
                     .ThenBy(property => property.Name, StringComparer.Ordinal)
                     .Select(property => new PendingOperationChange(
-                    Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value), "text",
+                    Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value), AgentArgumentPreview.ResolveValueType(property.Name, property.Value),
                     property.Value.Clone(), true)).ToList()
                 : [];
             if (parent.Count == 1)

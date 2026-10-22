@@ -68,6 +68,7 @@ public static partial class ErrorCopy
         (ErrorCodes.AllInstancesDone, "Every round for this period is already done or skipped.", "Todas as rodadas deste período já foram feitas ou puladas."),
         (ErrorCodes.BeyondOverdueWindow, "That day is too far back to log. Log a more recent one.", "Esse dia está distante demais para registrar. Registre um mais recente."),
         (DomainErrors.TitleRequired.Code, "Give this a title.", "Dê um título a isto."),
+        (DomainErrors.BadHabitNegatedName.Code, "Name the behaviour you want to reduce, or use a positive task for an instruction to abstain.", "Use o nome do comportamento que quer reduzir, ou uma tarefa positiva para uma instrução de não fazer algo."),
         (DomainErrors.InvalidCreatedAtUtc.Code, "Choose a creation time in the past using UTC.", "Escolha uma data de criação no passado em UTC."),
         (DomainErrors.AlreadyLoggedForDate.Code, "You already logged this habit on that day.", "Você já registrou este hábito nesse dia."),
         (DomainErrors.OnlyFlexibleHabitsSkippable.Code, "Only a flexible habit can be skipped this way.", "Só um hábito flexível pode ser pulado assim."),
