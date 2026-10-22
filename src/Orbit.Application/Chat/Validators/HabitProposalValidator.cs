@@ -42,8 +42,7 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
         var start = JsonArgumentParser.ParseDateOnly(item, "due_date");
         if (bounded && (!end.HasValue || bad))
             Reject("end_date", "TEMPORARY_HABIT_REQUIRES_END", "Temporary preparation must be a positive Task or have an explicit event end date.");
-        if (bounded && end is { } cutoff && EventDate().Matches(source).LastOrDefault() is { } reference
-            && !MatchesDate(reference.Value, cutoff))
+        if (bounded && end is { } cutoff && MatchesReferencedEvent(source, cutoff) == false)
             Reject("end_date", "TEMPORARY_HABIT_EVENT_CUTOFF", "Temporary preparation must end on the referenced event date.");
         var datedEvent = EventName().IsMatch(title) && !HabitSemantics.HasNegatedName(title)
             && !BoundedPeriod().IsMatch(title + " " + description);
@@ -52,6 +51,17 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
 
         void Reject(string field, string code, string error) =>
             context.AddFailure(new ValidationFailure(path + field, error) { ErrorCode = code });
+    }
+
+    private static bool? MatchesReferencedEvent(string source, DateOnly date)
+    {
+        var references = EventReference().Matches(source).Select(match => match.Groups["date"].Value).Distinct().ToArray();
+        var dates = EventDate().Matches(source).Select(match => match.Value).Distinct().ToArray();
+        if (references.Length == 1)
+            return int.TryParse(references[0], out var day)
+                ? day == date.Day && (dates.Length == 0 || dates.Any(text => MatchesDate(text, date)))
+                : MatchesDate(references[0], date);
+        return references.Length == 0 && dates.Length == 1 ? MatchesDate(dates[0], date) : null;
     }
 
     private static bool MatchesDate(string text, DateOnly date) =>
@@ -124,6 +134,9 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
 
     [GeneratedRegex(@"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{4})?)\b", RegexOptions.CultureInvariant)]
     private static partial Regex EventDate();
+
+    [GeneratedRegex(@"\b(?:for|para|pro)\s+(?:(?:o|a|the)\s+)?(?:exame|exam|test)\s+(?:(?:do\s+dia|on|dia)\s+)?(?<date>\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{4})?|\d{1,2})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex EventReference();
 
     [GeneratedRegex(@"\b\d{4}-\d{2}-\d{2}\b", RegexOptions.CultureInvariant)]
     private static partial Regex IsoDate();

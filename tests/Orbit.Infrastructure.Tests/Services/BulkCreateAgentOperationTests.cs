@@ -312,6 +312,31 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         });
     }
 
+    [Fact]
+    public async Task OneTimeChild_DoesNotInheritRecurringExamPreparationSchedule()
+    {
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            habits = new[]
+            {
+                new
+                {
+                    title = "Exam preparation", frequency_unit = "Day", due_date = "2026-10-27", end_date = "2026-10-30",
+                    sub_habits = new[] { new { title = "Blood test", frequency_unit = "OneTime", due_date = "2026-10-30", due_time = "13:30" } }
+                }
+            }
+        });
+        var request = await ConfirmAsync(arguments);
+        (await _executor.ExecuteAsync(request)).Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        using var verify = _factory.CreateContext();
+        var child = verify.Habits.Single(habit => habit.ParentHabitId != null);
+        child.FrequencyUnit.Should().BeNull();
+        child.FrequencyQuantity.Should().BeNull();
+        child.EndDate.Should().BeNull();
+        child.DueDate.Should().Be(new DateOnly(2026, 10, 30));
+        child.DueTime.Should().Be(new TimeOnly(13, 30));
+    }
+
     private void AssertApprovable()
     {
         using var verify = _factory.CreateContext();

@@ -74,6 +74,21 @@ public class HabitProposalValidatorTests
     }
 
     [Theory]
+    [InlineData("Exame 26/10. Exame 30/10. Pro exame do dia 26: 3 dias antes, não tomar vitaminas.")]
+    [InlineData("Exam 10/26. Exam 10/30. For the exam on 10/26: 3 days before, don't take vitamins.")]
+    public void EventReference_UsesTheNamedEventRatherThanTheLastListedDate(string message)
+    {
+        var proposal = JsonSerializer.SerializeToElement(new
+        {
+            title = "Não tomar vitaminas",
+            frequency_unit = "Day",
+            due_date = "2026-10-23",
+            end_date = "2026-10-26"
+        });
+        new HabitProposalValidator().Validate(new HabitProposal(message, proposal)).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
     [InlineData("Exame dia 30/10 às 13h30", "Exame")]
     [InlineData("Blood test on 10/30 at 13:30", "Blood test")]
     [InlineData("Não ir ao treino amanhã", "Não ir ao treino")]
