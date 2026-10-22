@@ -118,6 +118,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, BulkDeleteHabitsTool>();
         builder.Services.AddScoped<IAiTool, GetDailySummaryTool>();
         builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
+        builder.Services.AddScoped<IAiTool, GetHabitRankingTool>();
+        builder.Services.AddSingleton<IHabitRankingTokenService, HabitRankingTokenService>();
         builder.Services.AddScoped<IAiTool, GetHabitMetricsTool>();
         builder.Services.AddScoped<IAiTool, DescribeFeatureTool>();
         builder.Services.AddScoped<IAiTool, ListTagsTool>();

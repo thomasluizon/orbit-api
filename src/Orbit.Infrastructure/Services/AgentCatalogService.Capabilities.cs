@@ -330,7 +330,20 @@ public partial class AgentCatalogService
                 FeatureFlagKeys: ["ai_retrospective"],
                 ChatToolNames: ["get_retrospective"],
                 McpToolNames: ["get_retrospective"],
-                ControllerActionKeys: ["HabitsController.GetRetrospective"])
+                ControllerActionKeys: ["HabitsController.GetRetrospective"]),
+
+            new AgentCapability(
+                AgentCapabilityIds.HabitRankingRead,
+                "Read Habit Ranking",
+                "Ranks positive recurring habits by independent completion log count over resolved local dates.",
+                HabitsDomain,
+                AgentScopes.ReadHabits,
+                AgentRiskClass.Low,
+                IsMutation: false,
+                IsPhaseOneReadOnly: true,
+                AgentConfirmationRequirement.None,
+                ChatToolNames: ["get_habit_ranking"],
+                ControllerActionKeys: ["ChatController.QueryHabitRanking", "ChatController.GetHabitRankingPage"])
         ];
     }
 

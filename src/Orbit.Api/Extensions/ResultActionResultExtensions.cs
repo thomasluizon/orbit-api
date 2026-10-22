@@ -10,6 +10,7 @@ public static class ResultActionResultExtensions
 {
     private static readonly Dictionary<string, int> StatusByErrorCode = new()
     {
+        ["HABIT_RANKING_STALE"] = StatusCodes.Status409Conflict,
         [ErrorCodes.AstraBlockNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.AstraBlockInvalidated] = StatusCodes.Status410Gone,
         [ErrorCodes.AstraBlockExpired] = StatusCodes.Status410Gone,

@@ -264,3 +264,21 @@ The pinned Cloudflare provider's live [Worker script schema](https://github.com/
 A real `terraform providers schema -json` invocation against the installed pinned providers confirmed that `render_web_service.id` and `.url` are computed strings and `runtime_source.image` accepts `image_url`, `digest`, `tag`, and `registry_credential_id`, with no auto-deploy field. Reproduce in a backend-disabled scratch root containing `versions.tf`'s provider declarations without its S3 backend, or against the initialized backend. No Render API response fields are read by this change.
 
 Run `npm ci --prefix infra` and `npm test --prefix infra` for the infrastructure tests. The routing tests execute the deployed module in Miniflare with outbound requests intercepted and Cloudflare metadata fetching disabled. The [Miniflare testing documentation](https://developers.cloudflare.com/workers/testing/miniflare/) confirms the simulator's test API. Installed `miniflare/dist/src/index.d.ts` confirms `outboundService` accepts a Request callback returning a Response, `bindings` supplies environment values, and `dispatchFetch` invokes the Worker. Its implementation in `dist/src/index.js` dispatches outbound requests to that callback. These requests, rather than invented API fixtures, supply the assertions. The locked test dependencies override `undici` and `sharp` to patched versions; no testing dependency is bundled into the Worker uploaded by Terraform.
+
+## Habit ranking activation
+
+Release the append-only API through the existing `release.yml` workflow before
+shipping the #1618 consumer. Verify the generated contract at the deployed producer
+commit and an authenticated `POST /api/chat/habit-ranking/query` followed by paging
+and refresh using its returned tokens. An empty ranking is a successful result.
+No database migration, backfill, new secret or version-floor change is required.
+The query signer uses the already configured `Jwt:SecretKey`.
+
+The client enables the block by sending `supportsParts: true` and including
+`habitRanking` in `partKinds`. Remove that kind advertisement to return readable
+text. Existing `astra_period_blocks_disabled` or `astra_parts_disabled` flags
+also disable structured ranking output. Revert the producer if counts are wrong.
+Monitor `habit_ranking_query` outcomes and `habit_ranking_block` build failures;
+HTTP 409 `HABIT_RANKING_STALE` means refresh the existing absolute query rather
+than resolve its relative period again. The exact payload and boundary policy
+are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).

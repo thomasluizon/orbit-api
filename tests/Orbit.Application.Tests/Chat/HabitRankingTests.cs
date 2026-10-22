@@ -244,6 +244,22 @@ public class HabitRankingTests
         new GetHabitRankingQueryValidator().Validate(request).IsValid.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ConvertedBadHabit_DoesNotTurnHistoricalSlipsIntoPositiveCompletions()
+    {
+        var user = Guid.NewGuid();
+        var from = new DateOnly(2024, 1, 1);
+        var habit = Habit.Create(new HabitCreateParams(user, "Converted", FrequencyUnit.Day, 1,
+            DueDate: from, IsBadHabit: true)).Value;
+        habit.Log(from, advanceDueDate: false);
+        habit.Update(new HabitUpdateParams("Converted", null, FrequencyUnit.Day, 1, null, false, from)).IsSuccess.Should().BeTrue();
+        habit.Log(from.AddDays(1), advanceDueDate: false);
+
+        var result = (await Handler([habit]).Handle(new GetHabitRankingQuery(user, from, from.AddDays(2)), default)).Value;
+
+        result.Rows.Should().ContainSingle().Which.CompletedCount.Should().Be(1);
+    }
+
     private static Habit Logged(Guid user, DateOnly date, string name = "Habit")
     {
         var habit = Habit.Create(new HabitCreateParams(user, name, FrequencyUnit.Day, 1, DueDate: date)).Value;
