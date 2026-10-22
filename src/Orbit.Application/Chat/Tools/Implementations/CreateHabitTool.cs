@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Globalization;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
@@ -16,7 +18,7 @@ public class CreateHabitTool(
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IAiTool, IClarificationPrecheckTool, IArgumentCheckTool
+    IUnitOfWork unitOfWork) : IPreparedIntentTool, IClarificationPrecheckTool
 {
     private const string TitleProperty = "title";
 
@@ -188,6 +190,75 @@ public class CreateHabitTool(
         return children.IsFailure ? children : Domain.Common.Result.Success();
     }
 
+    public async Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        if (NeedsClarification(args) || args.ValueKind != JsonValueKind.Object)
+            return null;
+        var node = JsonNode.Parse(args.GetRawText())!.AsObject();
+        NormalizeMinuteTimes(node);
+        if (node["sub_habits"] is JsonArray childNodes)
+            foreach (var child in childNodes.OfType<JsonObject>())
+                NormalizeMinuteTimes(child);
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        node["due_date"] ??= today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var normalized = JsonSerializer.SerializeToElement(node);
+        if (!ChatToolArgumentCheck.HasValidShape(this, normalized)
+            || (await CheckArgumentsAsync(normalized, userId, ct)).IsFailure)
+            return null;
+
+        var parameters = BuildParentParameters(normalized, userId, normalized.GetProperty(TitleProperty).GetString()!, today).Value;
+        var parent = Habit.Create(parameters).Value;
+        var children = new List<HabitCreationIntent>();
+        if (node["sub_habits"] is JsonArray nodes)
+            foreach (var child in nodes.OfType<JsonObject>())
+            {
+                var sub = JsonSerializer.SerializeToElement(child);
+                var definition = BuildChildParameters(sub, userId, parent, today).Value;
+                children.Add(PreparedCreation(sub, definition with { ParentHabitId = null }, []));
+                child["due_date"] = definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                child["frequency_unit"] = definition.FrequencyUnit?.ToString() ?? "OneTime";
+                if (definition.FrequencyQuantity is { } quantity)
+                    child["frequency_quantity"] = quantity;
+                if (definition.Days is { Count: > 0 } days)
+                    child["days"] = JsonSerializer.SerializeToNode(days.Select(day => day.ToString()));
+                if (definition.IntervalWeeks is { } interval)
+                    child["interval_weeks"] = interval;
+            }
+        normalized = JsonSerializer.SerializeToElement(node);
+        if ((await CheckArgumentsAsync(normalized, userId, ct)).IsFailure)
+            return null;
+        return PreparedToolIntent.Create(PreparedCreation(normalized, parameters, children), normalized) with
+        {
+            ArgumentValidation = await CheckArgumentsAsync(args, userId, ct)
+        };
+    }
+
+    private static void NormalizeMinuteTimes(JsonObject node)
+    {
+        foreach (var field in new[] { "due_time", "due_end_time" })
+            if (node[field] is JsonValue value && value.TryGetValue<string>(out var text)
+                && TimeOnly.TryParseExact(text, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time)
+                && time.Second == 0)
+                node[field] = time.ToString("HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    private static HabitCreationIntent PreparedCreation(JsonElement args, HabitCreateParams definition,
+        IEnumerable<HabitCreationIntent> children) => new(definition with
+        {
+            Days = definition.Days is { } days ? PreparedToolIntent.Values(days) : null,
+            ReminderTimes = definition.ReminderTimes is { } times ? PreparedToolIntent.Values(times) : null,
+            ChecklistItems = definition.ChecklistItems is { } checklist ? PreparedToolIntent.Values(checklist) : null,
+            ScheduledReminders = definition.ScheduledReminders is { } scheduled ? PreparedToolIntent.Values(scheduled) : null,
+            RelativeReminders = definition.RelativeReminders is { } relative ? PreparedToolIntent.Values(relative) : null
+        },
+        PreparedToolIntent.Values(JsonArgumentParser.ParseStringArray(args, "tag_names") ?? []),
+        PreparedToolIntent.Values(JsonArgumentParser.ParseGuidArray(args, "goal_ids") ?? []),
+        PreparedToolIntent.Values(children));
+
+    private sealed record HabitCreationIntent(HabitCreateParams Definition,
+        IReadOnlyList<string> Tags, IReadOnlyList<Guid> Goals, IReadOnlyList<HabitCreationIntent> Children);
+
     private async Task<ToolResult> ExecuteLockedAsync(
         JsonElement args,
         Guid userId,
@@ -230,9 +301,16 @@ public class CreateHabitTool(
     private static Domain.Common.Result<Habit> BuildParentHabit(
         JsonElement args, Guid userId, string title, DateOnly today)
     {
+        var parameters = BuildParentParameters(args, userId, title, today);
+        return parameters.IsFailure ? parameters.PropagateError<Habit>() : Habit.Create(parameters.Value);
+    }
+
+    private static Domain.Common.Result<HabitCreateParams> BuildParentParameters(
+        JsonElement args, Guid userId, string title, DateOnly today)
+    {
         var parsedFrequency = JsonArgumentParser.ParseFrequencyUnit(args);
         if (parsedFrequency.IsFailure)
-            return parsedFrequency.PropagateError<Habit>();
+            return parsedFrequency.PropagateError<HabitCreateParams>();
         var frequencyUnit = parsedFrequency.Value;
         int? frequencyQuantity = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : null);
@@ -253,7 +331,7 @@ public class CreateHabitTool(
         var reminderTimes = JsonArgumentParser.ParseIntArray(args, "reminder_times");
         var scheduledReminders = JsonArgumentParser.ParseScheduledReminders(args);
 
-        return Habit.Create(new HabitCreateParams(
+        return Domain.Common.Result.Success(new HabitCreateParams(
             userId, title, frequencyUnit, frequencyQuantity,
             dueDate ?? today,
             JsonArgumentParser.GetOptionalString(args, "description"),
@@ -314,9 +392,16 @@ public class CreateHabitTool(
     private static Domain.Common.Result<Habit> BuildChildHabit(
         JsonElement sub, Guid userId, Habit parent, DateOnly parentDueDate)
     {
+        var parameters = BuildChildParameters(sub, userId, parent, parentDueDate);
+        return parameters.IsFailure ? parameters.PropagateError<Habit>() : Habit.Create(parameters.Value);
+    }
+
+    private static Domain.Common.Result<HabitCreateParams> BuildChildParameters(
+        JsonElement sub, Guid userId, Habit parent, DateOnly parentDueDate)
+    {
         var parsedFrequency = JsonArgumentParser.ParseFrequencyUnit(sub);
         if (parsedFrequency.IsFailure)
-            return parsedFrequency.PropagateError<Habit>();
+            return parsedFrequency.PropagateError<HabitCreateParams>();
         var subFrequencyUnit = parsedFrequency.Value;
         var subFrequencyQuantity = JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity");
         var subIntervalWeeks = JsonArgumentParser.GetOptionalInt(sub, "interval_weeks");
@@ -336,7 +421,7 @@ public class CreateHabitTool(
         if (subDays is null && subDueDate is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
             subDays = parent.Days.ToList();
 
-        return Habit.Create(new HabitCreateParams(
+        return Domain.Common.Result.Success(new HabitCreateParams(
             userId,
             JsonArgumentParser.GetOptionalString(sub, TitleProperty) ?? "Untitled",
             frequencyUnit,

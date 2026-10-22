@@ -33,6 +33,7 @@ public partial class ProcessUserChatCommandHandler
         public HashSet<string> PreviewedCalls { get; } = new(StringComparer.Ordinal);
         public HashSet<string> MergedCallIds { get; } = new(StringComparer.Ordinal);
         public List<AiToolCall> PreviousWriteCalls { get; } = [];
+        internal List<CorrectionOccurrence> CorrectionOccurrences { get; } = [];
         public Dictionary<Guid, (string ToolName, PendingAgentOperation Preview)> PendingWriteCalls { get; } = [];
 
         public DateTime? AnsweredAtUtc { get; init; }

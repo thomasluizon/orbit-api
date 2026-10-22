@@ -4,7 +4,7 @@ using Orbit.Application.Subscriptions.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class ManageSubscriptionTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class ManageSubscriptionTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_subscription";
     public string Description => "Create a checkout session or create a billing portal session.";
@@ -25,6 +25,13 @@ public class ManageSubscriptionTool(IMediator mediator) : IAiTool, IArgumentChec
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {

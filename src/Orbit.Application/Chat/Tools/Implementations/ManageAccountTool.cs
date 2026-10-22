@@ -5,7 +5,7 @@ using Orbit.Application.Profile.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class ManageAccountTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class ManageAccountTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_account";
     public string Description => "Reset the account, request an account deletion code, or confirm account deletion with a code.";
@@ -26,6 +26,15 @@ public class ManageAccountTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        if (JsonArgumentParser.GetOptionalString(args, "action") is "confirm_deletion" or "reset_account")
+            return Task.FromResult<PreparedToolIntent?>(null);
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {

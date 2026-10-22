@@ -5,7 +5,7 @@ using Orbit.Application.ApiKeys.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class ManageApiKeysTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class ManageApiKeysTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_api_keys";
     public string Description => "Create or revoke scoped API keys.";
@@ -44,6 +44,13 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool, IArgumentCheckTool
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
 
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
+
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var action = JsonArgumentParser.GetOptionalString(args, "action");
@@ -74,7 +81,7 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool, IArgumentCheckTool
             return new ToolResult(false, Error: "expires_at_utc must be a valid ISO-8601 UTC timestamp.");
         }
 
-        var command = new CreateApiKeyCommand(userId, name, scopes, isReadOnly, expiresAtUtc);
+        var command = new CreateApiKeyCommand(userId, name, scopes is null ? null : PreparedToolIntent.Values(scopes), isReadOnly, expiresAtUtc);
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
 

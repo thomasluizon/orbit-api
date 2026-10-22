@@ -73,7 +73,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
     }
 }
 
-public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class ManageCalendarSyncTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "manage_calendar_sync";
     public string Description => "Select calendars (an empty list resets to all owned calendars), enable or disable calendar auto-sync, dismiss imports or suggestions, or trigger a sync run.";
@@ -101,6 +101,17 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentChec
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
 
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        var action = JsonArgumentParser.GetOptionalString(args, "action");
+        if (action == "run_sync" || action == "set_selected_calendars"
+            && (!args.TryGetProperty("calendar_ids", out var ids) || ids.ValueKind != JsonValueKind.Array || ids.GetArrayLength() == 0))
+            return Task.FromResult<PreparedToolIntent?>(null);
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
+
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         var action = JsonArgumentParser.GetOptionalString(args, "action");
@@ -125,7 +136,7 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool, IArgumentChec
             return new ToolResult(false, Error: "calendar_ids is required; use an empty list for all owned calendars.");
         var calendarIds = ids.EnumerateArray().Select(id => id.GetString()!).ToList();
         return await ChatToolMediator.RunAsync(mediator,
-            new SetSelectedCalendarsCommand(userId, calendarIds), userId,
+            new SetSelectedCalendarsCommand(userId, PreparedToolIntent.Values(calendarIds)), userId,
             "Calendar selection updated", new { action = "set_selected_calendars", calendar_ids = calendarIds }, ct, checkOnly);
     }
 
