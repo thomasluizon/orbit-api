@@ -36,7 +36,7 @@ public sealed class GetPeriodAnalyticsQueryHandler(
         var rows = await habits.FindAsync(h => h.UserId == request.UserId
                 && (!request.HabitId.HasValue || h.Id == request.HabitId)
                 && (!request.IsBadHabit.HasValue || h.IsBadHabit == request.IsBadHabit),
-            q => q.Include(h => h.Tags).Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date >= first && l.Date <= last)), ct);
+            q => q.Include(h => h.Tags).Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date >= first && l.Date <= last)).AsSplitQuery(), ct);
         if (request.HabitId.HasValue && rows.Count == 0)
             return Result.Failure<PeriodAnalyticsResponse>(ErrorMessages.HabitNotFound);
         var selected = rows.Where(h => request.HabitId.HasValue || h.ParentHabitId is null)
