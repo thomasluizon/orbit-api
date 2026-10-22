@@ -20,6 +20,7 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            as_of = new { type = JsonSchemaTypes.String },
             include_profile = new
             {
                 type = JsonSchemaTypes.Boolean,
@@ -50,7 +51,7 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
 
         if (includeProfile)
         {
-            var profileResult = await mediator.Send(new GetGamificationProfileQuery(userId), ct);
+            var profileResult = await mediator.Send(new GetGamificationProfileQuery(userId, ReconcileAchievements: false), ct);
             if (profileResult.IsFailure) return ToolResult.FromFailure(profileResult);
             profile = includeAchievements
                 ? profileResult.Value with { Achievements = [] }
@@ -59,14 +60,14 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
 
         if (includeAchievements)
         {
-            var achievementsResult = await mediator.Send(new GetAchievementsQuery(userId), ct);
+            var achievementsResult = await mediator.Send(new GetAchievementsQuery(userId, ReconcileAchievements: false), ct);
             if (achievementsResult.IsFailure) return ToolResult.FromFailure(achievementsResult);
             achievements = achievementsResult.Value;
         }
 
         if (includeStreak)
         {
-            var streakResult = await mediator.Send(new GetStreakInfoQuery(userId), ct);
+            var streakResult = await mediator.Send(new GetStreakInfoQuery(userId, JsonArgumentParser.ParseDateOnly(args, "as_of")), ct);
             if (streakResult.IsFailure) return ToolResult.FromFailure(streakResult);
             streak = streakResult.Value;
         }

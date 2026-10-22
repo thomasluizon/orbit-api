@@ -1,8 +1,14 @@
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Subscriptions.Queries;
+using Orbit.Application.Subscriptions;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
+
+public sealed record SubscriptionOverviewPayload(
+    [property: System.Text.Json.Serialization.JsonPropertyName("status")] SubscriptionStatusResponse? Status,
+    [property: System.Text.Json.Serialization.JsonPropertyName("billing")] object? Billing,
+    [property: System.Text.Json.Serialization.JsonPropertyName("plans")] object? Plans);
 
 public class GetSubscriptionOverviewTool(IMediator mediator) : IAiTool
 {
@@ -27,7 +33,7 @@ public class GetSubscriptionOverviewTool(IMediator mediator) : IAiTool
         var includeBilling = JsonArgumentParser.GetOptionalBool(args, "include_billing") ?? true;
         var includePlans = JsonArgumentParser.GetOptionalBool(args, "include_plans") ?? true;
 
-        object? status = null;
+        SubscriptionStatusResponse? status = null;
         object? billing = null;
         object? plans = null;
 
@@ -52,6 +58,6 @@ public class GetSubscriptionOverviewTool(IMediator mediator) : IAiTool
             plans = plansResult.Value;
         }
 
-        return new ToolResult(true, Payload: new { status, billing, plans });
+        return new ToolResult(true, Payload: new SubscriptionOverviewPayload(status, billing, plans));
     }
 }

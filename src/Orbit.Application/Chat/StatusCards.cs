@@ -9,7 +9,9 @@ public record DaySummaryCard(
     DateOnly Date, int Due, int Done, int? CompletionRate,
     int OverdueCount, int CurrentStreak, string SurfaceId = "today",
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<HabitListCardItem>? Rows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalRows = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalRows = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? DateTo = null);
 
 public record StreakAchievement(string Id, string IconKey, DateTime EarnedAt);
 
@@ -20,18 +22,20 @@ public record StreakCard(
     DateOnly? LastActiveDate, bool IsFrozenToday, IReadOnlyList<DateOnly> RecentFreezeDates,
     IReadOnlyList<StreakAchievement> RecentAchievements,
     string SurfaceId = "progress",
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StreakAchievementDisc>? AchievementDiscs = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StreakAchievementDisc>? AchievementDiscs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
 
 public record CalendarCardEvent(string Title, string Start, string? End, bool IsAllDay,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CalendarName = null);
 
-public record CalendarCardSync(bool Enabled, string Status, DateTime? LastSyncedAt);
+public record CalendarCardSync(bool Enabled, string Status, DateTime? LastSyncedAt, bool? HasGoogleConnection = null);
 
 public record CalendarCard(
     IReadOnlyList<CalendarCardEvent> Events,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CalendarCardSync? Sync,
-    string SurfaceId = "calendar");
+    string SurfaceId = "calendar",
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
 
 public static class StatusCardBuilder
 {
@@ -97,7 +101,7 @@ public static class StatusCardBuilder
                 item.CalendarName))
             .ToList();
         var sync = payload.AutoSyncState is { } state
-            ? new CalendarCardSync(state.Enabled, state.Status.ToString(), state.LastSyncedAt)
+            ? new CalendarCardSync(state.Enabled, state.Status.ToString(), state.LastSyncedAt, state.HasGoogleConnection)
             : null;
         return new CalendarCard(events, sync);
     }

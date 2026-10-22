@@ -36,7 +36,7 @@ public record NextRewardCarrot(
     int XpToNextLevel,
     GamificationProTeaser? ProTeaser);
 
-public record GetGamificationProfileQuery(Guid UserId) : IRequest<Result<GamificationProfileResponse>>;
+public record GetGamificationProfileQuery(Guid UserId, bool ReconcileAchievements = true) : IRequest<Result<GamificationProfileResponse>>;
 
 public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
@@ -57,9 +57,9 @@ public class GetGamificationProfileQueryHandler(
         if (!unlocked)
             return Result.PayGateFailure<GamificationProfileResponse>("Gamification is a Pro feature. Upgrade to unlock!");
 
-        var reconciled = await gamificationService.ReconcileFoundingAchievementsAsync(
-            request.UserId,
-            cancellationToken);
+        var reconciled = request.ReconcileAchievements
+            ? await gamificationService.ReconcileFoundingAchievementsAsync(request.UserId, cancellationToken)
+            : Array.Empty<string>();
         if (reconciled.Count > 0)
         {
             user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);

@@ -108,6 +108,12 @@ public partial class ProcessUserChatCommandHandler
         var client = request.ClientContext;
         if (client?.SupportsParts == true)
             prompt = string.Join(Environment.NewLine, prompt,
+                "When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. "
+                + "get_period_analytics returns periodTotal or periodComparison; emit it only when that kind is explicitly advertised. "
+                + "get_habit_history uses recordList. New period kinds supported: "
+                + string.Join(", ", client.PartKinds?.Where(k => k is "periodTotal" or "periodComparison") ?? []));
+        if (client?.SupportsParts == true)
+            prompt = string.Join(Environment.NewLine, prompt,
                 "Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
         if (client?.SupportsHabitListCard == true)
             prompt = AppendCardPrompt(prompt, client, PartKinds.HabitList,

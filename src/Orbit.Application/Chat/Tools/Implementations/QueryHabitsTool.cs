@@ -38,6 +38,7 @@ public class QueryHabitsTool(
             tag = new { type = JsonSchemaTypes.String, description = "Filter by tag name (case-insensitive)" },
             include_sub_habits = new { type = JsonSchemaTypes.Boolean, description = "Include children. Default: true." },
             include_metrics = new { type = JsonSchemaTypes.Boolean, description = "Include streak/completion metrics for progress questions. Default: false." },
+            offset = new { type = JsonSchemaTypes.Integer, description = "Typed row offset. Default: 0." },
             limit = new { type = JsonSchemaTypes.Integer, description = "Maximum results to return. Default: 50" }
         },
         required = Array.Empty<string>()
@@ -87,11 +88,19 @@ public class QueryHabitsTool(
             ? "No habits found matching the given filters."
             : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule);
         var rows = new List<HabitListCardItem>();
-        foreach (var root in results)
+        foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
+            .OrderBy(h => h.Position).ThenBy(h => h.Id))
             AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs);
         return new ToolResult(true, EntityName: output,
-            Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date", rows,
-                query.Schedule?.Date));
+            Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
+                rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList(),
+                query.Schedule?.Date, TotalCount: rows.Count,
+                SourceRevision: ReadRevision.Hash(new
+                {
+                    Rows = rows,
+                    Sources = allHabits.OrderBy(h => h.Id).Select(h => new { h.Id, h.UpdatedAtUtc }),
+                    ScheduleRevision = query.Schedule?.Facts.SourceRevision
+                })));
     }
 
     private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,

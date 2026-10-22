@@ -35,6 +35,7 @@ public class QueryGoalsTool(
             include_completed = new { type = JsonSchemaTypes.Boolean, description = "Include non-active goals when status is not specified. Default: false." },
             include_descriptions = new { type = JsonSchemaTypes.Boolean, description = "Include descriptions. Default: true." },
             include_linked_habits = new { type = JsonSchemaTypes.Boolean, description = "Include linked habits. Default: true." },
+            offset = new { type = JsonSchemaTypes.Integer, description = "Result offset. Default: 0." },
             limit = new { type = JsonSchemaTypes.Integer, description = "Maximum results to return. Default: 50." }
         },
         required = Array.Empty<string>()
@@ -52,7 +53,7 @@ public class QueryGoalsTool(
             JsonArgumentParser.GetOptionalBool(args, "include_linked_habits") ?? true;
         var limit = Math.Clamp(JsonArgumentParser.GetOptionalInt(args, "limit") ?? 50, 1, 200);
 
-        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var userToday = JsonArgumentParser.ParseDateOnly(args, "as_of") ?? await userDateService.GetUserTodayAsync(userId, ct);
         var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
 
         var goals = await goalRepository.FindAsync(
@@ -64,17 +65,25 @@ public class QueryGoalsTool(
             q => q.Include(g => g.Habits),
             ct);
 
-        var filtered = goals
+        var allFiltered = goals
             .Where(g => MatchesSearch(g, search))
             .OrderBy(g => g.Position)
             .ThenBy(g => g.CreatedAtUtc)
-            .Take(limit)
+            .ThenBy(g => g.Id)
             .ToList();
+        var offset = Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0);
+        var filtered = allFiltered.Skip(offset).Take(limit).ToList();
+        foreach (var goal in filtered)
+            if (freshProgressValues.TryGetValue(goal.Id, out var fresh))
+                GoalProgressSyncService.ApplyReadValue(goal, fresh);
+        var card = GoalListCardBuilder.Build(filtered, userToday, includeProjections: false)
+            with
+        { TotalCount = allFiltered.Count, SourceRevision = ReadRevision.Hash(allFiltered.Select(g => new { g.Id, g.UpdatedAtUtc, Fresh = freshProgressValues.TryGetValue(g.Id, out var v) ? v : g.CurrentValue })) };
 
         if (filtered.Count == 0)
-            return new ToolResult(true, EntityName: "No goals found matching the given filters.");
+            return new ToolResult(true, EntityName: "No goals found matching the given filters.", Payload: card);
 
-        return new ToolResult(true, EntityName: BuildOutput(filtered, freshProgressValues, includeDescriptions, includeLinkedHabits));
+        return new ToolResult(true, EntityName: BuildOutput(filtered, freshProgressValues, includeDescriptions, includeLinkedHabits), Payload: card);
     }
 
     private static GoalStatus? ParseStatus(JsonElement args)

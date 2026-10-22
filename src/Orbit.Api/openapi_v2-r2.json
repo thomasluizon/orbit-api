@@ -2618,6 +2618,165 @@
         }
       }
     },
+    "/api/Chat/reads/refresh": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshReadBlockRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshReadBlockRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshReadBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryReadBlock"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryReadBlock"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryReadBlock"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Chat/records/{kind}": {
       "get": {
         "tags": [
@@ -14280,6 +14439,16 @@
           "surfaceId": {
             "type": "string",
             "default": "profile"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
           }
         }
       },
@@ -14361,6 +14530,146 @@
       "ActionStatus": {
         "type": "integer"
       },
+      "AgentClientContext": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "locale": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeFormat": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currentAppArea": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "showGeneralOnToday": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsHabitListCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsGoalListCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsMetricsCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "entryPointIntent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "supportsPendingOperationChanges": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsToolSteps": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsFollowUps": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "messageOrigin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "supportsPeriodInsightCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsDaySummaryCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsStreakCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsCalendarCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsRecordListCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsAccountRowsCard": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsHabitListDoneStatus": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "supportsParts": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "partKinds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "AgentConfirmationRequirement": {
         "type": "integer"
       },
@@ -14420,7 +14729,17 @@
             ],
             "format": "uuid"
           },
-          "payload": { }
+          "payload": { },
+          "readBlock": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryReadBlock"
+              }
+            ]
+          }
         }
       },
       "AgentOperationStatus": {
@@ -15444,6 +15763,16 @@
           "surfaceId": {
             "type": "string",
             "default": "calendar"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
           }
         }
       },
@@ -15505,6 +15834,12 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "hasGoogleConnection": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -16676,6 +17011,23 @@
               "string"
             ],
             "format": "int32"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          },
+          "dateTo": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -16831,6 +17183,31 @@
             "items": {
               "$ref": "#/components/schemas/GoalListCardItem"
             }
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sourceRevision": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -16905,6 +17282,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -17517,6 +17900,31 @@
               "string"
             ],
             "format": "date"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sourceRevision": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -17659,6 +18067,32 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "period": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PeriodHabitMetrics"
+              }
+            ]
+          },
+          "sourceRevision": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "periodSeries": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PeriodMetricSeries"
+              }
             ]
           }
         }
@@ -18656,6 +19090,26 @@
               "string"
             ],
             "format": "date"
+          },
+          "periodMetrics": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PeriodHabitMetrics"
+              }
+            ]
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
           }
         }
       },
@@ -19087,6 +19541,85 @@
           }
         }
       },
+      "PeriodHabitMetrics": {
+        "required": [
+          "window",
+          "positiveLogRecords",
+          "distinctLoggedDates",
+          "metScheduledDates",
+          "scheduledDates",
+          "completionRate",
+          "currentStreak",
+          "bestStreak"
+        ],
+        "type": "object",
+        "properties": {
+          "window": {
+            "$ref": "#/components/schemas/ReadWindow"
+          },
+          "positiveLogRecords": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "distinctLoggedDates": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "metScheduledDates": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "scheduledDates": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "currentStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "bestStreak": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "streakScope": {
+            "type": "string",
+            "default": "period"
+          }
+        }
+      },
       "PeriodInsightCard": {
         "required": [
           "period",
@@ -19201,6 +19734,79 @@
           "surfaceId": {
             "type": "string",
             "default": "progress"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          }
+        }
+      },
+      "PeriodMetricBucket": {
+        "required": [
+          "startDate",
+          "endDate",
+          "scheduled",
+          "completed",
+          "completionRate"
+        ],
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "scheduled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "completionRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PeriodMetricSeries": {
+        "required": [
+          "granularity",
+          "points"
+        ],
+        "type": "object",
+        "properties": {
+          "granularity": {
+            "type": "string"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeriodMetricBucket"
+            }
           }
         }
       },
@@ -19822,6 +20428,23 @@
           }
         }
       },
+      "QueryReadBlock": {
+        "required": [
+          "kind",
+          "block",
+          "read"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "block": { },
+          "read": {
+            "$ref": "#/components/schemas/ReadBlockMetadata"
+          }
+        }
+      },
       "QuickAction": {
         "required": [
           "label",
@@ -19840,6 +20463,76 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ReadBlockMetadata": {
+        "required": [
+          "queryId",
+          "queryFamily",
+          "scope",
+          "revision",
+          "completeness",
+          "refreshToken"
+        ],
+        "type": "object",
+        "properties": {
+          "queryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "queryFamily": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "completeness": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "recovery": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReadWindow": {
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
           }
         }
       },
@@ -19878,6 +20571,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
             ]
           }
         }
@@ -19928,6 +20631,22 @@
               "null",
               "string"
             ]
+          },
+          "logDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -20017,6 +20736,31 @@
             ],
             "format": "int32",
             "default": 0
+          }
+        }
+      },
+      "RefreshReadBlockRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
+          },
+          "page": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -20733,6 +21477,16 @@
             "items": {
               "$ref": "#/components/schemas/StreakAchievementDisc"
             }
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
           }
         }
       },

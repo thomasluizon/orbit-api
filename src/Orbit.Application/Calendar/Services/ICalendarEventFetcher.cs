@@ -2,13 +2,15 @@ using Orbit.Application.Calendar.Queries;
 
 namespace Orbit.Application.Calendar.Services;
 
+public sealed record CalendarReadWindow(DateTime FromAtUtc, DateTime ToAtUtc);
+
 public interface ICalendarEventFetcher
 {
     Task<List<CalendarEventItem>> FetchAsync(
         string accessToken,
         IReadOnlyCollection<string>? selectedCalendarIds,
         DateTime? updatedMin,
-        CancellationToken ct);
+        CancellationToken ct, CalendarReadWindow? window = null);
 
     Task<List<CalendarListItem>> ListCalendarsAsync(string accessToken, CancellationToken ct);
 }

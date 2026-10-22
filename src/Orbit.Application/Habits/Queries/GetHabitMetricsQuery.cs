@@ -9,11 +9,11 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Habits.Queries;
 
-public record GetHabitMetricsQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitMetrics>>;
+public record GetHabitMetricsQuery(Guid UserId, Guid HabitId, DateOnly? DateFrom = null, DateOnly? DateTo = null) : IRequest<Result<HabitMetrics>>;
 
 public class GetHabitMetricsQueryHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<User> userRepository) : IRequestHandler<GetHabitMetricsQuery, Result<HabitMetrics>>
+    IGenericRepository<User> userRepository, IUserDateService userDateService) : IRequestHandler<GetHabitMetricsQuery, Result<HabitMetrics>>
 {
     public async Task<Result<HabitMetrics>> Handle(GetHabitMetricsQuery request, CancellationToken cancellationToken)
     {
@@ -32,13 +32,27 @@ public class GetHabitMetricsQueryHandler(
         var userTimeZone = user.TimeZone is not null
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
             : TimeZoneInfo.Utc;
-        var today = HabitMetricsCalculator.GetUserToday(user);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var metrics = HabitMetricsCalculator.Calculate(
             habit,
             today,
             user.WeekStartDay,
             userTimeZone);
-        return Result.Success(metrics with { HabitId = habit.Id, HabitTitle = habit.Title });
+        var (period, series) = PeriodAnalyticsCalculator.Calculate([habit],
+            new(request.DateFrom ?? today.AddDays(-29), request.DateTo ?? today), userTimeZone, user.WeekStartDay);
+        return Result.Success(metrics with
+        {
+            HabitId = habit.Id,
+            HabitTitle = habit.Title,
+            Period = period,
+            PeriodSeries = new(series.Granularity, series.Points.Select(p => new PeriodMetricBucket(p.StartDate, p.EndDate, p.Scheduled, p.Completed, p.CompletionRate)).ToList()),
+            SourceRevision = Orbit.Application.Chat.ReadRevision.Hash(new
+            {
+                habit.Id,
+                habit.UpdatedAtUtc,
+                Logs = habit.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id).Select(l => new { l.Id, l.Date, l.Value, l.UpdatedAtUtc })
+            })
+        });
 
     }
 }

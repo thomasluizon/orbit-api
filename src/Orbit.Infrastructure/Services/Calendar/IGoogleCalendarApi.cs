@@ -1,4 +1,5 @@
 using Google.Apis.Calendar.v3.Data;
+using Orbit.Application.Calendar.Services;
 
 namespace Orbit.Infrastructure.Services.Calendar;
 
@@ -13,7 +14,7 @@ internal interface IGoogleCalendarApi
     /// the result to events changed after that UTC instant when provided.
     /// </summary>
     Task<IReadOnlyList<Event>> ListEventsAsync(
-        string accessToken, string calendarId, DateTime? updatedMin, CancellationToken ct);
+        string accessToken, string calendarId, DateTime? updatedMin, CancellationToken ct, CalendarReadWindow? window = null);
 
     /// <summary>Fetches a single event (used to resolve a recurring master's RRULE).</summary>
     Task<Event> GetEventAsync(string accessToken, string calendarId, string eventId, CancellationToken ct);

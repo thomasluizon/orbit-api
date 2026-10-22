@@ -1,4 +1,5 @@
 using Google.Apis.Auth.OAuth2;
+using Orbit.Application.Calendar.Services;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Calendar.v3.Data;
 using Google.Apis.Services;
@@ -36,7 +37,7 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
     }
 
     public async Task<IReadOnlyList<Event>> ListEventsAsync(
-        string accessToken, string calendarId, DateTime? updatedMin, CancellationToken ct)
+        string accessToken, string calendarId, DateTime? updatedMin, CancellationToken ct, CalendarReadWindow? window = null)
     {
         using var service = CreateCalendarService(accessToken);
 
@@ -44,7 +45,7 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
         string? pageToken = null;
         do
         {
-            var request = BuildEventsRequest(service, calendarId, updatedMin);
+            var request = BuildEventsRequest(service, calendarId, updatedMin, window);
             request.PageToken = pageToken;
             var response = await request.ExecuteAsync(ct);
             if (response.Items is { Count: > 0 })
@@ -63,12 +64,13 @@ internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarA
     }
 
     private static EventsResource.ListRequest BuildEventsRequest(
-        CalendarService service, string calendarId, DateTime? updatedMin)
+        CalendarService service, string calendarId, DateTime? updatedMin, CalendarReadWindow? window = null)
     {
         var request = service.Events.List(calendarId);
         request.SingleEvents = true;
-        request.TimeMinDateTimeOffset = DateTimeOffset.UtcNow;
-        request.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddDays(60);
+        var fromAtUtc = window?.FromAtUtc ?? TimeProvider.System.GetUtcNow().UtcDateTime;
+        request.TimeMinDateTimeOffset = new DateTimeOffset(DateTime.SpecifyKind(fromAtUtc, DateTimeKind.Utc));
+        request.TimeMaxDateTimeOffset = new DateTimeOffset(DateTime.SpecifyKind(window?.ToAtUtc ?? fromAtUtc.AddDays(60), DateTimeKind.Utc));
         request.MaxResults = EventsPageSize;
         request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
 

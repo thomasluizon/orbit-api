@@ -52,6 +52,13 @@ public class UserStreakService(
             : await CalculateStateAsync(userId, user, cancellationToken);
     }
 
+    public async Task<UserStreakState?> CalculateAtAsync(Guid userId, DateOnly asOf, CancellationToken cancellationToken = default)
+    {
+        var users = await repos.Users.FindAsync(user => user.Id == userId, cancellationToken);
+        var user = users.SingleOrDefault();
+        return user is null ? null : await CalculateStateAsync(userId, user, cancellationToken, asOf);
+    }
+
     public async Task<StreakRepairEvaluation?> EvaluateRepairAsync(
         Guid userId,
         DateOnly userToday,
@@ -318,12 +325,14 @@ public class UserStreakService(
     private async Task<UserStreakState> CalculateStateAsync(
         Guid userId,
         User user,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, DateOnly? asOf = null)
     {
-        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var userToday = asOf ?? await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
         var (completionDateSet, freezeDateSet, eligibleHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
+        completionDateSet.RemoveWhere(date => date > userToday);
+        freezeDateSet.RemoveWhere(date => date > userToday);
         var contributingHabits = GetContributingHabits(eligibleHabits);
 
         if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))

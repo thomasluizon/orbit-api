@@ -17,7 +17,9 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = JsonSchemaTypes.String, description = "The GUID of the habit to read metrics for." }
+            habit_id = new { type = JsonSchemaTypes.String, description = "The GUID of the habit to read metrics for." },
+            date_from = new { type = JsonSchemaTypes.String, description = "Absolute start of period metrics. Lifetime fields keep their existing meaning." },
+            date_to = new { type = JsonSchemaTypes.String, description = "Absolute end of period metrics." }
         },
         required = new[] { "habit_id" }
     };
@@ -28,7 +30,7 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
         if (!Guid.TryParse(habitId, out var parsedId))
             return new ToolResult(false, Error: "habit_id must be a valid GUID.");
 
-        var result = await mediator.Send(new GetHabitMetricsQuery(userId, parsedId), ct);
+        var result = await mediator.Send(new GetHabitMetricsQuery(userId, parsedId, JsonArgumentParser.ParseDateOnly(args, "date_from"), JsonArgumentParser.ParseDateOnly(args, "date_to")), ct);
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)

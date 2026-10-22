@@ -14,12 +14,15 @@ public record RecordListItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTime? Date = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? IsRead = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Count = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? LogDate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null);
 
 public record RecordListCard(
     string Kind, int TotalCount, IReadOnlyList<RecordListItem> Items,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SurfaceId = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NextCursor = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NextCursor = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
 
 public static class RecordListCardBuilder
 {

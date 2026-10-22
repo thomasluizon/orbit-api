@@ -19,7 +19,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
+    ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";
@@ -400,6 +400,12 @@ public partial class AgentOperationExecutor(
             }
         }
 
+        if (readBlocks is not null && tool.IsReadOnly && ReadBlockFactory.Supports(tool.Name))
+            execution = execution with
+            {
+                Arguments = await readBlocks.ResolveAsync(tool.Name,
+                execution.Arguments, execution.Request.UserId, executionCancellationToken)
+            };
         var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, executionCancellationToken);
         if (tool is ITransactionalAiTool && !result.Success)
             throw new ToolOutcomeRollbackException(policyDecision, result);
@@ -505,7 +511,7 @@ public partial class AgentOperationExecutor(
                 policyDecision.ShadowReason),
             cancellationToken);
 
-        return AgentOperationResponseFactory.ToolOutcome(
+        var response = AgentOperationResponseFactory.ToolOutcome(
             execution.Operation.Id,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
@@ -513,6 +519,13 @@ public partial class AgentOperationExecutor(
             result,
             outcomeStatus,
             isPayGateDenial);
+        if (result.Success && !execution.Operation.IsMutation && readBlocks is not null
+            && ReadBlockFactory.Supports(execution.Operation.Id))
+        {
+            var block = readBlocks.Capture(execution.Operation.Id, execution.Arguments, execution.Request.UserId, result.Payload);
+            response = response with { Operation = response.Operation with { ReadBlock = block } };
+        }
+        return response;
     }
 
     private static AgentExecuteOperationResponse DeniedResponse(

@@ -50,14 +50,15 @@ public record RetrospectiveResponse(
     RetrospectiveNarrative Narrative,
     bool FromCache,
     DateOnly? DateFrom = null,
-    DateOnly? DateTo = null);
+    DateOnly? DateTo = null,
+    string? SourceRevision = null);
 
 public record GetRetrospectiveQuery(
     Guid UserId,
     DateOnly DateFrom,
     DateOnly DateTo,
     string Period,
-    string Language) : IRequest<Result<RetrospectiveResponse>>;
+    string Language, bool GenerateNarrative = true) : IRequest<Result<RetrospectiveResponse>>;
 
 public class GetRetrospectiveQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -81,7 +82,7 @@ public class GetRetrospectiveQueryHandler(
             request.DateFrom,
             request.Language);
 
-        if (cache.TryGetValue(cacheKey, out RetrospectiveResponse? cached) && cached is not null)
+        if (request.GenerateNarrative && cache.TryGetValue(cacheKey, out RetrospectiveResponse? cached) && cached is not null)
             return Result.Success(cached with { FromCache = true });
 
         var habits = await habitRepository.FindAsync(
@@ -94,8 +95,8 @@ public class GetRetrospectiveQueryHandler(
         if (habitList.Count == 0)
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
 
-        var streakState = await userStreakService.RecalculateAsync(
-            request.UserId, awardFreezeIfEligible: false, cancellationToken);
+        var streakState = await userStreakService.CalculateAsync(
+            request.UserId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
 
         var metrics = RetrospectiveMetricsCalculator.Compute(
@@ -108,6 +109,20 @@ public class GetRetrospectiveQueryHandler(
 
         if (metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
+
+        if (!request.GenerateNarrative)
+            return Result.Success(new RetrospectiveResponse(request.Period, metrics,
+                new RetrospectiveNarrative(string.Empty, string.Empty, string.Empty, string.Empty), false,
+                request.DateFrom, request.DateTo, Orbit.Application.Chat.ReadRevision.Hash(new
+                {
+                    metrics,
+                    Sources = habitList.OrderBy(h => h.Id).Select(h => new
+                    {
+                        h.Id,
+                        h.UpdatedAtUtc,
+                        Logs = h.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id).Select(l => new { l.Id, l.Date, l.Value, l.UpdatedAtUtc })
+                    })
+                })));
 
         var narrativeResult = await retrospectiveService.GenerateRetrospectiveAsync(
             habitList,
@@ -127,7 +142,7 @@ public class GetRetrospectiveQueryHandler(
             narrativeResult.Value,
             FromCache: false,
             DateFrom: request.DateFrom,
-            DateTo: request.DateTo);
+            DateTo: request.DateTo, SourceRevision: Revision(habitList));
 
         cache.Set(cacheKey, response, new MemoryCacheEntryOptions
         {
@@ -136,4 +151,12 @@ public class GetRetrospectiveQueryHandler(
 
         return Result.Success(response);
     }
+    private static string Revision(IReadOnlyList<Habit> habits) => Orbit.Application.Chat.ReadRevision.Hash(
+        habits.OrderBy(h => h.Id).Select(h => new
+        {
+            h.Id,
+            h.UpdatedAtUtc,
+            Logs = h.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id).Select(l => new { l.Id, l.Date, l.Value, l.UpdatedAtUtc })
+        }));
+
 }

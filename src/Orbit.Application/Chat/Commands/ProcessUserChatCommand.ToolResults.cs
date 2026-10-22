@@ -58,7 +58,8 @@ public partial class ProcessUserChatCommandHandler
             operationResult.TargetId,
             operationResult.TargetName,
             BuildToolError(operationResult),
-            operationResult.Payload);
+            operationResult.Payload,
+            operationResult.ReadBlock is null ? null : "[[orbit:read:" + call.Id + "]]");
     }
 
     private static string? BuildToolError(AgentOperationResult operationResult)

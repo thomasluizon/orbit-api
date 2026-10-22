@@ -9,7 +9,8 @@ public record AccountRow(string Key, string? Value, string ValueType);
 public record AccountRowsCard(
     string Kind, IReadOnlyList<AccountRow> Rows,
     string? ReferralCode = null, string? ReferralLink = null,
-    string SurfaceId = "profile");
+    string SurfaceId = "profile",
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
 
 public static class AccountRowsCardBuilder
 {
@@ -53,6 +54,17 @@ public static class AccountRowsCardBuilder
             new("rewardType", dashboard.Stats.RewardType, "enum"),
             new("discountPercent", dashboard.Stats.DiscountPercent.ToString(CultureInfo.InvariantCulture), "count")
         ], dashboard.Code, dashboard.Link);
+
+    public static AccountRowsCard? Plan(Orbit.Application.Chat.Tools.Implementations.SubscriptionOverviewPayload payload) =>
+        payload.Status is not { } status ? null : new("plan",
+        [
+            new("plan", status.Plan, "enum"),
+            new("trialEnd", Iso(status.TrialEndsAt), "date"),
+            new("planExpiry", Iso(status.PlanExpiresAt), "date"),
+            new("interval", status.SubscriptionInterval, "enum"),
+            new("source", status.Source, "enum"),
+            new("lifetime", status.IsLifetimePro.ToString().ToLowerInvariant(), "boolean")
+        ]);
 
     private static string? Iso(DateTime? date) => date?.ToString("O", CultureInfo.InvariantCulture);
 }

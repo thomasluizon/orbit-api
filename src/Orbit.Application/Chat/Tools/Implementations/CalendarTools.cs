@@ -2,6 +2,9 @@ using System.Text.Json;
 using MediatR;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Application.Calendar.Services;
+using System.Globalization;
+using Orbit.Application.Common;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 
@@ -11,7 +14,7 @@ public record CalendarOverviewPayload(
     IReadOnlyList<CalendarEventItem> Events,
     CalendarAutoSyncStateResponse? AutoSyncState,
     IReadOnlyList<CalendarSyncSuggestionItem> Suggestions,
-    IReadOnlyList<UserCalendarItem>? Calendars = null);
+    IReadOnlyList<UserCalendarItem>? Calendars = null, string? Recovery = null);
 
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
@@ -24,6 +27,10 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            date_from = new { type = JsonSchemaTypes.String },
+            date_to = new { type = JsonSchemaTypes.String },
+            window_from_utc = new { type = JsonSchemaTypes.String },
+            window_to_utc = new { type = JsonSchemaTypes.String },
             include_calendars = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
             include_events = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
             include_auto_sync_state = new { type = new[] { JsonSchemaTypes.Boolean, "null" } },
@@ -38,11 +45,21 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         var includeAutoSyncState = JsonArgumentParser.GetOptionalBool(args, "include_auto_sync_state") ?? true;
         var includeSuggestions = JsonArgumentParser.GetOptionalBool(args, "include_suggestions") ?? true;
 
+        CalendarReadWindow? window = null;
+        if (DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_from_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var fromAtUtc)
+            && DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_to_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var toAtUtc))
+            window = new(fromAtUtc, toAtUtc);
         var events = includeEvents
-            ? await mediator.Send(new GetCalendarEventsQuery(userId), ct)
+            ? await mediator.Send(new GetCalendarEventsQuery(userId, Window: window, PersistConnectionState: false), ct)
             : Result.Success(new List<CalendarEventItem>());
+        string? recovery = null;
         if (events.IsFailure)
-            return ToolResult.FromFailure(events);
+        {
+            if (events.ErrorCode != ErrorMessages.CalendarNotConnected.Code && events.ErrorCode != ErrorMessages.CalendarReconnectRequired.Code)
+                return ToolResult.FromFailure(events);
+            recovery = "reconnect";
+            events = Result.Success(new List<CalendarEventItem>());
+        }
 
         CalendarAutoSyncStateResponse? autoSyncState = null;
         if (includeAutoSyncState)
@@ -61,15 +78,15 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
             return ToolResult.FromFailure(suggestions);
 
         var calendars = includeCalendars
-            ? await mediator.Send(new GetUserCalendarsQuery(userId), ct)
+            ? await mediator.Send(new GetUserCalendarsQuery(userId, PersistConnectionState: false), ct)
             : Result.Success(new List<UserCalendarItem>());
-        if (calendars.IsFailure && calendars.ErrorCode != Result.PayGateErrorCode)
+        if (calendars.IsFailure && calendars.ErrorCode != Result.PayGateErrorCode && recovery is null)
             return ToolResult.FromFailure(calendars);
 
         return new ToolResult(true, Payload: new CalendarOverviewPayload(
             events.Value, autoSyncState,
             suggestions.IsSuccess ? suggestions.Value : [],
-            includeCalendars && calendars.IsSuccess ? calendars.Value : null));
+            includeCalendars && calendars.IsSuccess ? calendars.Value : null, recovery));
     }
 }
 

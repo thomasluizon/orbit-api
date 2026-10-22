@@ -5,7 +5,10 @@ using Orbit.Domain.Entities;
 namespace Orbit.Application.Chat;
 
 public record HabitListCard(string Scope, IReadOnlyList<HabitListCardItem> Items,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? Date = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? Date = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalCount = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SourceRevision = null);
 
 public record HabitListCardItem(
     string Id,

@@ -21,7 +21,9 @@ public record MetricsCard(
     string? HabitTitle = null,
     decimal? WeeklyCompletionRate = null,
     decimal? MonthlyCompletionRate = null,
-    DateOnly? LastCompletedDate = null);
+    DateOnly? LastCompletedDate = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] PeriodHabitMetrics? PeriodMetrics = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ReadBlockMetadata? Read = null);
 
 public static partial class MetricsCardBuilder
 {
@@ -68,23 +70,23 @@ public static partial class MetricsCardBuilder
             metrics.TopHabits.FirstOrDefault()?.Name,
             metrics.TopHabits.FirstOrDefault()?.Emoji);
 
-    public static MetricsCard BuildHabit(HabitMetrics habitMetrics, RetrospectiveMetrics periodMetrics) =>
-        new(
-            "habit",
-            periodMetrics.CompletionRate,
-            habitMetrics.TotalCompletions,
-            periodMetrics.TotalScheduled,
-            periodMetrics.ActiveDays,
-            habitMetrics.CurrentStreak,
-            habitMetrics.LongestStreak,
-            periodMetrics.TotalScheduled > 0 || habitMetrics.TotalCompletions > 0,
-            "habit",
-            periodMetrics.CompletionSeries,
-            HabitId: habitMetrics.HabitId,
-            HabitTitle: habitMetrics.HabitTitle,
-            WeeklyCompletionRate: habitMetrics.WeeklyCompletionRate,
-            MonthlyCompletionRate: habitMetrics.MonthlyCompletionRate,
-            LastCompletedDate: habitMetrics.LastCompletedDate);
+    public static MetricsCard BuildPeriod(PeriodTotalCard total)
+    {
+        var metrics = total.Metrics;
+        return new("week", (int)Math.Round(metrics.CompletionRate ?? 0), total.Value,
+            metrics.ScheduledDates, metrics.DistinctLoggedDates, metrics.CurrentStreak, metrics.BestStreak,
+            total.Value > 0 || metrics.ScheduledDates > 0, "progress", total.Series, PeriodMetrics: metrics);
+    }
+
+    public static MetricsCard BuildHabit(HabitMetrics metrics) => new(
+        "habit", (int)Math.Round(metrics.Period?.CompletionRate ?? 0), metrics.TotalCompletions,
+        metrics.Period?.ScheduledDates ?? 0, metrics.Period?.DistinctLoggedDates ?? 0,
+        metrics.CurrentStreak, metrics.LongestStreak, metrics.TotalCompletions > 0 || metrics.Period?.ScheduledDates > 0,
+        "habit", metrics.PeriodSeries is { } series ? new CompletionSeries(series.Granularity,
+            series.Points.Select(p => new CompletionSeriesPoint(p.StartDate, p.EndDate, p.Scheduled, p.Completed, p.CompletionRate)).ToList()) : null,
+        HabitId: metrics.HabitId, HabitTitle: metrics.HabitTitle,
+        WeeklyCompletionRate: metrics.WeeklyCompletionRate, MonthlyCompletionRate: metrics.MonthlyCompletionRate,
+        LastCompletedDate: metrics.LastCompletedDate, PeriodMetrics: metrics.Period);
 
     [GeneratedRegex(@"\[\[orbit:metrics\]\]", RegexOptions.IgnoreCase)]
     private static partial Regex DirectiveRegex();

@@ -119,6 +119,10 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetDailySummaryTool>();
         builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
         builder.Services.AddScoped<IAiTool, GetHabitMetricsTool>();
+        builder.Services.AddScoped<IAiTool, GetPeriodAnalyticsTool>();
+        builder.Services.AddScoped<IAiTool, GetHabitHistoryTool>();
+        builder.Services.AddScoped<Orbit.Application.Chat.ReadBlockFactory>();
+        builder.Services.AddScoped<IReadQueryTokenService, Orbit.Infrastructure.Services.ReadQueryTokenService>();
         builder.Services.AddScoped<IAiTool, DescribeFeatureTool>();
         builder.Services.AddScoped<IAiTool, ListTagsTool>();
         builder.Services.AddScoped<IAiTool, CreateTagTool>();
