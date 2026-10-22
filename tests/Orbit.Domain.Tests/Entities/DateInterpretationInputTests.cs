@@ -29,6 +29,12 @@ public class DateInterpretationInputTests
     [InlineData("26th or 27th of October", "en")]
     [InlineData("October 26 or 26 or 27", "en")]
     [InlineData("26 ou 26 ou 27 de outubro", "pt-BR")]
+    [InlineData("October 26 or 27 or 26", "en")]
+    [InlineData("26 ou 27 ou 26 de outubro", "pt-BR")]
+    [InlineData("26 or 27 October, 2026 or 26", "en")]
+    [InlineData("26 de outubro ou 27 de 2026 ou 26", "pt-BR")]
+    [InlineData("0 or 26 October", "en")]
+    [InlineData("out. 0 ou 26", "pt-BR")]
     [InlineData("October 26, 2026 or 27", "en")]
     [InlineData("26 de outubro de 2026 ou 27", "pt-BR")]
     [InlineData("26° de outubro ou 27°", "pt-BR")]
@@ -58,6 +64,15 @@ public class DateInterpretationInputTests
     [InlineData("depois do cafe ou depois do almoco", "pt-BR")]
     [InlineData("October 26, 2026 or 26", "en")]
     [InlineData("26 de outubro de 2026 ou 26", "pt-BR")]
+    [InlineData("26 or 26 October, 2026 or 26", "en")]
+    [InlineData("26 de outubro ou 26 de 2026 ou 26", "pt-BR")]
+    [InlineData("26° de outubro", "pt-BR")]
+    [InlineData("26º de outubro", "pt-BR")]
+    [InlineData("Oct. 26th, 2026 or 26th", "en")]
+    [InlineData("out. 26º de 2026 ou 26º", "pt-BR")]
+    [InlineData("31stword of February", "en")]
+    [InlineData("31ºword de fevereiro", "pt-BR")]
+    [InlineData("31°word de fevereiro", "pt-BR")]
     public void PotentiallyInterpretableInput_CanConsult(string phrase, string language) =>
         DateInterpretationInput.Create(phrase, language).Value.IsUnresolvable().Should().BeFalse();
 
