@@ -60,7 +60,8 @@ public record BulkCreateItemResult(
     Guid? HabitId = null,
     string? Title = null,
     string? Error = null,
-    string? Field = null);
+    string? Field = null,
+    string? ErrorCode = null);
 
 public enum BulkItemStatus { Success, Failed }
 
@@ -127,7 +128,7 @@ public class BulkCreateHabitsCommandHandler(
                 out var field);
             if (subtree.IsFailure)
             {
-                results.Add(new(i, BulkItemStatus.Failed, Title: item.Title, Error: subtree.Error, Field: field));
+                results.Add(new(i, BulkItemStatus.Failed, Title: item.Title, Error: subtree.Error, Field: field, ErrorCode: subtree.ErrorCode));
                 continue;
             }
 
