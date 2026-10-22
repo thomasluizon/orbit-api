@@ -28,7 +28,8 @@ public partial class ProcessUserChatCommandHandler
             IsHabitIndexPartial: context.IsPromptHabitIndexPartial,
             TodayHabitIds: context.TodayFacts.TodayIds,
             OverdueHabitIds: context.TodayFacts.OverdueIds,
-            DoneTodayHabitIds: context.TodayFacts.DoneTodayIds);
+            DoneTodayHabitIds: context.TodayFacts.DoneTodayIds,
+            BlockFirstComposition: UsesComposition(request, context));
         var agentSnapshot = BuildAgentContextSnapshot(
             context.User,
             request.ClientContext,
@@ -66,9 +67,7 @@ public partial class ProcessUserChatCommandHandler
         dynamicContext = AppendCardPromptInstructions(dynamicContext, request, context, toolNames);
         if (request.ClientContext?.SupportsFollowUps == true)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
-                request.ClientContext.SupportsParts == true
-                    ? "After the reply's text and blocks, end with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them."
-                    : "After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
+                "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
         var toolDeclarations = ai.ToolRegistry.GetAll()
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
@@ -117,7 +116,10 @@ public partial class ProcessUserChatCommandHandler
             + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
             + $"Dated habit lists supported: {client?.SupportsDatedHabitListCard == true}. Habit history supported: {client?.SupportsHabitHistoryCard == true}. "
             + "For an unsupported subtype, answer from the queried facts in text.");
-        if (client?.SupportsParts == true)
+        if (UsesComposition(request, context))
+            prompt = string.Join(Environment.NewLine, prompt,
+                "The server composes the leading answer block from successful typed reads; directives are optional. Call only the reads needed for the request. Additional blocks require explicitly requested distinct subjects. Put clarification in ask and every write in its existing approval preview. Do not repeat block facts in prose.");
+        else if (client?.SupportsParts == true)
             prompt = string.Join(Environment.NewLine, prompt,
                 "Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
         if (client?.SupportsHabitListCard == true)

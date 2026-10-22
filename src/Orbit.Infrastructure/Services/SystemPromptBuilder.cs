@@ -61,5 +61,6 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             request.IsHabitIndexPartial,
             request.TodayHabitIds,
             request.OverdueHabitIds,
-            request.DoneTodayHabitIds);
+            request.DoneTodayHabitIds,
+            request.BlockFirstComposition);
 }

@@ -318,7 +318,8 @@ public partial class ProcessUserChatCommandHandler(
 
         var userLanguage = GetUserLanguage(context.User);
         var groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
-        var aiStreamFilter = BuildAiStreamFilter(groundingTurn.Enforce ? null : request.StreamSink);
+        var composition = UsesComposition(request, context);
+        var aiStreamFilter = BuildAiStreamFilter(groundingTurn.Enforce || composition ? null : request.StreamSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
             ? null
             : aiStreamFilter.HandleAsync;
@@ -382,28 +383,9 @@ public partial class ProcessUserChatCommandHandler(
         if (IsEmptyTokenBudgetResponse(toolLoopResult.TokenBudgetExceeded, aiResponse.TextMessage))
             return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
-        var parsedResponse = FollowUpDirective.Parse(StripJsonWrapper(aiResponse.TextMessage));
-        var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
-            ? parsedResponse.FollowUps
-            : null;
-        var responseText = parsedResponse.CardText;
-        if (aiResponse.IsTruncated)
-            responseText = AppendTruncationNotice(responseText, userLanguage);
-        var cards = request.ClientContext?.SupportsParts == true
-            ? await BuildResponsePartsAsync(parsedResponse, aiResponse.IsTruncated, userLanguage,
-                request, context, executionResults, cancellationToken)
-            : await TryBuildResponseCardsAsync(
-                responseText, request, context, executionResults, cancellationToken);
-        cards = ApplyResolutionToCards(cards, executionResults, userLanguage);
-        var groundedReply = await ApplyGroundingAsync(cards.AiMessage, followUps, executionResults, request, groundingTurn);
-        var aiMessage = groundedReply.Message;
-        followUps = groundedReply.FollowUps;
-        cards = ApplyGroundingToCards(cards, aiMessage);
-        cards = EnsureHabitRankingResult(cards, request, context, executionResults);
-        cards = EnsureFocusedReadResults(cards, request, context, executionResults);
-        aiMessage = cards.AiMessage;
-        if (executionResults.AskBlock is { } askBlock)
-            cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
+        var (cards, followUps, facts) = await ComposeFinalReplyAsync(request, context, executionResults,
+            toolLoopResult, aiResponse, groundingTurn, cancellationToken);
+        var aiMessage = cards.AiMessage;
 
         if (GetShareableFaqAnswer(faqMatch, aiMessage, executionResults, cards) is { } faqToCache)
         {
@@ -441,7 +423,7 @@ public partial class ProcessUserChatCommandHandler(
             cards.AccountRows,
             followUps,
             cards.Parts)
-        { GroundingFacts = groundedReply.Facts });
+        { GroundingFacts = facts });
     }
 
     private void CaptureMessageAnalytics(Guid userId, string? plan, AiTurnTelemetry telemetry)
