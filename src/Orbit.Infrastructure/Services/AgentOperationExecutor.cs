@@ -330,7 +330,34 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         policyState.Decision = null;
-        if (RequiresArgumentCheck(execution.Operation.Id, execution.Arguments) && tool is IArgumentCheckTool check)
+        PreparedToolIntent? preparedIntent = null;
+        if (execution.Request.Surface == AgentExecutionSurface.Chat && execution.Operation.IsMutation
+            && execution.Request.ConfirmationToken is null
+            && tool is IPreparedIntentTool preparer)
+        {
+            preparedIntent = await preparer.PrepareIntentAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+            if (preparedIntent is not null)
+            {
+                var check = preparedIntent.ArgumentValidation;
+                if (check.IsFailure)
+                {
+                    var rejection = await BuildToolOutcomeResponseAsync(execution,
+                        new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, execution.Capability),
+                        ToolResult.FromFailure(check), cancellationToken);
+                    return new RejectedBeforeDispatchResponse(rejection, execution.Request, preparedIntent);
+                }
+                execution = execution with { Arguments = preparedIntent.ExecutionArguments };
+            }
+        }
+        var response = await ExecutePreparedPolicyAndToolAsync(execution, tool, policyState, preparedIntent is not null, cancellationToken);
+        return preparedIntent is null ? response : new PreparedToolOperationResponse(response, execution.Request, preparedIntent);
+    }
+
+    private async Task<AgentExecuteOperationResponse> ExecutePreparedPolicyAndToolAsync(
+        OperationExecutionContext execution, IAiTool? tool, OperationPolicyState policyState, bool argumentsChecked,
+        CancellationToken cancellationToken)
+    {
+        if (!argumentsChecked && RequiresArgumentCheck(execution.Operation.Id, execution.Arguments) && tool is IArgumentCheckTool check)
         {
             var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
             if (validation.IsFailure)

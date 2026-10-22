@@ -28,7 +28,7 @@ public class GetNotificationsTool(IMediator mediator) : IAiTool
     }
 }
 
-public class UpdateNotificationsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class UpdateNotificationsTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "update_notifications";
     public string Description => "Mark notifications as read, manage push subscriptions, or send a test push notification.";
@@ -61,6 +61,15 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        if (JsonArgumentParser.GetOptionalString(args, "action") is "mark_all_read" or "test_push")
+            return Task.FromResult<PreparedToolIntent?>(null);
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
@@ -156,7 +165,7 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
     }
 }
 
-public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class DeleteNotificationsTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "delete_notifications";
     public string Description => "Delete one notification or clear all notifications.";
@@ -178,6 +187,15 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        if (JsonArgumentParser.GetOptionalString(args, "action") == "delete_all")
+            return Task.FromResult<PreparedToolIntent?>(null);
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
@@ -207,6 +225,7 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
                 return new ToolResult(false, Error: "notification_ids contains an invalid ID.");
             ids.Add(id);
         }
+        var prepared = new List<object>();
         foreach (var id in ids)
         {
             var command = new DeleteNotificationCommand(userId, id);
@@ -215,6 +234,7 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
                 var check = await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
                 if (!check.Success)
                     return check;
+                prepared.Add(command);
                 continue;
             }
 
@@ -222,8 +242,9 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool, IArgumentChe
             if (result.IsFailure)
                 return ToolResult.FromFailure(result);
         }
-        return new ToolResult(true, EntityId: userId.ToString(),
-            EntityName: $"Deleted {ids.Count} notifications");
+        return checkOnly ? ChatToolArgumentCheck.PreparedCommands(prepared)
+            : new ToolResult(true, EntityId: userId.ToString(),
+                EntityName: $"Deleted {ids.Count} notifications");
     }
 
     private async Task<ToolResult> DeleteOneAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)

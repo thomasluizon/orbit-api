@@ -25,6 +25,7 @@ public partial class ProcessUserChatCommandHandler
         var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
+        RejectedCallCorrection? correction = null;
 
         if (tokenBudgetExceeded)
         {
@@ -48,6 +49,8 @@ public partial class ProcessUserChatCommandHandler
                 request,
                 executionResults,
                 iteration,
+                totalReportedTokens,
+                correction,
                 language,
                 aiStreamSink,
                 cancellationToken);
@@ -56,6 +59,7 @@ public partial class ProcessUserChatCommandHandler
                 return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
 
             aiResponse = roundResult.Response;
+            correction = roundResult.Correction;
             hasUnexecutedCalls = aiResponse.HasToolCalls;
             if (roundResult.HadToolFailure)
             {
@@ -79,6 +83,12 @@ public partial class ProcessUserChatCommandHandler
         {
             foreach (var call in aiResponse.ToolCalls!)
                 remainingTrace.Record(call, null, null, ai.ToolRegistry.GetTool(call.Name) is IMcpOnlyAiTool);
+        }
+
+        if (correction is not null)
+        {
+            hadToolFailure = true;
+            aiResponse = MessageResponse(language);
         }
 
         return new ToolLoopResult(
@@ -107,6 +117,8 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         int iteration,
+        long totalReportedTokens,
+        RejectedCallCorrection? correction,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
@@ -124,10 +136,55 @@ public partial class ProcessUserChatCommandHandler
         orderedCalls = orderedCalls.Select(call => ai.ToolRegistry.GetTool(call.Name) is { } tool
             ? call with { Args = OptionalToolArguments.OmitOptionalNulls(call.Args, tool.GetParameterSchema()) }
             : call).ToList();
-        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken);
+        var outcomesByCallId = correction is null
+            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
+            : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
+        var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
+        var hadToolFailure = outcomesByCallId.Values.Any(outcome => outcome.OperationResult?.Status == AgentOperationStatus.Failed);
+
+        if (correction is not null)
+            return correction.HasUnresolvedFailures
+                ? new ToolRoundResult(MessageResponse(language), HadToolFailure: true)
+                : new ToolRoundResult(new AiResponse());
+
+        if (executionResults.AskBlock is not null)
+            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
+
+        if (hadToolFailure)
+        {
+            if (!HasCorrectionAllowance(request, executionResults, iteration, totalReportedTokens))
+                return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
+            correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
+            OfferCorrections(toolResults, outcomesByCallId);
+        }
+
+        foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
+            toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
+                "The ask call ended this turn. Ask in plain text and make no further tool calls."));
+        cancellationToken.ThrowIfCancellationRequested();
+        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
+            correction is null ? aiStreamSink : null, cancellationToken);
+        if (continueResult.IsFailure)
+        {
+            LogContinueWithToolResultsFailed(logger, continueResult.Error);
+            if (correction is not null)
+                return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
+            return new ToolRoundResult(aiResponse, ProviderError: new AppError(
+                continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
+        }
+
+        return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value,
+            Correction: correction);
+    }
+
+    private List<AiToolCallResult> RecordToolRound(AiResponse response, IReadOnlyList<AiToolCall> orderedCalls,
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomesByCallId, ToolExecutionAccumulator executionResults,
+        bool isCorrection)
+    {
+        var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         if (executionResults.EvalTrace is { } evalTrace)
         {
-            foreach (var call in aiResponse.ToolCalls!)
+            foreach (var call in response.ToolCalls!)
             {
                 outcomesByCallId.TryGetValue(call.Id, out var outcome);
                 evalTrace.Record(call, outcome?.ToolResult, outcome?.TraceStatus ?? outcome?.OperationResult?.Status,
@@ -135,11 +192,11 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
-        var hadToolFailure = false;
+
         foreach (var call in orderedCalls)
         {
-            var outcome = outcomesByCallId[call.Id];
+            if (!outcomesByCallId.TryGetValue(call.Id, out var outcome))
+                continue;
             if (executionResults.Recording is { Enabled: true } recording)
                 recording.ToolCalls.Add(new ConversationToolCall(call.Id, call.Name, call.Args.Clone(),
                     outcome.ToolResult.Success, outcome.ToolResult.Error));
@@ -151,35 +208,24 @@ public partial class ProcessUserChatCommandHandler
                 outcome.OperationResult,
                 outcome.PolicyDenial,
                 outcome.PendingOperation);
-
-            if (outcome.OperationResult?.Status == AgentOperationStatus.Failed)
-                hadToolFailure = true;
+            if (!isCorrection && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
+                executionResults.CorrectionOccurrences.Add(new CorrectionOccurrence(call, outcome));
         }
 
-        if (executionResults.AskBlock is not null)
-            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
-
-        if (hadToolFailure)
-            return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
-
-        foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
-            toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
-                "The ask call ended this turn. Ask in plain text and make no further tool calls."));
-        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
-        if (continueResult.IsFailure)
-        {
-            LogContinueWithToolResultsFailed(logger, continueResult.Error);
-            return new ToolRoundResult(aiResponse, ProviderError: new AppError(
-                continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
-        }
-
-        return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value);
+        return toolResults;
     }
+
+    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ToolExecutionAccumulator results,
+        int iteration, long totalReportedTokens) =>
+        iteration < ChatTurnLimits.MaxToolIterations && totalReportedTokens < AppConstants.MaxAiRequestTotalTokens
+        && request.BlockAnswer is null && request.ConfirmationToken is null
+        && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences);
 
     private sealed record ToolRoundResult(
         AiResponse Response,
         bool HadToolFailure = false,
-        AppError? ProviderError = null);
+        AppError? ProviderError = null,
+        RejectedCallCorrection? Correction = null);
 
     private static AiResponse MessageResponse(string? language) => new()
     {
@@ -353,7 +399,8 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator executionResults,
         IAgentOperationExecutor operationExecutor,
         IPendingClarificationStore clarificationStore,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AgentExecuteOperationRequest? correctionRequest = null)
     {
         var tool = ai.ToolRegistry.GetTool(call.Name);
         if (tool is null)
@@ -373,7 +420,9 @@ public partial class ProcessUserChatCommandHandler
             onExecutionStarted = () => executionResults.EmitToolStepAsync(capability.Domain, access, streamSink);
         }
 
-        var executionResponse = await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken);
+        var executionResponse = correctionRequest is null
+            ? await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken)
+            : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
         var operationResult = executionResponse.Operation;
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
@@ -388,7 +437,7 @@ public partial class ProcessUserChatCommandHandler
                 new ClarificationToolResult(toolResult, operationResult, executionResponse, payload), cancellationToken);
         }
 
-        return operationResult.Status switch
+        return (operationResult.Status switch
         {
             AgentOperationStatus.PendingConfirmation => new ToolCallOutcome(
                 new AiToolCallResult(call.Name, call.Id, true, null, null, null, new
@@ -424,7 +473,8 @@ public partial class ProcessUserChatCommandHandler
                 operationResult,
                 executionResponse.PolicyDenial,
                 executionResponse.PendingOperation)
-        };
+        }) with
+        { PreparedResponse = executionResponse as PreparedToolOperationResponse };
     }
 
     private void RegisterPendingWrite(Guid userId, IAiTool tool,
@@ -617,11 +667,12 @@ public partial class ProcessUserChatCommandHandler
             executionResponse.PendingOperation);
     }
 
-    private sealed record ToolCallOutcome(
+    internal sealed record ToolCallOutcome(
         AiToolCallResult ToolResult,
         ActionResult? ActionResult,
         AgentOperationResult? OperationResult,
         AgentPolicyDenial? PolicyDenial,
         PendingAgentOperation? PendingOperation,
-        AgentOperationStatus? TraceStatus = null);
+        AgentOperationStatus? TraceStatus = null,
+        PreparedToolOperationResponse? PreparedResponse = null);
 }

@@ -28,7 +28,7 @@ public class GetProfileTool(IMediator mediator) : IAiTool
     }
 }
 
-public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public class UpdateProfilePreferencesTool(IMediator mediator) : IPreparedIntentTool
 {
     public string Name => "update_profile_preferences";
     public string Description => "Update profile preferences such as name, timezone, language, week start day, clock format, light or dark mode, onboarding completion, or tour state. Orbit uses one accent.";
@@ -69,6 +69,13 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool, IArgume
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ChatToolArgumentCheck.CheckAsync(this, args, () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+
+    public Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        return ChatToolArgumentCheck.PrepareAsync(this, args,
+            () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+    }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
