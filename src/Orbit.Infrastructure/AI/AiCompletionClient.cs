@@ -230,6 +230,8 @@ public sealed partial class AiCompletionClient
         LogCallingJsonCompletion(_logger);
 
         var response = await ExecuteResponseAsync(options, purpose, cancellationToken, userId);
+        if (response.Status != ResponseStatus.Completed && (requireComplete || response.Status != ResponseStatus.Incomplete))
+            LogJsonCompletionFailed(_logger, "json_response", "not_completed", response.Status == ResponseStatus.Incomplete ? "incomplete" : "other");
         EnsureSuccessful(response);
         if (requireComplete && response.Status != ResponseStatus.Completed)
             throw new InvalidOperationException("AI date interpretation did not complete.");
@@ -345,5 +347,8 @@ public sealed partial class AiCompletionClient
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "AI token usage ({Purpose} via {Model}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
     private static partial void LogAiTokenUsage(ILogger logger, string purpose, string model, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI JSON completion failed at {Stage} with {Reason}; status {Status}")]
+    private static partial void LogJsonCompletionFailed(ILogger logger, string stage, string reason, string status);
 
 }

@@ -24,6 +24,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -707,68 +708,50 @@ public class AgentChatWriteHoldTests : IDisposable
     [InlineData(25, "approve")]
     [InlineData(26, "approve")]
     [InlineData(55, "approve")]
+    [InlineData(174, "approve")]
     [InlineData(26, "edit")]
     [InlineData(26, "reject")]
     [InlineData(26, "stale")]
     public async Task InferredIcons_AllTargets_RequireCompleteBoundApprovalAndReadBackExactly(int count, string action)
     {
-        var today = new DateOnly(2026, 10, 19);
-        var habits = Enumerable.Range(0, count).Select(index => Habit.Create(new HabitCreateParams(_userId,
-            $"Habit {index:D3}", FrequencyUnit.Day, 1, today, Description: "Keep description", DueTime: new TimeOnly(9, 0),
-            Days: [DayOfWeek.Monday], ChecklistItems: [new("Keep checklist", true)], Emoji: "📝")).Value).ToArray();
-        var completed = Habit.Create(new HabitCreateParams(_userId, "Completed", null, null, today, Emoji: "✅")).Value;
-        completed.Log(today);
-        var foreign = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Foreign", FrequencyUnit.Day, 1, today, Emoji: "🔒")).Value;
-        _dbContext.Habits.AddRange(habits.Concat([completed, foreign]));
-        await _dbContext.SaveChangesAsync();
+        var (habits, completed, foreign) = await CreateIconHabitsAsync(count);
+        var heldState = habits.Concat([completed, foreign]).ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit));
         var originalState = habits.ToDictionary(habit => habit.Id, StateExceptIcon);
         var originalVersions = habits.ToDictionary(habit => habit.Id, habit => habit.ReminderProbeVersion);
-        _dbContext.ChangeTracker.Clear();
         var expected = habits.Select((habit, index) => (habit.Id, Emoji: index % 2 == 0 ? "📚" : "🏃"))
             .ToDictionary(item => item.Id, item => item.Emoji);
         var handler = new IconResponseHandler(habits.Chunk(25).Select(chunk => ResponsesTestData.Text(JsonSerializer.Serialize(new
         {
             emojis = chunk.ToDictionary(habit => habit.Id.ToString(), habit => expected[habit.Id])
         }))));
-        var client = new AiCompletionClient(new ResponsesClient(new ApiKeyCredential("test-key"), new ResponsesClientOptions
-        {
-            Endpoint = new Uri("https://orbit.test/v1"),
-            Transport = new HttpClientPipelineTransport(new HttpClient(handler))
-        }), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var inference = new AiHabitEmojiInferenceService(AiBudgetTestDouble.Wrap(client), NullLogger<AiHabitEmojiInferenceService>.Instance);
-        var tool = new BulkUpdateHabitEmojisTool(new GenericRepository<Habit>(_dbContext), inference,
-            new UnitOfWork(_dbContext, new DatabaseConnectionSettings()), NullLogger<BulkUpdateHabitEmojisTool>.Instance);
-        var tools = new AiToolRegistry([tool]);
-        var dates = Substitute.For<IUserDateService>();
-        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
-        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
-            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), dates, tools);
-        var executor = CreateExecutor(tools, previewer);
-        var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
-            new RevisePendingOperationRequestValidator(), tools);
+        var (tool, executor, revisions) = CreateIconExecutor(handler);
 
         var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
             Parse("""{"emoji_mode":"infer","filter":{"all":true}}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
 
         held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
         var pending = held.PendingOperation!;
+        _dbContext.PendingAgentOperations.Should().ContainSingle();
+        pending.PreviewFingerprint.Should().NotBeNullOrWhiteSpace();
         pending.ChangeTargetCount.Should().Be(count);
         pending.Items.Should().HaveCount(count);
+        pending.Items!.Select(item => item.EntityId).Should().BeEquivalentTo(habits.Select(habit => (Guid?)habit.Id));
         foreach (var item in pending.Items!)
-            item.Fields.Should().Contain(field => field.Field == "emoji" && field.NewValue == expected[item.EntityId!.Value] && field.IsEditable);
-        _dbContext.ChangeTracker.Clear();
-        (await _dbContext.Habits.Where(habit => expected.Keys.Contains(habit.Id)).ToListAsync()).Should().OnlyContain(habit => habit.Emoji == "📝");
-        handler.Calls.Should().Be((count + 24) / 25);
-        foreach (var request in handler.Requests)
         {
-            using var json = JsonDocument.Parse(request);
-            json.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
-            json.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(1024);
-            json.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+            var field = item.Fields.Should().ContainSingle(change => change.Field == "emoji").Which;
+            field.NewValue.Should().Be(expected[item.EntityId!.Value]);
+            field.ProposedValue!.Value.GetString().Should().Be(expected[item.EntityId.Value]);
+            field.IsEditable.Should().BeTrue();
         }
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Habits.Include(habit => habit.Logs).ToListAsync()).ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit))
+            .Should().BeEquivalentTo(heldState);
+        AssertIconRequests(handler, habits, (count + 24) / 25);
         var refreshed = await revisions.RefreshAsync(_userId, pending.Id, default);
         refreshed.IsSuccess.Should().BeTrue();
         refreshed.Preview!.PreviewFingerprint.Should().Be(pending.PreviewFingerprint);
+        refreshed.Preview.Items.Should().HaveCount(count);
+        handler.Calls.Should().Be((count + 24) / 25);
         if (action == "reject")
         {
             var rejected = await revisions.ReviseAsync(_userId, pending.Id,
@@ -799,8 +782,21 @@ public class AgentChatWriteHoldTests : IDisposable
             execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         response.Operation.Status.Should().Be(action == "stale" ? AgentOperationStatus.Denied : AgentOperationStatus.Succeeded);
         if (action == "stale") response.PolicyDenial!.Reason.Should().Be("stale_preview");
+        else
+        {
+            JsonElement.DeepEquals(JsonSerializer.SerializeToElement(response.Operation.Payload), JsonSerializer.SerializeToElement(new
+            {
+                applied_count = expected.Count,
+                total_matched = expected.Count,
+                skipped_count = 0,
+                partial = false,
+                updated_count = expected.Count
+            })).Should().BeTrue();
+            _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
+        }
         _dbContext.ChangeTracker.Clear();
-        var readback = await _dbContext.Habits.ToListAsync();
+        var readback = await _dbContext.Habits.Include(habit => habit.Logs).ToListAsync();
+        readback.Select(habit => habit.Id).Should().BeEquivalentTo(habits.Concat([completed, foreign]).Select(habit => habit.Id));
         foreach (var habit in readback.Where(habit => habits.Any(original => original.Id == habit.Id)))
         {
             habit.Emoji.Should().Be(action != "stale" && expected.TryGetValue(habit.Id, out var emoji) ? emoji : "📝");
@@ -812,13 +808,176 @@ public class AgentChatWriteHoldTests : IDisposable
         }
         readback.Single(habit => habit.Id == foreign.Id).Emoji.Should().Be("🔒");
         readback.Single(habit => habit.Id == completed.Id).Emoji.Should().Be("✅");
+        JsonSerializer.Serialize(readback.Single(habit => habit.Id == foreign.Id)).Should().Be(heldState[foreign.Id]);
+        JsonSerializer.Serialize(readback.Single(habit => habit.Id == completed.Id)).Should().Be(heldState[completed.Id]);
         if (action != "stale")
         {
+            var approvedState = readback.ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit));
             var replay = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
                 execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
             replay.Operation.Status.Should().NotBe(AgentOperationStatus.Succeeded);
+            _dbContext.ChangeTracker.Clear();
+            (await _dbContext.Habits.Include(habit => habit.Logs).ToListAsync()).ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit))
+                .Should().BeEquivalentTo(approvedState);
         }
         handler.Calls.Should().Be((count + 24) / 25);
+    }
+
+    [Fact]
+    public Task InferredIcons_SevenChunks_SixthMappingMissingTargetStopsBeforeSeventhDispatch() =>
+        AssertLateIconPreparationFailureAsync(budgetExceeded: false);
+
+    [Fact]
+    public Task InferredIcons_SevenChunks_SeventhBudgetReservationPreservesTypedFailure() =>
+        AssertLateIconPreparationFailureAsync(budgetExceeded: true);
+
+    private async Task AssertLateIconPreparationFailureAsync(bool budgetExceeded)
+    {
+        var (habits, completed, foreign) = await CreateIconHabitsAsync(174);
+        var original = habits.Concat([completed, foreign]).ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit));
+        var handler = new IconResponseHandler(habits.Chunk(25).Select((chunk, index) => ResponsesTestData.Text(JsonSerializer.Serialize(new
+        {
+            emojis = chunk.Where((_, offset) => budgetExceeded || index != 5 || offset != 24)
+                .ToDictionary(habit => habit.Id.ToString(), _ => "📚")
+        }))));
+        var reservations = new List<Guid>();
+        var reservationAttempts = 0;
+        var budget = Substitute.For<IAiDailyBudget>();
+        budget.ReserveAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            if (++reservationAttempts == 7 && budgetExceeded)
+                return Task.FromException<Guid>(new AiBudgetExceededException());
+            var reservation = Guid.NewGuid();
+            reservations.Add(reservation);
+            return Task.FromResult(reservation);
+        });
+        var usage = Substitute.For<IAiUsageRecorder>();
+        usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<long>(),
+            Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry?>(), Arg.Any<long>()).Returns(_ =>
+        {
+            AiCallContext.Current.Should().NotBeNull();
+            AiCallContext.Current!.ReportCost(100L);
+            return Task.CompletedTask;
+        });
+        var inferenceLogger = Substitute.For<ILogger<AiHabitEmojiInferenceService>>();
+        inferenceLogger.IsEnabled(LogLevel.Warning).Returns(true);
+        var preparationLogger = Substitute.For<ILogger<BulkUpdateHabitEmojisTool>>();
+        preparationLogger.IsEnabled(LogLevel.Warning).Returns(true);
+        var (tool, executor, _) = CreateIconExecutor(handler, budget, usage, inferenceLogger, preparationLogger);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
+            Parse("""{"emoji_mode":"infer","filter":{"all":true}}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        response.Operation.PolicyReason.Should().Be(budgetExceeded ? "AI_DAILY_BUDGET_EXCEEDED" : "preview_unavailable");
+        response.PendingOperation.Should().BeNull();
+        response.PolicyDenial.Should().BeNull();
+        var pending = _dbContext.PendingAgentOperations.Should().ContainSingle().Which;
+        pending.PreviewFingerprint.Should().BeNull();
+        pending.ConfirmedAtUtc.Should().BeNull();
+        pending.ConsumedAtUtc.Should().NotBeNull();
+        _pendingOperationStore.Confirm(_userId, pending.Id).Should().BeNull();
+        _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
+        _dbContext.ChangeTracker.Entries<Habit>().Should().NotContain(entry => entry.State != EntityState.Unchanged);
+        _dbContext.ChangeTracker.Clear();
+        (await _dbContext.Habits.Include(habit => habit.Logs).ToListAsync()).ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit))
+            .Should().BeEquivalentTo(original);
+        AssertIconRequests(handler, habits, 6);
+        await budget.Received(budgetExceeded ? 7 : 6).ReserveAsync(_userId, 1000L, Arg.Any<CancellationToken>());
+        reservations.Should().HaveCount(6).And.OnlyHaveUniqueItems();
+        await budget.Received(6).SettleAsync(Arg.Any<Guid>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+        foreach (var reservation in reservations)
+            await budget.Received(1).SettleAsync(reservation, 100L, Arg.Any<CancellationToken>());
+        usage.ReceivedCalls().Should().HaveCount(6);
+        await usage.Received(6).RecordAsync("habit_emoji_inference", "gpt-6-luna", 0, 1, 2, 3,
+            Arg.Any<CancellationToken>(), _userId, Arg.Is<AiCallTelemetry>(call => call.HasUsage && !call.IsError), 0);
+        AssertIconFailureReceipt(inferenceLogger, new Dictionary<string, object?>
+        {
+            ["Stage"] = budgetExceeded ? "completion" : "mapping",
+            ["Reason"] = budgetExceeded ? "budget_exceeded" : "membership_mismatch",
+            ["ChunkTargetCount"] = budgetExceeded ? 24 : 25
+        });
+        AssertIconFailureReceipt(preparationLogger, new Dictionary<string, object?>
+        {
+            ["Stage"] = "inference",
+            ["Reason"] = budgetExceeded ? "budget_exceeded" : "unknown",
+            ["ChunkIndex"] = budgetExceeded ? 7 : 6,
+            ["ChunkCount"] = 7,
+            ["ChunkTargetCount"] = budgetExceeded ? 24 : 25,
+            ["TargetCount"] = 174
+        });
+    }
+
+    private async Task<(Habit[] Habits, Habit Completed, Habit Foreign)> CreateIconHabitsAsync(int count)
+    {
+        var today = new DateOnly(2026, 10, 19);
+        var habits = Enumerable.Range(0, count).Select(index => Habit.Create(new HabitCreateParams(_userId,
+            $"Habit {index:D3}", FrequencyUnit.Day, 1, today, Description: "Keep description", DueTime: new TimeOnly(9, 0),
+            Days: [DayOfWeek.Monday], ChecklistItems: [new("Keep checklist", true)], Emoji: "📝")).Value).ToArray();
+        var completed = Habit.Create(new HabitCreateParams(_userId, "Completed", null, null, today, Emoji: "✅")).Value;
+        completed.Log(today);
+        var foreign = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Foreign", FrequencyUnit.Day, 1, today, Emoji: "🔒")).Value;
+        _dbContext.Habits.AddRange(habits.Concat([completed, foreign]));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        return (habits, completed, foreign);
+    }
+
+    private (BulkUpdateHabitEmojisTool Tool, AgentOperationExecutor Executor, PendingOperationRevisionService Revisions) CreateIconExecutor(
+        IconResponseHandler handler, IAiDailyBudget? budget = null, IAiUsageRecorder? usage = null,
+        ILogger<AiHabitEmojiInferenceService>? inferenceLogger = null, ILogger<BulkUpdateHabitEmojisTool>? preparationLogger = null)
+    {
+        var client = new AiCompletionClient(new ResponsesClient(new ApiKeyCredential("test-key"), new ResponsesClientOptions
+        {
+            Endpoint = new Uri("https://orbit.test/v1"),
+            Transport = new HttpClientPipelineTransport(new HttpClient(handler))
+        }), NullLogger<AiCompletionClient>.Instance, usage ?? Substitute.For<IAiUsageRecorder>());
+        var budgeted = AiBudgetTestDouble.Wrap(client);
+        if (budget is not null)
+        {
+            var estimates = Substitute.For<IAiRequestCostEstimator>();
+            estimates.EstimateMicroDollarsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1000L);
+            budgeted = new BudgetedAiCompletionClient(client, budget, new HttpContextAccessor(),
+                NullLogger<BudgetedAiCompletionClient>.Instance, estimates);
+        }
+        var inference = new AiHabitEmojiInferenceService(budgeted, inferenceLogger ?? NullLogger<AiHabitEmojiInferenceService>.Instance);
+        var tool = new BulkUpdateHabitEmojisTool(new GenericRepository<Habit>(_dbContext), inference,
+            new UnitOfWork(_dbContext, new DatabaseConnectionSettings()), preparationLogger ?? NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var tools = new AiToolRegistry([tool]);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 10, 19));
+        var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_dbContext),
+            new GenericRepository<Goal>(_dbContext), new GenericRepository<Tag>(_dbContext), dates, tools);
+        return (tool, CreateExecutor(tools, previewer), new PendingOperationRevisionService(_pendingOperationStore, previewer,
+            new RevisePendingOperationRequestValidator(), tools));
+    }
+
+    private static void AssertIconRequests(IconResponseHandler handler, Habit[] habits, int completionCount)
+    {
+        handler.Calls.Should().Be(completionCount);
+        handler.Requests.Should().HaveCount(completionCount);
+        var chunks = habits.Chunk(25).Take(completionCount).ToArray();
+        for (var index = 0; index < completionCount; index++)
+        {
+            using var json = JsonDocument.Parse(handler.Requests[index]);
+            json.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+            json.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(1024);
+            json.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+            var userInput = json.RootElement.GetProperty("input").EnumerateArray()
+                .Single(item => item.GetProperty("role").GetString() == "user");
+            using var prompt = JsonDocument.Parse(userInput.GetProperty("content")[0].GetProperty("text").GetString()!);
+            prompt.RootElement.EnumerateArray().Select(item => item.GetProperty("id").GetGuid())
+                .Should().Equal(chunks[index].Select(habit => habit.Id));
+        }
+    }
+
+    private static void AssertIconFailureReceipt<T>(ILogger<T> logger, Dictionary<string, object?> expected)
+    {
+        var entry = logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log)).Should().ContainSingle().Which;
+        entry.GetArguments()[0].Should().Be(LogLevel.Warning);
+        entry.GetArguments()[3].Should().BeNull();
+        ((IEnumerable<KeyValuePair<string, object?>>)entry.GetArguments()[2]!).Where(pair => pair.Key != "{OriginalFormat}")
+            .Should().BeEquivalentTo(expected);
     }
 
     private static string StateExceptIcon(Habit habit) => JsonSerializer.Serialize(
