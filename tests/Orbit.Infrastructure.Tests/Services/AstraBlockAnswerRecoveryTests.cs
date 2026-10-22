@@ -57,7 +57,8 @@ public class AstraBlockAnswerRecoveryTests
         var quota = new PayGateService(new GenericRepository<Habit>(db), users, config, dates);
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
             users, Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>());
-        var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]));
+        var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]),
+            ClientContext: new(SupportsParts: true));
 
         var failure = await service.ExecuteAsync(request,
             _ => Task.FromResult(Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable)), default);

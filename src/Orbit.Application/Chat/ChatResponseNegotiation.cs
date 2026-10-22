@@ -13,6 +13,7 @@ internal static class ChatResponseNegotiation
         if (response.Parts is null) return response;
         var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AstraPartsDisabled);
         var negotiated = new List<ChatResponsePart>();
+        var downgraded = false;
         foreach (var part in response.Parts)
         {
             if (part is not ChatBlockPart block)
@@ -24,14 +25,17 @@ internal static class ChatResponseNegotiation
             if (supportsParts && Supported(block.Kind, value, client, flags))
                 negotiated.Add(block);
             else
+            {
+                downgraded = true;
                 negotiated.Add(new ChatTextPart(Fallback(value)));
+            }
         }
         var text = string.Join("\n\n", negotiated.OfType<ChatTextPart>().Select(part => part.Text));
         var followUps = client?.SupportsFollowUps == true && !flags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled);
         return response with
         {
             Parts = supportsParts ? negotiated : null,
-            AiMessage = text.Length == 0 ? null : text,
+            AiMessage = downgraded ? text : response.AiMessage,
             FollowUps = followUps ? response.FollowUps : null,
             FollowUpContext = followUps && client?.SupportsFollowUpContext == true ? response.FollowUpContext : null
         };
