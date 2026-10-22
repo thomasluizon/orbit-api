@@ -20,7 +20,7 @@ public record StreakAchievementDisc(string Id, string IconKey, DateTime? EarnedA
 public sealed record GamificationCard(
     GamificationOverviewPayload State,
     string SurfaceId = "progress",
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
 
 public record StreakCard(
     int CurrentStreak, int LongestStreak, int Level, int TotalXp, int XpForNextLevel,

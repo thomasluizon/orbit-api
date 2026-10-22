@@ -3483,6 +3483,165 @@
         }
       }
     },
+    "/api/Chat/gamification/refresh": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshGamificationReadBlockRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshGamificationReadBlockRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshGamificationReadBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GamificationReadBlockRefreshResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GamificationReadBlockRefreshResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GamificationReadBlockRefreshResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Chat/habit-ranking/query": {
       "post": {
         "tags": [
@@ -17574,6 +17733,31 @@
         ],
         "description": "MVC accepts case-insensitive names, surrounding whitespace, comma-separated names and signed 32-bit integers as numbers or numeric strings. Binding does not bypass habit validation."
       },
+      "GamificationCard": {
+        "required": [
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GamificationOverviewPayload"
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "progress"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          }
+        }
+      },
       "GamificationOverviewPayload": {
         "required": [
           "profile",
@@ -17757,6 +17941,25 @@
           },
           "locked": {
             "type": "boolean"
+          }
+        }
+      },
+      "GamificationReadBlockRefreshResponse": {
+        "required": [
+          "kind",
+          "block",
+          "read"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "block": {
+            "$ref": "#/components/schemas/GamificationCard"
+          },
+          "read": {
+            "$ref": "#/components/schemas/ReadBlockMetadata"
           }
         }
       },
@@ -21393,9 +21596,6 @@
             "$ref": "#/components/schemas/ReadBlockCardStreakCard"
           },
           {
-            "$ref": "#/components/schemas/ReadBlockCardGamificationCard"
-          },
-          {
             "$ref": "#/components/schemas/ReadBlockCardCalendarCard"
           },
           {
@@ -21604,30 +21804,6 @@
               "string"
             ],
             "format": "date"
-          }
-        }
-      },
-      "ReadBlockCardGamificationCard": {
-        "required": [
-          "state"
-        ],
-        "properties": {
-          "state": {
-            "$ref": "#/components/schemas/GamificationOverviewPayload"
-          },
-          "surfaceId": {
-            "type": "string",
-            "default": "progress"
-          },
-          "read": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ReadBlockMetadata"
-              }
-            ]
           }
         }
       },
@@ -22568,6 +22744,27 @@
             ],
             "format": "int32",
             "default": 0
+          }
+        }
+      },
+      "RefreshGamificationReadBlockRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
           }
         }
       },

@@ -721,6 +721,7 @@ public partial class AgentCatalogService
                 McpToolNames: ["get_gamification_profile", "get_achievements", "get_streak_info"],
                 ControllerActionKeys:
                 [
+                    "ChatController.RefreshGamificationReadBlock",
                     "GamificationController.GetProfile",
                     "GamificationController.GetAchievements",
                     "GamificationController.GetStreakInfo",

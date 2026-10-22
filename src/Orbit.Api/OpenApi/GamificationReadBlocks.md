@@ -66,8 +66,14 @@ The date retains the tool's existing semantics: the streak query evaluates that
 date, while profile and achievements return their source queries' current values.
 It does not promise historical profile or achievement snapshots.
 
-`POST /api/chat/reads/refresh` accepts the existing `token` and `clientContext`
-request. Use the original `read.refreshToken`; do not substitute a broader query.
+Both HTTP API versions expose `POST /api/chat/gamification/refresh` for the
+`gamification` kind. Its JSON request accepts `token` and `clientContext`, and its
+response is `GamificationReadBlockRefreshResponse` with `kind`, a concrete
+`GamificationCard` in `block`, and `read`. The route requires authentication.
+API keys need both `chat_interact` and `read_gamification`; credential restrictions
+are forwarded to the original read's policy checks.
+
+Use the original `read.refreshToken`; do not substitute a broader query.
 Refresh reruns the same selected sources and absolute as-of scope, retains the
 query ID, returns the original kind, and updates the revision from the returned
 source payload. A profile-only refresh still has no separate streak or catalogue.
@@ -75,8 +81,16 @@ Advancing the user's local day does not advance the query's as-of date.
 
 Refresh requires the same explicit part-kind capability and enabled status-block
 flag. Existing token ownership, expiry, source errors and policy checks apply.
-The refresh response publishes `GamificationCard` as a declared `ReadBlockCard`
-variant, with the same card fields carried by the chat part and no extra type tag.
+The dedicated response has the same card fields carried by the chat part and no
+extra type tag. These reads return their entire selected payload and do not page;
+the request has no `page` field and no paging route is provided.
+
+`POST /api/chat/reads/refresh` retains its existing request, response and card
+union. A `gamification` token sent there returns 403, even when the client
+advertises the new kind, without executing the source queries. Conversely, the
+dedicated route rejects tokens for other kinds with 403. Combined `streak` reads
+continue to use the generic refresh route with their original negotiation.
+Missing or invalid tokens retain the existing validation and 410 behavior.
 
 Complete acceptance of #1619 requires this API contract to deploy and its UI
 consumer to land. Its independent merge bar is unchanged.

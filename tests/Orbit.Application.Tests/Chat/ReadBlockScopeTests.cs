@@ -369,7 +369,9 @@ public sealed class ReadBlockScopeTests
             profile ? achievements ? source.Profile! with { Achievements = [] } : source.Profile : null,
             achievements ? source.Achievements : null, streak ? source.Streak : null);
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var wire = JsonSerializer.SerializeToElement(ReadBlockRefreshResponse.From(read), options);
+        var wire = kind == "gamification"
+            ? JsonSerializer.SerializeToElement(GamificationReadBlockRefreshResponse.From(read), options)
+            : JsonSerializer.SerializeToElement(ReadBlockRefreshResponse.From(read), options);
         wire.GetProperty("block").GetProperty("state").GetRawText()
             .Should().Be(JsonSerializer.Serialize(expected, options));
         wire.GetProperty("block").TryGetProperty("$type", out _).Should().BeFalse();
@@ -382,7 +384,7 @@ public sealed class ReadBlockScopeTests
         _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_day.AddDays(10));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
         var result = await refresh.Handle(new(_userId, read.Read.RefreshToken,
-            new(SupportsParts: true, PartKinds: [kind], SupportsStreakCard: true)), default);
+            new(SupportsParts: true, PartKinds: [kind], SupportsStreakCard: true), GamificationOnly: kind == "gamification"), default);
         result.IsSuccess.Should().BeTrue();
         result.Value.Kind.Should().Be(kind);
         result.Value.Read.QueryId.Should().Be(read.Read.QueryId);
@@ -390,7 +392,9 @@ public sealed class ReadBlockScopeTests
         result.Value.Read.Scope.GetProperty("include_profile").GetBoolean().Should().Be(profile);
         result.Value.Read.Scope.GetProperty("include_achievements").GetBoolean().Should().Be(achievements);
         result.Value.Read.Scope.GetProperty("include_streak").GetBoolean().Should().Be(streak);
-        var refreshed = JsonSerializer.SerializeToElement(ReadBlockRefreshResponse.From(result.Value), options);
+        var refreshed = kind == "gamification"
+            ? JsonSerializer.SerializeToElement(GamificationReadBlockRefreshResponse.From(result.Value), options)
+            : JsonSerializer.SerializeToElement(ReadBlockRefreshResponse.From(result.Value), options);
         refreshed.GetProperty("block").GetProperty("state").GetRawText()
             .Should().Be(JsonSerializer.Serialize(expected, options));
         await mediator.Received(profile ? 2 : 0).Send(
@@ -421,10 +425,71 @@ public sealed class ReadBlockScopeTests
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
 
         var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
-            new(SupportsParts: parts, PartKinds: advertisesKind ? ["gamification"] : ["streak"], SupportsStreakCard: true)), default);
+            new(SupportsParts: parts, PartKinds: advertisesKind ? ["gamification"] : ["streak"], SupportsStreakCard: true),
+            GamificationOnly: true), default);
 
         result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
         mediator.ReceivedCalls().Should().BeEmpty("unsupported refreshes must be denied before reading sources");
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, true)]
+    public async Task GamificationRefresh_GenericContractRejectsTokenBeforeExecutingSources(bool profile, bool achievements, bool streak)
+    {
+        var mediator = Substitute.For<IMediator>();
+        GamificationReadTestData.Configure(mediator, _day);
+        var tool = new GetGamificationOverviewTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, JsonSerializer.SerializeToElement(new
+        { include_profile = profile, include_achievements = achievements, include_streak = streak }),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        mediator.ClearReceivedCalls();
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+
+        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["gamification"])), default);
+
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+        mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GamificationRefresh_DedicatedContractRejectsStreakTokensAndPaging(bool page)
+    {
+        var mediator = Substitute.For<IMediator>();
+        GamificationReadTestData.Configure(mediator, _day);
+        var tool = new GetGamificationOverviewTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name,
+            JsonSerializer.SerializeToElement(new { include_profile = true, include_achievements = false, include_streak = !page }),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        mediator.ClearReceivedCalls();
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+
+        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["gamification", "streak"], SupportsStreakCard: true),
+            Page: page, GamificationOnly: true), default);
+
+        result.ErrorCode.Should().Be(page ? "READ_QUERY_PAGE_INVALID" : Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+        mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void RefreshValidator_RejectsPagingOnlyForTheGamificationContract(bool gamification, bool page, bool valid)
+    {
+        var validator = new Orbit.Application.Chat.Validators.RefreshReadBlockQueryValidator();
+        validator.Validate(new RefreshReadBlockQuery(_userId, "token", null, Page: page, GamificationOnly: gamification))
+            .IsValid.Should().Be(valid);
     }
 
     [Fact]

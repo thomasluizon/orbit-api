@@ -11,9 +11,10 @@ using Orbit.Domain.Models;
 namespace Orbit.Application.Chat.Queries;
 
 public sealed record RefreshReadBlockRequest(string Token, AgentClientContext? ClientContext = null, bool Page = false);
+public sealed record RefreshGamificationReadBlockRequest(string Token, AgentClientContext? ClientContext = null);
 public sealed record RefreshReadBlockQuery(Guid UserId, string Token, AgentClientContext? ClientContext,
     bool Page = false, AgentAuthMethod AuthMethod = AgentAuthMethod.Jwt,
-    IReadOnlyList<string>? GrantedScopes = null, bool ReadOnlyCredential = false)
+    IReadOnlyList<string>? GrantedScopes = null, bool ReadOnlyCredential = false, bool GamificationOnly = false)
     : IRequest<Result<QueryReadBlock>>;
 
 public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, IAgentOperationExecutor executor,
@@ -41,6 +42,10 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
         var ticket = tokens.Read(request.Token, request.UserId);
         if (ticket is null || !ReadBlockFactory.Supports(ticket.Tool))
             return Result.Failure<QueryReadBlock>("This exact query is unavailable. Repeat the original request.", errorCode: "READ_QUERY_EXPIRED");
+        if ((ticket.Kind == "gamification") != request.GamificationOnly)
+            return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
+        if (request.GamificationOnly && request.Page)
+            return Result.Failure<QueryReadBlock>("Gamification reads do not support paging.", errorCode: "READ_QUERY_PAGE_INVALID");
         var enabled = await flags.GetEnabledKeysForUserAsync(request.UserId, ct);
         if (!Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler.ReadKindEnabled(ticket.Kind,
             request.ClientContext, enabled)
