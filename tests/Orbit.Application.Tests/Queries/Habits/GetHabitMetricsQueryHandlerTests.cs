@@ -21,7 +21,9 @@ public class GetHabitMetricsQueryHandlerTests
 
     public GetHabitMetricsQueryHandlerTests()
     {
-        _handler = new GetHabitMetricsQueryHandler(_habitRepo, _userRepo);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        _handler = new GetHabitMetricsQueryHandler(_habitRepo, _userRepo, dates);
     }
 
     private static Habit CreateTestHabit()

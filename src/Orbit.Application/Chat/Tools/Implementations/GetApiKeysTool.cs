@@ -18,7 +18,7 @@ public class GetApiKeysTool(IMediator mediator) : IAiTool
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var result = await mediator.Send(new GetApiKeysQuery(userId), ct);
+        var result = await mediator.Send(new GetApiKeysQuery(userId, BypassCache: true), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
             : ToolResult.FromFailure(result);

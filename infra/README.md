@@ -265,6 +265,26 @@ A real `terraform providers schema -json` invocation against the installed pinne
 
 Run `npm ci --prefix infra` and `npm test --prefix infra` for the infrastructure tests. The routing tests execute the deployed module in Miniflare with outbound requests intercepted and Cloudflare metadata fetching disabled. The [Miniflare testing documentation](https://developers.cloudflare.com/workers/testing/miniflare/) confirms the simulator's test API. Installed `miniflare/dist/src/index.d.ts` confirms `outboundService` accepts a Request callback returning a Response, `bindings` supplies environment values, and `dispatchFetch` invokes the Worker. Its implementation in `dist/src/index.js` dispatches outbound requests to that callback. These requests, rather than invented API fixtures, supply the assertions. The locked test dependencies override `undici` and `sharp` to patched versions; no testing dependency is bundled into the Worker uploaded by Terraform.
 
+## Exact chat read recovery
+
+Chat read contracts and failure handling are documented in
+[the read-tool contract](../src/Orbit.Application/Chat/Tools/README.md#exact-read-metadata-and-recovery).
+Deploy the append-only API before the paired client advertises `periodTotal` or
+`periodComparison`. Dated `habitList` output additionally needs
+`supportsDatedHabitListCard: true`; `habitHistory` record lists need
+`supportsHabitHistoryCard: true`. Each advertisement promises compatible parsing,
+display and date-correct interactions; unadvertised subtypes fall back to queried
+text. Refresh rechecks the subtype and may return HTTP 403 after a local-date
+rollover for a client without dated support. The existing `AstraPeriodBlocksDisabled` feature flag disables
+those producers; no fleet-floor change or new secret is required. Read tokens use
+the shared `Jwt:SecretKey`; rotating that key expires outstanding queries and
+requires repeating the original request.
+
+On HTTP 409 `READ_QUERY_STALE`, refresh the original query before asking for another
+page. On HTTP 503 `READ_QUERY_REFRESH_FAILED`, keep the prior answer and retry the
+same token. HTTP 410 requires repeating the original query. A permission denial
+requires restoring the original capability through its existing flow. Never replace
+a historical query with Today, and never generate a recap to recover a read.
 ## Habit ranking activation
 
 Release the append-only API through the existing `release.yml` workflow before

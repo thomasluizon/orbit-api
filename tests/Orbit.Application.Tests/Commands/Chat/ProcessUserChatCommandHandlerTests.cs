@@ -430,10 +430,38 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(Result.Failure<AiResponse>(error));
     }
 
-    private void SetupRecap(RetrospectiveMetrics metrics)
+    private void SetupProgress(RetrospectiveMetrics metrics)
     {
-        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new RecapResponse("week", metrics, "https://example.test/recap")));
+        _mediator.Send(Arg.Any<GetPeriodAnalyticsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(c => Result.Success(ProgressResponse(c.Arg<GetPeriodAnalyticsQuery>(), metrics)));
+    }
+
+    private static PeriodAnalyticsResponse ProgressResponse(GetPeriodAnalyticsQuery query, RetrospectiveMetrics metrics) => new(
+        new PeriodTotalCard(query.Metric, "records", metrics.TotalCompletions,
+            new(new(query.DateFrom, query.DateTo), metrics.TotalCompletions, metrics.ActiveDays,
+                metrics.CompletionSeries?.Points.Sum(p => p.Completed) ?? (int)Math.Round(metrics.CompletionRate * metrics.TotalScheduled / 100m),
+                metrics.TotalScheduled, metrics.TotalScheduled == 0 ? null : metrics.CompletionRate,
+                metrics.CurrentStreak, metrics.BestStreak), metrics.CompletionSeries ?? new CompletionSeries("day", [])),
+        null, "test-source");
+
+    private static IAiTool SummaryReadTool(IReadOnlyList<Habit>? habits = null)
+    {
+        var (card, revision) = Orbit.Application.Habits.Services.DailySummaryReadProjection.Project(
+            habits ?? [], Today, Today, TimeZoneInfo.Utc, 1, 0);
+        return ReadTool("get_daily_summary", new ToolResult(true,
+            Payload: new DailySummaryResponse("Summary", string.Empty, false, card, revision)));
+    }
+
+    private static HabitMetrics ScopedMetrics(Habit habit, HabitMetrics lifetime)
+    {
+        var (period, series) = Orbit.Application.Habits.Services.PeriodAnalyticsCalculator.Calculate(
+            [habit], new(Today.AddDays(-29), Today), TimeZoneInfo.Utc, 1);
+        return lifetime with
+        {
+            Period = period,
+            PeriodSeries = new(series.Granularity,
+            series.Points.Select(p => new PeriodMetricBucket(p.StartDate, p.EndDate, p.Scheduled, p.Completed, p.CompletionRate)).ToList())
+        };
     }
 
     private static RetrospectiveMetrics Metrics(
@@ -1156,7 +1184,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
                 .Returns([FeatureFlagKeys.AstraPartsDisabled]);
         SetupAiResponse(new AiResponse { TextMessage = "A\n[[orbit:habits:today]]\nB\n[[orbit:metrics]]" });
-        SetupRecap(Metrics(totalScheduled: 1));
+        SetupProgress(Metrics(totalScheduled: 1));
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(
             UserId, "Show today and my week",
@@ -1165,7 +1193,8 @@ public partial class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         result.Value.Parts.Should().BeNull();
-        ChatStreamEvent.Final(result.Value).ToJson().Should().Be("""
+        var legacyResponse = result.Value with { MetricsCard = result.Value.MetricsCard! with { PeriodMetrics = null } };
+        ChatStreamEvent.Final(legacyResponse).ToJson().Should().Be("""
             {"type":"final","response":{"aiMessage":"A\n\nB","actions":[],"operations":[],"pendingOperations":[],"policyDenials":[],"correlationId":null,"relatedSurfaces":null,"habitList":{"scope":"today","items":[]},"goalList":null,"metricsCard":{"period":"week","completionRate":0,"totalCompletions":0,"totalScheduled":1,"activeDays":0,"currentStreak":0,"bestStreak":0,"hasData":true,"surfaceId":"progress","series":null,"topHabitName":null,"topHabitEmoji":null,"habitId":null,"habitTitle":null,"weeklyCompletionRate":null,"monthlyCompletionRate":null,"lastCompletedDate":null},"periodInsight":null,"daySummary":null,"streak":null,"calendar":null,"recordLists":null,"accountRows":null,"followUps":null}}
             """);
     }
@@ -1184,7 +1213,7 @@ public partial class ProcessUserChatCommandHandlerTests
                     await sink(AiStreamEvent.Delta(character.ToString()));
                 return Result.Success(new AiResponse { TextMessage = responseText });
             });
-        SetupRecap(Metrics(totalScheduled: 1));
+        SetupProgress(Metrics(totalScheduled: 1));
         var events = new List<ChatStreamEvent>();
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Show today and my week",
@@ -1260,7 +1289,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_PartsClient_LimitsBlocksAndDeduplicatesAtFirstPosition()
     {
         SetupUserAndPayGate();
-        SetupRecap(Metrics(totalScheduled: 1));
+        SetupProgress(Metrics(totalScheduled: 1));
         SetupAiResponse(new AiResponse
         {
             TextMessage =
@@ -1275,7 +1304,7 @@ public partial class ProcessUserChatCommandHandlerTests
         parts.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("metrics", "habitList", "goalList");
         parts[1].Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("metrics");
         result.Value.AiMessage.Should().Be("A\n\nB\n\nC\n\nD\n\nE\n\nF");
-        await _mediator.Received(1).Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(Arg.Any<GetPeriodAnalyticsQuery>(), Arg.Any<CancellationToken>());
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "chat_metrics_card_emitted", "Free",
             Arg.Any<IReadOnlyDictionary<string, object>>());
     }
@@ -1391,8 +1420,7 @@ public partial class ProcessUserChatCommandHandlerTests
             7, 9, Today, true, false, new NextRewardCarrot(4, "Next", 80, null));
         var streak = new StreakInfoResponse(
             7, 9, Today, 1, 2, 3, false, [], 0, 3, 0, 2, true, false, null, 0);
-        var summaryTool = ReadTool("get_daily_summary", new ToolResult(true,
-            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        var summaryTool = SummaryReadTool();
         var streakTool = ReadTool("get_gamification_overview", new ToolResult(true,
             Payload: new GamificationOverviewPayload(profile, null, streak)));
         var calendarTool = ReadTool("get_calendar_overview", new ToolResult(true,
@@ -1532,11 +1560,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Here is your week:\n[[orbit:metrics]]", ToolCalls = null });
-        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new RecapResponse(
-                "week",
-                Metrics(completionRate: 75, totalCompletions: 6, totalScheduled: 8, activeDays: 4, currentStreak: 3, bestStreak: 9),
-                "https://example.test/recap")));
+        SetupProgress(Metrics(completionRate: 75, totalCompletions: 6, totalScheduled: 8, activeDays: 4, currentStreak: 3, bestStreak: 9));
         var handler = CreateHandler();
 
         var result = await handler.Handle(
@@ -1548,13 +1572,13 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Here is your week:");
-        result.Value.MetricsCard.Should().Be(new MetricsCard("week", 75, 6, 8, 4, 3, 9, true, "progress"));
+        result.Value.MetricsCard.Should().BeEquivalentTo(new MetricsCard("week", 75, 6, 8, 4, 3, 9, true, "progress"), options => options.Excluding(c => c.PeriodMetrics));
         await _mediator.Received(1).Send(
-            Arg.Is<GetRecapQuery>(query =>
+            Arg.Is<GetPeriodAnalyticsQuery>(query =>
                 query.UserId == UserId
                 && query.DateFrom == new DateOnly(2026, 3, 30)
                 && query.DateTo == Today
-                && query.Period == "week"),
+                && query.Metric == "positiveLogRecords"),
             Arg.Any<CancellationToken>());
         _productAnalytics.Received(1).CaptureUserEvent(
             UserId,
@@ -1608,7 +1632,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 await sink!(AiStreamEvent.Delta(responseText));
                 return Result.Success(new AiResponse { TextMessage = responseText });
             });
-        SetupRecap(Metrics(totalScheduled: 1));
+        SetupProgress(Metrics(totalScheduled: 1));
         var streamEvents = new List<ChatStreamEvent>();
         var handler = CreateHandler();
 
@@ -1637,7 +1661,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Your week:\n[[orbit:metrics]]", ToolCalls = null });
-        SetupRecap(Metrics());
+        SetupProgress(Metrics());
         var handler = CreateHandler();
 
         var result = await handler.Handle(
@@ -1673,7 +1697,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns([FeatureFlagKeys.AstraPeriodBlocksDisabled]);
         SetupAiResponse(new AiResponse { TextMessage = "Your week [[orbit:metrics]]" });
-        SetupRecap(Metrics(totalScheduled: 3));
+        SetupProgress(Metrics(totalScheduled: 3));
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(
             UserId, "How was my week?", ClientContext: new AgentClientContext(SupportsMetricsCard: true)),
@@ -1800,8 +1824,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(habits.AsReadOnly());
-        var tool = ReadTool("get_daily_summary", new ToolResult(true,
-            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        var tool = SummaryReadTool(habits);
         SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
 
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
@@ -1839,8 +1862,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
                 Arg.Any<CancellationToken>())
             .Returns([new HabitScheduleLogDay(done.Id, Today, 1, 0, true)]);
-        var tool = ReadTool("get_daily_summary", new ToolResult(true,
-            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        var tool = SummaryReadTool([future, overdue, due, done]);
         SetupReadToolReply("get_daily_summary", "Today [[orbit:day]] [[orbit:habits:today]]");
 
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
@@ -1861,8 +1883,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_DaySummaryWithNothingDue_ReturnsEmptyRows()
     {
         SetupUserAndPayGate();
-        var tool = ReadTool("get_daily_summary", new ToolResult(true,
-            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        var tool = SummaryReadTool();
         SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
 
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
@@ -1892,8 +1913,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit }.AsReadOnly());
-        var tool = ReadTool("get_daily_summary", new ToolResult(true,
-            Payload: new DailySummaryResponse("Summary", string.Empty, false)));
+        var tool = SummaryReadTool([habit]);
         SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
 
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
@@ -1901,9 +1921,9 @@ public partial class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         result.Value.DaySummary.Should().NotBeNull();
-        result.Value.DaySummary!.Due.Should().Be(1);
-        result.Value.DaySummary.Done.Should().Be(1);
-        result.Value.DaySummary.CompletionRate.Should().Be(100);
+        result.Value.DaySummary!.Due.Should().Be(0);
+        result.Value.DaySummary.Done.Should().Be(0);
+        result.Value.DaySummary.CompletionRate.Should().BeNull();
     }
 
     [Fact]
@@ -2112,7 +2132,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(habit);
-        var payload = new HabitMetrics(3, 8, 50, 60, 20, Today, habit.Id, habit.Title);
+        var payload = ScopedMetrics(habit, new HabitMetrics(3, 8, 50, 60, 20, Today, habit.Id, habit.Title));
         var tool = ReadTool("get_habit_metrics", new ToolResult(true, Payload: payload));
         SetupAiResponse(ToolResponse("get_habit_metrics", "call_1", "{}"));
         _aiIntentService.ContinueWithToolResultsAsync(
@@ -2145,7 +2165,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(habit);
-        var payload = new HabitMetrics(1, 1, 50, 50, 1, Today, habit.Id, habit.Title);
+        var payload = ScopedMetrics(habit, new HabitMetrics(1, 1, 50, 50, 1, Today, habit.Id, habit.Title));
         var tool = ReadTool("get_habit_metrics", new ToolResult(true, Payload: payload));
         SetupAiResponse(ToolResponse("get_habit_metrics", "call_1", "{}"));
         _aiIntentService.ContinueWithToolResultsAsync(
@@ -2158,9 +2178,11 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new AgentClientContext(SupportsMetricsCard: true)), CancellationToken.None);
 
         result.Value.MetricsCard.Should().NotBeNull();
-        result.Value.MetricsCard!.TotalScheduled.Should().Be(2);
+        result.Value.MetricsCard!.TotalScheduled.Should().Be(1);
+        result.Value.MetricsCard.PeriodMetrics!.PositiveLogRecords.Should().Be(1);
+        result.Value.MetricsCard.PeriodMetrics.MetScheduledDates.Should().Be(0);
         result.Value.MetricsCard.Series!.Points[^1].Should().Be(
-            new CompletionSeriesPoint(Today, Today, 1, 1, 100));
+            new CompletionSeriesPoint(Today, Today, 0, 0, null));
     }
 
     [Fact]
@@ -3286,8 +3308,15 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsFollowUps: true)), CancellationToken.None);
 
         var expected = new List<string> { "dynamic prompt", "dynamic supplement" };
+        var subtypeInstruction = "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
+            + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
+            + "Dated habit lists supported: False. Habit history supported: False. "
+            + "For an unsupported subtype, answer from the queried facts in text.";
         if (supportsParts && !disabled)
         {
+            if (declaresKinds)
+                expected.Add("When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. get_period_analytics returns periodTotal or periodComparison; emit it only when that kind is explicitly advertised. get_habit_history uses recordList. New period kinds supported: ");
+            expected.Add(subtypeInstruction);
             expected.Add("Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
             if (declaresKinds)
                 expected.AddRange(instructions.Select(item => item.Parts));
@@ -3295,6 +3324,7 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         else
         {
+            expected.Add(subtypeInstruction);
             expected.AddRange(instructions.Select(item => item.Legacy));
             expected.Add("After any card directive, end your reply with [[orbit:followups]] followed by two or three short next questions, one per line. Do not add other text after them.");
         }

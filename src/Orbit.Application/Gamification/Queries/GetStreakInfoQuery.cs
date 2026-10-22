@@ -31,7 +31,7 @@ public record StreakInfoResponse(
     string? LastFreezeCoveredOrigin = null,
     IReadOnlyList<DateOnly>? RepairableGapDates = null);
 
-public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoResponse>>, IConcurrencyRetryable;
+public record GetStreakInfoQuery(Guid UserId, DateOnly? AsOf = null) : IRequest<Result<StreakInfoResponse>>, IConcurrencyRetryable;
 
 public class GetStreakInfoQueryHandler(
     IGenericRepository<User> userRepository,
@@ -53,14 +53,13 @@ public class GetStreakInfoQueryHandler(
         if (!unlocked)
             return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
 
-        var recalculatedStreak = await userStreakService.CalculateAsync(
-            request.UserId, cancellationToken);
+        var recalculatedStreak = await CalculateStreakAsync(request, cancellationToken);
 
         var currentStreak = recalculatedStreak?.CurrentStreak ?? user.CurrentStreak;
         var longestStreak = recalculatedStreak?.LongestStreak ?? user.LongestStreak;
         var lastActiveDate = recalculatedStreak?.LastActiveDate ?? user.LastActiveDate;
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = request.AsOf ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var monthEnd = monthStart.AddMonths(1);
@@ -70,7 +69,7 @@ public class GetStreakInfoQueryHandler(
 
         var windowStart = today.AddDays(-29);
         var recentFreezes = await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart && sf.UsedOnDate <= today,
             cancellationToken);
 
         var isFrozenToday = recentFreezes.Any(sf => sf.UsedOnDate == today);
@@ -145,4 +144,9 @@ public class GetStreakInfoQueryHandler(
             lastFreeze?.Origin?.ToString().ToLowerInvariant(),
             repairableGapDates));
     }
+    private Task<Orbit.Domain.Models.UserStreakState?> CalculateStreakAsync(GetStreakInfoQuery request, CancellationToken ct) =>
+        request.AsOf is { } asOf
+            ? userStreakService.CalculateAtAsync(request.UserId, asOf, ct)
+            : userStreakService.CalculateAsync(request.UserId, ct);
+
 }

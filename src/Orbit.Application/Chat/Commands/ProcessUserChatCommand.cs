@@ -164,7 +164,7 @@ public partial class ProcessUserChatCommandHandler(
     ILogger<ProcessUserChatCommandHandler> logger,
     IAppConfigService appConfig,
     IContentModerationService moderation,
-    IConversationTurnRecorder? conversationRecorder = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IConversationTurnRecorder? conversationRecorder = null, ReadBlockFactory? readBlocks = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -362,6 +362,8 @@ public partial class ProcessUserChatCommandHandler(
         {
             if (request.BlockAnswer is null && HasOnlySuccessfulRankingReads(executionResults))
                 return Result.Success(CompleteRankingWithoutNarrative(request, context, executionResults));
+            if (request.BlockAnswer is null && HasOnlySuccessfulFocusedReads(executionResults))
+                return Result.Success(CompleteFocusedReadsWithoutNarrative(request, context, executionResults));
             return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
         }
         if (toolLoopResult.HadToolFailure)
@@ -398,6 +400,7 @@ public partial class ProcessUserChatCommandHandler(
         followUps = groundedReply.FollowUps;
         cards = ApplyGroundingToCards(cards, aiMessage);
         cards = EnsureHabitRankingResult(cards, request, context, executionResults);
+        cards = EnsureFocusedReadResults(cards, request, context, executionResults);
         aiMessage = cards.AiMessage;
         if (executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
@@ -593,6 +596,7 @@ public partial class ProcessUserChatCommandHandler(
     private void CaptureResponseCardEvents(
         ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
     {
+        CaptureReadMetadata(request.UserId, cards);
         void Capture(string eventName, string kind) =>
             CaptureCardEvent(request, context, eventName, kind, cards.Parts);
 
@@ -704,10 +708,22 @@ public partial class ProcessUserChatCommandHandler(
             if (segment.Directive is not { } directive || blockCount >= 3 || !seen.Add(directive))
                 continue;
 
-            var kind = DirectivePartKind(directive);
+            var bound = ResolveQueryRead(directive, results);
+            var kind = bound?.Kind ?? DirectivePartKind(directive);
+            if (bound is not null)
+            {
+                if (!ReadEnabled(bound, request.ClientContext, context.EnabledFeatureFlags))
+                {
+                    if (ReadFallback(bound.Block) is { Length: > 0 } fallback) parts.Add(new ChatTextPart(fallback));
+                    continue;
+                }
+                parts.Add(new ChatBlockPart(bound.Kind, ForClient(bound, request.ClientContext, context.EnabledFeatureFlags).Block));
+                blockCount++;
+                continue;
+            }
             if (kind is null || request.ClientContext?.PartKinds?.Contains(kind, StringComparer.Ordinal) != true)
                 continue;
-
+            if (directive.StartsWith("[[orbit:read:", StringComparison.OrdinalIgnoreCase)) continue;
             var cards = await TryBuildResponseCardsAsync(directive, request, context, results, cancellationToken);
             object? block = kind switch
             {
@@ -724,7 +740,10 @@ public partial class ProcessUserChatCommandHandler(
                 _ => null
             };
             if (block is null)
+            {
+                if (!string.IsNullOrWhiteSpace(cards.AiMessage)) parts.Add(new ChatTextPart(cards.AiMessage));
                 continue;
+            }
 
             parts.Add(new ChatBlockPart(kind, block));
             blockCount++;
@@ -759,7 +778,11 @@ public partial class ProcessUserChatCommandHandler(
     {
         try
         {
-            return await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken);
+            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags);
+            var boundRead = ResolveQueryRead(aiMessage, executionResults);
+            if (boundRead is not null && ReadEnabled(boundRead, request.ClientContext, context.EnabledFeatureFlags))
+                return ResponseFromRead(StripAllDirectives(aiMessage), ForClient(boundRead, request.ClientContext, context.EnabledFeatureFlags));
+            return RetainCompatibleCards(await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken), request.ClientContext);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -769,7 +792,7 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private static string? StripAllDirectives(string? message) =>
-        message is null ? null : Regex.Replace(message, @"\[\[orbit:[a-z:]+\]\]", string.Empty,
+        message is null ? null : Regex.Replace(message, @"\[\[orbit:(?:read:[A-Za-z0-9_-]+|[a-z:]+)\]\]", string.Empty,
             RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Trim();
 
     private async Task<ResponseCards> BuildResponseCardsAsync(
@@ -784,13 +807,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             aiMessage = strippedMessage;
             if (request.ClientContext?.SupportsHabitListCard == true)
-                habitList = HabitListCardBuilder.Build(
-                    habitListScope == HabitListCardBuilder.ScopeToday ? context.TodayHabits : context.ActiveHabits,
-                    context.UserToday,
-                    habitListScope,
-                    context.TodayFacts,
-                    request.ClientContext.SupportsHabitListDoneStatus == true,
-                    remaining);
+                habitList = await BuildHabitListFromQueryAsync(request, context, executionResults, habitListScope, remaining, cancellationToken);
         }
 
         GoalListCard? goalList = null;
@@ -800,11 +817,8 @@ public partial class ProcessUserChatCommandHandler(
             if (request.ClientContext?.SupportsGoalListCard == true)
             {
                 var includeProjections = !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraGoalProjectionsDisabled);
-                goalList = executionResults.LastSuccessfulPayload<GoalListCard>("review_goals")
-                    ?? GoalListCardBuilder.Build(
-                        context.ActiveGoals, context.UserToday, context.User?.WeekStartDay ?? 1,
-                        includeProjections);
-                if (!includeProjections)
+                goalList = await BuildGoalReadAsync(request, context, executionResults, includeProjections, cancellationToken);
+                if (!includeProjections && goalList is not null)
                     goalList = GoalListCardBuilder.WithoutProjections(goalList);
             }
         }
@@ -818,8 +832,7 @@ public partial class ProcessUserChatCommandHandler(
             {
                 var habitMetrics = executionResults.LastSuccessfulPayload<HabitMetrics>("get_habit_metrics");
                 metricsCard = habitMetrics?.HabitId is not null
-                    ? await TryBuildHabitMetricsCardAsync(request.UserId, context.UserToday, context.User?.TimeZone,
-                        habitMetrics, cancellationToken)
+                    ? MetricsCardBuilder.BuildHabit(habitMetrics)
                     : await TryBuildMetricsCardAsync(request.UserId, context.UserToday, cancellationToken);
             }
         }
@@ -834,21 +847,18 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         var habitRanking = BuildRequestedHabitRanking(aiMessage, request, context, executionResults);
-
-        var (daySummary, streak, calendar) = await BuildStatusCardsAsync(
-            aiMessage, request, context, executionResults, cancellationToken);
+        var (daySummary, streak, calendar) = BuildStatusCards(aiMessage, request, context, executionResults);
         var recordLists = BuildRecordLists(aiMessage, request, context, executionResults);
-        var accountRows = await TryBuildAccountRowsAsync(
-            aiMessage, request, context, executionResults, cancellationToken);
+        var accountRows = BuildAccountRows(aiMessage, request, context, executionResults);
 
         aiMessage = StripAllDirectives(aiMessage);
-        return new ResponseCards(aiMessage, habitList, goalList, metricsCard, periodInsight,
-            daySummary, streak, calendar, recordLists, accountRows, HabitRanking: habitRanking);
+        return CarryQueryReads(new ResponseCards(aiMessage, habitList, goalList, metricsCard, periodInsight,
+            daySummary, streak, calendar, recordLists, accountRows, HabitRanking: habitRanking),
+            executionResults, request.ClientContext, context.EnabledFeatureFlags);
     }
 
-    private async Task<AccountRowsCard?> TryBuildAccountRowsAsync(
-        string? aiMessage, ProcessUserChatCommand request, ChatContext context,
-        ToolExecutionAccumulator results, CancellationToken cancellationToken)
+    private static AccountRowsCard? BuildAccountRows(
+        string? aiMessage, ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
         if (request.ClientContext?.SupportsAccountRowsCard != true
             || context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAccountRowsDisabled)
@@ -871,16 +881,8 @@ public partial class ProcessUserChatCommandHandler(
         if (results.LastSuccessfulPayload<ProfileResponse>("get_profile") is { } profilePayload)
             return AccountRowsCardBuilder.Plan(profilePayload);
 
-        try
-        {
-            var profileResult = await execution.Mediator.Send(new GetProfileQuery(request.UserId), cancellationToken);
-            return profileResult.IsSuccess ? AccountRowsCardBuilder.Plan(profileResult.Value) : null;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogResponseCardBuildThrew(logger, ex);
-            return null;
-        }
+        return results.LastSuccessfulPayload<SubscriptionOverviewPayload>("get_subscription_overview") is { } subscription
+            ? AccountRowsCardBuilder.Plan(subscription) : null;
     }
 
     private static IReadOnlyList<RecordListCard>? BuildRecordLists(
@@ -919,9 +921,8 @@ public partial class ProcessUserChatCommandHandler(
         return cards.Count == 0 ? null : cards;
     }
 
-    private async Task<(DaySummaryCard? Day, StreakCard? Streak, CalendarCard? Calendar)> BuildStatusCardsAsync(
-        string? aiMessage, ProcessUserChatCommand request, ChatContext context,
-        ToolExecutionAccumulator executionResults, CancellationToken cancellationToken)
+    private static (DaySummaryCard? Day, StreakCard? Streak, CalendarCard? Calendar) BuildStatusCards(
+        string? aiMessage, ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults)
     {
         if (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraStatusBlocksDisabled))
             return (null, null, null);
@@ -931,12 +932,7 @@ public partial class ProcessUserChatCommandHandler(
             && aiMessage?.Contains(StatusCardBuilder.DayDirective, StringComparison.OrdinalIgnoreCase) == true
             && executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary") is not null)
         {
-            day = await TryBuildDaySummaryCardAsync(request.UserId, context.UserToday,
-                context.User?.CurrentStreak ?? 0, context.User?.TimeZone,
-                HabitListCardBuilder.Build(context.TodayHabits, context.UserToday,
-                    HabitListCardBuilder.ScopeToday, context.TodayFacts,
-                    request.ClientContext.SupportsHabitListDoneStatus == true).Items,
-                cancellationToken);
+            day = AdaptDay(executionResults.LastSuccessfulPayload<DailySummaryResponse>("get_daily_summary")?.ReadCard, request.ClientContext?.SupportsHabitListDoneStatus);
         }
 
         var streak = request.ClientContext?.SupportsStreakCard == true
@@ -953,29 +949,6 @@ public partial class ProcessUserChatCommandHandler(
         return (day, streak, calendar);
     }
 
-    private async Task<DaySummaryCard?> TryBuildDaySummaryCardAsync(
-        Guid userId, DateOnly userToday, int currentStreak, string? timeZone,
-        IReadOnlyList<HabitListCardItem> rows, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var habits = await data.HabitRepository.FindAsync(
-                h => h.UserId == userId,
-                q => q.Include(h => h.Logs.Where(log => log.Date == userToday)), cancellationToken);
-            var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-            var metrics = RetrospectiveMetricsCalculator.ComputeHistorical(
-                habits.ToList(), userToday, userToday, currentStreak, currentStreak,
-                TimeZoneHelper.FindTimeZone(timeZone), weekStartDay);
-            var overdue = habits.Count(h => !h.IsGeneral && !h.IsCompleted && h.DueDate < userToday);
-            return StatusCardBuilder.BuildDay(userToday, metrics, overdue, rows);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogResponseCardBuildThrew(logger, ex);
-            return null;
-        }
-    }
-
     private async Task<MetricsCard?> TryBuildMetricsCardAsync(
         Guid userId,
         DateOnly userToday,
@@ -985,47 +958,17 @@ public partial class ProcessUserChatCommandHandler(
         {
             var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
             var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve("week", userToday, weekStartDay);
-            var recapResult = await execution.Mediator.Send(
-                new GetRecapQuery(userId, dateFrom, dateTo, "week"),
-                cancellationToken);
-
-            if (recapResult.IsFailure)
+            var result = await execution.Mediator.Send(new GetPeriodAnalyticsQuery(userId, dateFrom, dateTo), cancellationToken);
+            if (result.IsFailure) return null;
+            var card = MetricsCardBuilder.BuildPeriod(result.Value.Total);
+            var args = JsonSerializer.SerializeToElement(new
             {
-                LogMetricsCardBuildFailed(logger, recapResult.Error);
-                return null;
-            }
+                date_from = dateFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                date_to = dateTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                metric = "positiveLogRecords"
+            });
+            return readBlocks?.Capture("get_period_analytics", args, userId, card, revisionOverride: result.Value.SourceRevision)?.Block as MetricsCard ?? card;
 
-            return MetricsCardBuilder.Build(recapResult.Value.Period, recapResult.Value.Metrics);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogMetricsCardBuildThrew(logger, ex);
-            return null;
-        }
-    }
-
-    private async Task<MetricsCard?> TryBuildHabitMetricsCardAsync(
-        Guid userId,
-        DateOnly userToday,
-        string? timeZone,
-        HabitMetrics habitMetrics,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var dateFrom = userToday.AddDays(-29);
-            var habit = await data.HabitRepository.FindOneTrackedAsync(
-                h => h.UserId == userId && h.Id == habitMetrics.HabitId,
-                q => q.Include(h => h.Logs.Where(l => l.Date >= dateFrom && l.Date <= userToday)),
-                cancellationToken);
-            if (habit is null)
-                return null;
-
-            var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-            var periodMetrics = RetrospectiveMetricsCalculator.ComputeHistorical(
-                [habit], dateFrom, userToday, habitMetrics.CurrentStreak, habitMetrics.LongestStreak,
-                TimeZoneHelper.FindTimeZone(timeZone), weekStartDay);
-            return MetricsCardBuilder.BuildHabit(habitMetrics, periodMetrics);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1127,9 +1070,6 @@ public partial class ProcessUserChatCommandHandler(
         long totalReportedTokens,
         int maxTokens,
         int toolIterations);
-
-    [LoggerMessage(EventId = 29, Level = LogLevel.Warning, Message = "Metrics card could not be built: {Error}")]
-    private static partial void LogMetricsCardBuildFailed(ILogger logger, string? error);
 
     [LoggerMessage(EventId = 30, Level = LogLevel.Warning, Message = "Metrics card computation failed")]
     private static partial void LogMetricsCardBuildThrew(ILogger logger, Exception ex);

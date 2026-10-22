@@ -23,7 +23,7 @@ public record AchievementDto(
 
 public record AchievementsResponse(IReadOnlyList<AchievementDto> Achievements);
 
-public record GetAchievementsQuery(Guid UserId) : IRequest<Result<AchievementsResponse>>;
+public record GetAchievementsQuery(Guid UserId, bool ReconcileAchievements = true) : IRequest<Result<AchievementsResponse>>;
 
 public class GetAchievementsQueryHandler(
     IGenericRepository<User> userRepository,
@@ -49,9 +49,8 @@ public class GetAchievementsQueryHandler(
                 return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
         }
 
-        await gamificationService.ReconcileFoundingAchievementsAsync(
-            request.UserId,
-            cancellationToken);
+        if (request.ReconcileAchievements)
+            await gamificationService.ReconcileFoundingAchievementsAsync(request.UserId, cancellationToken);
 
         var earnedList = (await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken))
             .Where(a => AchievementDefinitions.GetById(a.AchievementId) is not null)

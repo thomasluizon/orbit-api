@@ -45,6 +45,7 @@ public partial class ProcessUserChatCommandHandler
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
+        public Dictionary<string, QueryReadBlock> QueryReads { get; } = new(StringComparer.Ordinal);
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];
@@ -76,11 +77,9 @@ public partial class ProcessUserChatCommandHandler
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
         public T? LastSuccessfulPayload<T>(string toolName, Func<T, bool>? predicate = null) where T : class =>
-            OperationResults
-                .LastOrDefault(operation => operation.OperationId == toolName
-                    && operation.Status == AgentOperationStatus.Succeeded
-                    && operation.Payload is T payload
-                    && (predicate is null || predicate(payload)))?.Payload as T;
+            OperationResults.LastOrDefault(operation => operation.OperationId == toolName
+                && operation.Status == AgentOperationStatus.Succeeded && operation.Payload is T payload
+                && (predicate is null || predicate(payload)))?.Payload as T;
 
         public AgentOperationResult? LastSuccessfulOperation(string toolName) =>
             OperationResults.LastOrDefault(operation => operation.OperationId == toolName

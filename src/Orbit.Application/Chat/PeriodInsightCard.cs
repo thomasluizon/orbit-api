@@ -18,7 +18,8 @@ public record PeriodInsightCard(
     IReadOnlyList<RetrospectiveHabitStat> NeedsAttention,
     RetrospectiveNarrative Narrative,
     CompletionSeries? Series,
-    string SurfaceId = "progress");
+    string SurfaceId = "progress",
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ReadBlockMetadata? Read = null) : ReadBlockCard;
 
 public static class PeriodInsightCardBuilder
 {

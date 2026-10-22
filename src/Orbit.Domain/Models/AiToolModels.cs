@@ -30,7 +30,8 @@ public record AiToolCallResult(
     string? EntityId,
     string? EntityName,
     string? Error,
-    object? Payload = null);
+    object? Payload = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ReadDirective = null);
 
 /// <summary>
 /// Opaque conversation state passed between SendWithToolsAsync and ContinueWithToolResultsAsync.

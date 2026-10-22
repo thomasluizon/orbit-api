@@ -12,7 +12,7 @@ public record ChecklistTemplateResponse(
     string Name,
     IReadOnlyList<string> Items);
 
-public record GetChecklistTemplatesQuery(Guid UserId) : IRequest<Result<IReadOnlyList<ChecklistTemplateResponse>>>;
+public record GetChecklistTemplatesQuery(Guid UserId, bool BypassCache = false) : IRequest<Result<IReadOnlyList<ChecklistTemplateResponse>>>;
 
 public class GetChecklistTemplatesQueryHandler(
     IGenericRepository<ChecklistTemplate> repository,
@@ -21,7 +21,7 @@ public class GetChecklistTemplatesQueryHandler(
     public async Task<Result<IReadOnlyList<ChecklistTemplateResponse>>> Handle(GetChecklistTemplatesQuery request, CancellationToken cancellationToken)
     {
         var cacheKey = ReferenceCacheKeys.ChecklistTemplates(request.UserId);
-        if (cache.TryGetValue(cacheKey, out IReadOnlyList<ChecklistTemplateResponse>? cached) && cached is not null)
+        if (!request.BypassCache && cache.TryGetValue(cacheKey, out IReadOnlyList<ChecklistTemplateResponse>? cached) && cached is not null)
             return Result.Success(cached);
 
         var templates = await repository.FindAsync(
@@ -29,7 +29,7 @@ public class GetChecklistTemplatesQueryHandler(
             cancellationToken);
 
         var result = templates
-            .OrderBy(t => t.CreatedAtUtc)
+            .OrderBy(t => t.CreatedAtUtc).ThenBy(t => t.Id)
             .Select(t => new ChecklistTemplateResponse(t.Id, t.Name, t.Items))
             .ToList();
 

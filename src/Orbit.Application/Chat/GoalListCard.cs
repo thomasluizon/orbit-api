@@ -5,7 +5,10 @@ using Orbit.Application.Goals.Services;
 
 namespace Orbit.Application.Chat;
 
-public record GoalListCard(IReadOnlyList<GoalListCardItem> Items);
+public record GoalListCard(IReadOnlyList<GoalListCardItem> Items,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? TotalCount = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? SourceRevision = null) : ReadBlockCard;
 
 public record GoalListCardItem(
     string Id,
@@ -17,7 +20,8 @@ public record GoalListCardItem(
     string? TrackingStatus = null,
     decimal? ProgressPercentage = null,
     string? ProjectedCompletionDate = null,
-    int? DaysToDeadline = null);
+    int? DaysToDeadline = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Status = null);
 
 public static partial class GoalListCardBuilder
 {
@@ -67,17 +71,20 @@ public static partial class GoalListCardBuilder
             metrics?.VelocityPerDay > 0
                 ? metrics.ProjectedCompletionDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                 : null,
-            metrics?.DaysToDeadline);
+            metrics?.DaysToDeadline, goal.Status.ToString());
     }
 
     public static GoalListCard WithoutProjections(GoalListCard card) =>
-        new(card.Items.Select(item => item with
+        card with
         {
-            TrackingStatus = null,
-            ProgressPercentage = null,
-            ProjectedCompletionDate = null,
-            DaysToDeadline = null
-        }).ToList());
+            Items = card.Items.Select(item => item with
+            {
+                TrackingStatus = null,
+                ProgressPercentage = null,
+                ProjectedCompletionDate = null,
+                DaysToDeadline = null
+            }).ToList()
+        };
 
     [GeneratedRegex(@"\[\[orbit:goals\]\]", RegexOptions.IgnoreCase)]
     private static partial Regex DirectiveRegex();

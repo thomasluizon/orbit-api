@@ -14,13 +14,15 @@ namespace Orbit.Application.Habits.Queries;
 /// contract only for legacy mobile clients (pre-July-2026 builds) that still parse and render a
 /// nudge chip; it is always mapped empty regardless of cache contents and is no longer generated.
 /// </summary>
-public record DailySummaryResponse(string Summary, string Insight, bool FromCache);
+public record DailySummaryResponse(string Summary, string Insight, bool FromCache,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Application.Chat.DaySummaryCard? ReadCard = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? SourceRevision = null);
 
 public record GetDailySummaryQuery(
     Guid UserId,
     DateOnly DateFrom,
     DateOnly DateTo,
-    string Language) : IRequest<Result<DailySummaryResponse>>;
+    string Language, bool GenerateNarrative = true) : IRequest<Result<DailySummaryResponse>>;
 
 public record HabitSummarySlipDate(Guid HabitId, DateOnly Date);
 
@@ -45,7 +47,7 @@ public class GetDailySummaryQueryHandler(
         if (user is null)
             return Result.Failure<DailySummaryResponse>(ErrorMessages.UserNotFound);
 
-        if (!user.AiSummaryEnabled)
+        if (request.GenerateNarrative && !user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>(ErrorMessages.AiSummaryDisabled);
 
         string effectiveLanguage;
@@ -70,10 +72,9 @@ public class GetDailySummaryQueryHandler(
             effectiveLanguage,
             SummaryTimeBucket(currentLocalTime));
 
-        if (cache.TryGetValue(cacheKey, out DailySummaryContent? cached) && cached is not null)
-        {
-            return Result.Success(new DailySummaryResponse(cached.Summary, string.Empty, FromCache: true));
-        }
+        cache.TryGetValue(cacheKey, out ScopedSummary? cached);
+        var fromCache = request.GenerateNarrative && cached is not null
+            && cached.From == request.DateFrom && cached.To == request.DateTo;
 
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
@@ -97,6 +98,12 @@ public class GetDailySummaryQueryHandler(
 
         var lastBadHabitSlipDates = await LoadLastBadHabitSlipDates(
             summaryHabits, userToday, cancellationToken);
+
+        var (readCard, revision) = DailySummaryReadProjection.Project(summaryHabits,
+            request.DateFrom, request.DateTo, userTimeZone, user.WeekStartDay, user.CurrentStreak);
+        if (!request.GenerateNarrative || fromCache)
+            return Result.Success(new DailySummaryResponse(fromCache ? cached!.Content.Summary : string.Empty,
+                string.Empty, fromCache, readCard, revision));
 
         var summaryResult = await summaryService.GenerateSummaryAsync(
             summaryHabits,
@@ -126,11 +133,13 @@ public class GetDailySummaryQueryHandler(
             AbsoluteExpiration = expiry
         };
 
-        cache.Set(cacheKey, summaryResult.Value, cacheOptions);
+        cache.Set(cacheKey, new ScopedSummary(request.DateFrom, request.DateTo, summaryResult.Value), cacheOptions);
 
         return Result.Success(new DailySummaryResponse(
-            summaryResult.Value.Summary, string.Empty, FromCache: false));
+            summaryResult.Value.Summary, string.Empty, FromCache: false, readCard, revision));
     }
+
+    private sealed record ScopedSummary(DateOnly From, DateOnly To, DailySummaryContent Content);
 
     private static IReadOnlyList<HabitSummaryLogWindow> BuildLogWindows(
         IEnumerable<Habit> habits, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday, int weekStartDay)

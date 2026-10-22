@@ -35,7 +35,7 @@ public static class FollowUpDirective
 public sealed class ResponseDirectiveParser
 {
     private const string DirectivePrefix = "[[orbit:";
-    private static readonly Regex DirectiveRegex = new(@"\[\[orbit:[a-z:]+\]\]",
+    private static readonly Regex DirectiveRegex = new(@"\[\[orbit:(?:read:[A-Za-z0-9_-]+|[a-z:]+)\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     private readonly StringBuilder _visible = new();

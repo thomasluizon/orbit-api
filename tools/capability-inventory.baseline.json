@@ -1847,6 +1847,32 @@
         "name": "get_calendar_overview",
         "parameters": [
           {
+            "name": "as_of",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "calendar_ids",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "date_from",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "include_auto_sync_state",
             "type": [
               "boolean",
@@ -1877,6 +1903,16 @@
               "null"
             ],
             "required": false
+          },
+          {
+            "name": "window_from_utc",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "window_to_utc",
+            "type": "string",
+            "required": false
           }
         ]
       },
@@ -1898,6 +1934,11 @@
             "required": false
           },
           {
+            "name": "generate_narrative",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "language",
             "type": "string",
             "required": false
@@ -1907,6 +1948,11 @@
       {
         "name": "get_gamification_overview",
         "parameters": [
+          {
+            "name": "as_of",
+            "type": "string",
+            "required": false
+          },
           {
             "name": "include_achievements",
             "type": "boolean",
@@ -1925,8 +1971,48 @@
         ]
       },
       {
+        "name": "get_habit_history",
+        "parameters": [
+          {
+            "name": "date_from",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "habit_id",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "limit",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "offset",
+            "type": "integer",
+            "required": false
+          }
+        ]
+      },
+      {
         "name": "get_habit_metrics",
         "parameters": [
+          {
+            "name": "date_from",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "required": false
+          },
           {
             "name": "habit_id",
             "type": "string",
@@ -2001,11 +2087,78 @@
       },
       {
         "name": "get_notifications",
-        "parameters": []
+        "parameters": [
+          {
+            "name": "limit",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "offset",
+            "type": "integer",
+            "required": false
+          }
+        ]
       },
       {
         "name": "get_notion_tasks",
         "parameters": []
+      },
+      {
+        "name": "get_period_analytics",
+        "parameters": [
+          {
+            "name": "baseline_from",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "baseline_to",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "date_from",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "is_bad_habit",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "metric",
+            "type": "string",
+            "required": true,
+            "values": [
+              "distinctLoggedDates",
+              "metScheduledDates",
+              "positiveLogRecords",
+              "scheduledDates"
+            ]
+          },
+          {
+            "name": "search",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "tag",
+            "type": "string",
+            "required": false
+          }
+        ]
       },
       {
         "name": "get_profile",
@@ -2022,6 +2175,21 @@
       {
         "name": "get_retrospective",
         "parameters": [
+          {
+            "name": "date_from",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "generate_narrative",
+            "type": "boolean",
+            "required": false
+          },
           {
             "name": "language",
             "type": "string",
@@ -2373,6 +2541,11 @@
             "required": false
           },
           {
+            "name": "offset",
+            "type": "integer",
+            "required": false
+          },
+          {
             "name": "search",
             "type": "string",
             "required": false
@@ -2441,6 +2614,11 @@
           },
           {
             "name": "limit",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "offset",
             "type": "integer",
             "required": false
           },
@@ -6036,6 +6214,9 @@
           "direct": [
             {
               "tool": "get_habit_metrics"
+            },
+            {
+              "tool": "get_period_analytics"
             }
           ],
           "viaOperations": []
@@ -6050,6 +6231,10 @@
           "viaOperations": [
             {
               "tool": "get_habit_metrics",
+              "via": "execute_agent_operation_v2"
+            },
+            {
+              "tool": "get_period_analytics",
               "via": "execute_agent_operation_v2"
             }
           ]
@@ -6215,6 +6400,9 @@
           "verdict": "covered",
           "direct": [
             {
+              "tool": "get_habit_history"
+            },
+            {
               "tool": "query_habits"
             }
           ],
@@ -6237,6 +6425,10 @@
             }
           ],
           "viaOperations": [
+            {
+              "tool": "get_habit_history",
+              "via": "execute_agent_operation_v2"
+            },
             {
               "tool": "query_habits",
               "via": "execute_agent_operation_v2"
