@@ -197,3 +197,85 @@ This capability requires an ordinary API deployment. It needs no configuration,
 secret, schema migration, backfill or mobile contract change. Local verification
 does not claim the production payload-construction cause is fixed. Stryker remains
 owned by CI.
+
+## Invariant calibration and permanent mutation eligibility
+
+The proof follow-up preserves the deployed runtime at
+`8ac0be8d24398be490a5fb1aa2101dd5d354cb65`. Its authored changes strengthen existing
+tests and append the twelve Application and two Infrastructure recovery owners to
+the existing Stryker allowlists. Prior includes, excludes, reporters, test projects,
+mutation level and thresholds are retained.
+
+The unchanged 72-case recovery/preparation selection passed before these test
+changes. The unchanged unrelated-candidate test also passed with a temporary real
+binder fallback from zero equivalent matches to the first same-tool occurrence.
+That passing result exposed its earlier unconditional rejection: the unrelated
+candidate failed preparation before the binder could evaluate its meaning.
+
+`RecoveryCapability_UnrelatedSameNameDoesNotConsumeEitherOccurrence` now injects
+one rejection for each complete historical original payload, comparing JSON values
+so the handler's Unicode escaping does not change the injection. The unrelated
+candidate passes the actual preparer with successful argument validation. Both
+original gateway responses must be actual `RejectedBeforeDispatchResponse`
+instances. The test captures repository additions and requires no extra request,
+no saved habit, two retained failures, no proposal and the existing localized
+failure text. Its injector establishes only the rejection precondition; the real
+tool and central binder still establish semantic intent.
+
+The same fallback then made that strengthened test fail: three requests instead of
+two, one saved original adaptation habit and one consumed original failure. The
+unrelated title was not saved because execution retained the original arguments.
+The useful corrected-preview control passed, and the restored four-case selection
+passed. A preliminary raw-JSON injection attempt did not establish the original
+certificates and is excluded from this calibration evidence.
+
+All temporary faults modify actual production owners and restore their exact
+original bytes in `finally`. Full stdout, exits, baseline/fault/restored files and
+SHA-256 receipts are retained in the private proof packet. No fault is committed.
+
+| Guard | Temporary fault and observed sensitivity |
+| --- | --- |
+| Successful sibling | Remove only the central failed-occurrence eligibility conjunction, accepting `PreparedToolOperationResponse` while retaining complete intent equality. Both existing false/true replay cases fail: three/four actual requests and two/three repository additions instead of two requests and one addition. The original failed outcome and truthful terminal assertions remain required. Useful preview and legitimate two-habit recovery controls pass. All four cases pass after restoration. |
+| Unrelated same-name candidate | Add only the zero-match first-same-tool fallback. The unchanged weak test passes; the corrected preconditions expose the unauthorized third request and consumed failure. Uniqueness, no-effect evidence, selected-occurrence checks and original-argument dispatch remain intact. |
+| Different multiplexed action | Remove complete intent equality in the real binder. Calendar `dismiss_import`, subscription `create_portal` and profile `set_language` cause extra gateway requests and fail. Notification `mark_all_read`, notification `delete_all` and account `reset_account` stay green because preparation excludes dynamic target sets. API-key `revoke` stays green because its referenced owned key is absent and the real command check returns no preparation. All seven cases remain required. The seven boundary cases, complete-value preparation cases covering every owner and useful preview remain controls. The 42-case selection passes after restoration. |
+| Opposite setter | The equality-only fault makes plain `set_auto_sync enabled:false` fail with an extra request. The forged `retry_of` and empty-calendar cases remain green behind independent shape/preparation checks. This repeats the exact delivered-owner fault with SHA-256 `6f4b60675a38f9f6f1c4f9ca196d1576f90c37c52c813ec225f8cf30adddca0f`; the original committed binding fault retains its separate attribution. Original `enabled:true` arguments still execute, so this is unauthorized dispatch evidence, not an opposite-value save. |
+| Forged model identity | First permit only the legacy `retry_of` field in the actual shape owner: all three refusal cases and useful preview pass with semantic equality intact. Then remove actual intent equality too: both the forged and plain opposite setters fail on extra gateway requests; empty selection and useful preview remain green. Both source owners are restored and all four cases pass. This is an injected unsafe-owner calibration, not a checkout of the removed historical strategy or final support for `retry_of`. |
+
+Removing `IMcpOnlyAiTool` from the actual existing `ManageFeatureFlagsTool` also
+makes both the exposed-inventory and preparation-owner discovery guards fail while
+useful recovery stays green. Restoring the marker restores the guards. Their
+expected fixture inventory is unchanged.
+
+The two published mutation jobs for the original feature selected the correct
+projects but tested **zero mutants** after config/since filtering. Application
+created 21,187 mutants, with 2,101 compile errors, 18,338 removed by the mutate
+filter and 748 removed by the since filter. Infrastructure created 16,241, with
+831 compile errors, 15,071 removed by mutate and 339 removed by since. Their green
+exits do not prove recovery mutation coverage. The separate 23 capability-inventory
+scanner mutations do not cover these runtime owners either.
+
+The pinned installed Stryker 4.16.0 package identifies upstream commit
+`f9109e24c615a7030a3b33e5532c665c974e4ec5`. Its actual CLI reader accepts repeated
+`--mutate` arguments and `--since:<committish>`. `SinceTargetInput` accepts a branch
+or commit, and `SinceMutantFilter` enables whole changed source files and can enable
+mutants covered by changed C# tests. The original included base is therefore the
+explicit acceptance target, rather than a follow-up comparison only to current main:
+
+```sh
+dotnet tool restore
+dotnet stryker -f stryker-config.application.json --since:2c4381c66d4c502d7f47af29e3a909350882441c --concurrency 4
+dotnet stryker -f stryker-config.infrastructure.json --since:2c4381c66d4c502d7f47af29e3a909350882441c --concurrency 4
+```
+
+The private detached acceptance packet also supplies the existing workflow's
+repeated-argument form to restrict that run to exactly the fourteen recovery
+owners without changing canonical prior scope. Every owner must appear as eligible
+in the actual report. An owner with no mutable sites requires source evidence;
+config/since exclusion does not qualify. The actual producer's JSON serialization
+and disposition definitions must be checked before reading report fields. Generated,
+compile-error, ignored and uncovered mutants are not tested safety mutants.
+
+Targeted Stryker acceptance is **PENDING** for the root/CI runner. This follow-up
+does not claim nonzero tested mutants or ticket completion. Actual nonzero tested
+results, per-owner dispositions and review of critical invariant mutants remain
+required even with the existing unchanged break threshold of zero.

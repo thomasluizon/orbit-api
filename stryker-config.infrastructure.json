@@ -11,7 +11,9 @@
       "!**/Services/GoogleTokenService.cs",
       "!**/Services/GooglePlayPushTokenValidator.cs",
       "!**/Services/UserDateService.cs",
-      "!**/Services/StreakFreezeAutoActivationService.cs"
+      "!**/Services/StreakFreezeAutoActivationService.cs",
+      "**/Services/AgentOperationExecutor.cs",
+      "**/Services/Prompts/Sections/Static/ToolFailureSection.cs"
     ],
     "mutation-level": "Standard",
     "reporters": ["cleartext", "html", "json"],
