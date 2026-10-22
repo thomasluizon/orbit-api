@@ -33,7 +33,7 @@ public class EmailCopyTests
     {
         var sources = new (string Email, object Copy)[]
         {
-            ("VerificationCode", EmailCopy.VerificationCode(isPtBr)),
+            ("VerificationCode", EmailCopy.VerificationCode(isPtBr, "123456")),
             ("Welcome", EmailCopy.Welcome(isPtBr, "Alex")),
             ("AccountDeletion", EmailCopy.AccountDeletion(isPtBr)),
             ("ApiKeyCreation", EmailCopy.ApiKeyCreation(isPtBr)),
