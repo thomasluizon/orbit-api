@@ -191,6 +191,94 @@ public class OAuthLoginPageTests : IDisposable
         page.Should().Contain("autocomplete=\"one-time-code\"");
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void Page_ActiveCodeCellHasOneInsetIndicator_AndKeepsErrorAndDisabledStates(string language)
+    {
+        var css = RenderedCss(RenderPage(language));
+
+        var active = CssRule(css, ".cell[data-active]");
+        active.Should().Contain("box-shadow: inset 0 0 0 2px var(--primary);")
+            .And.NotContain("outline");
+        CssRule(css, ".code input").Should().Contain("outline: none;").And.Contain("opacity: 0;");
+        CssRule(css, ".code[data-error] .cell").Should().Contain("box-shadow: inset 0 0 0 2px var(--status-bad);");
+        css.IndexOf(".code[data-error] .cell", StringComparison.Ordinal)
+            .Should().BeGreaterThan(css.IndexOf(".cell[data-active]", StringComparison.Ordinal));
+        CssRule(css, ".code[data-disabled]").Should().Contain("opacity: 0.4;");
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void EveryPage_UsesOneFocusIndicatorForEachControl(string language)
+    {
+        var login = OAuthLoginPage.Render("client", "https://claude.ai/callback", "state", "challenge", "S256",
+            language: language, appleSignInEnabled: true);
+        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(Guid.NewGuid(), "challenge",
+            "https://claude.ai/callback", "client", "state", null, language));
+        var consent = _controller.Consent(ticket).Should().BeOfType<ContentResult>().Subject.Content!;
+        _controller.Request.Headers.AcceptLanguage = language;
+        var invalid = _controller.Consent("missing").Should().BeOfType<ContentResult>().Subject.Content!;
+        var completed = OAuthConsentPage.RenderCompleted(language);
+
+        foreach (var page in new[] { login, consent, invalid, completed })
+        {
+            var css = RenderedCss(page);
+            CssRule(css, ":focus-visible").Should().Contain("outline: 2px solid var(--primary);")
+                .And.Contain("outline-offset: 2px;").And.NotContain("box-shadow");
+            CssRule(css, ".control:focus-within").Should().Contain("outline: 2px solid var(--primary);")
+                .And.Contain("outline-offset: 2px;").And.NotContain("box-shadow");
+            CssRule(css, ".control input").Should().Contain("outline: none;").And.NotContain("box-shadow");
+            CssRule(css, ".code input").Should().Contain("outline: none;").And.NotContain("box-shadow");
+            CssRule(css, ".cell[data-active]").Should().NotContain("outline");
+            Regex.Matches(css, @"[^{}]*:focus(?:-visible|-within)?[^{}]*\{[^{}]*\}")
+                .Should().HaveCount(2, "only the shared outline and the email wrapper own focus rules");
+            CssRule(css, ".btn").Should().Contain("border-radius: var(--r-pill);");
+            CssRule(css, ".control").Should().Contain("border-radius: var(--r-well);");
+        }
+
+        var loginControls = Regex.Matches(login, @"<(?:input|button|a)\b[^>]*>").Select(match => match.Value).ToArray();
+        loginControls.Should().HaveCount(8);
+        foreach (var id in new[] { "email", "code-input" })
+            loginControls.Should().ContainSingle(tag => tag.Contains($"id=\"{id}\"", StringComparison.Ordinal)
+                && tag.StartsWith("<input", StringComparison.Ordinal));
+        foreach (var id in new[] { "send-code", "google", "apple", "change-email", "verify", "resend" })
+            loginControls.Should().ContainSingle(tag => tag.Contains($"id=\"{id}\"", StringComparison.Ordinal)
+                && tag.Contains("class=\"btn ", StringComparison.Ordinal));
+        Regex.Matches(consent, @"<button\b[^>]*>").Should().HaveCount(3)
+            .And.OnlyContain(match => match.Value.Contains("class=\"btn ", StringComparison.Ordinal));
+        Regex.Matches(consent, @"<summary>").Should().ContainSingle();
+        foreach (var terminalPage in new[] { invalid, completed })
+            Regex.Matches(terminalPage, @"<(?:input|button|a|summary)\b").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Page_ActiveCodeCellUsesABorderWhenForcedColorsRemoveShadows()
+    {
+        var css = RenderedCss(RenderPage());
+        var forcedColors = Regex.Match(css, @"@media\s*\(forced-colors:\s*active\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}");
+
+        forcedColors.Success.Should().BeTrue("forced colors remove the inset shadow");
+        CssRule(forcedColors.Groups[1].Value, ".cell").Should().Contain("border: 1px solid CanvasText;");
+        CssRule(forcedColors.Groups[1].Value, ".cell[data-active]").Should()
+            .Contain("border: 2px solid Highlight;").And.NotContain("outline");
+    }
+
+    private static string RenderedCss(string page)
+    {
+        var style = Regex.Match(page, "<style>(.*?)</style>", RegexOptions.Singleline);
+        style.Success.Should().BeTrue();
+        return style.Groups[1].Value;
+    }
+
+    private static string CssRule(string css, string selector)
+    {
+        var rule = Regex.Match(css, @"(?:^|[{}])\s*" + Regex.Escape(selector) + @"\s*\{([^{}]*)\}");
+        rule.Success.Should().BeTrue($"the rendered stylesheet must define {selector}");
+        return rule.Groups[1].Value;
+    }
+
     [Fact]
     public void Page_KeepsBothSignInPathsAndSendsTheRequestLanguage()
     {

@@ -281,9 +281,13 @@ h1 {
   color: var(--fg-1);
   box-shadow: inset 0 0 0 1px var(--border-control);
 }
-.cell[data-active] { box-shadow: inset 0 0 0 2px var(--primary); outline: 2px solid var(--primary); outline-offset: 2px; }
+.cell[data-active] { box-shadow: inset 0 0 0 2px var(--primary); }
 .code[data-error] .cell { box-shadow: inset 0 0 0 2px var(--status-bad); }
 .code[data-disabled] { opacity: 0.4; }
+@media (forced-colors: active) {
+  .cell { border: 1px solid CanvasText; }
+  .cell[data-active] { border: 2px solid Highlight; }
+}
 .scopes {
   display: flex;
   flex-direction: column;
