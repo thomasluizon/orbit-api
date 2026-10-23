@@ -175,7 +175,7 @@ public sealed class PendingOperationChangePreviewerTests
         var reading = CreateHabit("Ler 10 minutos", null);
         var allergy = CreateHabit("Alergia", null);
         allergy.Update(new HabitUpdateParams(allergy.Title, "Ler sobre água e meditação",
-            allergy.FrequencyUnit, allergy.FrequencyQuantity, allergy.Days.ToArray(), allergy.IsBadHabit, allergy.DueDate))
+            allergy.FrequencyUnit, allergy.FrequencyQuantity, allergy.Days.ToArray(), allergy.IsBadHabit, allergy.NextDueDate))
             .IsSuccess.Should().BeTrue();
         Setup([water, reading, allergy]);
         foreach (var search in new[] { "agua", "ÁGUA", "agu beb" })

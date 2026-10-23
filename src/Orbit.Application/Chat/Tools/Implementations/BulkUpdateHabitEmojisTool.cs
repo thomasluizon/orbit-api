@@ -347,7 +347,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             habit.FrequencyQuantity,
             habit.Days.ToList(),
             habit.IsBadHabit,
-            habit.DueDate,
+            habit.NextDueDate,
             DueTime: habit.DueTime,
             DueEndTime: habit.DueEndTime,
             ReminderEnabled: habit.ReminderEnabled,

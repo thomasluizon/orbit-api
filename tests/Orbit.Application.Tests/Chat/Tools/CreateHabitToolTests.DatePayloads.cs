@@ -80,7 +80,7 @@ public partial class CreateHabitToolTests
         var child = habits.Single(habit => habit.ParentHabitId == parent.Id);
         child.Schedule.Should().Be(HabitSchedule.OneTime);
         child.Days.Should().BeEmpty();
-        child.DueDate.Should().Be(new DateOnly(2026, 8, 26));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 8, 26));
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public partial class CreateHabitToolTests
         child.Schedule.Should().Be(HabitSchedule.Recurring);
         child.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         child.Days.Should().Equal(DayOfWeek.Thursday);
-        child.DueDate.Should().Be(new DateOnly(2026, 8, 27));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 8, 27));
         var inherited = AddedHabits().Single(habit => habit.Title == "Aula herdada");
         inherited.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         inherited.Days.Should().Equal(DayOfWeek.Wednesday);
@@ -220,7 +220,7 @@ public partial class CreateHabitToolTests
         child.FrequencyQuantity.Should().Be(quantity);
         child.IntervalWeeks.Should().Be(2);
         child.Days.Should().BeEmpty();
-        child.DueDate.Should().Be(new DateOnly(2026, 8, 27));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 8, 27));
     }
 
     [Fact]
@@ -251,7 +251,7 @@ public partial class CreateHabitToolTests
         habit.FrequencyQuantity.Should().BeNull();
         habit.IntervalWeeks.Should().BeNull();
         habit.Days.Should().BeEmpty();
-        habit.DueDate.Should().Be(date);
+        habit.NextDueDate.Should().Be(date);
         habit.DueTime.Should().Be(new TimeOnly(11, 15));
         habit.DueEndTime.Should().Be(new TimeOnly(12, 5));
     }

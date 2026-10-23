@@ -239,9 +239,9 @@ public class GetHabitScheduleQueryHandler(
         var logDays = await scheduleLogReader.ReadDaysAsync(candidateIds, logFrom, logTo, cancellationToken);
         var logFacts = new HabitScheduleLogFacts(logDays);
         var dueDateResolution = allHabits
-            .Where(habit => habit.DueDate >= logFrom
-                && habit.DueDate <= logTo
-                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
+            .Where(habit => habit.NextDueDate >= logFrom
+                && habit.NextDueDate <= logTo
+                && logFacts.ResolvedDates(habit.Id).Contains(habit.NextDueDate))
             .Select(habit => habit.Id)
             .ToHashSet();
         if (request.IncludeOverdue)
@@ -249,7 +249,7 @@ public class GetHabitScheduleQueryHandler(
             var oldDueDateIds = allHabits
                 .Where(habit => habit.Schedule == HabitSchedule.Recurring
                     && !habit.IsBadHabit
-                    && habit.DueDate < logFrom)
+                    && habit.NextDueDate < logFrom)
                 .Select(habit => habit.Id)
                 .ToArray();
             if (oldDueDateIds.Length > 0)
@@ -373,7 +373,7 @@ public class GetHabitScheduleQueryHandler(
                     h.FrequencyUnit,
                     h.FrequencyQuantity,
                     h.IntervalWeeks,
-                    h.DueDate,
+                    h.NextDueDate,
                     h.ScheduledStartDate,
                     h.OriginalDayOfMonth,
                     h.EndDate,

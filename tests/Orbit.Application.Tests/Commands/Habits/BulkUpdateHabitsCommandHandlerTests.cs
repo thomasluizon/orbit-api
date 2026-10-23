@@ -153,8 +153,8 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.Value.Should().Be(new BulkHabitMutationResult(205, 205, 0, false));
-        tagged.Should().OnlyContain(habit => habit.DueDate == Today.AddDays(1));
-        untagged.Should().OnlyContain(habit => habit.DueDate == Today);
+        tagged.Should().OnlyContain(habit => habit.NextDueDate == Today.AddDays(1));
+        untagged.Should().OnlyContain(habit => habit.NextDueDate == Today);
     }
 
     [Fact]

@@ -25,17 +25,17 @@ public static class HabitScheduleService
         if (habit.Schedule == HabitSchedule.Flexible)
         {
             if (habit.FrequencyUnit is null) return false;
-            return target >= habit.DueDate
+            return target >= habit.NextDueDate
                 && IsActiveIntervalWeek(habit, target, weekStartDay);
         }
 
-        var anchor = habit.DueDate;
+        var anchor = habit.NextDueDate;
         var unit = habit.FrequencyUnit;
         var qty = habit.FrequencyQuantity ?? 1;
 
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
-            return target == habit.DueDate;
+            return target == habit.NextDueDate;
         }
 
         if (target < anchor) return false;
@@ -210,7 +210,7 @@ public static class HabitScheduleService
         var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.SpecifyKind(habit.CreatedAtUtc, DateTimeKind.Utc),
             userTimeZone));
-        var recurrenceAnchor = habit.ScheduledStartDate ?? habit.DueDate;
+        var recurrenceAnchor = habit.ScheduledStartDate ?? habit.NextDueDate;
         var scheduledStart = habit.ScheduledStartDate ?? createdDate;
         var effectiveFrom = Max(from, createdDate, scheduledStart);
         var effectiveTo = habit.EndDate.HasValue && habit.EndDate.Value < to
@@ -242,7 +242,7 @@ public static class HabitScheduleService
 
     public static bool WasScheduledOnDate(Habit habit, DateOnly target, int weekStartDay)
     {
-        var start = habit.ScheduledStartDate ?? habit.DueDate;
+        var start = habit.ScheduledStartDate ?? habit.NextDueDate;
         return target >= start
             && (!habit.EndDate.HasValue || target <= habit.EndDate.Value)
             && IsHistoricallyDueOnDate(habit, target, start, weekStartDay);
@@ -260,7 +260,7 @@ public static class HabitScheduleService
 
         var unit = habit.FrequencyUnit;
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
-            return target == habit.DueDate;
+            return target == habit.NextDueDate;
 
         return MatchesFrequency(
             habit,
@@ -294,11 +294,11 @@ public static class HabitScheduleService
 
         var unit = habit.FrequencyUnit;
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
-            return target == habit.DueDate;
+            return target == habit.NextDueDate;
 
         if (target < habitCreationDate) return false;
 
-        return MatchesFrequency(habit, target, habit.DueDate, unit, habit.FrequencyQuantity ?? 1, weekStartDay);
+        return MatchesFrequency(habit, target, habit.NextDueDate, unit, habit.FrequencyQuantity ?? 1, weekStartDay);
     }
 
     private static List<DateOnly> GetStreakScheduledDates(
@@ -334,19 +334,19 @@ public static class HabitScheduleService
     {
         if (habit.Schedule != HabitSchedule.Recurring || habit.IsBadHabit)
             return false;
-        if (habit.DueDate >= today)
+        if (habit.NextDueDate >= today)
             return false;
-        if ((!habit.EndDate.HasValue || habit.DueDate <= habit.EndDate.Value)
-            && IsHabitDueOnDate(habit, habit.DueDate, weekStartDay)
+        if ((!habit.EndDate.HasValue || habit.NextDueDate <= habit.EndDate.Value)
+            && IsHabitDueOnDate(habit, habit.NextDueDate, weekStartDay)
             && !dueDateResolved
-            && !IsOccurrenceResolved(habit, habit.DueDate, resolvedDates))
+            && !IsOccurrenceResolved(habit, habit.NextDueDate, resolvedDates))
             return true;
 
         var latestOccurrence = today.AddDays(-1);
         if (habit.EndDate.HasValue && habit.EndDate.Value < latestOccurrence)
             latestOccurrence = habit.EndDate.Value;
 
-        var earliestOccurrence = habit.DueDate;
+        var earliestOccurrence = habit.NextDueDate;
         var boundedStart = latestOccurrence.AddDays(-Math.Min(
             AppConstants.MaxRangeDays - 1,
             latestOccurrence.DayNumber));
@@ -390,7 +390,7 @@ public static class HabitScheduleService
 
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return !habit.IsCompleted
-                && habit.DueDate < referenceDate
+                && habit.NextDueDate < referenceDate
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= referenceDate);
 
         if (IsHabitDueOnDate(habit, referenceDate, weekStartDay))
@@ -406,7 +406,7 @@ public static class HabitScheduleService
     public static bool IsFlexibleHabitDueOnDate(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
         if (habit.Schedule != HabitSchedule.Flexible || habit.FrequencyUnit is null) return false;
-        if (target < habit.DueDate) return false;
+        if (target < habit.NextDueDate) return false;
         if (!IsActiveIntervalWeek(habit, target, weekStartDay)) return false;
         return GetRemainingCompletions(habit, target, logs, weekStartDay) > 0;
     }
@@ -506,12 +506,12 @@ public static class HabitScheduleService
     private static List<HabitInstanceItem> GetOneTimeTaskInstance(
         Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday)
     {
-        if (habit.DueDate < dateFrom || habit.DueDate > dateTo)
+        if (habit.NextDueDate < dateFrom || habit.NextDueDate > dateTo)
             return [];
 
-        var log = habit.Logs.FirstOrDefault(l => l.Date == habit.DueDate);
-        var status = ResolveInstanceStatus(log, habit.DueDate, userToday, habit.IsBadHabit);
-        return [new HabitInstanceItem(habit.DueDate, status, log?.Id)];
+        var log = habit.Logs.FirstOrDefault(l => l.Date == habit.NextDueDate);
+        var status = ResolveInstanceStatus(log, habit.NextDueDate, userToday, habit.IsBadHabit);
+        return [new HabitInstanceItem(habit.NextDueDate, status, log?.Id)];
     }
 
     private static List<HabitInstanceItem> GetRecurringInstances(
@@ -523,8 +523,8 @@ public static class HabitScheduleService
         int weekStartDay)
     {
         var lookbackStart = dateFrom.AddDays(-overdueWindowDays);
-        if (lookbackStart < habit.DueDate)
-            lookbackStart = habit.DueDate;
+        if (lookbackStart < habit.NextDueDate)
+            lookbackStart = habit.NextDueDate;
 
         var scheduledDates = GetScheduledDates(habit, lookbackStart, dateTo, weekStartDay);
         var completedLogDatesInRange = habit.Logs
@@ -587,7 +587,7 @@ public static class HabitScheduleService
         var staleBadHabits = await habitRepository.FindTrackedAsync(
             h => h.UserId == userId && h.IsBadHabit
                 && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible)
-                && h.FrequencyQuantity != null && h.DueDate < today
+                && h.FrequencyQuantity != null && h.NextDueDate < today
                 && (!h.EndDate.HasValue || h.EndDate.Value >= today), ct);
         if (staleBadHabits.Count > 0)
         {
@@ -638,7 +638,7 @@ public static class HabitScheduleService
         if (intervalWeeks == 1)
             return true;
 
-        var anchor = recurrenceAnchor ?? habit.ScheduledStartDate ?? habit.DueDate;
+        var anchor = recurrenceAnchor ?? habit.ScheduledStartDate ?? habit.NextDueDate;
         var targetWeek = WeekMath.WeekStart(target, weekStartDay);
         var anchorWeek = WeekMath.WeekStart(anchor, weekStartDay);
         return TrueMod(WeekDiff(targetWeek, anchorWeek), intervalWeeks) == 0;

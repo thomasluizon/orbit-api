@@ -69,7 +69,7 @@ public class HabitScheduleEnumReaderTests
             snapshot.IsGeneral.Should().Be(schedule == HabitSchedule.General);
             snapshot.IsFlexible.Should().Be(schedule == HabitSchedule.Flexible);
             snapshot.StartDate.Should().Be(Start);
-            snapshot.DueDate.Should().Be(habit.DueDate);
+            snapshot.NextDueDate.Should().Be(habit.NextDueDate);
         }
     }
 

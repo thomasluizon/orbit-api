@@ -92,7 +92,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         var readback = await _dbContext.Habits.AsNoTracking().ToArrayAsync();
         readback.Should().HaveCount(174).And.OnlyContain(habit => habit.Emoji == "📚"
-            && habit.Description == "Keep this description" && habit.DueDate == Today);
+            && habit.Description == "Keep this description" && habit.NextDueDate == Today);
         await _emojiInference.Received(7).InferAsync(_userId,
             Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>());
     }

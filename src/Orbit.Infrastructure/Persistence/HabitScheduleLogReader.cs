@@ -96,7 +96,7 @@ public sealed class HabitScheduleLogReader(OrbitDbContext context) : IHabitSched
         var resolved = await (
             from log in context.HabitLogs.AsNoTracking()
             join habit in context.Habits.AsNoTracking() on log.HabitId equals habit.Id
-            where ids.Contains(log.HabitId) && log.Date == habit.DueDate && log.Value >= 0
+            where ids.Contains(log.HabitId) && log.Date == habit.NextDueDate && log.Value >= 0
             select log.HabitId).Distinct().ToListAsync(cancellationToken);
         return resolved.ToHashSet();
     }

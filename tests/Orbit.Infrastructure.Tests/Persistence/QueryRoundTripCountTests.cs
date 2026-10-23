@@ -47,7 +47,7 @@ public class QueryRoundTripCountTests
             HabitLog.FromScheduleRead(Guid.NewGuid(), skippedToday.Id, today, 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), skippedEarlier.Id, today.AddDays(-1), 0, 0, DateTime.UtcNow),
             HabitLog.FromScheduleRead(Guid.NewGuid(), bad.Id, today.AddDays(-5), 1, 0, DateTime.UtcNow),
-            HabitLog.FromScheduleRead(Guid.NewGuid(), oldResolved.Id, oldResolved.DueDate, 1, 0, DateTime.UtcNow));
+            HabitLog.FromScheduleRead(Guid.NewGuid(), oldResolved.Id, oldResolved.NextDueDate, 1, 0, DateTime.UtcNow));
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         var directLogs = await new HabitSummaryLogReader(context).ReadAsync(
@@ -105,10 +105,10 @@ public class QueryRoundTripCountTests
                 .AsSplitQuery(), CancellationToken.None);
         var legacyIncluded = legacyHabits.ToList();
         var legacyResolution = legacyIncluded
-            .Where(habit => habit.Logs.Any(log => log.Date == habit.DueDate && log.Value >= 0))
+            .Where(habit => habit.Logs.Any(log => log.Date == habit.NextDueDate && log.Value >= 0))
             .Select(habit => habit.Id).ToHashSet();
         if (await context.HabitLogs.AnyAsync(log => log.HabitId == oldResolved.Id
-            && log.Date == oldResolved.DueDate && log.Value >= 0))
+            && log.Date == oldResolved.NextDueDate && log.Value >= 0))
             legacyResolution.Add(oldResolved.Id);
         var legacySlipDates = legacyIncluded.Where(habit => habit.IsBadHabit)
             .SelectMany(habit => habit.Logs.Where(log => log.Value > 0)

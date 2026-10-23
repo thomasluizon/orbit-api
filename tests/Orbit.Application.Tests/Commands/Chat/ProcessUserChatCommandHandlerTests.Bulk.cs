@@ -136,7 +136,7 @@ public partial class ProcessUserChatCommandHandlerTests
         preview.ChangeTargetCount.Should().Be(251);
         preview.Items.Should().HaveCount(251);
         preview.Items!.Select(item => item.EntityId).Should().BeEquivalentTo(habits.Select(habit => habit.Id));
-        habits.Should().OnlyContain(habit => habit.Description == null && habit.DueDate == Today);
+        habits.Should().OnlyContain(habit => habit.Description == null && habit.NextDueDate == Today);
         await _mediator.DidNotReceive().Send(Arg.Any<BulkUpdateHabitsCommand>(), Arg.Any<CancellationToken>());
     }
 

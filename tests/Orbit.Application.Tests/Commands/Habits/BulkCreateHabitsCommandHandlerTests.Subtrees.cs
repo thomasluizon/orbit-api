@@ -108,14 +108,14 @@ public partial class BulkCreateHabitsCommandHandlerTests
         }
         var overridden = children[1];
         var grandchild = saved.Single(h => h.Title == "Inherited override");
-        grandchild.DueDate.Should().Be(overridden.DueDate).And.Be(Today.AddDays(4));
+        grandchild.NextDueDate.Should().Be(overridden.NextDueDate).And.Be(Today.AddDays(4));
         grandchild.StartDate.Should().Be(overridden.StartDate);
         grandchild.IntervalWeeks.Should().Be(3);
         grandchild.Days.Should().Equal(DayOfWeek.Tuesday);
         var weekly = saved.Single(h => h.Title == "Weekly");
         weekly.ParentHabitId.Should().Be(overridden.Id);
         weekly.Position.Should().Be(1);
-        weekly.DueDate.Should().Be(Today.AddDays(5));
+        weekly.NextDueDate.Should().Be(Today.AddDays(5));
         weekly.FrequencyQuantity.Should().Be(2);
         weekly.Days.Should().BeEmpty();
         weekly.IntervalWeeks.Should().BeNull();
@@ -151,7 +151,7 @@ public partial class BulkCreateHabitsCommandHandlerTests
         node.IsBadHabit.Should().BeTrue();
         node.IsGeneral.Should().BeFalse();
         node.IsFlexible.Should().BeTrue();
-        node.DueDate.Should().Be(Today.AddDays(2));
+        node.NextDueDate.Should().Be(Today.AddDays(2));
         node.DueTime.Should().Be(leaf.DueTime);
         node.DueEndTime.Should().Be(leaf.DueEndTime);
         node.EndDate.Should().Be(leaf.EndDate);
@@ -183,7 +183,7 @@ public partial class BulkCreateHabitsCommandHandlerTests
         var result = await _handler.Handle(new(UserId, [root]), CancellationToken.None);
 
         result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
-        saved.Should().HaveCount(4).And.OnlyContain(h => h.IsGeneral && h.DueDate == Today.AddDays(3));
+        saved.Should().HaveCount(4).And.OnlyContain(h => h.IsGeneral && h.NextDueDate == Today.AddDays(3));
         foreach (var child in saved.Skip(1))
         {
             child.Tags.Should().BeEmpty();

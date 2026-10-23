@@ -301,9 +301,9 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         var saved = verify.Habits.OrderBy(habit => habit.Position).ToList();
         saved.Should().HaveCount(4);
         saved.Take(2).Should().AllSatisfy(habit => habit.FrequencyUnit.Should().BeNull());
-        saved[0].DueDate.Should().Be(new DateOnly(2026, 10, 26));
+        saved[0].NextDueDate.Should().Be(new DateOnly(2026, 10, 26));
         saved[0].DueTime.Should().Be(new TimeOnly(15, 50));
-        saved[1].DueDate.Should().Be(new DateOnly(2026, 10, 30));
+        saved[1].NextDueDate.Should().Be(new DateOnly(2026, 10, 30));
         saved[1].DueTime.Should().Be(new TimeOnly(13, 30));
         saved.Skip(2).Should().AllSatisfy(habit =>
         {
@@ -333,7 +333,7 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
         child.FrequencyUnit.Should().BeNull();
         child.FrequencyQuantity.Should().BeNull();
         child.EndDate.Should().BeNull();
-        child.DueDate.Should().Be(new DateOnly(2026, 10, 30));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 10, 30));
         child.DueTime.Should().Be(new TimeOnly(13, 30));
     }
 

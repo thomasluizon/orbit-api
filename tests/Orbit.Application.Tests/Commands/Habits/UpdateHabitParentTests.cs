@@ -50,7 +50,7 @@ public sealed class UpdateHabitParentTests : IDisposable
     }
 
     private UpdateHabitCommand Command(Habit habit) => new(_user.Id, habit.Id, "Changed", "Details",
-        habit.FrequencyUnit, habit.FrequencyQuantity, DueDate: habit.DueDate);
+        habit.FrequencyUnit, habit.FrequencyQuantity, DueDate: habit.NextDueDate);
 
     private UpdateHabitCommandHandler Handler(IUnitOfWork? work = null, IPayGateService? gate = null) =>
         new(_habits, Substitute.For<IGenericRepository<SentReminder>>(), Substitute.For<IGenericRepository<Goal>>(),
@@ -338,7 +338,7 @@ public sealed class UpdateHabitParentTests : IDisposable
     {
         habit.FrequencyUnit,
         habit.FrequencyQuantity,
-        habit.DueDate,
+        habit.NextDueDate,
         habit.StartDate,
         habit.ScheduledStartDate,
         habit.OriginalDayOfMonth,

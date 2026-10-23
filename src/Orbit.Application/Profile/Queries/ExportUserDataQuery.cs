@@ -166,7 +166,7 @@ public class ExportUserDataQueryHandler(
             habit.Emoji,
             habit.IsBadHabit,
             habit.Schedule == HabitSchedule.General,
-            habit.DueDate,
+            habit.NextDueDate,
             habit.EndDate,
             habit.FrequencyUnit?.ToString(),
             habit.FrequencyQuantity,

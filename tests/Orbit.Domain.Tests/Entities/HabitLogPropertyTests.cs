@@ -31,7 +31,7 @@ public class HabitLogPropertyTests
     [Property]
     public void LogThenUnlog_OnDueDate_RestoresObservableState(Habit habit)
     {
-        var dueDate = habit.DueDate;
+        var dueDate = habit.NextDueDate;
         var wasCompleted = habit.IsCompleted;
 
         habit.Log(dueDate);
@@ -40,6 +40,6 @@ public class HabitLogPropertyTests
         unlog.IsSuccess.Should().BeTrue();
         habit.Logs.Count(l => l.Value > 0 && !l.IsDeleted).Should().Be(0);
         habit.IsCompleted.Should().Be(wasCompleted);
-        habit.DueDate.Should().Be(dueDate);
+        habit.NextDueDate.Should().Be(dueDate);
     }
 }

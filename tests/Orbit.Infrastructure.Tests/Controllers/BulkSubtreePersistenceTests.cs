@@ -80,7 +80,7 @@ public class BulkSubtreePersistenceTests
             node.FrequencyQuantity.Should().Be(1);
             node.IntervalWeeks.Should().Be(2);
             node.Days.Should().Equal(DayOfWeek.Monday);
-            node.DueDate.Should().Be(new DateOnly(2026, 4, 6));
+            node.NextDueDate.Should().Be(new DateOnly(2026, 4, 6));
         }
         leaf.Description.Should().Be("Description");
         leaf.Emoji.Should().Be("⭐");
@@ -90,7 +90,7 @@ public class BulkSubtreePersistenceTests
         leaf.IsFlexible.Should().BeTrue();
         leaf.IsBadHabit.Should().BeTrue();
         leaf.IsGeneral.Should().BeFalse();
-        leaf.DueDate.Should().Be(new DateOnly(2026, 4, 7));
+        leaf.NextDueDate.Should().Be(new DateOnly(2026, 4, 7));
         leaf.DueTime.Should().Be(timed ? new TimeOnly(9, 0) : null);
         leaf.DueEndTime.Should().Be(new TimeOnly(10, 0));
         leaf.EndDate.Should().Be(new DateOnly(2026, 5, 1));

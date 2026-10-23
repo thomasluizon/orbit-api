@@ -73,7 +73,7 @@ public class HabitScheduleCharacterizationTests
         habit.Log(Today).IsSuccess.Should().BeTrue();
 
         habit.StartDate.Should().Be(Today);
-        habit.DueDate.Should().Be(Today.AddDays(cursorOffset));
+        habit.NextDueDate.Should().Be(Today.AddDays(cursorOffset));
         HabitScheduleService.IsHabitDueOnDate(habit, Today).Should().Be(dueToday);
         HabitScheduleService.IsHabitDueOnDate(habit, Today.AddDays(1)).Should().Be(dueTomorrow);
         HabitScheduleService.GetHistoricalScheduledDates(habit, Today, Today, TimeZoneInfo.Utc)

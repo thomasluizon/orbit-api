@@ -49,7 +49,7 @@ public sealed class ReviewSkipBaselineTests
             .IsSuccess.Should().BeTrue();
 
         await using (var afterSkip = factory.CreateContext())
-            (await afterSkip.Habits.SingleAsync()).DueDate.Should().Be(newerDueDate);
+            (await afterSkip.Habits.SingleAsync()).NextDueDate.Should().Be(newerDueDate);
 
         await using var undoContext = factory.CreateContext();
         using var undoUnit = new UnitOfWork(undoContext, new DatabaseConnectionSettings());
@@ -61,7 +61,7 @@ public sealed class ReviewSkipBaselineTests
             .IsSuccess.Should().BeTrue();
 
         await using var verify = factory.CreateContext();
-        (await verify.Habits.SingleAsync()).DueDate.Should().Be(newerDueDate);
+        (await verify.Habits.SingleAsync()).NextDueDate.Should().Be(newerDueDate);
         (await verify.HabitSkipUndos.SingleAsync()).PreviousDueDate.Should().Be(newerDueDate);
     }
 
@@ -93,7 +93,7 @@ public sealed class ReviewSkipBaselineTests
         }
 
         await using var verify = factory.CreateContext();
-        (await verify.Habits.SingleAsync()).DueDate.Should().Be(stagedDueDate);
+        (await verify.Habits.SingleAsync()).NextDueDate.Should().Be(stagedDueDate);
         context.Entry(tracked).State.Should().Be(EntityState.Unchanged);
     }
 
@@ -119,11 +119,11 @@ public sealed class ReviewSkipBaselineTests
         var result = await Skip(context, user.Id, habit.Id, today, bulk, Guid.NewGuid());
 
         result.ErrorCode.Should().Be(ErrorCodes.ConcurrentUpdateConflict);
-        tracked.DueDate.Should().Be(stagedDueDate);
+        tracked.NextDueDate.Should().Be(stagedDueDate);
         tracked.UpdatedAtUtc.Should().Be(stagedTimestamp);
         context.Entry(tracked).State.Should().Be(EntityState.Modified);
         await using var verify = factory.CreateContext();
-        (await verify.Habits.SingleAsync()).DueDate.Should().Be(committedDueDate);
+        (await verify.Habits.SingleAsync()).NextDueDate.Should().Be(committedDueDate);
         (await verify.HabitSkipUndos.CountAsync()).Should().Be(0);
         (await verify.HabitLogs.CountAsync()).Should().Be(0);
     }
@@ -148,7 +148,7 @@ public sealed class ReviewSkipBaselineTests
 
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotYetDue);
         await using var verify = factory.CreateContext();
-        (await verify.Habits.SingleAsync()).DueDate.Should().Be(committedDueDate);
+        (await verify.Habits.SingleAsync()).NextDueDate.Should().Be(committedDueDate);
         (await verify.HabitSkipUndos.CountAsync()).Should().Be(0);
         (await verify.HabitLogs.CountAsync()).Should().Be(0);
     }
@@ -172,7 +172,7 @@ public sealed class ReviewSkipBaselineTests
         (await Skip(context, user.Id, habit.Id, today, bulk, Guid.NewGuid())).IsSuccess.Should().BeTrue();
 
         await using var verify = factory.CreateContext();
-        (await verify.Habits.SingleAsync(h => h.Id == otherHabit.Id)).DueDate.Should().Be(stagedDueDate);
+        (await verify.Habits.SingleAsync(h => h.Id == otherHabit.Id)).NextDueDate.Should().Be(stagedDueDate);
         context.Entry(trackedOther).State.Should().Be(EntityState.Unchanged);
     }
 

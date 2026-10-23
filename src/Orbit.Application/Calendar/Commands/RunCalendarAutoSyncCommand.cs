@@ -196,7 +196,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var habitsByKey = existingHabits
             .GroupBy(habit => LegacyCalendarMatchKey.BuildLegacyMatchKey(
                 habit.Title,
-                habit.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                habit.NextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 habit.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture)), StringComparer.Ordinal)
             .Where(group => group.Count() == 1)
             .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);

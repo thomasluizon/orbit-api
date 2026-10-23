@@ -374,7 +374,7 @@ public sealed class PendingOperationChangePreviewer(
         ["frequency_quantity"] = AgentArgumentPreview.Format(habit.FrequencyQuantity),
         ["interval_weeks"] = AgentArgumentPreview.Format(habit.IntervalWeeks),
         ["days"] = string.Join(", ", habit.Days),
-        ["due_date"] = AgentArgumentPreview.Format(habit.DueDate),
+        ["due_date"] = AgentArgumentPreview.Format(habit.NextDueDate),
         ["end_date"] = AgentArgumentPreview.Format(habit.EndDate),
         ["due_time"] = AgentArgumentPreview.Format(habit.DueTime),
         [DueEndTimeField] = AgentArgumentPreview.Format(habit.DueEndTime),
@@ -656,7 +656,7 @@ public sealed class PendingOperationChangePreviewer(
             habit.Description,
             habit.Emoji,
             habit.IsCompleted,
-            habit.DueDate,
+            DueDate = habit.NextDueDate,
             habit.DueTime,
             habit.DueEndTime,
             IsGeneral = habit.Schedule == HabitSchedule.General,
@@ -700,7 +700,7 @@ public sealed class PendingOperationChangePreviewer(
         Add("interval_weeks", habit.IntervalWeeks, effective.IntervalWeeks, "number");
         Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text",
             typedValue: JsonSerializer.SerializeToElement(effective.Days.Select(day => day.ToString())));
-        Add("due_date", habit.DueDate, effective.DueDate, "date");
+        Add("due_date", habit.NextDueDate, effective.NextDueDate, "date");
         Add("end_date", habit.EndDate, effective.EndDate, "date");
         Add("due_time", habit.DueTime, effective.DueTime, "time");
         Add(DueEndTimeField, habit.DueEndTime, effective.DueEndTime, "time");

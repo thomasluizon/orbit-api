@@ -33,11 +33,11 @@ public class OrbitDbContextTests
 
         firstHabit.Update(new HabitUpdateParams("First edit", firstHabit.Description,
             firstHabit.FrequencyUnit, firstHabit.FrequencyQuantity, firstHabit.Days.ToList(),
-            firstHabit.IsBadHabit, firstHabit.DueDate)).IsSuccess.Should().BeTrue();
+            firstHabit.IsBadHabit, firstHabit.NextDueDate)).IsSuccess.Should().BeTrue();
         firstDb.SaveChanges();
         secondHabit.Update(new HabitUpdateParams("Second edit", secondHabit.Description,
             secondHabit.FrequencyUnit, secondHabit.FrequencyQuantity, secondHabit.Days.ToList(),
-            secondHabit.IsBadHabit, secondHabit.DueDate)).IsSuccess.Should().BeTrue();
+            secondHabit.IsBadHabit, secondHabit.NextDueDate)).IsSuccess.Should().BeTrue();
         secondDb.SaveChanges();
 
         factory.Context.Habits.IgnoreQueryFilters().Sum(h => h.ReminderProbeVersion).Should().Be(2);

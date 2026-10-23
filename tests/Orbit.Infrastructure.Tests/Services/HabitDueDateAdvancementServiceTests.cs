@@ -51,7 +51,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().Be(futureDate);
+        habit.NextDueDate.Should().Be(futureDate);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().Be(Today);
+        habit.NextDueDate.Should().Be(Today);
     }
 
     [Fact]
@@ -104,8 +104,8 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
-        var daysDiff = habit.DueDate.DayNumber - startDate.DayNumber;
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        var daysDiff = habit.NextDueDate.DayNumber - startDate.DayNumber;
         (daysDiff % 2).Should().Be(0);
     }
 
@@ -131,7 +131,7 @@ public class HabitDueDateAdvancementServiceTests
         habit.CatchUpDueDate(Today);
 
         habit.IsCompleted.Should().BeFalse();
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -153,8 +153,8 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
-        var daysDiff = habit.DueDate.DayNumber - startDate.DayNumber;
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
+        var daysDiff = habit.NextDueDate.DayNumber - startDate.DayNumber;
         (daysDiff % 3).Should().Be(0);
     }
 
@@ -165,7 +165,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class HabitDueDateAdvancementServiceTests
 
         habit.CatchUpDueDate(Today);
 
-        habit.DueDate.Should().BeOnOrAfter(Today);
+        habit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public class HabitDueDateAdvancementServiceTests
             dueDate: cutoff.AddDays(-10), endDate: cutoff.AddDays(-5), isBadHabit: true);
         habit.CatchUpDueDate(cutoff.AddDays(-4));
         habit.IsCompleted.Should().BeTrue();
-        habit.DueDate.Should().BeBefore(cutoff);
+        habit.NextDueDate.Should().BeBefore(cutoff);
 
         StaleBadHabitFilterFor(cutoff)(habit).Should().BeFalse();
     }
@@ -275,9 +275,9 @@ public class HabitDueDateAdvancementServiceTests
         var reloadedBad = await dbContext.Habits.AsNoTracking()
             .SingleAsync(h => h.Id == badHabit.Id);
 
-        reloadedBad.DueDate.Should().BeOnOrAfter(Today);
-        reloadedNonBad.DueDate.Should().Be(staleDueDate);
-        reloadedNonBad.DueDate.Should().BeBefore(Today);
+        reloadedBad.NextDueDate.Should().BeOnOrAfter(Today);
+        reloadedNonBad.NextDueDate.Should().Be(staleDueDate);
+        reloadedNonBad.NextDueDate.Should().BeBefore(Today);
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public class HabitDueDateAdvancementServiceTests
         unsatisfiableHabit.AdvanceDueDate(anchor, weekStartDay: user.WeekStartDay);
         typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(unsatisfiableHabit, 2);
         typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(unsatisfiableHabit, 2);
-        var unsatisfiableDueDate = unsatisfiableHabit.DueDate;
+        var unsatisfiableDueDate = unsatisfiableHabit.NextDueDate;
         var validHabit = Habit.Create(new HabitCreateParams(
             user.Id,
             "Valid",
@@ -313,8 +313,8 @@ public class HabitDueDateAdvancementServiceTests
         var act = () => service.AdvanceStaleDueDates(CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        unsatisfiableHabit.DueDate.Should().Be(unsatisfiableDueDate);
-        validHabit.DueDate.Should().BeOnOrAfter(Today);
+        unsatisfiableHabit.NextDueDate.Should().Be(unsatisfiableDueDate);
+        validHabit.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     [Fact]
@@ -352,8 +352,8 @@ public class HabitDueDateAdvancementServiceTests
             .SingleAsync(h => h.Id == boundaryHabit.Id);
         var reloadedValid = await dbContext.Habits.AsNoTracking()
             .SingleAsync(h => h.Id == validHabit.Id);
-        reloadedBoundary.DueDate.Should().Be(DateOnly.MinValue);
-        reloadedValid.DueDate.Should().BeOnOrAfter(Today);
+        reloadedBoundary.NextDueDate.Should().Be(DateOnly.MinValue);
+        reloadedValid.NextDueDate.Should().BeOnOrAfter(Today);
     }
 
     private static OrbitDbContext CreateInMemoryDbContext()

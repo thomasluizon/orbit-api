@@ -81,13 +81,13 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// Moving the due-date cursor leaves this anchor unchanged.
     /// </summary>
     public DateOnly StartDate { get; private set; }
-    public DateOnly DueDate { get; private set; }
+    public DateOnly NextDueDate { get; private set; }
     public DateOnly? ScheduledStartDate { get; private set; }
     /// <summary>
-    /// For monthly/yearly habits, the original day-of-month from the first DueDate (1-31).
+    /// For monthly/yearly habits, the original day-of-month from the first NextDueDate (1-31).
     /// Preserves the anchor across month-end clamping so a Jan 31 habit re-anchors to Mar 31
     /// rather than permanently drifting to day 28 after the Feb clamp.
-    /// Null for daily/weekly habits and for legacy rows pre-migration (falls back to DueDate.Day).
+    /// Null for daily/weekly habits and for legacy rows pre-migration (falls back to NextDueDate.Day).
     /// </summary>
     public int? OriginalDayOfMonth { get; private set; }
     public TimeOnly? DueTime { get; private set; }
@@ -164,7 +164,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyUnit = snapshot.FrequencyUnit,
         FrequencyQuantity = snapshot.FrequencyQuantity,
         IntervalWeeks = snapshot.IntervalWeeks,
-        DueDate = snapshot.DueDate,
+        NextDueDate = snapshot.NextDueDate,
         StartDate = snapshot.StartDate,
         Schedule = snapshot.Schedule,
         ScheduledStartDate = snapshot.ScheduledStartDate,
@@ -200,7 +200,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyUnit = candidate.FrequencyUnit;
         FrequencyQuantity = candidate.FrequencyQuantity;
         IntervalWeeks = candidate.IntervalWeeks;
-        DueDate = candidate.DueDate;
+        NextDueDate = candidate.NextDueDate;
         ScheduledStartDate = candidate.ScheduledStartDate;
         OriginalDayOfMonth = candidate.OriginalDayOfMonth;
         EndDate = candidate.EndDate;
@@ -264,7 +264,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var habit = CreateValidated(p);
         if (p.StartDate.HasValue)
         {
-            habit.DueDate = p.StartDate.Value;
+            habit.NextDueDate = p.StartDate.Value;
             var alignment = habit.AlignFirstOccurrence(p.WeekStartDay);
             if (alignment.IsFailure)
                 return Result.Failure<Habit>(DomainErrors.RecurrenceScheduleUnsatisfiable);
@@ -289,7 +289,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsBadHabit = p.IsBadHabit,
             IsGeneral = schedule == HabitSchedule.General,
             IsFlexible = schedule == HabitSchedule.Flexible,
-            DueDate = p.DueDate,
+            NextDueDate = p.DueDate,
             StartDate = startDate,
             Schedule = schedule,
             ScheduledStartDate = startDate,
@@ -381,17 +381,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         !advanceDueDate
         && Schedule != HabitSchedule.Flexible
         && !IsBadHabit
-        && DueDate == date
+        && NextDueDate == date
         && _logs.Exists(l => l.Date == date && l.Value > 0 && l.IsDeleted);
 
     private Result AdvancePastResolvedLogs(int weekStartDay)
     {
         do
         {
-            var result = AdvanceDueDate(DueDate, weekStartDay);
+            var result = AdvanceDueDate(NextDueDate, weekStartDay);
             if (result.IsFailure)
                 return result;
-        } while (_logs.Any(l => l.Date == DueDate && !l.IsDeleted));
+        } while (_logs.Any(l => l.Date == NextDueDate && !l.IsDeleted));
 
         return Result.Success();
     }
@@ -419,8 +419,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public Result AdvanceDueDate(DateOnly today, int weekStartDay = 1)
     {
-        var candidate = DueDate;
-        var anchor = ScheduledStartDate ?? DueDate;
+        var candidate = NextDueDate;
+        var anchor = ScheduledStartDate ?? NextDueDate;
 
         do
         {
@@ -433,9 +433,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         } while (candidate <= today);
 
         CaptureLegacyScheduledStart();
-        DueDate = candidate;
+        NextDueDate = candidate;
 
-        if (EndDate.HasValue && DueDate > EndDate.Value)
+        if (EndDate.HasValue && NextDueDate > EndDate.Value)
         {
             IsCompleted = true;
         }
@@ -445,14 +445,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     }
 
     /// <summary>
-    /// Advances DueDate to the nearest scheduled date on or after today, without going past it.
-    /// Used by background service to keep DueDate current for recurring habits.
+    /// Advances NextDueDate to the nearest scheduled date on or after today, without going past it.
+    /// Used by background service to keep NextDueDate current for recurring habits.
     /// </summary>
     public Result CatchUpDueDate(DateOnly today, int weekStartDay = 1)
     {
-        var shouldAdvance = DueDate < today && !IsCompleted;
-        var candidate = DueDate;
-        var anchor = ScheduledStartDate ?? DueDate;
+        var shouldAdvance = NextDueDate < today && !IsCompleted;
+        var candidate = NextDueDate;
+        var anchor = ScheduledStartDate ?? NextDueDate;
         var shouldComplete = IsCompleted;
 
         while (candidate < today && !shouldComplete)
@@ -471,7 +471,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (shouldAdvance)
             CaptureLegacyScheduledStart();
 
-        DueDate = candidate;
+        NextDueDate = candidate;
         IsCompleted = shouldComplete;
 
         UpdatedAtUtc = DateTime.UtcNow;
@@ -481,11 +481,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private void CaptureLegacyScheduledStart()
     {
         if (ScheduledStartDate is null)
-            ScheduledStartDate = DueDate;
+            ScheduledStartDate = NextDueDate;
     }
 
     /// <summary>
-    /// Advances DueDate by one frequency step, re-anchoring for monthly/yearly drift
+    /// Advances NextDueDate by one frequency step, re-anchoring for monthly/yearly drift
     /// and snapping to the next matching day-of-week if Days are set.
     /// </summary>
     private Result<DateOnly> AdvanceDueDateByOneStep(
@@ -611,7 +611,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public void PostponeTo(DateOnly date)
     {
-        DueDate = date;
+        NextDueDate = date;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
@@ -620,7 +620,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (ParentHabitId != parent.Id || UserId != parent.UserId)
             throw new ArgumentException("The resolved occurrence must belong to this habit's parent.", nameof(parent));
 
-        DueDate = parent.DueDate;
+        NextDueDate = parent.NextDueDate;
         IsCompleted = parent.IsCompleted;
         UpdatedAtUtc = DateTime.UtcNow;
     }
@@ -655,7 +655,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             log.SoftDelete();
         }
 
-        DueDate = skip.PreviousDueDate;
+        NextDueDate = skip.PreviousDueDate;
         ScheduledStartDate = skip.PreviousScheduledStartDate;
         IsCompleted = skip.PreviousIsCompleted;
         UpdatedAtUtc = DateTime.UtcNow;
@@ -676,7 +676,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
         else if (Schedule == HabitSchedule.Recurring)
         {
-            DueDate = date;
+            NextDueDate = date;
             if (IsCompleted)
                 IsCompleted = false;
         }
@@ -790,7 +790,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             p.DueTime, p.DueEndTime,
             effectiveIsGeneral && p.EndDate.HasValue ? p.EndDate
                 : p.ClearEndDate == true || effectiveIsGeneral ? null : (p.EndDate ?? EndDate),
-            p.FrequencyUnit, effectiveIsGeneral, p.StartDate ?? p.DueDate ?? DueDate);
+            p.FrequencyUnit, effectiveIsGeneral, p.StartDate ?? p.DueDate ?? NextDueDate);
         if (dateValidation is not null)
             return dateValidation;
 
@@ -848,9 +848,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             p.IsFlexible ?? Schedule == HabitSchedule.Flexible, p.FrequencyUnit);
         var effectiveIsFlexible = schedule == HabitSchedule.Flexible;
         var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
-        var effectiveDueDate = p.StartDate.HasValue ? DueDate : p.DueDate ?? DueDate;
+        var effectiveDueDate = p.StartDate.HasValue ? NextDueDate : p.DueDate ?? NextDueDate;
         var reanchorSchedule = RequiresScheduleReanchor(p);
-        var dueChanged = effectiveDueDate != DueDate;
+        var dueChanged = effectiveDueDate != NextDueDate;
         var recurrencePhaseChanged = RecurrenceChanged(p);
 
         Title = p.Title.Trim();
@@ -871,16 +871,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             if (reanchor.IsFailure)
                 return reanchor;
         }
-        else if (effectiveDueDate != DueDate || recurrencePhaseChanged)
+        else if (effectiveDueDate != NextDueDate || recurrencePhaseChanged)
         {
-            DueDate = effectiveDueDate;
+            NextDueDate = effectiveDueDate;
             ScheduledStartDate = effectiveDueDate;
         }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
             OriginalDayOfMonth = reanchorSchedule ? StartDate.Day
                 : recurrencePhaseChanged || dueChanged ? effectiveDueDate.Day
-                : OriginalDayOfMonth ?? DueDate.Day;
+                : OriginalDayOfMonth ?? NextDueDate.Day;
         else
             OriginalDayOfMonth = null;
         return Result.Success();
@@ -889,7 +889,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private Result Reanchor(HabitUpdateParams p)
     {
         StartDate = p.StartDate!.Value;
-        DueDate = StartDate;
+        NextDueDate = StartDate;
         ScheduledStartDate = StartDate;
         OriginalDayOfMonth = StartDate.Day;
         IsCompleted = false;
@@ -902,15 +902,15 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             var catchUp = CatchUpDueDate(p.UserToday!.Value, p.WeekStartDay);
             if (catchUp.IsFailure)
                 return catchUp;
-            while (_logs.Any(log => !log.IsDeleted && log.Date == DueDate))
+            while (_logs.Any(log => !log.IsDeleted && log.Date == NextDueDate))
             {
-                var advance = AdvanceDueDate(DueDate, p.WeekStartDay);
+                var advance = AdvanceDueDate(NextDueDate, p.WeekStartDay);
                 if (advance.IsFailure)
                     return advance;
             }
         }
-        else if (DueDate < p.UserToday!.Value)
-            DueDate = p.UserToday.Value;
+        else if (NextDueDate < p.UserToday!.Value)
+            NextDueDate = p.UserToday.Value;
         return Result.Success();
     }
 
@@ -920,14 +920,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return Result.Success();
         for (var attempt = 0; attempt < DaysInWeek * (IntervalWeeks ?? 1); attempt++)
         {
-            var active = IsInActiveWeek(DueDate, StartDate, IntervalWeeks ?? 1, weekStartDay);
+            var active = IsInActiveWeek(NextDueDate, StartDate, IntervalWeeks ?? 1, weekStartDay);
             if (active.IsFailure)
                 return Result.Failure(active.Error);
-            if (Days.Contains(DueDate.DayOfWeek) && active.Value)
+            if (Days.Contains(NextDueDate.DayOfWeek) && active.Value)
                 return Result.Success();
-            if (DueDate == DateOnly.MaxValue)
+            if (NextDueDate == DateOnly.MaxValue)
                 return Result.Failure(DomainErrors.RecurrenceScheduleUnsatisfiable);
-            DueDate = DueDate.AddDays(1);
+            NextDueDate = NextDueDate.AddDays(1);
         }
         return Result.Failure(DomainErrors.RecurrenceScheduleUnsatisfiable);
     }
@@ -948,7 +948,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DueTime = candidate.DueTime;
         DueEndTime = candidate.DueEndTime;
         StartDate = candidate.StartDate;
-        DueDate = candidate.DueDate;
+        NextDueDate = candidate.NextDueDate;
         ScheduledStartDate = candidate.ScheduledStartDate;
         OriginalDayOfMonth = candidate.OriginalDayOfMonth;
         IsCompleted = candidate.IsCompleted;
@@ -1001,7 +1001,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private void RecomputeCompletionForEndDate()
     {
-        if (EndDate.HasValue && DueDate > EndDate.Value)
+        if (EndDate.HasValue && NextDueDate > EndDate.Value)
             IsCompleted = true;
         else if (IsCompleted)
             IsCompleted = false;

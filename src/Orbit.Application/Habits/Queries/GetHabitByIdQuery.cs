@@ -136,7 +136,7 @@ public class GetHabitByIdQueryHandler(
             isCompleted,
             habit.Schedule == HabitSchedule.General,
             habit.Schedule == HabitSchedule.Flexible,
-            habit.DueDate,
+            habit.NextDueDate,
             habit.DueTime,
             habit.DueEndTime,
             habit.EndDate,
@@ -226,7 +226,7 @@ internal static class HabitDetailChildMapper
         child.Schedule == HabitSchedule.General,
         child.Schedule == HabitSchedule.Flexible,
         child.Days.ToList(),
-        child.DueDate,
+        child.NextDueDate,
         child.DueTime,
         child.DueEndTime,
         child.EndDate,
@@ -272,7 +272,7 @@ internal static class HabitDetailChildMapper
 
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
-            return habit.DueDate < userToday
+            return habit.NextDueDate < userToday
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= userToday);
         }
 
@@ -292,8 +292,8 @@ internal static class HabitDetailChildMapper
         var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
         var lookbackStart = userToday.AddDays(-lookbackDays);
 
-        if (habit.DueDate > lookbackStart)
-            lookbackStart = habit.DueDate;
+        if (habit.NextDueDate > lookbackStart)
+            lookbackStart = habit.NextDueDate;
 
         var pastDates = HabitScheduleService.GetScheduledDates(
             habit,

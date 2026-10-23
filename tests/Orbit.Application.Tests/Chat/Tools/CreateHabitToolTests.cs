@@ -886,7 +886,7 @@ public partial class CreateHabitToolTests
         var parent = habits.Single(habit => habit.ParentHabitId is null);
         parent.Days.Should().Equal(DayOfWeek.Wednesday);
         var child = habits.Single(habit => habit.ParentHabitId == parent.Id);
-        child.DueDate.Should().Be(new DateOnly(2026, 6, 1));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 6, 1));
         child.Schedule.Should().Be(HabitSchedule.Recurring);
         child.FrequencyUnit.Should().Be(parent.FrequencyUnit).And.Be(FrequencyUnit.Day);
         child.FrequencyQuantity.Should().Be(parent.FrequencyQuantity).And.Be(1);

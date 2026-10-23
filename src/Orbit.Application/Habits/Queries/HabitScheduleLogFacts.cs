@@ -26,7 +26,7 @@ internal sealed class HabitScheduleLogFacts(IEnumerable<HabitScheduleLogDay> day
 
     internal bool IsFlexibleDue(Habit habit, DateOnly date, int weekStartDay)
     {
-        if (habit.Schedule != HabitSchedule.Flexible || habit.FrequencyUnit is null || date < habit.DueDate
+        if (habit.Schedule != HabitSchedule.Flexible || habit.FrequencyUnit is null || date < habit.NextDueDate
             || !HabitScheduleService.IsActiveIntervalWeek(habit, date, weekStartDay))
             return false;
 

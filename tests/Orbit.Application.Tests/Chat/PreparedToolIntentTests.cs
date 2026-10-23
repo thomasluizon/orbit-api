@@ -147,7 +147,7 @@ public class PreparedToolIntentTests
 
         result.Success.Should().BeTrue();
         var child = context.Added.OfType<Habit>().Single(habit => habit.ParentHabitId is not null);
-        child.DueDate.Should().Be(context.Today);
+        child.NextDueDate.Should().Be(context.Today);
         child.Days.Should().BeEquivalentTo([DayOfWeek.Wednesday, DayOfWeek.Sunday]);
         child.DueTime.Should().Be(new TimeOnly(21, 0));
     }

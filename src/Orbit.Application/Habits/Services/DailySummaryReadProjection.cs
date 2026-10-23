@@ -15,7 +15,7 @@ public static class DailySummaryReadProjection
         var days = habits.SelectMany(h => h.Logs.Where(l => !l.IsDeleted).GroupBy(l => l.Date)
             .Select(group => new HabitScheduleLogDay(h.Id, group.Key, group.Count(l => l.Value > 0),
                 group.Count(l => l.Value == 0), true))).ToList();
-        var resolvedDue = habits.Where(h => h.Logs.Any(l => !l.IsDeleted && l.Date == h.DueDate))
+        var resolvedDue = habits.Where(h => h.Logs.Any(l => !l.IsDeleted && l.Date == h.NextDueDate))
             .Select(h => h.Id).ToHashSet();
         var snapshot = HabitTodaySnapshot.Build(habits, from, weekStartDay, days, resolvedDue);
         var rows = HabitListCardBuilder.Build(habits, from, "today", snapshot, supportsDoneStatus: true).Items;

@@ -63,7 +63,7 @@ public class UpdateHabitToolTests
         habit.FrequencyUnit.Should().BeNull();
         habit.FrequencyQuantity.Should().BeNull();
         habit.EndDate.Should().BeNull();
-        habit.DueDate.Should().Be(new DateOnly(2026, 10, 29));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 10, 29));
         habit.DueTime.Should().Be(new TimeOnly(13, 30));
         habit.Description.Should().Be("At home");
         habit.ReminderEnabled.Should().BeTrue();
@@ -296,7 +296,7 @@ public class UpdateHabitToolTests
         habit.IntervalWeeks.Should().Be(2);
         habit.Days.Should().BeEquivalentTo([DayOfWeek.Monday, DayOfWeek.Wednesday]);
         habit.IsBadHabit.Should().BeTrue();
-        habit.DueDate.Should().Be(Today);
+        habit.NextDueDate.Should().Be(Today);
         habit.DueTime.Should().Be(new TimeOnly(9, 0));
         habit.DueEndTime.Should().Be(new TimeOnly(15, 0));
         habit.ReminderEnabled.Should().BeTrue();
@@ -611,7 +611,7 @@ public class UpdateHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_date": "2026-06-15"}""");
 
         result.Success.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 6, 15));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 6, 15));
     }
 
     [Fact]
@@ -819,7 +819,7 @@ public class UpdateHabitToolTests
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         habit.FrequencyQuantity.Should().Be(2);
         habit.IsBadHabit.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 5, 1));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 5, 1));
         habit.DueTime.Should().Be(new TimeOnly(10, 0));
         habit.ReminderEnabled.Should().BeTrue();
         habit.ReminderTimes.Should().BeEquivalentTo([15]);

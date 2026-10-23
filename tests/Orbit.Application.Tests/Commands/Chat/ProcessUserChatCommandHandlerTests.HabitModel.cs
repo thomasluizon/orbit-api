@@ -72,7 +72,7 @@ public partial class ProcessUserChatCommandHandlerTests
             child.ParentHabitId.Should().Be(root.Id);
             child.FrequencyUnit.Should().Be(FrequencyUnit.Day);
             child.FrequencyQuantity.Should().Be(1);
-            child.DueDate.Should().Be(new DateOnly(2026, 8, 27));
+            child.NextDueDate.Should().Be(new DateOnly(2026, 8, 27));
             child.Days.Should().BeEmpty();
         }
         if (addSibling)
@@ -112,7 +112,7 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue();
         saved.Should().ContainSingle().Which.Should().Match<Habit>(habit =>
             habit.FrequencyUnit.ToString() == unit && habit.FrequencyQuantity == quantity
-            && habit.IsFlexible == flexible && habit.DueDate == new DateOnly(2026, 10, 23));
+            && habit.IsFlexible == flexible && habit.NextDueDate == new DateOnly(2026, 10, 23));
     }
 
     [Theory]

@@ -22,7 +22,7 @@ public sealed class HabitSkipUndoTests
         receipt.Seal(habit, null, "logs");
 
         receipt.Undo(habit, "logs").IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Today);
+        habit.NextDueDate.Should().Be(Today);
         var restoredAtUtc = habit.UpdatedAtUtc;
         receipt.Undo(habit, "other logs").IsSuccess.Should().BeTrue();
         habit.UpdatedAtUtc.Should().Be(restoredAtUtc);
@@ -39,7 +39,7 @@ public sealed class HabitSkipUndoTests
         habit.PostponeTo(Today.AddDays(4));
         habit.UpdatedAtUtc = receipt.ExpectedUpdatedAtUtc.AddSeconds(1);
         receipt.Undo(habit, "logs").ErrorCode.Should().Be(DomainErrors.SkipUndoConflict.Code);
-        habit.DueDate.Should().Be(Today.AddDays(4));
+        habit.NextDueDate.Should().Be(Today.AddDays(4));
     }
 
     [Fact]

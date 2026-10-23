@@ -240,7 +240,7 @@ public class ReminderSchedulerCacheTests
 
     private static HabitUpdateParams UpdateParams(Habit habit, string title, bool enabled) =>
         new(title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
-            habit.Days.ToList(), habit.IsBadHabit, habit.DueDate,
+            habit.Days.ToList(), habit.IsBadHabit, habit.NextDueDate,
             DueTime: habit.DueTime, ReminderEnabled: enabled);
 
     [Fact]
@@ -410,7 +410,7 @@ public class ReminderSchedulerCacheTests
         await service.CheckAndSendReminders(CancellationToken.None);
 
         habit.Update(new HabitUpdateParams(habit.Title, habit.Description, habit.FrequencyUnit,
-            habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.DueDate,
+            habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.NextDueDate,
             ReminderEnabled: true,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))]))
             .IsSuccess.Should().BeTrue();

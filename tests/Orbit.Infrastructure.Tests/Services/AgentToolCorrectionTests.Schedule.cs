@@ -75,7 +75,7 @@ public sealed partial class AgentToolCorrectionTests
         habit.FrequencyQuantity.Should().Be(1);
         habit.Days.Should().Equal(DayOfWeek.Monday);
         habit.IntervalWeeks.Should().Be(2);
-        habit.DueDate.Should().Be(new DateOnly(2026, 10, 1));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 10, 1));
         habit.DueTime.Should().Be(new TimeOnly(21, 17));
         _store.GetExecution(_userId, pending.Id).Should().BeNull();
     }

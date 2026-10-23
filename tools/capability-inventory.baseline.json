@@ -15802,234 +15802,6 @@
           }
         },
         {
-          "name": "DueDate",
-          "type": "DateOnly",
-          "surfaces": {
-            "chat": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].due_date",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered"
-                    }
-                  ]
-                }
-              }
-            },
-            "mcp": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "get_habit",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habitsJson[].dueDate",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.due_date",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.due_date",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
           "name": "DueEndTime",
           "type": "TimeOnly?",
           "surfaces": {
@@ -18546,6 +18318,234 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "NextDueDate",
+          "type": "DateOnly",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_date",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered"
+                    }
+                  ]
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habitsJson[].dueDate",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.due_date",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.due_date",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 }
               }
             }
@@ -34074,234 +34074,6 @@
           }
         },
         {
-          "name": "DueDate",
-          "type": "DateOnly",
-          "surfaces": {
-            "chat": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].due_date",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered"
-                    }
-                  ]
-                }
-              }
-            },
-            "mcp": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "get_habit",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habitsJson[].dueDate",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.due_date",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "dueDate",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.due_date",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_reschedule_habits",
-                      "parameter": "due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.due_date",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
           "name": "DueEndTime",
           "type": "TimeOnly?",
           "surfaces": {
@@ -36763,6 +36535,234 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "NextDueDate",
+          "type": "DateOnly",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_date",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered"
+                    }
+                  ]
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "read": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "update": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habitsJson[].dueDate",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.due_date",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "filterKeyedBulk": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "dueDate",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.due_date",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_reschedule_habits",
+                      "parameter": "due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.due_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 }
               }
             }
