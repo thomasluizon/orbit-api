@@ -78,7 +78,7 @@ jobs:
         env:
           MUTATE_FILES: ${{ matrix.mutate && join(matrix.mutate, ' ') || '' }}
         run: |
-          git fetch origin ${{ github.base_ref }}
+          since_target=$(git rev-parse HEAD^1)
           concurrency=$(nproc)
           echo "Stryker concurrency: $concurrency"
           read -r -a files <<< "$MUTATE_FILES"
@@ -86,7 +86,7 @@ jobs:
           for file in "${files[@]}"; do
             args+=(--mutate "$file")
           done
-          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/${{ github.base_ref }} --concurrency "$concurrency" "${args[@]}"
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:"$since_target" --concurrency "$concurrency" "${args[@]}"
 
       - name: Run Stryker (nightly full in-scope)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
