@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
 var inputs = JsonSerializer.Deserialize<Input[]>(Console.In.ReadToEnd())
@@ -20,7 +21,13 @@ var results = inputs.Select(input =>
             .Select(token => (token.RawKind, token.Text));
         var newCode = newTokens.Where(token => token.Span.OverlapsWith(newSpan))
             .Select(token => (token.RawKind, token.Text));
-        if (!oldCode.SequenceEqual(newCode)) spans.Add([newSpan.Start, newSpan.End]);
+        if (oldCode.SequenceEqual(newCode)) continue;
+        var enclosingSpans = newTokens.Where(token => token.Span.OverlapsWith(newSpan))
+            .SelectMany(token => token.Parent?.AncestorsAndSelf() ?? [])
+            .Where(node => node is ExpressionSyntax or StatementSyntax)
+            .Select(node => node.Span)
+            .Append(newSpan);
+        spans.Add([enclosingSpans.Min(span => span.Start), enclosingSpans.Max(span => span.End)]);
     }
     return spans;
 });
