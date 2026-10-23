@@ -154,7 +154,7 @@ public class OAuthControllerTests : IDisposable
             "client", clientState, null, language));
         _controller.Request.Headers.AcceptLanguage = language == "en" ? "pt-BR" : "en";
 
-        var redirect = _controller.GrantConsent(ticket, "cancel").Should().BeOfType<RedirectResult>().Subject;
+        var redirect = _controller.CancelConsent(ticket).Should().BeOfType<RedirectResult>().Subject;
         ExtractQueryParam(redirect.Url, "error").Should().Be("access_denied");
         ExtractQueryParam(redirect.Url, "state").Should().Be(clientState);
         redirect.Url.Should().NotContain("code=");
@@ -165,7 +165,7 @@ public class OAuthControllerTests : IDisposable
 
         foreach (var result in new[]
                  {
-                     _controller.GrantConsent(ticket, "cancel"), _controller.GrantConsent(ticket, "requested"),
+                     _controller.CancelConsent(ticket), _controller.GrantConsent(ticket, "requested"),
                      _controller.GrantConsent(ticket, "read_only"), _controller.Consent(ticket)
                  })
         {
@@ -196,18 +196,22 @@ public class OAuthControllerTests : IDisposable
         entry!.Scopes.Should().Equal(scopes);
         entry.IsReadOnly.Should().BeFalse();
         entry.Nonce.Should().Be("nonce");
-        _controller.GrantConsent(ticket, "cancel").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
+        _controller.CancelConsent(ticket).Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
         _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(0);
     }
 
-    [Fact]
-    public void Consent_UnknownAction_DoesNotConsumeTicket()
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("cancel")]
+    public void Consent_UnknownAction_DoesNotConsumeTicket(string access)
     {
         var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge",
             "https://claude.ai/callback", "client", "state", null, "en"));
 
-        _controller.GrantConsent(ticket, "unknown").Should().BeOfType<BadRequestObjectResult>();
+        var response = _controller.GrantConsent(ticket, access).Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.SerializeToElement(response.Value).GetProperty("error").GetString().Should().Be("invalid_request");
         _authStore.ReadPendingConsent(ticket)!.IsConsumed.Should().BeFalse();
+        _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(0);
     }
 
     [Theory]
@@ -224,7 +228,7 @@ public class OAuthControllerTests : IDisposable
         var code = ExtractQueryParam(grant.Url, "code");
         _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(1);
 
-        foreach (var result in new[] { _controller.GrantConsent(ticket, "read_only"), _controller.Consent(ticket) })
+        foreach (var result in new[] { _controller.GrantConsent(ticket, "read_only"), _controller.CancelConsent(ticket), _controller.Consent(ticket) })
         {
             var page = result.Should().BeOfType<ContentResult>().Subject;
             page.StatusCode.Should().Be(200);
@@ -261,13 +265,41 @@ public class OAuthControllerTests : IDisposable
         }
 
         foreach (var result in new[] { _controller.Consent(ticket), _controller.GrantConsent(ticket, "requested"),
-                     _controller.GrantConsent(ticket, "read_only"), _controller.GrantConsent(ticket, "cancel") })
+                     _controller.GrantConsent(ticket, "read_only"), _controller.CancelConsent(ticket) })
         {
             var page = result.Should().BeOfType<ContentResult>().Subject;
             page.StatusCode.Should().Be(400);
             page.Content.Should().Contain($"<html lang=\"{language}\">")
                 .And.Contain(OAuthPageStrings.For(language).InvalidRequestTitle);
         }
+    }
+
+    [Theory]
+    [InlineData("en", "https://untrusted.example/callback")]
+    [InlineData("en", "http://claude.ai/callback")]
+    [InlineData("pt-BR", "https://untrusted.example/callback")]
+    [InlineData("pt-BR", "http://claude.ai/callback")]
+    public void Consent_DisallowedRedirect_RejectsGrantAndCancel_EvenAfterConsumption(string language, string redirectUri)
+    {
+        _controller.Request.Headers.AcceptLanguage = language;
+        foreach (var action in new Func<string, IActionResult>[]
+                 {
+                     ticket => _controller.GrantConsent(ticket, "requested"),
+                     ticket => _controller.GrantConsent(ticket, "read_only"),
+                     _controller.CancelConsent
+                 })
+        {
+            var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", redirectUri,
+                "client", "state", null, language));
+            foreach (var result in new[] { action(ticket), action(ticket) })
+            {
+                var page = result.Should().BeOfType<ContentResult>().Subject;
+                page.StatusCode.Should().Be(400);
+                page.Content.Should().Contain($"<html lang=\"{language}\">")
+                    .And.Contain(OAuthPageStrings.For(language).InvalidRequestTitle);
+            }
+        }
+        _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(0);
     }
 
     [Fact]

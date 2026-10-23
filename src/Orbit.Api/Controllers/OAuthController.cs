@@ -450,7 +450,7 @@ public partial class OAuthController(
     [Consumes("application/x-www-form-urlencoded")]
     public IActionResult GrantConsent([FromForm] string ticket, [FromForm] string access)
     {
-        if (access is not ("read_only" or "requested" or "cancel"))
+        if (access is not ("read_only" or "requested"))
             return BadRequest(new { error = "invalid_request" });
         var consent = authStore.ConsumePendingConsent(ticket);
         if (consent is null || !IsRedirectUriAllowed(consent.Entry.RedirectUri))
@@ -458,11 +458,6 @@ public partial class OAuthController(
         if (consent.IsConsumed)
             return CompletedConsent(consent.Entry.Language);
         var entry = consent.Entry;
-        if (access == "cancel")
-        {
-            LogOAuthConsentDenied(logger, entry.ClientId);
-            return RedirectConsent(entry, "error", "access_denied");
-        }
         var readOnly = access == "read_only";
         var scopes = entry.Scopes ?? AgentScopes.ClaudeDefaultScopes;
         if (readOnly)
@@ -470,6 +465,19 @@ public partial class OAuthController(
         var code = authStore.CreateCode(entry.UserId, entry.CodeChallenge, entry.RedirectUri,
             entry.ClientId, entry.Nonce, scopes, readOnly);
         return RedirectConsent(entry, "code", code);
+    }
+
+    [HttpPost("/oauth/consent/cancel")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public IActionResult CancelConsent([FromForm] string ticket)
+    {
+        var consent = authStore.ConsumePendingConsent(ticket);
+        if (consent is null || !IsRedirectUriAllowed(consent.Entry.RedirectUri))
+            return InvalidGoogleState();
+        if (consent.IsConsumed)
+            return CompletedConsent(consent.Entry.Language);
+        LogOAuthConsentDenied(logger, consent.Entry.ClientId);
+        return RedirectConsent(consent.Entry, "error", "access_denied");
     }
 
     private RedirectResult RedirectConsent(ConsentEntry entry, string key, string value) =>

@@ -34,14 +34,7 @@ public class OAuthConsentPageTests
     {
         var page = Render(language);
         page.Should().Contain(OAuthPageStyles.Mark).And.Contain(OAuthPageStyles.Css)
-            .And.Contain("class=\"action-row\"")
-            .And.Contain($"class=\"btn btn-sm btn-quiet\" name=\"access\" value=\"cancel\">{OAuthPageStrings.For(language).Consent.Cancel}</button>")
-            .And.Contain("class=\"btn btn-sm btn-primary\" name=\"access\" value=\"read_only\"")
-            .And.Contain("class=\"btn btn-sm btn-ghost\" name=\"access\" value=\"requested\"");
-        page.IndexOf("value=\"requested\"", StringComparison.Ordinal).Should()
-            .BeLessThan(page.IndexOf("value=\"read_only\"", StringComparison.Ordinal));
-        page.IndexOf("value=\"read_only\"", StringComparison.Ordinal).Should()
-            .BeLessThan(page.IndexOf("value=\"cancel\"", StringComparison.Ordinal));
+            .And.Contain("class=\"action-row\"");
         var groups = Regex.Match(page, "<ul id=\"permission-groups\">(.*?)</ul>", RegexOptions.Singleline);
         var labels = Regex.Matches(groups.Groups[1].Value, "<li>(.*?)</li>")
             .Select(match => WebUtility.HtmlDecode(match.Groups[1].Value)).ToArray();
@@ -49,6 +42,27 @@ public class OAuthConsentPageTests
         OAuthPageStyles.Css.Should().Contain(".action-row {").And.Contain("gap: var(--s-3);")
             .And.Contain("justify-content: flex-end;").And.Contain(".action-row .btn { width: auto; }")
             .And.Contain(".action-row .btn { width: 100%; }");
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void ActionButtons_UseSmallSharedVariants_WithCancelAndRequestedBeforeReadOnly(string language)
+    {
+        var page = Render(language);
+        var copy = OAuthPageStrings.For(language).Consent;
+        var row = Regex.Match(page, "<div class=\"action-row\">(.*?)</div>", RegexOptions.Singleline);
+        row.Success.Should().BeTrue();
+        var buttons = Regex.Matches(row.Groups[1].Value, "<button\\b[^>]*>.*?</button>")
+            .Select(match => WebUtility.HtmlDecode(match.Value)).ToArray();
+        buttons.Should().HaveCount(3).And.OnlyContain(button => button.Contains("class=\"btn btn-sm ", StringComparison.Ordinal));
+        buttons[0].Should().Contain("btn-ghost\"").And.Contain("formaction=\"/oauth/consent/cancel\"")
+            .And.Contain($">{copy.Cancel}</button>").And.NotContain("name=\"access\"");
+        buttons[1].Should().Contain("btn-ghost\"").And.Contain("name=\"access\" value=\"requested\"")
+            .And.Contain($">{copy.Requested}</button>");
+        buttons[2].Should().Contain("btn-primary\"").And.Contain("name=\"access\" value=\"read_only\"")
+            .And.Contain($">{copy.ReadOnly}</button>");
+        page.Should().NotContain("btn-quiet");
     }
 
     [Fact]

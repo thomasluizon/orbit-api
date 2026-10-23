@@ -1041,6 +1041,7 @@ public partial class AgentCatalogService
                     "OAuthController.Token",
                     "OAuthController.Consent",
                     "OAuthController.GrantConsent",
+                    "OAuthController.CancelConsent",
                     "WaitlistController.Join",
                     "WaitlistController.Confirm"
                 ]),

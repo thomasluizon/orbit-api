@@ -16,7 +16,7 @@ form.addEventListener('submit', (event) => {
   }
   pending = true;
   form.setAttribute('aria-busy', 'true');
-  form.querySelectorAll('button[name="access"]').forEach((button) => {
+  form.querySelectorAll('button').forEach((button) => {
     button.setAttribute('aria-busy', 'true');
     button.setAttribute('aria-disabled', 'true');
   });
@@ -50,9 +50,9 @@ form.addEventListener('submit', (event) => {
 </section>
 <form id="consent-form" method="post" action="/oauth/consent"><input type="hidden" name="ticket" value="{{WebUtility.HtmlEncode(ticket)}}">
 <div class="action-row">
+<button class="btn btn-sm btn-ghost" type="submit" formaction="/oauth/consent/cancel">{{WebUtility.HtmlEncode(consent.Cancel)}}</button>
 <button class="btn btn-sm btn-ghost" name="access" value="requested">{{WebUtility.HtmlEncode(consent.Requested)}}</button>
 <button class="btn btn-sm btn-primary" name="access" value="read_only">{{WebUtility.HtmlEncode(consent.ReadOnly)}}</button>
-<button class="btn btn-sm btn-quiet" name="access" value="cancel">{{WebUtility.HtmlEncode(consent.Cancel)}}</button>
 </div>
 </form></main>
 <script>
