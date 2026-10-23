@@ -5,22 +5,32 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const gitPath = "/usr/bin/git";
+const processOptions = { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 };
+if (process.argv.length > 2 && (process.argv.length !== 4 || process.argv[2] !== "--since")) {
+  throw new Error("Usage: mutation-matrix.mjs [--since <commit SHA or HEAD^1>]");
+}
+const sinceRef = process.argv[2] === "--since" ? process.argv[3] : null;
+if (sinceRef !== null && sinceRef !== "HEAD^1" && (sinceRef.length !== 40 || !/^[0-9a-f]{40}$/.test(sinceRef))) {
+  throw new Error("Invalid since target: expected a 40-character commit SHA or HEAD^1");
+}
 const dotnetRoot = process.env.DOTNET_ROOT ?? "/usr/local/share/dotnet";
-if (!isAbsolute(dotnetRoot)) throw new Error("DOTNET_ROOT must be an absolute SDK installation path");
+if (!isAbsolute(dotnetRoot) || !/^\/(?:\w[\w.-]*\/)*\w[\w.-]*\/?$/.test(dotnetRoot) || /\s/.test(dotnetRoot)) {
+  throw new Error("DOTNET_ROOT must be an absolute SDK installation path with canonical directory names");
+}
 const dotnetPath = realpathSync(join(dotnetRoot, "dotnet"));
-const git = (...args) => execFileSync(gitPath, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 
 function spanShards(project, name, file, boundaries, start = 0) {
-  return [...boundaries, null].map((end, index) => ({
-    project,
-    shard: `${name}-${index + 1}`,
-    // https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.Configuration/FilePattern.cs
-    // Prefix exclusions assign boundary-crossing mutants to the shard containing their end.
-    mutate: [
-      `${file}${end === null ? "" : `{0..${end}}`}`,
-      ...(index === 0 && start === 0 ? [] : [`!${file}{0..${index === 0 ? start : boundaries[index - 1]}}`]),
-    ],
-  }));
+  return [...boundaries, null].map((end, index) => {
+    const included = end === null ? file : `${file}{0..${end}}`;
+    const lower = index === 0 ? start : boundaries[index - 1];
+    return {
+      project,
+      shard: `${name}-${index + 1}`,
+      // https://github.com/stryker-mutator/stryker-net/blob/f9109e24c615a7030a3b33e5532c665c974e4ec5/src/Stryker.Configuration/FilePattern.cs
+      // Prefix exclusions assign boundary-crossing mutants to the shard containing their end.
+      mutate: [included, ...(lower === 0 ? [] : [`!${file}{0..${lower}}`])],
+    };
+  });
 }
 
 const shards = [
@@ -66,9 +76,14 @@ const shards = [
       "**/Chat/Tools/Implementations/ManageSubscriptionTool.cs",
     ],
   },
-  ...spanShards("application", "application-chat-habits", "**/Chat/Tools/Implementations/CreateHabitTool.cs", [15000])
-    .map((scope, index) => ({ ...scope, mutate: [...scope.mutate, index === 0
-      ? "**/Chat/Tools/Implementations/ManageAccountTool.cs" : "**/Chat/Tools/Implementations/ProfileTools.cs"] })),
+  // https://github.com/thomasluizon/orbit-api/actions/runs/39967757328/artifacts/12509680517
+  // The generated mutant listing splits the slow prefix into 69 and 64, retaining the completed suffix's 258.
+  ...spanShards("application", "application-chat-habits", "**/Chat/Tools/Implementations/CreateHabitTool.cs", [10500, 15000])
+    .map((scope, index) => {
+      const companion = index === 0 ? ["**/Chat/Tools/Implementations/ManageAccountTool.cs"] : [];
+      if (index === 2) companion.push("**/Chat/Tools/Implementations/ProfileTools.cs");
+      return { ...scope, mutate: [...scope.mutate, ...companion] };
+    }),
   {
     project: "application", shard: "application-chat-calendar-notifications", mutate: [
       "**/Chat/Tools/Implementations/CalendarTools.cs",
@@ -81,7 +96,9 @@ const shards = [
 function patternParts(pattern) {
   const [glob] = pattern.replace(/^!/, "").split("{");
   const ranges = [...pattern.matchAll(/\{(\d+)\.\.(\d+)\}/g)].map((match) => [Number(match[1]), Number(match[2])]);
-  const regex = new RegExp(`^${glob.split("/").map((part) => part === "**" ? ".*" : part.split("*").map((text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")).join("/")}$`);
+  const segments = glob.split("/").map((part) => part === "**" ? ".*" : part.split("*")
+    .map((text) => text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)).join("[^/]*"));
+  const regex = new RegExp("^" + segments.join("/") + "$");
   return { glob, ranges: ranges.length ? ranges : [[0, 2147483647]], matches: (path) => regex.test(path) };
 }
 
@@ -92,23 +109,28 @@ function inProject(path, scope) {
 }
 
 function isInScopeFile(path, scopes) {
-  return /^src\/Orbit\.(?:Domain|Application|Infrastructure)\/(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.cs$/.test(path)
-    && scopes.some((scope) => inProject(path, scope)
-      && scope.mutate.some((pattern) => !pattern.startsWith("!") && patternParts(pattern).matches(path)));
+  if (!scopes.some((scope) => inProject(path, scope)
+    && scope.mutate.some((pattern) => !pattern.startsWith("!") && patternParts(pattern).matches(path)))) return false;
+  if (!/^src\/Orbit\.(?:Domain|Application|Infrastructure)\/(?:\w[\w.-]*\/)*\w[\w.-]*\.cs$/.test(path) || /\s/.test(path)) {
+    throw new Error("Invalid in-scope repository path");
+  }
+  return true;
 }
 
 function selectDiff(target) {
-  const changed = git("diff", "--name-only", "--no-renames", "--diff-filter=AM", "-z", target, "HEAD", "--").split("\0").filter(Boolean);
+  const changed = execFileSync(gitPath, ["diff", "--name-only", "--no-ext-diff", "--no-textconv", "--no-renames", "--diff-filter=AM", "-z", "--end-of-options", target, "HEAD", "--"], processOptions).split("\0").filter(Boolean);
   const candidates = [];
   const scopes = shards.map((shard) => ({ ...shard, mutate: shard.mutate ?? JSON.parse(readFileSync(`${root}stryker-config.${shard.project}.json`, "utf8"))["stryker-config"].mutate }));
-  for (const path of changed) {
-    if (!isInScopeFile(path, scopes)) continue;
-    const patch = git("--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--unified=0", "--no-renames", target, "HEAD", "--", path);
+  const paths = changed.filter((path) => isInScopeFile(path, scopes));
+  for (const path of paths) {
+    const patch = execFileSync(gitPath, ["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--unified=0", "--no-renames", "--end-of-options", target, "HEAD", "--", path], processOptions);
     const hunks = [...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({
       OldStart: Number(match[1]), OldCount: Number(match[2] ?? 1), NewStart: Number(match[3]), NewCount: Number(match[4] ?? 1),
     }));
-    const existed = git("--literal-pathspecs", "ls-tree", "-z", target, "--", path).length > 0;
-    candidates.push({ path, Before: existed ? git("show", `${target}:${path}`) : "", After: git("show", `HEAD:${path}`), Hunks: hunks });
+    const existed = execFileSync(gitPath, ["--literal-pathspecs", "ls-tree", "-z", "--end-of-options", target, "--", path], processOptions).length > 0;
+    const before = existed ? execFileSync(gitPath, ["show", "--no-ext-diff", "--no-textconv", "--end-of-options", `${target}:${path}`], processOptions) : "";
+    const after = execFileSync(gitPath, ["show", "--no-ext-diff", "--no-textconv", "--end-of-options", `HEAD:${path}`], processOptions);
+    candidates.push({ path, Before: before, After: after, Hunks: hunks });
   }
   if (!candidates.length) return [];
   const spans = JSON.parse(execFileSync(dotnetPath, [fileURLToPath(new URL("./mutation-spans/bin/Debug/net10.0/MutationSpans.dll", import.meta.url))], {
@@ -124,7 +146,8 @@ function selectDiff(target) {
         const glob = `**/${path.split("/").slice(2).join("/")}`;
         const selected = spans[index].flatMap(([start, end]) => ranges.map(([lower, upper]) => [Math.max(start, lower), Math.min(end, upper)]))
           .filter(([start, end]) => start < end && !exclusions.some((pattern) => patternParts(pattern).ranges.some(([lower, upper]) => start >= lower && end <= upper)));
-        if (selected.length) mutate.push(`${glob}${selected.map(([start, end]) => `{${start}..${end}}`).join("")}`);
+        const selectedRanges = selected.map(([start, end]) => `{${start}..${end}}`).join("");
+        if (selected.length) mutate.push(glob + selectedRanges);
       }
       if (mutate.some((pattern) => patternParts(pattern).matches(path))) mutate.push(...exclusions);
     }
@@ -133,11 +156,9 @@ function selectDiff(target) {
 }
 
 let selected = shards;
-if (process.argv.length > 2 && (process.argv.length !== 4 || process.argv[2] !== "--since")) {
-  throw new Error("Usage: mutation-matrix.mjs [--since <commit>]");
-}
-if (process.argv[2] === "--since") {
-  const target = git("rev-parse", "--verify", "--end-of-options", `${process.argv[3]}^{commit}`).trim();
+if (sinceRef !== null) {
+  const target = execFileSync(gitPath, ["rev-parse", "--verify", "--end-of-options", `${sinceRef}^{commit}`], processOptions).trim();
+  if (target.length !== 40 || !/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid resolved commit: expected a 40-character SHA");
   selected = selectDiff(target);
 }
 

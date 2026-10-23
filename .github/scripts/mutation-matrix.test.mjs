@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,8 @@ const dotnetPath = realpathSync(join(process.env.DOTNET_ROOT ?? "/usr/local/shar
 execFileSync(dotnetPath, ["build", fileURLToPath(new URL("./mutation-spans/MutationSpans.csproj", import.meta.url)), "--nologo"], { stdio: "pipe" });
 
 function select(repo, target, env = process.env) {
-  const output = execFileSync(process.execPath, [selector, ...(target ? ["--since", target] : [])], {
+  const revision = target && target !== "HEAD^1" ? repo.git("rev-parse", "--verify", "--end-of-options", `${target}^{commit}`).trim() : target;
+  const output = execFileSync(process.execPath, [selector, ...(target ? ["--since", revision] : [])], {
     cwd: repo?.root, encoding: "utf8", env,
   });
   const values = Object.fromEntries(output.trim().split("\n").map((line) => {
@@ -45,6 +46,45 @@ function repository(t) {
     paths.clear();
   };
   return { root, git, write, commit };
+}
+
+function assertRejectedBeforeProcess(t, args, message, env = process.env, firstOutput) {
+  const directory = mkdtempSync(join(tmpdir(), "orbit-mutation-process-probe-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const marker = join(directory, "process-started");
+  const preload = join(directory, "probe.mjs");
+  writeFileSync(preload, [
+    'import childProcess from "node:child_process";',
+    'import { writeFileSync } from "node:fs";',
+    'import { syncBuiltinESMExports } from "node:module";',
+    "let calls = 0;",
+    "childProcess.execFileSync = () => {",
+    ...(firstOutput === undefined ? [] : [`  if (++calls === 1) return ${JSON.stringify(firstOutput)};`]),
+    `  writeFileSync(${JSON.stringify(marker)}, "started");`,
+    '  throw new Error("Process started before validation");',
+    "};",
+    "syncBuiltinESMExports();",
+  ].join("\n"));
+  assert.throws(() => execFileSync(process.execPath, ["--import", preload, selector, ...args], { env, stdio: "pipe" }), message);
+  assert.equal(existsSync(marker), false, "Unvalidated values must never reach execFileSync");
+}
+
+for (const target of ["--help", "HEAD^1\n", `${"a".repeat(40)}\n`, "main", "HEAD", "a".repeat(39)]) {
+  test(`process validation: unsafe since target ${JSON.stringify(target)} is rejected before execution`, (t) => {
+    assertRejectedBeforeProcess(t, ["--since", target], /Invalid since target/);
+  });
+}
+
+for (const installation of ["--help", `${process.env.DOTNET_ROOT ?? "/usr/local/share/dotnet"}\n`]) {
+  test(`process validation: unsafe DOTNET_ROOT ${JSON.stringify(installation)} is rejected before execution`, (t) => {
+    assertRejectedBeforeProcess(t, ["--since", "HEAD^1"], /DOTNET_ROOT must/, { ...process.env, DOTNET_ROOT: installation });
+  });
+}
+
+for (const resolved of ["--help\n", `${"a".repeat(20)}\n${"a".repeat(20)}\n`]) {
+  test(`process validation: invalid resolved commit ${JSON.stringify(resolved)} is rejected before another execution`, (t) => {
+    assertRejectedBeforeProcess(t, ["--since", "HEAD^1"], /Invalid resolved commit/, process.env, resolved);
+  });
 }
 
 const userPath = "src/Orbit.Domain/Entities/User.cs";
@@ -230,7 +270,7 @@ function assertOneOwner(scopes, file, start, end) {
 test("nightly and manual runs keep the configured file set and thresholds", () => {
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
-  assert.equal(matrix.filter(({ project }) => project === "application").length, 9);
+  assert.equal(matrix.filter(({ project }) => project === "application").length, 10);
   for (const project of ["domain", "application"]) {
     const scopes = matrix.filter((scope) => scope.project === project);
     const config = JSON.parse(readFileSync(new URL(`../../stryker-config.${project}.json`, import.meta.url), "utf8"))["stryker-config"];
@@ -317,11 +357,30 @@ for (const path of [
   "src/Orbit.Application/Auth/Commands/--help.cs",
   "src/Orbit.Application/Auth/Commands/unsafe;argument.cs",
   "src/Orbit.Application/Auth/Commands/unsafe$(argument).cs",
+  "src/Orbit.Application/Auth/Commands/unsafe\nargument.cs",
 ]) {
-  test(`diff spans: file arguments must be canonical in-scope paths: ${path}`, (t) => {
-    assert.deepEqual(select(change(t, path), "base"), []);
+  test(`process validation: file arguments must be canonical in-scope paths: ${JSON.stringify(path)}`, (t) => {
+    assert.throws(() => select(change(t, path), "base"), /Invalid in-scope repository path/);
   });
 }
+
+test("nightly chat habit spans split the measured slow prefix and retain the completed suffix", () => {
+  const scopes = select().filter(({ shard }) => shard?.startsWith("application-chat-habits-"));
+  assert.deepEqual(scopes.map(({ mutate }) => mutate), [
+    ["**/Chat/Tools/Implementations/CreateHabitTool.cs{0..10500}", "**/Chat/Tools/Implementations/ManageAccountTool.cs"],
+    ["**/Chat/Tools/Implementations/CreateHabitTool.cs{0..15000}", "!**/Chat/Tools/Implementations/CreateHabitTool.cs{0..10500}"],
+    ["**/Chat/Tools/Implementations/CreateHabitTool.cs", "!**/Chat/Tools/Implementations/CreateHabitTool.cs{0..15000}", "**/Chat/Tools/Implementations/ProfileTools.cs"],
+  ]);
+  const path = "src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs";
+  for (const boundary of [10500, 15000]) {
+    assertOneOwner(scopes, path, boundary - 1, boundary);
+    assertOneOwner(scopes, path, boundary, boundary + 1);
+    assertOneOwner(scopes, path, boundary - 1, boundary + 1);
+    const owner = scopes.find((scope) => owns(scope, path, boundary, boundary + 1));
+    assert.throws(() => assertOneOwner(scopes.filter((scope) => scope !== owner), path, boundary, boundary + 1), /exactly one owner/);
+    assert.throws(() => assertOneOwner([...scopes, owner], path, boundary, boundary + 1), /exactly one owner/);
+  }
+});
 
 test("nightly scopes split each timed-out or near-limit shard", () => {
   const scopes = select();
@@ -375,9 +434,10 @@ for (const [path, boundary] of [
   ["src/Orbit.Domain/Entities/Habit.cs", 31500],
   ["src/Orbit.Domain/Entities/HabitInvariants.cs", 2000],
   ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 18000],
+  ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 10500],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 15000],
 ]) {
-  test(`diff spans: ${path} routes multiline changes across its split without dropping the mutant`, (t) => {
+  test(`diff spans: ${path} routes multiline changes across ${boundary} without dropping the mutant`, (t) => {
     const prefix = `/*${" ".repeat(boundary - 50)}*/\n`;
     const source = prefix + "class User {\n    bool Value => left &&\n        right &&\n        tail;\n}\n";
     const revised = source.replace("right", "other");
