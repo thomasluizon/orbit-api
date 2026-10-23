@@ -15,6 +15,15 @@ on:
         type: string
         required: true
         default: main
+      sha:
+        description: Full commit SHA (required for staging; production defaults to the dispatch commit)
+        type: string
+        required: false
+      force_unstaged:
+        description: Release production without a matching healthy staging commit
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -29,13 +38,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Validate release selection
+        id: selection
         env:
           RELEASE_ENVIRONMENT: ${{ inputs.environment }}
           RELEASE_BRANCH: ${{ inputs.branch }}
+          RELEASE_SHA: ${{ inputs.sha }}
+          DISPATCH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
@@ -50,25 +60,39 @@ jobs:
             echo '::error::Production releases require branch main'
             exit 1
           fi
+          git check-ref-format "refs/heads/$RELEASE_BRANCH"
+          if [ "$RELEASE_ENVIRONMENT" = production ] && [ -z "$RELEASE_SHA" ]; then
+            RELEASE_SHA="$DISPATCH_SHA"
+          fi
+          if [[ ! "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo '::error::Select a full 40-character commit SHA; staging requires an explicit SHA'
+            exit 1
+          fi
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ steps.selection.outputs.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Resolve commit
         id: commit
         env:
           RELEASE_BRANCH: ${{ inputs.branch }}
+          RELEASE_SHA: ${{ steps.selection.outputs.sha }}
         run: |
           set -euo pipefail
           sha=$(git rev-parse HEAD)
-          branch_sha=$(gh api "repos/$GITHUB_REPOSITORY/branches/$RELEASE_BRANCH" --jq '.commit.sha')
-          if [ "$sha" != "$branch_sha" ]; then
-            echo "::error::The checked out commit is not the head of $RELEASE_BRANCH"
+          if [ "$sha" != "$RELEASE_SHA" ]; then
+            echo '::error::Checkout does not match the selected release SHA'
             exit 1
           fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" "refs/remotes/origin/$RELEASE_BRANCH"; then
+            echo "::error::The selected release SHA is not reachable from $RELEASE_BRANCH"
+            exit 1
+          fi
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
 
   production:
     if: inputs.environment == 'production'
@@ -85,6 +109,28 @@ jobs:
       COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Require healthy staging commit
+        env:
+          FORCE_UNSTAGED: ${{ inputs.force_unstaged }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Production staging admission'
+            echo "Selected SHA: $COMMIT_SHA"
+            echo "force_unstaged: $FORCE_UNSTAGED"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FORCE_UNSTAGED" = true ]; then
+            echo "::notice::Operator override force_unstaged permits production release of $COMMIT_SHA without staging admission"
+            exit 0
+          fi
+          health=$(curl --fail-with-body --silent --show-error --max-time 30 \
+            'https://api-staging.useorbit.org/health')
+          if ! jq -e --arg sha "$COMMIT_SHA" '.status == "Healthy" and .commit == $sha' <<< "$health" > /dev/null; then
+            echo "::error::Staging must serve $COMMIT_SHA with status Healthy before production release; force_unstaged is the explicit override"
+            exit 1
+          fi
+          echo "Staging served $COMMIT_SHA with status Healthy" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Trigger and monitor Render deploy
         id: render
         run: |
@@ -171,6 +217,14 @@ jobs:
             '{state: "success", environment: "production", log_url: $log_url, environment_url: "https://api.useorbit.org"}')
           gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
             --input - <<< "$status"
+
+      - name: Summarize release
+        run: |
+          set -euo pipefail
+          {
+            echo '## API production release'
+            echo "Deployed SHA: $COMMIT_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
     if: inputs.environment == 'staging'
@@ -288,3 +342,11 @@ jobs:
             '{state: "success", environment: "staging", log_url: $log_url, environment_url: "https://api-staging.useorbit.org"}')
           gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
             --input - <<< "$status"
+
+      - name: Summarize release
+        run: |
+          set -euo pipefail
+          {
+            echo '## API staging release'
+            echo "Deployed SHA: $COMMIT_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
