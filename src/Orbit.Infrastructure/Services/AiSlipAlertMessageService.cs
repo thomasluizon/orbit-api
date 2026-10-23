@@ -37,6 +37,7 @@ public sealed partial class AiSlipAlertMessageService(
             - Never say or imply that it is now the usual time. The notification always arrives before it, and when there is no time pattern there is no usual time to name.
             - Do not name the app.
             - Write ONLY in {languageName}.
+            - Plain text only, no Markdown. Preserve the habit name exactly as supplied.
 
             {NotificationVoice.Rules}
             """;
@@ -66,7 +67,10 @@ public sealed partial class AiSlipAlertMessageService(
                 return GenerateFallback(habitTitle, peakHour, language);
             }
 
-            var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var lines = AiPlainText.Normalize(text, [habitTitle])
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (lines.Length == 0)
+                return GenerateFallback(habitTitle, peakHour, language);
             return lines.Length >= 2
                 ? Result.Success((lines[0], lines[1]))
                 : Result.Success((FallbackTitle(habitTitle, peakHour, language), lines[0]));

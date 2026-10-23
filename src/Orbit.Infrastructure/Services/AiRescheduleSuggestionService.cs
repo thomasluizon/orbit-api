@@ -143,7 +143,7 @@ public sealed partial class AiRescheduleSuggestionService(
     private static Result<RescheduleSuggestion> BuildSuggestion(
         RescheduleSuggestionPayload payload, Habit habit, DateOnly userToday)
     {
-        var rationale = (payload.Rationale ?? string.Empty).Trim();
+        var rationale = AiPlainText.Normalize(payload.Rationale ?? string.Empty, [habit.Title]);
         if (rationale.Length == 0)
             return Result.Failure<RescheduleSuggestion>(ErrorMessages.AiEmptyResponse);
         if (rationale.Length > MaxRationaleChars)

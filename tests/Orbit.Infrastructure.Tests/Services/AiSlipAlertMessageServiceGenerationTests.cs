@@ -22,13 +22,24 @@ public class AiSlipAlertMessageServiceGenerationTests
     [Fact]
     public async Task GenerateMessageAsync_TwoLines_ReturnsTitleAndBody()
     {
-        var service = BuildService("Your usual time for Smoking\nIt tends to show up around now. You can let it pass.");
+        var service = BuildService("**Your usual time for Smoking**\nIt tends to show up around now. You can *let it pass*.");
 
         var result = await service.GenerateMessageAsync("Smoking", DayOfWeek.Friday, 14, "en");
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Your usual time for Smoking");
         result.Value.Body.Should().Be("It tends to show up around now. You can let it pass.");
+    }
+
+    [Fact]
+    public async Task GenerateMessageAsync_PreservesLiteralHabitNameInBothFields()
+    {
+        var service = BuildService("**A reminder for Smoke *less***\nLet *Smoke *less** pass today.");
+
+        var result = await service.GenerateMessageAsync("Smoke *less*", DayOfWeek.Friday, 14, "en");
+
+        result.Value.Title.Should().Be("A reminder for Smoke *less*");
+        result.Value.Body.Should().Be("Let Smoke *less* pass today.");
     }
 
     [Fact]

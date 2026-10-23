@@ -7,5 +7,6 @@ public interface IGoalReviewService
     Task<Result<string>> GenerateReviewAsync(
         string goalsContext,
         string language,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<string>? literalNames = null);
 }

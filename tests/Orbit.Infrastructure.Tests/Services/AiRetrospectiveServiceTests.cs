@@ -261,10 +261,10 @@ public class AiRetrospectiveServiceTests
     public void ParseNarrative_English_SplitsAllFourSections()
     {
         var text =
-            "**Highlights**\nYou nailed Exercise at 100%.\n\n" +
-            "**Missed Opportunities**\nReading slipped to 20%.\n\n" +
-            "**Trends**\nMornings are your strongest window.\n\n" +
-            "**Suggestion**\nSchedule Reading right after lunch.";
+            "**Highlights**\nYou nailed **Exercise** at 100%.\n\n" +
+            "**Missed Opportunities**\n*Reading* slipped to 20%.\n\n" +
+            "**Trends**\n__Mornings__ are your strongest window.\n\n" +
+            "**Suggestion**\n- Schedule Reading right after lunch.";
 
         var result = InvokeParseNarrative(text, "en");
 
@@ -328,7 +328,7 @@ public class AiRetrospectiveServiceTests
 
         var result = InvokeParseNarrative(text, "en");
 
-        result.Highlights.Should().Be(text);
+        result.Highlights.Should().Be("Highlights\nGood week.\nTrends\nUp and to the right.");
         result.Missed.Should().BeEmpty();
     }
 
@@ -373,10 +373,42 @@ public class AiRetrospectiveServiceTests
         return ((string, int, int, int))method.Invoke(null, [habits, dateFrom, dateTo, totalDays, 1])!;
     }
 
-    private static RetrospectiveNarrative InvokeParseNarrative(string text, string language)
+    [Theory]
+    [InlineData("Read *daily*")]
+    [InlineData("**Water**")]
+    [InlineData("A*B")]
+    [InlineData("__Meals__")]
+    [InlineData("- Walk")]
+    public void ParseNarrative_PreservesLiteralHabitNames(string name)
+    {
+        var text = $"Highlights\n- You completed **{name}**.\nMissed Opportunities\nNone.\nTrends\nSteady.\nSuggestion\nKeep going.";
+
+        var result = InvokeParseNarrative(text, "en", [name]);
+
+        result.Highlights.Should().Be($"You completed {name}.");
+    }
+
+    [Fact]
+    public void ParseNarrative_FallbackAlsoRemovesInlineMarkdown()
+    {
+        InvokeParseNarrative("- **Water** and *Meals* improved.", "en").Highlights
+            .Should().Be("Water and Meals improved.");
+    }
+
+    [Fact]
+    public void BuildRetrospectivePrompt_RequestsPlainTextAndExactNames()
+    {
+        var prompt = InvokeBuildRetrospectivePrompt([CreateDailyHabit("A*B")], DateFrom, DateTo, "week", "pt-BR");
+
+        prompt.Should().Contain("Plain text only: no Markdown");
+        prompt.Should().Contain("preserve habit names exactly");
+        prompt.Should().NotContain("**");
+    }
+
+    private static RetrospectiveNarrative InvokeParseNarrative(string text, string language, IEnumerable<string>? names = null)
     {
         var method = typeof(AiRetrospectiveService)
             .GetMethod("ParseNarrative", PrivateStatic)!;
-        return (RetrospectiveNarrative)method.Invoke(null, [text, language])!;
+        return (RetrospectiveNarrative)method.Invoke(null, [text, language, names])!;
     }
 }

@@ -61,7 +61,7 @@ public class GetGoalReviewQueryHandlerTests
             .Returns(new List<Goal> { goal }.AsReadOnly());
 
         _reviewService.GenerateReviewAsync(
-            Arg.Any<string>(), "en", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Success("Review content"));
 
         var query = new GetGoalReviewQuery(UserId, "en");
@@ -71,6 +71,8 @@ public class GetGoalReviewQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Review.Should().Be("Review content");
         result.Value.FromCache.Should().BeFalse();
+        await _reviewService.Received(1).GenerateReviewAsync(Arg.Any<string>(), "en", Arg.Any<CancellationToken>(),
+            Arg.Is<IReadOnlyList<string>?>(names => names != null && names.SequenceEqual(new[] { goal.Title })));
         await _payGate.Received(1).TryConsumeAiMessage(
             UserId, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>());
     }
@@ -87,7 +89,7 @@ public class GetGoalReviewQueryHandlerTests
             .Returns(new List<Goal> { goal }.AsReadOnly());
         string? capturedContext = null;
         _reviewService.GenerateReviewAsync(
-            Arg.Do<string>(context => capturedContext = context), "en", Arg.Any<CancellationToken>())
+            Arg.Do<string>(context => capturedContext = context), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Success("Review content"));
         var previousCulture = CultureInfo.CurrentCulture;
 
@@ -117,7 +119,7 @@ public class GetGoalReviewQueryHandlerTests
             .Returns(new List<Goal> { goal }.AsReadOnly());
         string? capturedContext = null;
         _reviewService.GenerateReviewAsync(
-            Arg.Do<string>(context => capturedContext = context), "en", Arg.Any<CancellationToken>())
+            Arg.Do<string>(context => capturedContext = context), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Success("Review content"));
         var previousCulture = CultureInfo.CurrentCulture;
 
@@ -156,7 +158,7 @@ public class GetGoalReviewQueryHandlerTests
 
         string? capturedContext = null;
         _reviewService.GenerateReviewAsync(
-            Arg.Do<string>(ctx => capturedContext = ctx), "en", Arg.Any<CancellationToken>())
+            Arg.Do<string>(ctx => capturedContext = ctx), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Success("Review content"));
 
         var result = await _handler.Handle(new GetGoalReviewQuery(UserId, "en"), CancellationToken.None);
@@ -178,7 +180,7 @@ public class GetGoalReviewQueryHandlerTests
             .Returns(new List<Goal> { goal }.AsReadOnly());
 
         _reviewService.GenerateReviewAsync(
-            Arg.Any<string>(), "en", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Success("Review content"));
 
         var query = new GetGoalReviewQuery(UserId, "en");
@@ -202,7 +204,7 @@ public class GetGoalReviewQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { CreateTestGoal() }.AsReadOnly());
         _reviewService.GenerateReviewAsync(
-            Arg.Any<string>(), "en", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Success("Review content"));
 
         var query = new GetGoalReviewQuery(UserId, "en");
@@ -232,7 +234,7 @@ public class GetGoalReviewQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
         await _reviewService.DidNotReceive().GenerateReviewAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>());
     }
 
     [Fact]
@@ -265,7 +267,7 @@ public class GetGoalReviewQueryHandlerTests
             .Returns(new List<Goal> { goal }.AsReadOnly());
 
         _reviewService.GenerateReviewAsync(
-            Arg.Any<string>(), "en", Arg.Any<CancellationToken>())
+            Arg.Any<string>(), "en", Arg.Any<CancellationToken>(), Arg.Any<IReadOnlyList<string>?>())
             .Returns(Result.Failure<string>("AI service error"));
 
         var query = new GetGoalReviewQuery(UserId, "en");
