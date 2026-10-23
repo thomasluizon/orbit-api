@@ -1,7 +1,10 @@
 {
   "stryker-config": {
     "project": "Orbit.Infrastructure.csproj",
-    "test-projects": ["tests/Orbit.Infrastructure.Tests/Orbit.Infrastructure.Tests.csproj"],
+    "test-projects": [
+      "tests/Orbit.Infrastructure.Tests/Orbit.Infrastructure.Tests.csproj",
+      "tests/Orbit.Application.Tests/Orbit.Application.Tests.csproj"
+    ],
     "mutate": [
       "**/Services/JwtTokenService.cs",
       "**/Services/AuthSessionService.cs",

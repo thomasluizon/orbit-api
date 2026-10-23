@@ -34,7 +34,8 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(ToolResponse(tool.Name, "rejected_occurrence", original));
         QueueCorrection(ParseArguments(ProductionAdaptationArguments));
 
-        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create the adaptation habit at 21:00."), default);
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create the adaptation habit at 21:00.",
+            StreamSink: _ => Task.CompletedTask), default);
 
         gateway.Requests.Should().HaveCount(2);
         (gateway.Requests[1] with { Arguments = gateway.Requests[0].Arguments }).Should().Be(gateway.Requests[0]);
@@ -258,6 +259,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
         gateway.Requests.Should().HaveCount(2);
         result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
+        result.Value.Actions[0].Error.Should().Be(language == "en" ? EnglishToolFailureMessage : PortugueseToolFailureMessage);
+        result.Value.Actions[0].MessageKey.Should().Be("chat.toolResult.toolFailure");
         result.Value.AiMessage.Should().Be(language == "en" ? EnglishToolFailureMessage : PortugueseToolFailureMessage);
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
@@ -281,6 +284,8 @@ public partial class ProcessUserChatCommandHandlerTests
         gateway.Requests.Should().ContainSingle();
         result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
         result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
+        result.Value.Actions[0].Error.Should().Be(EnglishToolFailureMessage);
+        result.Value.Actions[0].MessageKey.Should().Be("chat.toolResult.toolFailure");
     }
 
     [Fact]
@@ -509,7 +514,12 @@ public partial class ProcessUserChatCommandHandlerTests
             result.Value.AiMessage.Should().BeNull();
         }
         else
+        {
             result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
+            result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed);
+            result.Value.Actions[0].Error.Should().Be(EnglishToolFailureMessage);
+            result.Value.Actions[0].MessageKey.Should().Be("chat.toolResult.toolFailure");
+        }
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
@@ -567,10 +577,11 @@ public partial class ProcessUserChatCommandHandlerTests
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
+        var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
-            ownership, Substitute.For<IAgentStepUpAuthorizationBridge>(), registry,
+            ownership, bridge, registry,
             previewer, _pendingOperationStore, _unitOfWork, NullLogger<AgentOperationExecutor>.Instance);
-        var gateway = new CorrectionGateway(executor, [], []);
+        var gateway = new CorrectionGateway(executor, [], [], policy, bridge);
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
             var request = call.ArgAt<AgentExecuteOperationRequest>(0);
@@ -583,7 +594,8 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     private sealed record CorrectionGateway(AgentOperationExecutor Executor,
-        List<AgentExecuteOperationRequest> Requests, List<AgentExecuteOperationResponse> Responses);
+        List<AgentExecuteOperationRequest> Requests, List<AgentExecuteOperationResponse> Responses,
+        IAgentPolicyEvaluator Policy, IAgentStepUpAuthorizationBridge Bridge);
 
     private sealed class ExecutionOverrideTool(IPreparedIntentTool inner, Func<Task<ToolResult>> execute) : IPreparedIntentTool
     {
