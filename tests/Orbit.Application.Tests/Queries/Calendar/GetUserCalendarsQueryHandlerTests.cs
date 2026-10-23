@@ -114,6 +114,7 @@ public class GetUserCalendarsQueryHandlerTests
     [Fact]
     public async Task Handle_ReconnectRequired_MarksUserAndReturnsReconnectMessage()
     {
+        _logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
         var user = CreateUser();
         user.SetGoogleTokens("stale", null);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -127,5 +128,8 @@ public class GetUserCalendarsQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.CalendarReconnectRequired);
         user.GoogleAccessToken.Should().BeNull();
+        var levels = _logger.ReceivedCalls().Where(c => c.GetMethodInfo().Name == "Log")
+            .Select(c => (LogLevel)c.GetArguments()[0]!);
+        levels.Should().Contain(LogLevel.Warning).And.NotContain(LogLevel.Error);
     }
 }
