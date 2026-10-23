@@ -72,8 +72,8 @@ public sealed class PendingOperationChangePreviewerTests
         var bulkPreview = await Preview("bulk_update_habits", bulkArgs);
         bulkPreview.Should().NotBeNull();
         bulkPreview!.Changes.Should().ContainSingle().Which.Field.Should().Be("title");
-        bulkPreview.Should().BeEquivalentTo(bulkBefore);
-        preview.Should().BeEquivalentTo(before);
+        JsonSerializer.Serialize(bulkPreview).Should().Be(JsonSerializer.Serialize(bulkBefore));
+        JsonSerializer.Serialize(preview).Should().Be(JsonSerializer.Serialize(before));
     }
 
     [Fact]
