@@ -108,7 +108,7 @@ public class GetRetrospectiveQueryHandler(
             streakState?.LongestStreak ?? 0,
             weekStartDay);
 
-        if (metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
+        if (request.GenerateNarrative && metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
 
         if (!request.GenerateNarrative)

@@ -82,6 +82,22 @@ public class GetRetrospectiveQueryHandlerTests
     private Task<Result<RetrospectiveResponse>> HandleWeek() =>
         _handler.Handle(new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "week", "en"), CancellationToken.None);
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Handle_ReadWithoutNarrativeIncludesScheduledWeekWithNoLogs(string language)
+    {
+        StubHabits(CreateDailyHabit());
+
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language, GenerateNarrative: false), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Metrics.TotalScheduled.Should().Be(7);
+        result.Value.Metrics.TotalCompletions.Should().Be(0);
+        result.Value.Metrics.CompletionSeries!.Points.Should().HaveCount(7);
+        _retroService.ReceivedCalls().Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Handle_GeneratesNewRetrospective_WhenNotCached()
     {
