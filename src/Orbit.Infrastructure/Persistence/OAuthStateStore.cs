@@ -10,21 +10,34 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
 {
     public bool Put(string secret, string kind, string payload, DateTime expiresAtUtc, int? capacity = null)
     {
-        using var transaction = db.Database.CurrentTransaction is null ? db.Database.BeginTransaction() : null;
-        if (capacity.HasValue)
+        return db.Database.CurrentTransaction is not null
+            ? PutCore()
+            : db.Database.CreateExecutionStrategy().Execute(PutCore);
+
+        bool PutCore()
         {
-            if (db.Database.IsNpgsql())
-                db.Database.ExecuteSqlRaw("SELECT pg_advisory_xact_lock(hashtext({0}))", $"oauth-capacity:{kind}");
-            var nowAtUtc = timeProvider.GetUtcNow().UtcDateTime;
-            if (db.OAuthStates.Count(state => state.Kind == kind && state.ExpiresAtUtc > nowAtUtc) >= capacity.Value)
-                return false;
+            using var transaction = db.Database.CurrentTransaction is null ? db.Database.BeginTransaction() : null;
+            if (capacity.HasValue)
+            {
+                if (db.Database.IsNpgsql())
+                    db.Database.ExecuteSqlRaw("SELECT pg_advisory_xact_lock(hashtext({0}))", $"oauth-capacity:{kind}");
+                var nowAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+                if (db.OAuthStates.Count(state => state.Kind == kind && state.ExpiresAtUtc > nowAtUtc) >= capacity.Value)
+                    return false;
+            }
+            var state = OAuthState.Create(Hash(secret), kind, payload, expiresAtUtc);
+            db.OAuthStates.Add(state);
+            try
+            {
+                db.SaveChanges();
+                transaction?.Commit();
+                return true;
+            }
+            finally
+            {
+                db.Entry(state).State = EntityState.Detached;
+            }
         }
-        var state = OAuthState.Create(Hash(secret), kind, payload, expiresAtUtc);
-        db.OAuthStates.Add(state);
-        db.SaveChanges();
-        db.Entry(state).State = EntityState.Detached;
-        transaction?.Commit();
-        return true;
     }
 
     public string? Read(string secret, string kind, DateTime nowAtUtc)
