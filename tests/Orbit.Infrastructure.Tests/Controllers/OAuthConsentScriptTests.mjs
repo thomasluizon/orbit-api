@@ -6,10 +6,10 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../../../src/Orbit.Api/OAuth/OAuthConsentPage.cs', import.meta.url), 'utf8')
   .split('public const string SubmitScript = """\n')[1].split('\n""";')[0];
 
-for (const access of ['read_only', 'requested']) {
+for (const access of ['read_only', 'requested', 'cancel']) {
   test(`allows one submission and preserves the ${access} submitter`, () => {
     const attributes = new Map();
-    const buttons = ['read_only', 'requested'].map((value) => ({
+    const buttons = ['read_only', 'requested', 'cancel'].map((value) => ({
       name: 'access', value, disabled: false, attributes: new Map(),
       setAttribute(name, value) { this.attributes.set(name, value); }
     }));

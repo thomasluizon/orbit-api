@@ -219,6 +219,7 @@ h1 {
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--primary); color: var(--fg-on-primary); }
 .btn-ghost { background: transparent; color: var(--fg-1); box-shadow: inset 0 0 0 1.5px var(--hairline-strong); }
+.btn-quiet { background: transparent; color: var(--fg-3); }
 .btn-sm {
   position: relative;
   height: var(--btn-h-sm);
@@ -242,16 +243,18 @@ h1 {
   align-items: center;
   gap: var(--s-3);
 }
-.action-row .btn { width: auto; }
-@media (max-width: 479px) {
-  .action-row .btn { width: 100%; }
+.action-row .btn { width: 100%; }
+@media (min-width: 480px) {
+  .action-row .btn { width: auto; }
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--primary-hover); }
   .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-card); }
+  .btn-quiet:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-card); color: var(--fg-1); }
 }
 .btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background: var(--primary-pressed); transform: scale(0.96); }
 .btn-ghost:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
+.btn-quiet:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
 .divider { display: flex; align-items: center; gap: var(--s-3); }
 .divider span[data-rule] { flex: 1; height: 1px; background: var(--hairline); }
 .divider span[data-label] { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--fg-4); }

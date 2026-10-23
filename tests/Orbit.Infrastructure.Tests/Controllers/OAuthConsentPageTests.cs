@@ -35,10 +35,13 @@ public class OAuthConsentPageTests
         var page = Render(language);
         page.Should().Contain(OAuthPageStyles.Mark).And.Contain(OAuthPageStyles.Css)
             .And.Contain("class=\"action-row\"")
+            .And.Contain($"class=\"btn btn-sm btn-quiet\" name=\"access\" value=\"cancel\">{OAuthPageStrings.For(language).Consent.Cancel}</button>")
             .And.Contain("class=\"btn btn-sm btn-primary\" name=\"access\" value=\"read_only\"")
             .And.Contain("class=\"btn btn-sm btn-ghost\" name=\"access\" value=\"requested\"");
         page.IndexOf("value=\"requested\"", StringComparison.Ordinal).Should()
             .BeLessThan(page.IndexOf("value=\"read_only\"", StringComparison.Ordinal));
+        page.IndexOf("value=\"read_only\"", StringComparison.Ordinal).Should()
+            .BeLessThan(page.IndexOf("value=\"cancel\"", StringComparison.Ordinal));
         var groups = Regex.Match(page, "<ul id=\"permission-groups\">(.*?)</ul>", RegexOptions.Singleline);
         var labels = Regex.Matches(groups.Groups[1].Value, "<li>(.*?)</li>")
             .Select(match => WebUtility.HtmlDecode(match.Groups[1].Value)).ToArray();
@@ -49,7 +52,7 @@ public class OAuthConsentPageTests
     }
 
     [Fact]
-    public void Render_EncodesTheTicket_AndKeepsRawScopesInert()
+    public void Render_EncodesTheTicket()
     {
         var page = OAuthConsentPage.Render("\"><script>alert(1)</script>", Entry("en", [AgentScopes.ReadHabits]));
         page.Should().Contain("value=\"&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;\"")

@@ -52,6 +52,7 @@ form.addEventListener('submit', (event) => {
 <div class="action-row">
 <button class="btn btn-sm btn-ghost" name="access" value="requested">{{WebUtility.HtmlEncode(consent.Requested)}}</button>
 <button class="btn btn-sm btn-primary" name="access" value="read_only">{{WebUtility.HtmlEncode(consent.ReadOnly)}}</button>
+<button class="btn btn-sm btn-quiet" name="access" value="cancel">{{WebUtility.HtmlEncode(consent.Cancel)}}</button>
 </div>
 </form></main>
 <script>
