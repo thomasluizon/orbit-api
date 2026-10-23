@@ -176,7 +176,8 @@ public partial class OAuthController(
         var html = OAuthLoginPage.Render(
             request.ClientId, request.RedirectUri, request.State,
             request.CodeChallenge, request.CodeChallengeMethod, request.Nonce, errorMessage, language,
-            botProtection.Enabled, botProtection.SiteKey, request.Scope);
+            botProtection.Enabled, botProtection.SiteKey, request.Scope,
+            configuration.GetSection(AppleSignInSettings.SectionName).Get<AppleSignInSettings>()?.IsMcpConfigured == true);
 
         return Content(html, "text/html");
     }

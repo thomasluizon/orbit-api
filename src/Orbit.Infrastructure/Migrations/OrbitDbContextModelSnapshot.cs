@@ -2612,6 +2612,17 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("AppStoreStateSignedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("AppleRefreshToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AppleSubject")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("AppleTokenClientId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<DateTime?>("BonusProExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2873,6 +2884,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("AppStoreOriginalTransactionId")
                         .IsUnique()
                         .HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
+
+                    b.HasIndex("AppleSubject")
+                        .IsUnique()
+                        .HasFilter("\"AppleSubject\" IS NOT NULL");
 
                     b.HasIndex("Email")
                         .IsUnique();

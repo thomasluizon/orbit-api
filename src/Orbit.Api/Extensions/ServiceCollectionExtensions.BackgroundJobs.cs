@@ -95,6 +95,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<SendWelcomeEmailJob>();
         builder.Services.AddScoped<SendAccountDeletionCodeEmailJob>();
         builder.Services.AddScoped<CancelSubscriptionOnDeletionJob>();
+        builder.Services.AddScoped<RevokeAppleTokenOnDeletionJob>();
         builder.Services.AddScoped<OwedSubscriptionCancellationJob>();
         builder.Services.AddScoped<SendMarketingEmailJob>();
         builder.Services.AddScoped<DeliverReferralRewardJob>();

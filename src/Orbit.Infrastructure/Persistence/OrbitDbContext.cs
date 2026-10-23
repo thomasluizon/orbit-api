@@ -866,6 +866,10 @@ public class OrbitDbContext : DbContext
 
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
+            entity.Property(u => u.AppleSubject).HasMaxLength(255);
+            entity.Property(u => u.AppleTokenClientId).HasMaxLength(255);
+            entity.Property(u => u.AppleRefreshToken).HasColumnType("text");
+            entity.HasIndex(u => u.AppleSubject).IsUnique().HasFilter("\"AppleSubject\" IS NOT NULL");
             entity.Property(u => u.AppStoreOriginalTransactionId).HasMaxLength(255);
             entity.Property(u => u.AppStoreEnvironment).HasMaxLength(20);
             entity.HasIndex(u => u.AppStoreOriginalTransactionId).IsUnique().HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
@@ -906,6 +910,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
             entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
+            entity.Property(u => u.AppleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
         });
     }
 

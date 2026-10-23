@@ -40,6 +40,8 @@ public class ConfirmAccountDeletionCommandHandler(
         user.Deactivate(scheduledDate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         CancelSubscriptionOnDeletionJob.EnqueueCancellation(backgroundJobClient, user);
+        if (user.AppleRefreshToken is not null)
+            backgroundJobClient.Enqueue<RevokeAppleTokenOnDeletionJob>(job => job.ExecuteAsync(user.Id, CancellationToken.None));
 
         return Result.Success(scheduledDate);
     }

@@ -46,6 +46,45 @@ public class AuthControllerTests
     }
 
     [Theory]
+    [InlineData(nameof(AuthController.AppleNative))]
+    [InlineData(nameof(AuthController.AppleStart))]
+    [InlineData(nameof(AuthController.AppleCallback))]
+    [InlineData(nameof(AuthController.AppleHandoff))]
+    public void AppleRoutes_AreAnonymousAndRateLimited(string methodName)
+    {
+        var method = typeof(AuthController).GetMethod(methodName)!;
+        method.GetCustomAttribute<AllowAnonymousAttribute>().Should().NotBeNull();
+        method.GetCustomAttribute<DistributedRateLimitAttribute>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AppleNative_InvalidIdentity_ReturnsUnauthorized()
+    {
+        _mediator.Send(Arg.Any<AppleNativeSignInCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<LoginResponse>(ErrorMessages.InvalidSession));
+        var result = await _controller.AppleNative(new("forged", "code", "nonce"), default);
+        ((ObjectResult)result).StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
+    public async Task AppleCallback_RedirectsWithSeeOtherAndNoCookieDependency()
+    {
+        const string destination = "https://app.example.com/auth-callback?provider=apple&handoff=opaque&state=client-state";
+        _mediator.Send(Arg.Any<CompleteAppleCallbackCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(destination));
+        var result = await _controller.AppleCallback(new() { State = "state", Code = "code" }, default);
+        ((StatusCodeResult)result).StatusCode.Should().Be(StatusCodes.Status303SeeOther);
+        _controller.Response.Headers.Location.ToString().Should().Be(destination);
+        _controller.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AppleHandoff_Replay_ReturnsUnauthorized()
+    {
+        _mediator.Send(Arg.Any<TakeAppleHandoffCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<LoginResponse>(ErrorMessages.InvalidSession));
+        var result = await _controller.AppleHandoff(new("used-handoff", "state"), default);
+        ((ObjectResult)result).StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
+    [Theory]
     [InlineData("absent")]
     [InlineData("expired")]
     [InlineData("wrong")]

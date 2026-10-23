@@ -357,6 +357,7 @@ public static partial class ServiceCollectionExtensions
 
         AddStripeBilling(builder, httpTimeout);
         AddGooglePlayBilling(builder, httpTimeout);
+        AddAppleIntegrations(builder, httpTimeout);
         AddPushAndReferralServices(builder, httpTimeout);
         AddBackgroundServices(builder);
 
