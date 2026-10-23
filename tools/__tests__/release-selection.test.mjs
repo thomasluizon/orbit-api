@@ -154,7 +154,7 @@ process.exitCode = ${transport ? 22 : 0}
 test("production admits only the exact Healthy commit served by staging", () => {
   const result = stagingGate(healthy)
   assert.equal(result.status, 0, result.stdout + result.stderr)
-  assert.match(result.calls, /https:\/\/api-staging.useorbit.org\/health/)
+  assert.match(result.calls, /https:\/\/api-staging\.useorbit\.org\/health/)
   assert.match(result.calls, /--fail-with-body/)
   assert.match(result.calls, /--max-time/)
   assert.match(result.summary, /force_unstaged: false/)
