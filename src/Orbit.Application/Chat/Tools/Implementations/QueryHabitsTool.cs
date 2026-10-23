@@ -112,8 +112,8 @@ public class QueryHabitsTool(
                 : HabitListCardBuilder.StatusToday
             : habit.Schedule == HabitSchedule.General ? HabitListCardBuilder.StatusGeneral
                 : GetResponseCompletion(habit, today) ? HabitListCardBuilder.StatusDone
-                : habit.DueDate < today ? HabitListCardBuilder.StatusOverdue
-                : habit.DueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
+                : habit.NextDueDate < today ? HabitListCardBuilder.StatusOverdue
+                : habit.NextDueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
         rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status));
         if (includeSubs)
             foreach (var child in habits.Where(item => item.ParentHabitId == habit.Id).OrderBy(item => item.Position))
@@ -301,7 +301,7 @@ public class QueryHabitsTool(
         var details = HabitFieldSummary.From(habit).Format();
         var detailSuffix = details.Length == 0 ? string.Empty : $" | {details}";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
-        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}{detailSuffix}");
+        return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.NextDueDate:yyyy-MM-dd}{labelStr}{detailSuffix}");
     }
 
     private static List<string> BuildLabels(Habit habit, DateOnly today, int weekStartDay, bool includeMetrics, ScheduleContext? schedule)
@@ -319,8 +319,8 @@ public class QueryHabitsTool(
         }
         else
         {
-            if (habit.Schedule != HabitSchedule.General && !isCompleted && habit.DueDate < today) labels.Add("OVERDUE");
-            if (habit.Schedule != HabitSchedule.General && !isCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
+            if (habit.Schedule != HabitSchedule.General && !isCompleted && habit.NextDueDate < today) labels.Add("OVERDUE");
+            if (habit.Schedule != HabitSchedule.General && !isCompleted && habit.NextDueDate == today) labels.Add("DUE TODAY");
         }
         AddNotDueLabel(labels, habit, today);
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
@@ -347,8 +347,8 @@ public class QueryHabitsTool(
 
     private static void AddNotDueLabel(List<string> labels, Habit habit, DateOnly today)
     {
-        if (habit.Schedule != HabitSchedule.General && !GetResponseCompletion(habit, today) && habit.DueDate > today)
-            labels.Add(string.Create(CultureInfo.InvariantCulture, $"NOT DUE: {habit.DueDate:yyyy-MM-dd}"));
+        if (habit.Schedule != HabitSchedule.General && !GetResponseCompletion(habit, today) && habit.NextDueDate > today)
+            labels.Add(string.Create(CultureInfo.InvariantCulture, $"NOT DUE: {habit.NextDueDate:yyyy-MM-dd}"));
     }
 
     private static void AddMetricLabels(

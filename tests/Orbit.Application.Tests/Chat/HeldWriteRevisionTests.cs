@@ -23,7 +23,7 @@ public sealed class HeldWriteRevisionTests
         { "assign_tags", """{"habit_id":"$habit","tag_names":["Study"]}""", "tag_names", """["Work"]""", "Tags.0.Name" },
         { "bulk_create_habits", """{"habits":[{"title":"Read"}]}""", "title", "\"Write\"", "Habits.0.Title" },
         { "bulk_update_habits", """{"filter":{"all":true},"updates":{"title":"Read"}}""", "title", "\"Write\"", "Changes.Title" },
-        { "bulk_reschedule_habits", """{"filter":{"all":true},"due_date":"2026-10-01"}""", "due_date", "\"2026-10-02\"", "Changes.DueDate" },
+        { "bulk_reschedule_habits", """{"filter":{"all":true},"due_date":"2026-10-01"}""", "due_date", "\"2026-10-02\"", "Changes.NextDueDate" },
         { "bulk_log_habits", """{"filter":{"all":true},"date":"2026-09-29"}""", "date", "\"2026-09-30\"", "Items.0.Date" },
         { "bulk_skip_habits", """{"filter":{"all":true},"date":"2026-09-29"}""", "date", "\"2026-09-30\"", "Items.0.Date" },
         { "bulk_update_habit_emojis", """{"filter":{"all":true},"emoji":"📚"}""", "emoji", "\"✍️\"", "Emoji" },

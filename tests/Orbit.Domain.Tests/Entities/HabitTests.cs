@@ -390,7 +390,7 @@ public class HabitTests
 
         habit.Log(startDate);
 
-        habit.DueDate.Should().BeAfter(startDate);
+        habit.NextDueDate.Should().BeAfter(startDate);
     }
 
     [Fact]
@@ -406,8 +406,8 @@ public class HabitTests
 
         habit.Log(monday);
 
-        habit.DueDate.DayOfWeek.Should().BeOneOf(DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday);
-        habit.DueDate.Should().BeAfter(monday);
+        habit.NextDueDate.DayOfWeek.Should().BeOneOf(DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday);
+        habit.NextDueDate.Should().BeAfter(monday);
     }
 
     [Fact]
@@ -474,11 +474,11 @@ public class HabitTests
             frequencyQuantity: 1,
             dueDate: startDate);
         habit.Log(startDate);
-        habit.DueDate.Should().NotBe(startDate);
+        habit.NextDueDate.Should().NotBe(startDate);
 
         habit.Unlog(startDate);
 
-        habit.DueDate.Should().Be(startDate);
+        habit.NextDueDate.Should().Be(startDate);
     }
 
     [Fact]
@@ -493,10 +493,10 @@ public class HabitTests
             habit.Log(oldest.AddDays(offset)).IsSuccess.Should().BeTrue();
 
         habit.Unlog(oldest).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(oldest);
+        habit.NextDueDate.Should().Be(oldest);
         habit.Log(oldest, advanceDueDate: false).IsSuccess.Should().BeTrue();
 
-        habit.DueDate.Should().Be(oldest.AddDays(3));
+        habit.NextDueDate.Should().Be(oldest.AddDays(3));
         habit.Logs.Where(l => !l.IsDeleted).Select(l => l.Date)
             .Should().BeEquivalentTo([oldest, oldest.AddDays(1), oldest.AddDays(2)]);
     }
@@ -520,7 +520,7 @@ public class HabitTests
         habit.Description.Should().Be("Morning jog");
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         habit.FrequencyQuantity.Should().Be(2);
-        habit.DueDate.Should().Be(new DateOnly(2025, 6, 1));
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 6, 1));
     }
 
     [Fact]
@@ -787,7 +787,7 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         habit.IsCompleted.Should().BeFalse();
-        habit.DueDate.Should().Be(new DateOnly(2026, 1, 31));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 1, 31));
     }
 
     [Fact]
@@ -885,7 +885,7 @@ public class HabitTests
 
         habit.Log(startDate);
 
-        habit.DueDate.Should().Be(startDate);
+        habit.NextDueDate.Should().Be(startDate);
     }
 
     [Fact]
@@ -1317,7 +1317,7 @@ public class HabitTests
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         habit.FrequencyQuantity.Should().Be(2);
         habit.IsBadHabit.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 6, 1));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 6, 1));
         habit.DueTime.Should().Be(new TimeOnly(9, 0));
         habit.DueEndTime.Should().Be(new TimeOnly(10, 0));
         habit.ReminderEnabled.Should().BeTrue();
@@ -1431,7 +1431,7 @@ public class HabitTests
 
         habit.Update(new HabitUpdateParams("Title", null, FrequencyUnit.Day, 1, null, false, null));
 
-        habit.DueDate.Should().Be(dueDate);
+        habit.NextDueDate.Should().Be(dueDate);
     }
 
     [Fact]
@@ -1443,7 +1443,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.DueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().BeOnOrAfter(today);
         habit.IsCompleted.Should().BeFalse();
     }
 
@@ -1455,7 +1455,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.DueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().BeOnOrAfter(today);
     }
 
     [Fact]
@@ -1467,7 +1467,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.DueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().BeOnOrAfter(today);
     }
 
     [Fact]
@@ -1479,7 +1479,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.DueDate.Should().BeOnOrAfter(today);
+        habit.NextDueDate.Should().BeOnOrAfter(today);
     }
 
     [Fact]
@@ -1501,7 +1501,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(today);
 
-        habit.DueDate.Should().Be(today);
+        habit.NextDueDate.Should().Be(today);
     }
 
     [Fact]
@@ -1512,7 +1512,7 @@ public class HabitTests
 
         habit.AdvanceDueDate(start);
 
-        habit.DueDate.Should().BeAfter(start);
+        habit.NextDueDate.Should().BeAfter(start);
     }
 
     [Fact]
@@ -1522,7 +1522,7 @@ public class HabitTests
 
         habit.AdvanceDueDate(start);
 
-        habit.DueDate.Should().Be(new DateOnly(2025, 1, 13));
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 1, 13));
     }
 
     [Fact]
@@ -1533,7 +1533,7 @@ public class HabitTests
 
         habit.AdvanceDueDate(start);
 
-        habit.DueDate.Should().Be(new DateOnly(2025, 2, 15));
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 2, 15));
     }
 
     [Fact]
@@ -1543,7 +1543,7 @@ public class HabitTests
         var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Month, frequencyQuantity: 1, dueDate: start);
 
         habit.AdvanceDueDate(start);
-        habit.DueDate.Should().Be(new DateOnly(2025, 2, 28));
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 2, 28));
     }
 
     [Fact]
@@ -1553,7 +1553,7 @@ public class HabitTests
         var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Month, frequencyQuantity: 1, dueDate: start);
 
         habit.AdvanceDueDate(start);
-        habit.DueDate.Should().Be(new DateOnly(2025, 3, 28));
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 3, 28));
     }
 
     [Fact]
@@ -1564,7 +1564,7 @@ public class HabitTests
 
         habit.AdvanceDueDate(start);
 
-        habit.DueDate.Should().Be(new DateOnly(2026, 3, 15));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 3, 15));
     }
 
     [Fact]
@@ -1579,8 +1579,8 @@ public class HabitTests
 
         habit.AdvanceDueDate(monday);
 
-        habit.DueDate.DayOfWeek.Should().BeOneOf(DayOfWeek.Monday, DayOfWeek.Friday);
-        habit.DueDate.Should().BeAfter(monday);
+        habit.NextDueDate.DayOfWeek.Should().BeOneOf(DayOfWeek.Monday, DayOfWeek.Friday);
+        habit.NextDueDate.Should().BeAfter(monday);
     }
 
     [Theory]
@@ -1634,7 +1634,7 @@ public class HabitTests
 
         habit.AdvanceDueDate(tuesday.AddDays(2), weekStartDay: 1);
 
-        habit.DueDate.Should().Be(tuesday.AddDays(14));
+        habit.NextDueDate.Should().Be(tuesday.AddDays(14));
     }
 
     [Theory]
@@ -1652,7 +1652,7 @@ public class HabitTests
         habit.AdvanceDueDate(anchor, weekStartDay: 1);
         typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(habit, 2);
         typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
-        var dueDateBeforeAttempt = habit.DueDate;
+        var dueDateBeforeAttempt = habit.NextDueDate;
         var methodName = catchUp ? nameof(Habit.CatchUpDueDate) : nameof(Habit.AdvanceDueDate);
         var method = typeof(Habit).GetMethod(methodName, [typeof(DateOnly), typeof(int)])!;
         object? rawResult = null;
@@ -1665,7 +1665,7 @@ public class HabitTests
         var result = rawResult.Should().BeOfType<Result>().Subject;
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
-        habit.DueDate.Should().Be(dueDateBeforeAttempt);
+        habit.NextDueDate.Should().Be(dueDateBeforeAttempt);
     }
 
     [Fact]
@@ -1684,7 +1684,7 @@ public class HabitTests
         var result = act.Should().NotThrow().Which;
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("RECURRENCE_SCHEDULE_UNSATISFIABLE");
-        habit.DueDate.Should().Be(DateOnly.MinValue);
+        habit.NextDueDate.Should().Be(DateOnly.MinValue);
     }
 
     [Fact]
@@ -1713,7 +1713,7 @@ public class HabitTests
             IntervalWeeks: 2));
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(currentDueDate);
+        habit.NextDueDate.Should().Be(currentDueDate);
         habit.ScheduledStartDate.Should().Be(originalDueDate);
     }
 
@@ -1742,12 +1742,12 @@ public class HabitTests
             IntervalWeeks: 2));
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(currentDueDate);
+        habit.NextDueDate.Should().Be(currentDueDate);
         habit.ScheduledStartDate.Should().Be(currentDueDate);
 
         habit.AdvanceDueDate(currentDueDate, weekStartDay: 1);
 
-        habit.DueDate.Should().Be(currentDueDate.AddDays(14));
+        habit.NextDueDate.Should().Be(currentDueDate.AddDays(14));
     }
 
     [Fact]
@@ -1777,7 +1777,7 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         habit.ScheduledStartDate.Should().Be(rescheduledDueDate);
-        habit.DueDate.Should().Be(rescheduledDueDate.AddDays(14));
+        habit.NextDueDate.Should().Be(rescheduledDueDate.AddDays(14));
     }
 
     [Fact]
@@ -1805,7 +1805,7 @@ public class HabitTests
 
         habit.CatchUpDueDate(rescheduledDueDate.AddDays(1), weekStartDay: 1);
 
-        habit.DueDate.Should().Be(rescheduledDueDate.AddDays(14));
+        habit.NextDueDate.Should().Be(rescheduledDueDate.AddDays(14));
     }
 
     [Theory]
@@ -1821,7 +1821,7 @@ public class HabitTests
             habit.FrequencyQuantity,
             habit.Days.ToList(),
             habit.IsBadHabit,
-            habit.DueDate,
+            habit.NextDueDate,
             IntervalWeeks: intervalWeeks));
 
         result.IsSuccess.Should().BeTrue();
@@ -1841,7 +1841,7 @@ public class HabitTests
             habit.FrequencyQuantity,
             habit.Days.ToList(),
             habit.IsBadHabit,
-            habit.DueDate,
+            habit.NextDueDate,
             IntervalWeeks: intervalWeeks));
 
         result.IsFailure.Should().BeTrue();
@@ -1898,7 +1898,7 @@ public class HabitTests
         }
 
         habit.Logs.Should().HaveCount(5);
-        habit.DueDate.Should().Be(today);
+        habit.NextDueDate.Should().Be(today);
     }
 
     [Fact]
@@ -1997,7 +1997,7 @@ public class HabitTests
 
         habit.PostponeTo(new DateOnly(2025, 3, 15));
 
-        habit.DueDate.Should().Be(new DateOnly(2025, 3, 15));
+        habit.NextDueDate.Should().Be(new DateOnly(2025, 3, 15));
     }
 
     [Fact]
@@ -2163,14 +2163,14 @@ public class HabitTests
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Flex", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
         habit.Log(today);
-        var originalDueDate = habit.DueDate;
+        var originalDueDate = habit.NextDueDate;
 
         var result = habit.Unlog(today);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.IsDeleted.Should().BeTrue();
         habit.Logs.Should().NotContain(l => !l.IsDeleted);
-        habit.DueDate.Should().Be(originalDueDate);
+        habit.NextDueDate.Should().Be(originalDueDate);
     }
 
     [Fact]
@@ -2183,8 +2183,8 @@ public class HabitTests
             ValidUserId, "Meditate", FrequencyUnit.Day, 1, DueDate: userToday));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.DueDate.Should().Be(userToday);
-        result.Value.DueDate.Should().NotBe(utcToday);
+        result.Value.NextDueDate.Should().Be(userToday);
+        result.Value.NextDueDate.Should().NotBe(utcToday);
     }
 
     [Fact]
@@ -2196,7 +2196,7 @@ public class HabitTests
             ValidUserId, "Pay rent", FrequencyUnit.Month, 1, DueDate: providedDueDate));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.DueDate.Should().Be(providedDueDate);
+        result.Value.NextDueDate.Should().Be(providedDueDate);
         result.Value.OriginalDayOfMonth.Should().Be(31);
     }
 
@@ -2225,7 +2225,7 @@ public class HabitTests
             null,
             habit.Days.ToList(),
             habit.IsBadHabit,
-            habit.DueDate));
+            habit.NextDueDate));
 
         result.IsFailure.Should().BeTrue();
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Day);
@@ -2243,7 +2243,7 @@ public class HabitTests
             null,
             habit.Days.ToList(),
             habit.IsBadHabit,
-            habit.DueDate));
+            habit.NextDueDate));
 
         result.IsFailure.Should().BeTrue();
         habit.FrequencyUnit.Should().BeNull();

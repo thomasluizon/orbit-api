@@ -76,7 +76,7 @@ public class UpdateHabitCommandHandlerTests
             StartDate: anchor, IntervalWeeks: 2, Options: new(Days: [DayOfWeek.Monday])), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 11, 2));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 11, 2));
         habit.ScheduledStartDate.Should().Be(anchor);
         await _userDateService.Received(1).GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
         await _userDateService.Received(1).GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>());
@@ -93,10 +93,10 @@ public class UpdateHabitCommandHandlerTests
             StartDate: Today.AddDays(-1));
         (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
         habit.StartDate.Should().Be(Today.AddDays(-1));
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         habit.Logs.Should().ContainSingle();
         (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
     }
 
     [Theory]
@@ -105,7 +105,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_EndDateReactivation_AllowanceRefused_LeavesHabitUnchanged(bool clearEndDate)
     {
         var habit = CreateCompletedRecurringHabit();
-        var originalDueDate = habit.DueDate;
+        var originalDueDate = habit.NextDueDate;
         var originalUpdatedAtUtc = habit.UpdatedAtUtc;
         _habitRepo.FindOneTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -128,7 +128,7 @@ public class UpdateHabitCommandHandlerTests
         result.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
         habit.IsCompleted.Should().BeTrue();
         habit.EndDate.Should().Be(Today);
-        habit.DueDate.Should().Be(originalDueDate);
+        habit.NextDueDate.Should().Be(originalDueDate);
         habit.Title.Should().Be("Completed recurring habit");
         habit.Description.Should().BeNull();
         habit.UpdatedAtUtc.Should().Be(originalUpdatedAtUtc);
@@ -142,7 +142,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_EndDateReactivation_AllowanceGranted_UpdatesAndSaves(bool clearEndDate)
     {
         var habit = CreateCompletedRecurringHabit();
-        var originalDueDate = habit.DueDate;
+        var originalDueDate = habit.NextDueDate;
         _habitRepo.FindOneTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -161,7 +161,7 @@ public class UpdateHabitCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         habit.IsCompleted.Should().BeFalse();
         habit.EndDate.Should().Be(endDate);
-        habit.DueDate.Should().Be(originalDueDate);
+        habit.NextDueDate.Should().Be(originalDueDate);
         habit.Title.Should().Be("Updated title");
         habit.Description.Should().Be("Updated description");
         await _payGate.Received(1).CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>());

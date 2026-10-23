@@ -26,15 +26,15 @@ internal sealed record HabitTodaySnapshot(
         var logFacts = new HabitScheduleLogFacts(logDays);
         var active = habits.Where(habit => !habit.IsCompleted).ToList();
         var dueDateResolution = active
-            .Where(habit => habit.DueDate >= logFrom
-                && habit.DueDate <= date
-                && logFacts.ResolvedDates(habit.Id).Contains(habit.DueDate))
+            .Where(habit => habit.NextDueDate >= logFrom
+                && habit.NextDueDate <= date
+                && logFacts.ResolvedDates(habit.Id).Contains(habit.NextDueDate))
             .Select(habit => habit.Id)
             .ToHashSet();
         var oldDueDateIds = active
             .Where(habit => habit.Schedule == HabitSchedule.Recurring
                 && !habit.IsBadHabit
-                && habit.DueDate < logFrom)
+                && habit.NextDueDate < logFrom)
             .Select(habit => habit.Id)
             .ToArray();
         if (oldDueDateIds.Length > 0)

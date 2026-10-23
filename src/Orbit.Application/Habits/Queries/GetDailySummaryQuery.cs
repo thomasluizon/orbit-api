@@ -93,7 +93,7 @@ public class GetDailySummaryQueryHandler(
 
         var summaryHabits = habits.ToList();
         var dueDateResolution = summaryHabits
-            .Where(habit => habit.Logs.Any(log => log.Date == habit.DueDate && log.Value >= 0))
+            .Where(habit => habit.Logs.Any(log => log.Date == habit.NextDueDate && log.Value >= 0))
             .Select(habit => habit.Id)
             .ToHashSet();
 
@@ -162,24 +162,24 @@ public class GetDailySummaryQueryHandler(
                     HabitScheduleService.GetWindowEnd(habit, dateTo, weekStartDay)));
             }
             if (!habit.IsBadHabit && habit.Schedule == HabitSchedule.Recurring && !habit.IsCompleted
-                && habit.DueDate < userToday
+                && habit.NextDueDate < userToday
                 && !HabitScheduleService.IsHabitDueOnDate(habit, userToday, weekStartDay))
             {
                 var latest = userToday.AddDays(-1);
                 if (habit.EndDate.HasValue && habit.EndDate.Value < latest)
                     latest = habit.EndDate.Value;
 
-                if (latest >= habit.DueDate)
+                if (latest >= habit.NextDueDate)
                 {
                     var earliest = latest.AddDays(-Math.Min(AppConstants.MaxRangeDays - 1, latest.DayNumber));
-                    var from = habit.DueDate > earliest ? habit.DueDate : earliest;
+                    var from = habit.NextDueDate > earliest ? habit.NextDueDate : earliest;
                     windows.AddRange(HabitScheduleService.GetScheduledDates(habit, from, latest, weekStartDay)
                         .Select(date => new HabitSummaryLogWindow(habit.Id, date, date)));
                 }
 
-                if ((!habit.EndDate.HasValue || habit.DueDate <= habit.EndDate.Value)
-                    && HabitScheduleService.IsHabitDueOnDate(habit, habit.DueDate, weekStartDay))
-                    windows.Add(new HabitSummaryLogWindow(habit.Id, habit.DueDate, habit.DueDate));
+                if ((!habit.EndDate.HasValue || habit.NextDueDate <= habit.EndDate.Value)
+                    && HabitScheduleService.IsHabitDueOnDate(habit, habit.NextDueDate, weekStartDay))
+                    windows.Add(new HabitSummaryLogWindow(habit.Id, habit.NextDueDate, habit.NextDueDate));
             }
 
             foreach (var window in windows.OrderBy(window => window.From))

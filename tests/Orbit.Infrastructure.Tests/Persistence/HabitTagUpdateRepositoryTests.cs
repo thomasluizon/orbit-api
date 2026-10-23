@@ -80,7 +80,7 @@ public class HabitTagUpdateRepositoryTests
         var saved = await readback.Habits.Include(h => h.Tags).Include(h => h.Goals).SingleAsync(h => h.Id == habit.Id);
         saved.Title.Should().Be(rejected ? "Original" : "Changed");
         saved.Description.Should().Be(rejected ? null : "Details");
-        saved.DueDate.Should().Be(rejected ? today : today.AddDays(1));
+        saved.NextDueDate.Should().Be(rejected ? today : today.AddDays(1));
         saved.DueTime.Should().Be(rejected ? null : new TimeOnly(10, 0));
         saved.ReminderEnabled.Should().Be(!rejected);
         saved.ReminderTimes.Should().Equal(rejected ? habit.ReminderTimes : new[] { 30 });

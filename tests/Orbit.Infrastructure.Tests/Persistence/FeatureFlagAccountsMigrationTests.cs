@@ -26,7 +26,7 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
 
-        differences.Should().HaveCount(51 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(52 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
@@ -127,7 +127,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261020033359_RestoreRequiredProactiveAstraPreference",
             "20261020041243_SeparateBonusProEntitlement",
             "20261020134743_AllowExplicitHabitStartDate");
-        context.Database.GetMigrations().Last().Should().EndWith("_CascadeRetiredFeatureParents");
+        context.Database.GetMigrations().Last().Should().EndWith("_ExpandHabitNextDueDate");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();
@@ -137,7 +137,8 @@ public class FeatureFlagAccountsMigrationTests
     private static void AssertHabitExpandColumns(IReadOnlyList<MigrationOperation> differences)
     {
         var habitColumns = differences.OfType<AddColumnOperation>().Where(column => column.Table == "Habits").ToArray();
-        habitColumns.Should().HaveCount(2);
+        habitColumns.Should().HaveCount(3);
+        ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
         habitColumns.Should().ContainSingle(column => column.Name == "Schedule"
             && column.ClrType == typeof(int) && !column.IsNullable && Equals(column.DefaultValue, 0));
         habitColumns.Should().ContainSingle(column => column.Name == "StartDate"

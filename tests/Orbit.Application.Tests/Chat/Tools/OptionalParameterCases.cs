@@ -28,7 +28,7 @@ public static class OptionalParameterCases
         habit.FrequencyQuantity,
         habit.IntervalWeeks,
         habit.Days,
-        habit.DueDate,
+        habit.NextDueDate,
         habit.EndDate,
         habit.DueTime,
         habit.DueEndTime,

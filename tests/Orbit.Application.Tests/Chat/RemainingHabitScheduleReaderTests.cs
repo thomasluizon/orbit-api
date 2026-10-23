@@ -62,7 +62,7 @@ public class RemainingHabitScheduleReaderTests
             .Should().Be(schedule == HabitSchedule.OneTime ? "none" : schedule == HabitSchedule.General ? "general"
                 : schedule == HabitSchedule.Recurring ? "none" : "today");
         habit.StartDate.Should().Be(Today);
-        habit.DueDate.Should().Be(schedule == HabitSchedule.Recurring ? Today.AddDays(1) : Today);
+        habit.NextDueDate.Should().Be(schedule == HabitSchedule.Recurring ? Today.AddDays(1) : Today);
     }
 
     [Theory]

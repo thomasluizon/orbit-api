@@ -50,7 +50,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorMessages.ConcurrentUpdateConflict.Code);
-        habit.DueDate.Should().Be(Today);
+        habit.NextDueDate.Should().Be(Today);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -74,8 +74,8 @@ public class BulkSkipHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().HaveCount(2);
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
-        habit1.DueDate.Should().BeAfter(Today);
-        habit2.DueDate.Should().BeAfter(Today);
+        habit1.NextDueDate.Should().BeAfter(Today);
+        habit2.NextDueDate.Should().BeAfter(Today);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -92,7 +92,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
-        habit.DueDate.Should().BeAfter(Today);
+        habit.NextDueDate.Should().BeAfter(Today);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class BulkSkipHabitsCommandHandlerTests
             CancellationToken.None);
 
         result.Value.Results.Should().ContainSingle(r => r.Status == BulkItemStatus.Success);
-        habit.DueDate.Should().BeAfter(catchUpDay);
+        habit.NextDueDate.Should().BeAfter(catchUpDay);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public class BulkSkipHabitsCommandHandlerTests
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         result.Value.Results[1].Status.Should().Be(BulkItemStatus.Failed);
         result.Value.Results[1].ErrorCode.Should().Be(ErrorCodes.BeyondOverdueWindow);
-        inWindow.DueDate.Should().BeAfter(Today);
+        inWindow.NextDueDate.Should().BeAfter(Today);
     }
 
     private void SetupHabitsForUser(List<Habit> habits)
@@ -313,7 +313,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
-        habit.DueDate.Should().Be(flexible ? Today : Today.AddDays(1));
+        habit.NextDueDate.Should().Be(flexible ? Today : Today.AddDays(1));
         habit.StartDate.Should().Be(Today);
         habit.Logs.Count(log => log.Value == 0).Should().Be(flexible ? 1 : 0);
     }

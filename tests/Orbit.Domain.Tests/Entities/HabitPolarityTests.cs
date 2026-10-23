@@ -48,7 +48,7 @@ public class HabitPolarityTests
     {
         var habit = HydrateLegacyAvoidHabit(title);
         var update = new HabitUpdateParams(habit.Title, reminderOnly ? habit.Description : "Updated description",
-            habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.DueDate,
+            habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.NextDueDate,
             ReminderEnabled: reminderOnly ? true : null, ReminderTimes: reminderOnly ? [30] : null);
 
         var result = habit.Update(update);
@@ -67,7 +67,7 @@ public class HabitPolarityTests
         var habit = HydrateLegacyAvoidHabit("No caffeine");
 
         var result = habit.Update(new HabitUpdateParams("Avoid caffeine", habit.Description,
-            habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), true, habit.DueDate));
+            habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), true, habit.NextDueDate));
 
         result.ErrorCode.Should().Be("BAD_HABIT_NEGATED_NAME");
         habit.Title.Should().Be("No caffeine");
@@ -80,7 +80,7 @@ public class HabitPolarityTests
             new DateOnly(2026, 10, 27))).Value;
 
         var result = habit.Update(new HabitUpdateParams(habit.Title, habit.Description,
-            habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), true, habit.DueDate));
+            habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), true, habit.NextDueDate));
 
         result.ErrorCode.Should().Be("BAD_HABIT_NEGATED_NAME");
         habit.IsBadHabit.Should().BeFalse();

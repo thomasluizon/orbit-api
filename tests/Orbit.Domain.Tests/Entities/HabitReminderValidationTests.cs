@@ -47,7 +47,7 @@ public class HabitReminderValidationTests
         result.Error.Should().Be(message);
         habit.Title.Should().Be("Reminder");
         habit.Description.Should().Be("Original");
-        habit.DueDate.Should().Be(Today);
+        habit.NextDueDate.Should().Be(Today);
         habit.DueTime.Should().BeNull();
         habit.ReminderEnabled.Should().BeTrue();
         habit.ReminderTimes.Should().Equal(30);

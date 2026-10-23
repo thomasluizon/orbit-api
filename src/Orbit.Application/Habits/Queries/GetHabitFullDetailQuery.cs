@@ -70,7 +70,7 @@ public class GetHabitFullDetailQueryHandler(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.IsBadHabit, isCompleted, habit.Schedule == HabitSchedule.General, habit.Schedule == HabitSchedule.Flexible,
-            habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
+            habit.NextDueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),
             habit.ChecklistItems, habit.CreatedAtUtc, children,

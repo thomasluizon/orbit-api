@@ -24,7 +24,7 @@ public class GetHabitRecurrenceOriginTests
             Guid.NewGuid(), "Recurring habit", frequency, 1, origin)).Value;
         habit.Log(origin).IsSuccess.Should().BeTrue();
         var nextDueDate = frequency == FrequencyUnit.Month ? origin.AddMonths(1) : origin.AddYears(1);
-        habit.DueDate.Should().Be(nextDueDate);
+        habit.NextDueDate.Should().Be(nextDueDate);
         habit.ScheduledStartDate.Should().Be(origin);
         habit.OriginalDayOfMonth.Should().Be(day);
 
@@ -79,7 +79,7 @@ public class GetHabitRecurrenceOriginTests
             .Returns(new List<Habit> { habit }.AsReadOnly());
         logs.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(habit.Logs.ToList().AsReadOnly());
-        dates.GetUserTodayAsync(habit.UserId, Arg.Any<CancellationToken>()).Returns(habit.DueDate);
+        dates.GetUserTodayAsync(habit.UserId, Arg.Any<CancellationToken>()).Returns(habit.NextDueDate);
         dates.GetUserWeekStartDayAsync(habit.UserId, Arg.Any<CancellationToken>()).Returns(1);
 
         HabitDetailResponse detail;

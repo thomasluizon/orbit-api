@@ -50,7 +50,7 @@ public class EditableHabitStartDatePersistenceTests
 
             var loaded = mutation.ChangeTracker.Entries<Habit>().Single().Entity;
             loaded.Logs.Should().ContainSingle().Which.Date.Should().Be(Today);
-            loaded.DueDate.Should().Be(Today.AddDays(1));
+            loaded.NextDueDate.Should().Be(Today.AddDays(1));
             loaded.IsCompleted.Should().Be(terminal);
             await gate.DidNotReceive().CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>());
             await work.SaveChangesAsync();
@@ -59,7 +59,7 @@ public class EditableHabitStartDatePersistenceTests
         await using var readback = factory.CreateContext();
         var persisted = await readback.Habits.Include(h => h.Logs).SingleAsync(h => h.Id == habit.Id);
         persisted.StartDate.Should().Be(Today.AddDays(-1));
-        persisted.DueDate.Should().Be(Today.AddDays(1));
+        persisted.NextDueDate.Should().Be(Today.AddDays(1));
         persisted.IsCompleted.Should().Be(terminal);
         persisted.Logs.Select(log => (log.Id, log.Date, log.Value, log.IsDeleted)).OrderBy(log => log.Id).Should().Equal(history);
     }
@@ -80,7 +80,7 @@ public class EditableHabitStartDatePersistenceTests
         seed.Users.Add(user);
         seed.Habits.Add(habit);
         await seed.SaveChangesAsync();
-        var previous = (habit.StartDate, habit.DueDate, habit.Title, habit.UpdatedAtUtc);
+        var previous = (habit.StartDate, habit.NextDueDate, habit.Title, habit.UpdatedAtUtc);
         var newStart = reactivates ? Today.AddDays(1) : Today.AddDays(-7);
 
         await using (var mutation = factory.CreateContext())
@@ -103,7 +103,7 @@ public class EditableHabitStartDatePersistenceTests
         await using var readback = factory.CreateContext();
         var persisted = await readback.Habits.Include(h => h.Logs).SingleAsync(h => h.Id == habit.Id);
         if (reactivates && !allowed)
-            (persisted.StartDate, persisted.DueDate, persisted.Title, persisted.UpdatedAtUtc).Should().Be(previous);
+            (persisted.StartDate, persisted.NextDueDate, persisted.Title, persisted.UpdatedAtUtc).Should().Be(previous);
         else
         {
             persisted.StartDate.Should().Be(newStart);

@@ -81,10 +81,10 @@ public static class HabitMetricsCalculator
         {
             var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
                 habit.CreatedAtUtc, userTimeZone ?? TimeZoneInfo.Utc));
-            var legacyHistoryStart = habit.DueDate.AddDays(-MaxStreakHorizonDays);
+            var legacyHistoryStart = habit.NextDueDate.AddDays(-MaxStreakHorizonDays);
             if (legacyHistoryStart < createdDate)
                 legacyHistoryStart = createdDate;
-            if (legacyHistoryStart < habit.DueDate
+            if (legacyHistoryStart < habit.NextDueDate
                 && (currentStreakLogStart is null || legacyHistoryStart < currentStreakLogStart))
                 currentStreakLogStart = legacyHistoryStart;
         }
@@ -262,7 +262,7 @@ public static class HabitMetricsCalculator
             habit,
             logs,
             createdDate);
-        return hasProgressingHistory ? createdDate : habit.DueDate;
+        return hasProgressingHistory ? createdDate : habit.NextDueDate;
     }
 
     private static bool HasProgressingLegacyHistory(
@@ -277,10 +277,10 @@ public static class HabitMetricsCalculator
             .Where(log => !log.IsDeleted)
             .Select(log => log.Date)
             .ToHashSet();
-        var firstCandidate = createdDate < habit.DueDate.AddDays(-MaxStreakHorizonDays)
-            ? habit.DueDate.AddDays(-MaxStreakHorizonDays)
+        var firstCandidate = createdDate < habit.NextDueDate.AddDays(-MaxStreakHorizonDays)
+            ? habit.NextDueDate.AddDays(-MaxStreakHorizonDays)
             : createdDate;
-        var candidateCount = habit.DueDate.DayNumber - firstCandidate.DayNumber;
+        var candidateCount = habit.NextDueDate.DayNumber - firstCandidate.DayNumber;
         if (candidateCount <= 0)
             return false;
 

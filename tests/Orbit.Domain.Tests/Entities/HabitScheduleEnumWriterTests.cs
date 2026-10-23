@@ -24,11 +24,11 @@ public class HabitScheduleEnumWriterTests
         habit.Log(Start).IsSuccess.Should().BeTrue();
 
         habit.IsCompleted.Should().Be(completed);
-        habit.DueDate.Should().Be(Start.AddDays(cursorOffset));
+        habit.NextDueDate.Should().Be(Start.AddDays(cursorOffset));
         habit.ChecklistItems.Should().Equal(new ChecklistItem("Read", checklistChecked));
         habit.Unlog(Start).IsSuccess.Should().BeTrue();
         habit.IsCompleted.Should().BeFalse();
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
         habit.StartDate.Should().Be(Start);
     }
 
@@ -49,7 +49,7 @@ public class HabitScheduleEnumWriterTests
         habit.IsGeneral.Should().Be(schedule == HabitSchedule.General);
         habit.IsFlexible.Should().Be(schedule == HabitSchedule.Flexible);
         habit.StartDate.Should().Be(Start);
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
     }
 
     [Fact]

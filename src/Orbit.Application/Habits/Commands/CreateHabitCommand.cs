@@ -120,7 +120,7 @@ public partial class CreateHabitCommandHandler(
                 if (catchUp.IsFailure)
                     return catchUp.PropagateError<Guid>();
             }
-            else if (habit.DueDate < today)
+            else if (habit.NextDueDate < today)
                 habit.PostponeTo(today);
         }
 
@@ -175,7 +175,7 @@ public partial class CreateHabitCommandHandler(
                 subTitle,
                 request.FrequencyUnit,
                 request.FrequencyQuantity,
-                request.StartDate ?? request.DueDate ?? parent.DueDate,
+                request.StartDate ?? request.DueDate ?? parent.NextDueDate,
                 ParentHabitId: parent.Id,
                 IsGeneral: request.IsGeneral,
                 EndDate: opts.EndDate,

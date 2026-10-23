@@ -52,7 +52,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -69,7 +69,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().BeAfter(Today);
+        habit.NextDueDate.Should().BeAfter(Today);
         await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
             UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
@@ -86,7 +86,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().BeAfter(Today);
+        habit.NextDueDate.Should().BeAfter(Today);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class SkipHabitCommandHandlerTests
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
         typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(habit, 2);
-        habit.DueDate.Should().Be(inactiveDueDate);
+        habit.NextDueDate.Should().Be(inactiveDueDate);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(inactiveToday, catchUpDay);
@@ -348,7 +348,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().BeAfter(boundary);
+        habit.NextDueDate.Should().BeAfter(boundary);
         await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
             UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }

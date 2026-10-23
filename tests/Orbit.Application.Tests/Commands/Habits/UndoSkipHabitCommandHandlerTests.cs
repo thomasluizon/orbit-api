@@ -58,7 +58,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
 
         await using var context = Context();
         var restored = await context.Habits.SingleAsync(h => h.Id == habit.Id);
-        restored.DueDate.Should().Be(habit.DueDate);
+        restored.NextDueDate.Should().Be(habit.NextDueDate);
         restored.ScheduledStartDate.Should().Be(habit.ScheduledStartDate);
         restored.OriginalDayOfMonth.Should().Be(habit.OriginalDayOfMonth);
         restored.IsCompleted.Should().Be(previousCompleted);
@@ -95,7 +95,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
         (await Undo(habit.Id, skipId)).IsSuccess.Should().BeTrue();
 
         await using var verify = Context();
-        (await verify.Habits.SingleAsync()).DueDate.Should().Be(Today.AddDays(9));
+        (await verify.Habits.SingleAsync()).NextDueDate.Should().Be(Today.AddDays(9));
         await _goals.DidNotReceiveWithAnyArgs().SyncDerivedGoalsAsync(default, default!, default);
     }
 
@@ -141,7 +141,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
         result.ErrorCode.Should().BeOneOf(DomainErrors.SkipUndoConflict.Code, ErrorCodes.HabitNotFound);
         await using var verify = Context();
         var afterHabit = await verify.Habits.IgnoreQueryFilters().SingleAsync();
-        afterHabit.DueDate.Should().Be(beforeHabit.DueDate);
+        afterHabit.NextDueDate.Should().Be(beforeHabit.NextDueDate);
         afterHabit.UpdatedAtUtc.Should().Be(beforeHabit.UpdatedAtUtc);
         (await verify.HabitLogs.IgnoreQueryFilters().Select(log => log.UpdatedAtUtc).ToArrayAsync()).Should().Equal(beforeLogs);
         (await verify.HabitSkipUndos.SingleAsync()).IsUndone.Should().BeFalse();
@@ -181,7 +181,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
         var restored = await verify.Habits.SingleAsync();
         restored.IsCompleted.Should().BeFalse();
         restored.ScheduledStartDate.Should().BeNull();
-        restored.DueDate.Should().Be(Today);
+        restored.NextDueDate.Should().Be(Today);
     }
 
     [Fact]

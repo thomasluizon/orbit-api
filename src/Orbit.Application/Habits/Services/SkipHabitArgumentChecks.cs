@@ -18,7 +18,7 @@ internal static class SkipHabitArgumentChecks
             return Result.Failure(ErrorMessages.BeyondOverdueWindow);
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return Result.Success();
-        if (habit.Schedule != HabitSchedule.Flexible && habit.DueDate > targetDate)
+        if (habit.Schedule != HabitSchedule.Flexible && habit.NextDueDate > targetDate)
             return Result.Failure(ErrorMessages.HabitNotYetDue);
         if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {

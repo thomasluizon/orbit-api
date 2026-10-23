@@ -89,7 +89,7 @@ public sealed class CreateHabitToolPersistenceTests
         dated.FrequencyQuantity.Should().BeNull();
         dated.IntervalWeeks.Should().BeNull();
         dated.Days.Should().BeEmpty();
-        dated.DueDate.Should().Be(new DateOnly(2026, 8, 26));
+        dated.NextDueDate.Should().Be(new DateOnly(2026, 8, 26));
         dated.DueTime.Should().Be(new TimeOnly(11, 15));
         dated.DueEndTime.Should().Be(new TimeOnly(12, 5));
     }

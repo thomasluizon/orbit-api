@@ -175,7 +175,7 @@ public class RetrospectiveCompletionSeriesTests
             [habit], logged, logged, 0, 0, TimeZoneInfo.Utc);
         var card = StatusCardBuilder.BuildDay(logged, metrics, 0);
 
-        habit.DueDate.Should().Be(new DateOnly(2026, 2, 28));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 2, 28));
         card.Due.Should().Be(1);
         card.Done.Should().Be(1);
         metrics.CompletionSeries!.Points.Single().Should().Be(

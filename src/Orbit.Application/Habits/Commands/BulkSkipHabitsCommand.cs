@@ -144,7 +144,7 @@ public class BulkSkipHabitsCommandHandler(
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
         }
 
-        if (habit.Schedule != HabitSchedule.Flexible && habit.DueDate > targetDate)
+        if (habit.Schedule != HabitSchedule.Flexible && habit.NextDueDate > targetDate)
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotYetDue.Message, ErrorCode: ErrorMessages.HabitNotYetDue.Code);
 

@@ -22,7 +22,7 @@ public sealed class HabitSkipUndoWriter(OrbitDbContext context, HabitScheduleSna
         var updated = await context.Habits.Where(h => h.Id == habit.Id && h.UserId == habit.UserId
                 && h.UpdatedAtUtc == expectedUpdatedAtUtc)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(h => h.DueDate, habit.DueDate)
+                .SetProperty(h => h.NextDueDate, habit.NextDueDate)
                 .SetProperty(h => h.ScheduledStartDate, habit.ScheduledStartDate)
                 .SetProperty(h => h.IsCompleted, habit.IsCompleted)
                 .SetProperty(h => h.UpdatedAtUtc, habit.UpdatedAtUtc)

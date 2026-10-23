@@ -113,7 +113,7 @@ public class GetHabitScheduleQueryHandlerTests
             {
                 var ids = call.ArgAt<IReadOnlyCollection<Guid>>(0).ToHashSet();
                 return habits.Where(habit => ids.Contains(habit.Id)
-                    && habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.DueDate && log.Value >= 0))
+                    && habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.NextDueDate && log.Value >= 0))
                     .Select(habit => habit.Id)
                     .ToHashSet();
             });

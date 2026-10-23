@@ -20,9 +20,9 @@ internal static class HabitDueDateResolutionLoader
         var missingDueDates = habitList
             .Where(habit => habit.Schedule == HabitSchedule.Recurring
                 && !habit.IsBadHabit
-                && habit.DueDate < loadedLogFrom
+                && habit.NextDueDate < loadedLogFrom
                 && !resolvedHabitIds.Contains(habit.Id))
-            .ToDictionary(habit => habit.Id, habit => habit.DueDate);
+            .ToDictionary(habit => habit.Id, habit => habit.NextDueDate);
 
         if (missingDueDates.Count == 0)
             return resolvedHabitIds;
@@ -48,5 +48,5 @@ internal static class HabitDueDateResolutionLoader
     }
 
     private static bool IsResolvedInLoadedLogs(Habit habit) =>
-        habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.DueDate && log.Value >= 0);
+        habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.NextDueDate && log.Value >= 0);
 }

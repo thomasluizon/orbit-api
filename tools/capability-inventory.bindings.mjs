@@ -33,6 +33,7 @@ export const entities = {
 }
 
 export const aliases = {
+  NextDueDate: ["due_date", "dueDate"],
   Tags: ["tags", "tag_names", "tag_ids", "tagIds"], Goals: ["goal_ids", "goalIds"],
   ParentHabitId: ["parent_habit_id", "parent_id", "parentHabitId", "parentId"],
   ChecklistItems: ["checklist_items", "checklistItemsJson"],
@@ -77,9 +78,9 @@ export const outputAliases = {
 
 // Select the rendered expressions, never a predicate or an intermediate projection.
 export const rendered = {
-  "chat:query_habits": { file: chat + "QueryHabitsTool.cs", start: "private static string BuildHabitLine", receiver: "habit", fields: "Id Title Emoji DueDate FrequencyUnit FrequencyQuantity IsBadHabit IsGeneral IsCompleted", partial: "ChecklistItems Tags" },
+  "chat:query_habits": { file: chat + "QueryHabitsTool.cs", start: "private static string BuildHabitLine", receiver: "habit", fields: "Id Title Emoji NextDueDate FrequencyUnit FrequencyQuantity IsBadHabit IsGeneral IsCompleted", partial: "ChecklistItems Tags" },
   "chat:query_goals": { file: chat + "QueryGoalsTool.cs", start: "private static string BuildOutput", receiver: "goal", fields: "Id Title Description Type Status TargetValue CurrentValue Unit Deadline", partial: "Habits" },
-  "mcp:get_habit": { receiver: "h", fields: "Id Title Emoji Description FrequencyUnit FrequencyQuantity DueDate DueTime Days IsBadHabit IsGeneral IsFlexible IsCompleted CreatedAtUtc", partial: "ChecklistItems Children" },
+  "mcp:get_habit": { receiver: "h", names: { NextDueDate: "DueDate" }, fields: "Id Title Emoji Description FrequencyUnit FrequencyQuantity NextDueDate DueTime Days IsBadHabit IsGeneral IsFlexible IsCompleted CreatedAtUtc", partial: "ChecklistItems Children" },
   "mcp:list_habits": { receiver: "h", fields: "Id Title Emoji FrequencyUnit FrequencyQuantity DueTime IsCompleted IsBadHabit IsGeneral IsFlexible", partial: "ChecklistItems Children Tags" },
   "mcp:get_goal": { receiver: "g", fields: "Id Title Description Status CurrentValue TargetValue Unit Deadline CreatedAtUtc CompletedAtUtc", partial: "Habits" },
   "mcp:list_goals": { receiver: "g", fields: "Id Title Status CurrentValue TargetValue Unit Deadline" },

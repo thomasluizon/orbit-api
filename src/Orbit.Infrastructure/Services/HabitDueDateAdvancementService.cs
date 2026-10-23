@@ -67,10 +67,10 @@ public partial class HabitDueDateAdvancementService(
             && h.Schedule == HabitSchedule.Recurring
             && h.FrequencyQuantity != null
             && h.IsBadHabit
-            && h.DueDate < cutoff;
+            && h.NextDueDate < cutoff;
 
     internal static bool ShouldAdvanceForUserToday(Habit habit, DateOnly userToday) =>
-        habit.DueDate < userToday;
+        habit.NextDueDate < userToday;
 
     internal async Task AdvanceStaleDueDates(CancellationToken ct)
     {
