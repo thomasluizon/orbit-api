@@ -1291,6 +1291,288 @@
         }
       }
     },
+    "/api/Auth/apple/native": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleNativeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleNativeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleNativeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Auth/apple/start": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleStartRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleStartRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppleStartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppleStartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppleStartResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/Auth/apple/callback": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "303": {
+            "description": "See Other"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Auth/apple/handoff": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleHandoffRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleHandoffRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppleHandoffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Auth/send-code": {
       "post": {
         "tags": [
@@ -10362,6 +10644,121 @@
         }
       }
     },
+    "/oauth/apple/start": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nonce",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/oauth/apple/callback": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/.well-known/oauth-authorization-server": {
       "get": {
         "tags": [
@@ -13077,7 +13474,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStatusResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStatusResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStatusResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad Request",
@@ -13588,6 +14002,171 @@
           },
           "500": {
             "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/api/subscriptions/app-store/verify": {
+      "post": {
+        "tags": [
+          "Subscription"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyAppStorePurchaseRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyAppStorePurchaseRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyAppStorePurchaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStoreVerifyResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStoreVerifyResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppStoreVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/subscriptions/app-store/notifications": {
+      "post": {
+        "tags": [
+          "Subscription"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppStoreNotificationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppStoreNotificationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppStoreNotificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable"
           }
         }
       }
@@ -15320,6 +15899,94 @@
           }
         }
       },
+      "AppleHandoffRequest": {
+        "required": [
+          "handoff",
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "handoff": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "AppleNativeRequest": {
+        "required": [
+          "identityToken",
+          "authorizationCode",
+          "rawNonce"
+        ],
+        "type": "object",
+        "properties": {
+          "identityToken": {
+            "type": "string"
+          },
+          "authorizationCode": {
+            "type": "string"
+          },
+          "rawNonce": {
+            "type": "string"
+          },
+          "givenName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "familyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AppleStartRequest": {
+        "required": [
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "referralCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AppleStartResponse": {
+        "required": [
+          "authorizationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "authorizationUrl": {
+            "type": "string"
+          }
+        }
+      },
       "ApplyGoalInput": {
         "required": [
           "title",
@@ -15548,6 +16215,56 @@
             "format": "int32"
           },
           "colorScheme": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AppStoreNotificationRequest": {
+        "required": [
+          "signedPayload"
+        ],
+        "type": "object",
+        "properties": {
+          "signedPayload": {
+            "type": "string"
+          }
+        }
+      },
+      "AppStoreVerifyResponse": {
+        "required": [
+          "hasProAccess",
+          "source",
+          "subscriptionInterval",
+          "planExpiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "hasProAccess": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subscriptionInterval": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "planExpiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "billingProvider": {
             "type": [
               "null",
               "string"
@@ -19871,6 +20588,40 @@
           }
         }
       },
+      "LoginResponse": {
+        "required": [
+          "userId",
+          "token",
+          "name",
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "wasReactivated": {
+            "type": "boolean",
+            "default": false
+          },
+          "refreshToken": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "LogoutSessionOperationRequest": {
         "required": [
           "refreshToken"
@@ -21332,6 +22083,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "billingProvider": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -23578,6 +24335,96 @@
           }
         }
       },
+      "SubscriptionStatusResponse": {
+        "required": [
+          "plan",
+          "hasProAccess",
+          "isTrialActive",
+          "trialEndsAt",
+          "planExpiresAt",
+          "aiMessagesUsed",
+          "aiMessagesLimit",
+          "isLifetimePro",
+          "subscriptionInterval",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "hasProAccess": {
+            "type": "boolean"
+          },
+          "isTrialActive": {
+            "type": "boolean"
+          },
+          "trialEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "planExpiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "aiMessagesUsed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "aiMessagesLimit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "isLifetimePro": {
+            "type": "boolean"
+          },
+          "subscriptionInterval": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lapseReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subscriptionEndedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "billingProvider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SuggestHabitSetupRequest": {
         "required": [
           "title"
@@ -24919,6 +25766,17 @@
           },
           "isSynced": {
             "type": "boolean"
+          }
+        }
+      },
+      "VerifyAppStorePurchaseRequest": {
+        "required": [
+          "signedTransaction"
+        ],
+        "type": "object",
+        "properties": {
+          "signedTransaction": {
+            "type": "string"
           }
         }
       },

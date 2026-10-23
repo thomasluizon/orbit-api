@@ -33,7 +33,7 @@ public class ConversationMigrationTests
         var additions = differ.GetDifferences(preceding.GetRelationalModel(), target.GetRelationalModel());
         additions.Should().HaveCount(6);
         AssertConversationExpansion(additions);
-        var remaining = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
+        var remaining = AppStoreMigrationTests.WithoutAppleAdditions(differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel()));
         var schemaVersion = remaining.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "PendingAgentOperations").Subject;
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");

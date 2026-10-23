@@ -62,7 +62,8 @@ public record ProfileResponse(
     bool ProactiveAstraEnabled = false,
     bool? MarketingEmailConsent = null,
     DateOnly? LastCompletionDate = null,
-    int? ActiveApiKeyCount = null);
+    int? ActiveApiKeyCount = null,
+    string? BillingProvider = null);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -159,6 +160,7 @@ public class GetProfileQueryHandler(
             user.EffectiveProactivePushEnabled,
             user.MarketingEmailConsent,
             lastCompletionDate,
-            activeApiKeyCount));
+            activeApiKeyCount,
+            user.SubscriptionSource.ToBillingProvider()));
     }
 }

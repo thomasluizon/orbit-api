@@ -18,7 +18,8 @@ public partial class PushNotificationService(
     OrbitDbContext dbContext,
     IOptions<VapidSettings> vapidSettings,
     ILogger<PushNotificationService> logger,
-    HttpClient httpClient) : IPushNotificationService
+    HttpClient httpClient,
+    IApnsPushSender apnsSender) : IPushNotificationService
 {
     private readonly VapidSettings _settings = vapidSettings.Value;
 
@@ -54,6 +55,14 @@ public partial class PushNotificationService(
 
         if (fcmSubs.Count > 0)
             delivered |= await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
+
+        foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Apns))
+        {
+            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken);
+            if (outcome == ApnsDeliveryOutcome.Stale)
+                staleSubscriptions.Add(sub);
+            delivered |= outcome == ApnsDeliveryOutcome.Delivered;
+        }
 
         if (webPushSubs.Count > 0)
             delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);

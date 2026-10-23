@@ -11,4 +11,10 @@ public static class SubscriptionSourceExtensions
         SubscriptionSource.GooglePlay => "play",
         _ => null,
     };
+    public static string? ToBillingProvider(this SubscriptionSource? source) => source switch
+    {
+        SubscriptionSource.AppStore => "app_store",
+        _ => source.ToApiValue()
+    };
 }
+

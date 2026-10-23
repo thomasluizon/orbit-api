@@ -14,7 +14,7 @@ public class SubscribePushCommandValidator : AbstractValidator<SubscribePushComm
         RuleFor(x => x.UserId).NotEmpty();
         RuleFor(x => x.Endpoint).NotEmpty().MaximumLength(2000);
         RuleFor(x => x.Endpoint)
-            .Must((command, endpoint) => PushSubscription.ClassifyTransport(command.P256dh) == PushTransport.Fcm
+            .Must((command, endpoint) => PushSubscription.ClassifyTransport(command.P256dh) != PushTransport.WebPush
                 || WebPushEndpointPolicy.IsAllowed(endpoint))
             .WithMessage(ErrorMessages.PushEndpointInvalid.Message)
             .WithErrorCode(ErrorCodes.PushEndpointInvalid);

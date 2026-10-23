@@ -573,7 +573,7 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CheckoutSessionCompleted_ClearsStalePlayPurchaseToken()
+    public async Task Handle_CheckoutSessionCompleted_PreservesStillPaidPlayPurchaseToken()
     {
         var user = User.Create("Alex", "test@example.com").Value;
         user.SetPlaySubscription("stale_play_token", DateTime.UtcNow.AddMonths(1));
@@ -593,7 +593,7 @@ public class HandleWebhookCommandHandlerTests
 
         await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
-        user.PlayPurchaseToken.Should().BeNull();
+        user.PlayPurchaseToken.Should().Be("stale_play_token");
         user.SubscriptionSource.Should().Be(Orbit.Domain.Enums.SubscriptionSource.Stripe);
     }
 

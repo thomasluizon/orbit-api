@@ -27,7 +27,7 @@ public class GetPushSubscriptionsQueryHandler(
 
         var items = subscriptions.Select(subscription => new PushSubscriptionItemDto(
             subscription.Id,
-            subscription.Transport == PushTransport.Fcm ? "native" : "web",
+            subscription.Transport == PushTransport.WebPush ? "web" : "native",
             subscription.CreatedAtUtc,
             Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(subscription.Endpoint))))).ToList();
 

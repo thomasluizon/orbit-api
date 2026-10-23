@@ -76,6 +76,21 @@ public class PushSubscriptionTests
         result.Error.Should().Contain("Auth key is required");
     }
 
+    [Theory]
+    [InlineData("apns", PushTransport.Apns)]
+    [InlineData("fcm", PushTransport.Fcm)]
+    [InlineData("browser-key", PushTransport.WebPush)]
+    public void ClassifyTransport_UsesStoredMarker(string marker, PushTransport expected) =>
+        PushSubscription.ClassifyTransport(marker).Should().Be(expected);
+
+    [Fact]
+    public void MatchesCredentials_Apns_RequiresSameTransport()
+    {
+        var subscription = PushSubscription.Create(ValidUserId, "device-token", "apns", "auth").Value;
+        subscription.MatchesCredentials("apns", "different-auth").Should().BeTrue();
+        subscription.MatchesCredentials("fcm", "auth").Should().BeFalse();
+    }
+
     [Fact]
     public void ClassifyTransport_FcmSentinel_IsFcm()
     {

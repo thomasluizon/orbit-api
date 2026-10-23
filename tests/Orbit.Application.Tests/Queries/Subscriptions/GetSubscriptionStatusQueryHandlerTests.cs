@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Text.Json;
 using NSubstitute;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Domain.Entities;
@@ -27,6 +28,18 @@ public class GetSubscriptionStatusQueryHandlerTests
     private static User CreateTestUser()
     {
         return User.Create("Test User", "test@example.com").Value;
+    }
+
+    [Fact]
+    public async Task Handle_AppStore_EmitsNullableLegacySourceAndOptionalProvider()
+    {
+        var user = CreateTestUser();
+        user.ApplyAppStoreSubscription("original", "Sandbox", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly, DateTime.UtcNow, true, null);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var result = await _handler.Handle(new(UserId), default);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, JsonSerializerOptions.Web));
+        json.RootElement.GetProperty("source").ValueKind.Should().Be(JsonValueKind.Null);
+        json.RootElement.GetProperty("billingProvider").GetString().Should().Be("app_store");
     }
 
     [Fact]

@@ -42,6 +42,8 @@ public static class ErrorCodes
     public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";
     public const string NoActiveSubscription = "NO_ACTIVE_SUBSCRIPTION";
     public const string InvalidBillingInterval = "INVALID_BILLING_INTERVAL";
+    public const string AppStorePurchaseNotActive = "APP_STORE_PURCHASE_NOT_ACTIVE";
+    public const string AppStorePurchaseAccountMismatch = "APP_STORE_PURCHASE_ACCOUNT_MISMATCH";
     public const string PlayPurchaseNotActive = "PLAY_PURCHASE_NOT_ACTIVE";
     public const string PlayPurchaseAccountMismatch = "PLAY_PURCHASE_ACCOUNT_MISMATCH";
     public const string ChatHistoryTooLarge = "CHAT_HISTORY_TOO_LARGE";

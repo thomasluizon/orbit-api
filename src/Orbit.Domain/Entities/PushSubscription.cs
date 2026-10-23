@@ -14,6 +14,7 @@ public class PushSubscription : Entity
     /// the bare string at call sites.
     /// </summary>
     public const string FcmSentinel = "fcm";
+    public const string ApnsSentinel = "apns";
 
     public Guid UserId { get; private set; }
     public string Endpoint { get; private set; } = null!;
@@ -24,9 +25,12 @@ public class PushSubscription : Entity
     public PushTransport Transport => ClassifyTransport(P256dh);
 
     public static PushTransport ClassifyTransport(string p256dh) =>
-        string.Equals(p256dh, FcmSentinel, StringComparison.Ordinal)
-            ? PushTransport.Fcm
-            : PushTransport.WebPush;
+        p256dh switch
+        {
+            FcmSentinel => PushTransport.Fcm,
+            ApnsSentinel => PushTransport.Apns,
+            _ => PushTransport.WebPush
+        };
 
     private PushSubscription() { }
 
@@ -68,8 +72,8 @@ public class PushSubscription : Entity
     /// credential Firebase issues to one app install, so the matched token plus the FCM sentinel is the proof.
     /// </summary>
     public bool MatchesCredentials(string p256dh, string auth) =>
-        Transport == PushTransport.Fcm
-            ? ClassifyTransport(p256dh) == PushTransport.Fcm
+        Transport is PushTransport.Fcm or PushTransport.Apns
+            ? ClassifyTransport(p256dh) == Transport
             : FixedTimeEquals(P256dh, p256dh) && FixedTimeEquals(Auth, auth);
 
     /// <summary>

@@ -49,7 +49,7 @@ public partial class SubscriptionController(
     }
 
     [HttpGet("status")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SubscriptionStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -153,6 +153,37 @@ public partial class SubscriptionController(
         return result.ToErrorResult(StatusCodes.Status500InternalServerError);
     }
 #pragma warning restore S6932
+
+    [HttpPost("app-store/verify")]
+    [ProducesResponseType(typeof(AppStoreVerifyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> VerifyAppStorePurchase([FromBody] VerifyAppStorePurchaseRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new VerifyAppStorePurchaseCommand(HttpContext.GetUserId(), request.SignedTransaction), cancellationToken);
+        if (result.ErrorCode == ErrorCodes.PaymentServiceUnavailable)
+            return result.ToErrorResult(StatusCodes.Status503ServiceUnavailable);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
+    [HttpPost("app-store/notifications")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> HandleAppStoreNotification([FromBody] AppStoreNotificationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new HandleAppStoreNotificationCommand(request.SignedPayload), cancellationToken);
+        if (result.IsSuccess)
+            return Ok();
+        var status = result.ErrorCode == ErrorCodes.PaymentServiceUnavailable
+            ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status401Unauthorized;
+        return result.ToErrorResult(status);
+    }
+
+    public record VerifyAppStorePurchaseRequest(string SignedTransaction);
+    public record AppStoreNotificationRequest(string SignedPayload);
 
     public record CreateCheckoutRequest(string Interval);
 

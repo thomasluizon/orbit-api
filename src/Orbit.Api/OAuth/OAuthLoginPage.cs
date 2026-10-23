@@ -11,7 +11,7 @@ public static class OAuthLoginPage
     public static string Render(string clientId, string redirectUri, string state,
         string codeChallenge, string codeChallengeMethod, string? nonce = null,
         string? error = null, string language = "en",
-        bool botProtectionEnabled = false, string? turnstileSiteKey = null, string? scope = null)
+        bool botProtectionEnabled = false, string? turnstileSiteKey = null, string? scope = null, bool appleSignInEnabled = false)
     {
         var copy = OAuthPageStrings.For(language);
         var requestJson = OAuthPageJson.Write(new
@@ -59,6 +59,11 @@ public static class OAuthLoginPage
         if (scope is not null) googleStartQuery += $"&scope={Uri.EscapeDataString(scope)}";
         var googleStartUrl = System.Net.WebUtility.HtmlEncode($"/oauth/google/start?{googleStartQuery}");
 
+        var appleStartUrl = System.Net.WebUtility.HtmlEncode($"/oauth/apple/start?{googleStartQuery}");
+        var appleLabel = copy.Locale == "pt-BR" ? "Iniciar sessão com a Apple" : "Sign in with Apple";
+        var appleButton = appleSignInEnabled
+            ? $"<a class=\"btn btn-ghost\" id=\"apple\" href=\"{appleStartUrl}\">{appleLabel}</a>" : "";
+
         return $$"""
 <!DOCTYPE html>
 <html lang="{{copy.Locale}}">
@@ -83,6 +88,7 @@ public static class OAuthLoginPage
 <button type="button" class="btn btn-primary" id="send-code">{{copy.ContinueLabel}}</button>
 <div class="divider" aria-hidden="true"><span data-rule></span><span data-label>{{copy.OrLabel}}</span><span data-rule></span></div>
 <a class="btn btn-ghost btn-google" id="google" href="{{googleStartUrl}}"><img src="/oauth/assets/google-mark.svg" width="20" height="20" alt="" aria-hidden="true">{{copy.GoogleLabel}}</a>
+{{appleButton}}
 </section>
 <section class="step hidden" id="step-code">
 <button type="button" class="btn btn-ghost btn-sm" id="change-email">{{copy.ChangeEmailLabel}}</button>

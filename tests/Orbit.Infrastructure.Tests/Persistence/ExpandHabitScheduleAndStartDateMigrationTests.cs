@@ -24,6 +24,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
         differences.Should().HaveCount(40 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         var preference = differences.OfType<AlterColumnOperation>().Should().ContainSingle().Subject;
         preference.Table.Should().Be("Users");
@@ -67,6 +68,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
         differences.Should().HaveCount(11 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
