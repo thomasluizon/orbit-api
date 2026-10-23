@@ -242,14 +242,14 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             .OrderBy(bucket => bucket.WindowStartUtc)
             .ToListAsync(cancellationToken);
 
-        var currentCount = recentBuckets.Sum(bucket => bucket.Count);
+        var currentCount = recentBuckets.Sum(bucket => (long)bucket.Count);
         if (currentCount >= policy.PermitLimit)
         {
             var oldestRelevantBucket = recentBuckets.FirstOrDefault();
             return new DistributedRateLimitDecision(
                 false,
                 policy.PermitLimit,
-                currentCount,
+                (int)Math.Min(currentCount, int.MaxValue),
                 oldestRelevantBucket?.WindowEndsAtUtc ?? bucketExpiresAtUtc);
         }
 
@@ -272,7 +272,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         return new DistributedRateLimitDecision(
             true,
             policy.PermitLimit,
-            currentCount + 1,
+            (int)currentCount + 1,
             bucketExpiresAtUtc);
     }
 
