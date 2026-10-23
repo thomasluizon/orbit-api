@@ -167,7 +167,7 @@ public class AiSlipAlertMessageServiceGenerationTests
     {
         result.IsSuccess.Should().BeTrue();
         if (language.StartsWith("pt", StringComparison.OrdinalIgnoreCase))
-            result.Value.Should().Be(("Uma escolha de cada vez", "Hoje, você pode seguir o que escolheu para você."));
+            result.Value.Should().Be(("Uma escolha de cada vez", "Hoje, você pode seguir o que escolheu."));
         else
             result.Value.Should().Be(("One choice at a time", "You can stick with what you chose for yourself today."));
         AssertNoHabitTitle(result, habitTitle);

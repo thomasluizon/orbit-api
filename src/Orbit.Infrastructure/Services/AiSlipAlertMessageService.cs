@@ -98,7 +98,7 @@ public sealed partial class AiSlipAlertMessageService(
     private static Result<(string Title, string Body)> GenerateFallback(string language)
     {
         var body = LocaleHelper.IsPortuguese(language)
-            ? "Hoje, você pode seguir o que escolheu para você."
+            ? "Hoje, você pode seguir o que escolheu."
             : "You can stick with what you chose for yourself today.";
 
         return Result.Success((FallbackTitle(language), body));
