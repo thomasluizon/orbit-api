@@ -50,11 +50,11 @@ public class ConfigControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetConfig_OmitsRetainedMemoryLimitWithoutMutatingCachedConfiguration()
+    public async Task GetConfig_ReturnsSeededLimitsWithoutRetiredMemoryLimit()
     {
         var stored = await _dbContext.AppConfigs.AsNoTracking()
             .ToDictionaryAsync(config => config.Key, config => config.Value);
-        stored.Should().ContainKey("MaxUserFacts");
+        stored.Should().NotContainKey("MaxUserFacts");
         _configService.GetAllAsync(Arg.Any<CancellationToken>()).Returns(stored);
 
         var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
@@ -63,8 +63,8 @@ public class ConfigControllerTests : IDisposable
         var limits = payload.GetProperty("limits");
         limits.TryGetProperty("MaxUserFacts", out _).Should().BeFalse();
         limits.EnumerateObject().Select(property => property.Name)
-            .Should().BeEquivalentTo(stored.Keys.Where(key => key != "MaxUserFacts"));
-        stored.Should().ContainKey("MaxUserFacts");
+            .Should().BeEquivalentTo(stored.Keys);
+        stored.Should().NotContainKey("MaxUserFacts");
     }
 
     [Fact]
@@ -200,8 +200,7 @@ public class ConfigControllerTests : IDisposable
         flag.GetProperty("enabled").GetBoolean().Should().BeTrue();
         flag.GetProperty("planRequirement").ValueKind.Should().Be(JsonValueKind.Null);
         payload.GetProperty("limits").Deserialize<Dictionary<string, string>>()
-            .Should().BeEquivalentTo(stored.Where(pair => pair.Key != "MaxUserFacts")
-                .ToDictionary(pair => pair.Key, pair => pair.Value));
+            .Should().BeEquivalentTo(stored);
     }
 
     [Fact]

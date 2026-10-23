@@ -14,14 +14,14 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class FeatureFlagAccountsMigrationTests
 {
     [Fact]
-    public void TargetModel_PreservesPromotedRedesignAndCombinedSnapshotMatchesCurrentModel()
+    public void TargetModel_PreservesPromotedRedesignThroughLastExpansion()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var initializer = context.GetService<IModelRuntimeInitializer>();
         var target = initializer.Initialize(new AddDurableSignupWork().TargetModel, designTime: true);
         var featureFlags = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = initializer.Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
@@ -127,7 +127,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261020033359_RestoreRequiredProactiveAstraPreference",
             "20261020041243_SeparateBonusProEntitlement",
             "20261020134743_AllowExplicitHabitStartDate");
-        context.Database.GetMigrations().Last().Should().EndWith("_ExpandHabitNextDueDate");
+        context.Database.GetMigrations().Last().Should().EndWith("_DropRetiredFeatureTables");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

@@ -729,7 +729,6 @@ public partial class DistributedRateLimitServiceTests : IDisposable
             modelBuilder.Ignore<User>();
             modelBuilder.Ignore<Habit>();
             modelBuilder.Ignore<HabitLog>();
-            modelBuilder.Ignore<UserFact>();
             modelBuilder.Ignore<AppConfig>();
             modelBuilder.Ignore<Tag>();
             modelBuilder.Ignore<PushSubscription>();

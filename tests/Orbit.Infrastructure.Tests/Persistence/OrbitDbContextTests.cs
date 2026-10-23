@@ -74,7 +74,6 @@ public class OrbitDbContextTests
         context.Model.FindEntityType(typeof(Habit))!.FindProperty(nameof(Habit.Title))!.GetValueConverter().Should().NotBeNull();
         context.Model.FindEntityType(typeof(Habit))!.FindProperty(nameof(Habit.Description))!.GetValueConverter().Should().NotBeNull();
         context.Model.FindEntityType(typeof(HabitLog))!.FindProperty(nameof(HabitLog.Note))!.GetValueConverter().Should().NotBeNull();
-        context.Model.FindEntityType(typeof(UserFact))!.FindProperty(nameof(UserFact.FactText))!.GetValueConverter().Should().NotBeNull();
         context.Model.FindEntityType(typeof(Goal))!.FindProperty(nameof(Goal.Title))!.GetValueConverter().Should().NotBeNull();
         context.Model.FindEntityType(typeof(GoalProgressLog))!.FindProperty(nameof(GoalProgressLog.Note))!.GetValueConverter().Should().NotBeNull();
     }
@@ -209,24 +208,6 @@ public class OrbitDbContextTests
         AssertCascadingUserForeignKey(context.Model.FindEntityType(typeof(Tag))!, nameof(Tag.UserId));
     }
 
-    [Theory]
-    [InlineData(nameof(AccountabilityPair.RequesterId))]
-    [InlineData(nameof(AccountabilityPair.AddresseeId))]
-    public void Model_AccountabilityParticipant_CascadesInCurrentModelAndMigration(string foreignKeyProperty)
-    {
-        using var context = CreatePostgresContext();
-        AssertCascadingUserForeignKey(context.Model.FindEntityType(typeof(AccountabilityPair))!, foreignKeyProperty);
-
-        var migrationModel = context.GetService<IModelRuntimeInitializer>().Initialize(
-            new Orbit.Infrastructure.Migrations.CascadeAccountabilityPairsOnUserDeletion().TargetModel,
-            designTime: true);
-        var foreignKey = migrationModel.FindEntityType(typeof(AccountabilityPair).FullName!)!
-            .GetForeignKeys().Single(key => key.Properties.Count == 1 && key.Properties[0].Name == foreignKeyProperty);
-
-        foreignKey.PrincipalEntityType.Name.Should().Be(typeof(User).FullName);
-        foreignKey.DeleteBehavior.Should().Be(DeleteBehavior.Cascade);
-    }
-
     private static void AssertCascadingUserForeignKey(
         Microsoft.EntityFrameworkCore.Metadata.IEntityType entityType,
         string foreignKeyPropertyName)
@@ -334,7 +315,6 @@ public class OrbitDbContextTests
             (typeof(ProactiveItem), nameof(ProactiveItem.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ProcessedRequest), nameof(ProcessedRequest.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ClosedMonthRecap), nameof(ClosedMonthRecap.UserId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(AiFactExtractionBatch), nameof(AiFactExtractionBatch.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(PendingClarification), nameof(PendingClarification.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(ChecklistTemplate), nameof(ChecklistTemplate.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(StreakFreeze), nameof(StreakFreeze.UserId), typeof(User), DeleteBehavior.Cascade),
@@ -343,28 +323,6 @@ public class OrbitDbContextTests
             (typeof(ApiKey), nameof(ApiKey.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(GoogleCalendarSyncSuggestion), nameof(GoogleCalendarSyncSuggestion.UserId), typeof(User), DeleteBehavior.Cascade),
             (typeof(GoalProgressLog), nameof(GoalProgressLog.GoalId), typeof(Goal), DeleteBehavior.Cascade),
-            (typeof(AccountabilityPairHabit), nameof(AccountabilityPairHabit.PairId), typeof(AccountabilityPair), DeleteBehavior.Cascade),
-            (typeof(AccountabilityPairHabit), nameof(AccountabilityPairHabit.HabitId), typeof(Habit), DeleteBehavior.Cascade),
-            (typeof(AccountabilityCheckIn), nameof(AccountabilityCheckIn.PairId), typeof(AccountabilityPair), DeleteBehavior.Cascade),
-            (typeof(ChallengeParticipant), nameof(ChallengeParticipant.ChallengeId), typeof(Challenge), DeleteBehavior.Cascade),
-            (typeof(ChallengeParticipantHabit), nameof(ChallengeParticipantHabit.ChallengeParticipantId), typeof(ChallengeParticipant), DeleteBehavior.Cascade),
-            (typeof(ChallengeParticipantHabit), nameof(ChallengeParticipantHabit.HabitId), typeof(Habit), DeleteBehavior.Cascade),
-            (typeof(Friendship), nameof(Friendship.RequesterId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Friendship), nameof(Friendship.AddresseeId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Cheer), nameof(Cheer.SenderId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Cheer), nameof(Cheer.RecipientId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Cheer), nameof(Cheer.HabitId), typeof(Habit), DeleteBehavior.Cascade),
-            (typeof(BlockedUser), nameof(BlockedUser.BlockerId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(BlockedUser), nameof(BlockedUser.BlockedId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Report), nameof(Report.ReporterId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Report), nameof(Report.ReportedUserId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Report), nameof(Report.CheerId), typeof(Cheer), DeleteBehavior.SetNull),
-            (typeof(UserFact), nameof(UserFact.UserId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(AccountabilityPair), nameof(AccountabilityPair.RequesterId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(AccountabilityPair), nameof(AccountabilityPair.AddresseeId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(FriendFeedEvent), nameof(FriendFeedEvent.ActorUserId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(Challenge), nameof(Challenge.CreatorId), typeof(User), DeleteBehavior.Cascade),
-            (typeof(ChallengeParticipant), nameof(ChallengeParticipant.UserId), typeof(User), DeleteBehavior.Cascade),
         };
         var data = new TheoryData<Type, string, Type, DeleteBehavior>();
         foreach (var entry in cases)
@@ -402,7 +360,6 @@ public class OrbitDbContextTests
             {
                 nameof(ClosedMonthRecap.UserId), nameof(ClosedMonthRecap.DateFrom), nameof(ClosedMonthRecap.DateTo),
             }),
-            (typeof(AiFactExtractionBatch), new[] { nameof(AiFactExtractionBatch.BatchId) }),
             (typeof(AiUsageDaily), new[]
             {
                 nameof(AiUsageDaily.Date), nameof(AiUsageDaily.Model), nameof(AiUsageDaily.Purpose), nameof(AiUsageDaily.UserId),
@@ -420,23 +377,6 @@ public class OrbitDbContextTests
             (typeof(GoogleCalendarSyncSuggestion), new[]
             {
                 nameof(GoogleCalendarSyncSuggestion.UserId), nameof(GoogleCalendarSyncSuggestion.GoogleEventId),
-            }),
-            (typeof(BlockedUser), new[] { nameof(BlockedUser.BlockerId), nameof(BlockedUser.BlockedId) }),
-            (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.AchievementId) }),
-            (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.Type), nameof(FriendFeedEvent.Value) }),
-            (typeof(Challenge), new[] { nameof(Challenge.JoinCode) }),
-            (typeof(ChallengeParticipant), new[] { nameof(ChallengeParticipant.ChallengeId), nameof(ChallengeParticipant.UserId) }),
-            (typeof(ChallengeParticipantHabit), new[]
-            {
-                nameof(ChallengeParticipantHabit.ChallengeParticipantId), nameof(ChallengeParticipantHabit.HabitId),
-            }),
-            (typeof(AccountabilityPairHabit), new[]
-            {
-                nameof(AccountabilityPairHabit.PairId), nameof(AccountabilityPairHabit.UserId), nameof(AccountabilityPairHabit.HabitId),
-            }),
-            (typeof(AccountabilityCheckIn), new[]
-            {
-                nameof(AccountabilityCheckIn.PairId), nameof(AccountabilityCheckIn.UserId), nameof(AccountabilityCheckIn.Date),
             }),
         };
         var data = new TheoryData<Type, string[]>();
@@ -457,9 +397,6 @@ public class OrbitDbContextTests
             (typeof(User), new[] { nameof(User.GoogleCalendarAutoSyncEnabled), nameof(User.GoogleCalendarLastSyncedAt) }, "\"GoogleCalendarAutoSyncEnabled\" = TRUE"),
             (typeof(Habit), new[] { nameof(Habit.UserId), nameof(Habit.GoogleEventId) }, "\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE"),
             (typeof(HabitLog), new[] { nameof(HabitLog.HabitId), nameof(HabitLog.Date), nameof(HabitLog.CompletionOrdinal) }, "\"Value\" > 0 AND NOT \"IsDeleted\""),
-            (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.AchievementId) }, "\"AchievementId\" IS NOT NULL"),
-            (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.Type), nameof(FriendFeedEvent.Value) }, "\"AchievementId\" IS NULL"),
-            (typeof(ChallengeParticipant), new[] { nameof(ChallengeParticipant.ChallengeId), nameof(ChallengeParticipant.UserId) }, "\"LeftAtUtc\" IS NULL"),
         };
         var data = new TheoryData<Type, string[], string>();
         foreach (var entry in cases)
@@ -476,11 +413,9 @@ public class OrbitDbContextTests
             (typeof(HabitLog), nameof(HabitLog.IsDeleted)),
             (typeof(Tag), nameof(Tag.IsDeleted)),
             (typeof(Notification), nameof(Notification.IsDeleted)),
-            (typeof(UserFact), nameof(UserFact.IsDeleted)),
             (typeof(Goal), nameof(Goal.IsDeleted)),
             (typeof(GoalProgressLog), nameof(GoalProgressLog.IsDeleted)),
             (typeof(ChecklistTemplate), nameof(ChecklistTemplate.IsDeleted)),
-            (typeof(Challenge), nameof(Challenge.IsDeleted)),
         };
         var data = new TheoryData<Type, string>();
         foreach (var entry in cases)
@@ -510,7 +445,6 @@ public class OrbitDbContextTests
             (typeof(ApiKey), new[] { nameof(ApiKey.UserId) }),
             (typeof(GoogleCalendarSyncSuggestion), new[] { nameof(GoogleCalendarSyncSuggestion.UserId) }),
             (typeof(ProcessedRequest), new[] { nameof(ProcessedRequest.CreatedAtUtc) }),
-            (typeof(Cheer), new[] { nameof(Cheer.SenderId), nameof(Cheer.CreatedAtUtc) }),
         };
         var data = new TheoryData<Type, string[]>();
         foreach (var entry in cases)

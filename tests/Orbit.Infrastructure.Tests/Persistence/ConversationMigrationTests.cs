@@ -23,7 +23,8 @@ public class ConversationMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         context.Database.HasPendingModelChanges().Should().BeFalse();
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
         generator.Generate(migration.UpOperations, model).Should().NotBeEmpty();
         generator.Generate(migration.DownOperations, model).Should().NotBeEmpty();
         var initializer = context.GetService<IModelRuntimeInitializer>();

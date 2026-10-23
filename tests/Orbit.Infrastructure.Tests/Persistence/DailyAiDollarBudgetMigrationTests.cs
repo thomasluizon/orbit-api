@@ -38,7 +38,8 @@ public class DailyAiDollarBudgetMigrationTests
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Table == "PendingAgentOperations");
