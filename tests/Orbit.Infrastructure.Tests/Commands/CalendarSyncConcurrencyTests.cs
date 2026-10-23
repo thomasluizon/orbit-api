@@ -21,6 +21,55 @@ namespace Orbit.Infrastructure.Tests.Commands;
 public class CalendarSyncConcurrencyTests
 {
     [Fact]
+    public async Task RunSync_ConcurrentTimezoneWrites_LocksUserUntilCompletion()
+    {
+        await using var database = new UserRowConcurrencyHarness(user => user.SetTimeZone("America/Sao_Paulo"));
+        var user = User.Create("Calendar user", "calendar@example.com").Value;
+        user.SetStripeSubscription("sub_calendar", DateTime.UtcNow.AddDays(30));
+        user.SetGoogleTokens("access", "refresh");
+        user.EnableCalendarAutoSync();
+        await database.SeedAsync(user);
+        var gate = Substitute.For<IPayGateService>();
+        gate.CanManageCalendar(user.Id, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var tokens = Substitute.For<IGoogleTokenService>();
+        tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            call.Arg<User>().SetGoogleTokens("refreshed", null);
+            return new GoogleTokenRefreshOutcome("refreshed", GoogleTokenRefreshResult.Success, null);
+        });
+        var fetcher = Substitute.For<ICalendarEventFetcher>();
+        fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("event", "Calendar event", null, "2030-04-10", null, null, false, null, [])
+            });
+        var syncLock = Substitute.For<ICalendarSyncLock>();
+        syncLock.TryAcquireAsync(user.Id, Arg.Any<CancellationToken>()).Returns(true);
+        var context = database.Context;
+        var handler = new RunCalendarAutoSyncCommandHandler(new CalendarAutoSyncDependencies(
+            new GenericRepository<User>(context), new GenericRepository<Habit>(context),
+            new GenericRepository<GoogleCalendarSyncSuggestion>(context), new GenericRepository<Notification>(context),
+            tokens, fetcher, database.Work, syncLock), gate, TimeProvider.System,
+            NullLogger<RunCalendarAutoSyncCommandHandler>.Instance);
+        var retry = new ConcurrencyRetryBehavior<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>(database.Work);
+        var command = new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true);
+
+        var result = await retry.Handle(command, ct => handler.Handle(command, ct), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.NewSuggestions.Should().Be(1);
+        database.SaveAttempts.Should().Be(2);
+        database.ConcurrentWrites.Should().Be(1);
+        await tokens.Received(1).TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await using var verify = database.CreateContext();
+        var saved = await verify.Users.SingleAsync();
+        saved.TimeZone.Should().Be("America/Sao_Paulo");
+        saved.GoogleAccessToken.Should().Be("refreshed");
+        saved.GoogleCalendarLastSyncedAt.Should().NotBeNull();
+        (await verify.GoogleCalendarSyncSuggestions.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
     public async Task RunSync_CompletionSaveFails_RollsBackSuggestionsTokensAndTimestamp()
     {
         var failCompletion = new FailCompletionSave();
