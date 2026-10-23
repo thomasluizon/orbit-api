@@ -7,7 +7,8 @@ internal static partial class AiPlainText
 {
     internal static string Normalize(string text, IEnumerable<string>? literalNames = null)
     {
-        var names = literalNames?.Where(name => !string.IsNullOrEmpty(name))
+        var names = literalNames?.Where(name => !string.IsNullOrEmpty(name)
+                && (name.IndexOfAny(['*', '_', '~', '`', '[']) >= 0 || LineMarkers().IsMatch(name)))
             .Distinct(StringComparer.Ordinal).OrderByDescending(name => name.Length).ToArray() ?? [];
         var protectedNames = new Dictionary<string, string>(StringComparer.Ordinal);
         var prefix = "\uE000";

@@ -78,6 +78,15 @@ public sealed class AiProactiveCheckinMessageServiceTests
     }
 
     [Fact]
+    public async Task GroundedMarkdownSentence_ReturnsPlainTextAndPreservesHabitName()
+    {
+        var facts = Facts(ProactiveTrigger.EveningCheckin) with { HabitTitles = ["Read *daily*"] };
+        var result = await Service("**Read *daily*** is __still open__ today.").GenerateAsync(facts, "en", default);
+
+        result.Text.Should().Be("Read *daily* is still open today.");
+    }
+
+    [Fact]
     public async Task ModelFailure_UsesTemplate()
     {
         var facts = Facts(ProactiveTrigger.RestartAfterMiss);

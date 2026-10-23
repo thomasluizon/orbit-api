@@ -51,7 +51,9 @@ public sealed partial class AiSummaryService(
             if (content is null || string.IsNullOrWhiteSpace(content.Summary))
                 return Result.Failure<DailySummaryContent>(ErrorMessages.AiEmptyResponse);
 
-            var summary = CapToSentence(StripMarkdownFences(content.Summary), MaxSummaryChars);
+            var names = scheduledHabits.Select(h => h.Title)
+                .Concat(scheduledHabits.SelectMany(h => h.Goals).Select(g => g.Title));
+            var summary = CapToSentence(AiPlainText.Normalize(content.Summary, names), MaxSummaryChars);
 
             if (logger.IsEnabled(LogLevel.Debug))
                 LogDailySummaryGenerated(logger, summary.Length);

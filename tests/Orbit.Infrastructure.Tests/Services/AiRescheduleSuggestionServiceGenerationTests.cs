@@ -52,7 +52,7 @@ public class AiRescheduleSuggestionServiceGenerationTests
             dueDate = "2026-07-20",
             dueTime = "08:00",
             days = SuggestedDayNames,
-            rationale = "  Let's ease back in gently.  "
+            rationale = "  Let's **ease back** in *gently*.  "
         }));
 
         var result = await service.GenerateAsync(OverdueHabit(), Today, "en");
@@ -64,6 +64,22 @@ public class AiRescheduleSuggestionServiceGenerationTests
         result.Value.DueTime.Should().Be(new TimeOnly(8, 0));
         result.Value.Days.Should().Equal(DayOfWeek.Monday, DayOfWeek.Tuesday);
         result.Value.Rationale.Should().Be("Let's ease back in gently.");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RationalePreservesLiteralHabitName()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Run *gently*", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(-5))).Value;
+        var service = BuildService(JsonSerializer.Serialize(new
+        {
+            dueDate = "2026-07-20",
+            rationale = "Try **Run *gently*** again."
+        }));
+
+        var result = await service.GenerateAsync(habit, Today, "en");
+
+        result.Value.Rationale.Should().Be("Try Run *gently* again.");
     }
 
     [Fact]

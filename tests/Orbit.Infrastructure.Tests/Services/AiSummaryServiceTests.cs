@@ -761,13 +761,25 @@ public class AiSummaryServiceTests
     public async Task GenerateSummaryAsync_ReturnsSummaryWithAlwaysEmptyInsight()
     {
         var service = BuildSummaryService(
-            "{\"summary\":\"Nice work getting the run in.\"}");
+            "{\"summary\":\"Nice work getting the **run** in.\"}");
 
         var result = await InvokeGenerateSummaryAsync(service);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Summary.Should().Be("Nice work getting the run in.");
         result.Value.Insight.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateSummaryAsync_PreservesLiteralHabitNameWhileRemovingEmphasis()
+    {
+        var habit = CreateHabit("Read *daily*");
+        var service = BuildSummaryService("{\"summary\":\"Nice work with **Read *daily***.\"}");
+
+        var result = await service.GenerateSummaryAsync([habit],
+            new DailySummaryContext(Today, Today, Today, "en", null, 0, 0, new Dictionary<Guid, DateOnly>()));
+
+        result.Value.Summary.Should().Be("Nice work with Read *daily*.");
     }
 
     [Fact]

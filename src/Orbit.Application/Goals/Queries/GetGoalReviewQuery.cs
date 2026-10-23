@@ -67,7 +67,8 @@ public class GetGoalReviewQueryHandler(
         var result = await goalReviewService.GenerateReviewAsync(
             goalsContext,
             request.Language,
-            cancellationToken);
+            cancellationToken,
+            goalList.Select(g => g.Title).Concat(goalList.SelectMany(g => g.Habits).Select(h => h.Title)).ToArray());
 
         if (result.IsFailure)
             return result.PropagateError<GoalReviewResponse>();

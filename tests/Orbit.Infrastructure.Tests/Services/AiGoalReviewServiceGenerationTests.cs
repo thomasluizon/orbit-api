@@ -34,12 +34,23 @@ public class AiGoalReviewServiceGenerationTests
     [Fact]
     public async Task GenerateReviewAsync_ModelReturnsText_ReturnsTrimmedReview()
     {
-        var service = BuildService("```\nYou are on track with running. Keep the momentum.\n```");
+        var service = BuildService("```\nYou are on track with **running**. Keep the *momentum*.\n```");
 
         var result = await service.GenerateReviewAsync("Goal: run 100km, 60km done", "pt-BR");
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be("You are on track with running. Keep the momentum.");
+    }
+
+    [Fact]
+    public async Task GenerateReviewAsync_PreservesLiteralNamesWhileRemovingEmphasis()
+    {
+        var service = BuildService("**Learn *C*** is on track. Keep __Read *daily*__ going.");
+
+        var result = await service.GenerateReviewAsync("Goal: Learn *C*; habit: Read *daily*", "en",
+            literalNames: ["Learn *C*", "Read *daily*"]);
+
+        result.Value.Should().Be("Learn *C* is on track. Keep Read *daily* going.");
     }
 
     [Fact]

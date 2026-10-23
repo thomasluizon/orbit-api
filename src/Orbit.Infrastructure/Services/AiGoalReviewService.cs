@@ -16,7 +16,8 @@ public sealed partial class AiGoalReviewService(
     public async Task<Result<string>> GenerateReviewAsync(
         string goalsContext,
         string language,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<string>? literalNames = null)
     {
         if (string.IsNullOrWhiteSpace(goalsContext))
             return Result.Failure<string>(ErrorMessages.NoGoalsData);
@@ -41,6 +42,7 @@ public sealed partial class AiGoalReviewService(
             - Be encouraging but honest
             - No markdown formatting, no emojis, no JSON
             - Plain text only
+            - Preserve goal and habit names exactly as supplied
             """;
 
         if (logger.IsEnabled(LogLevel.Debug))
@@ -58,7 +60,7 @@ public sealed partial class AiGoalReviewService(
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<string>(ErrorMessages.AiEmptyResponse);
 
-            var trimmed = AiSummaryService.StripMarkdownFences(text);
+            var trimmed = AiPlainText.Normalize(text, literalNames);
 
             if (logger.IsEnabled(LogLevel.Debug))
                 LogGoalReviewGenerated(logger, trimmed.Length);
