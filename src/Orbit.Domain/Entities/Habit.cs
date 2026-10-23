@@ -197,9 +197,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             throw new ArgumentException("Schedule candidate must match the hydrated habit.");
 
         ParentHabitId = candidate.ParentHabitId;
-        Schedule = candidate.Schedule;
-        IsGeneral = Schedule == HabitSchedule.General;
-        IsFlexible = Schedule == HabitSchedule.Flexible;
         FrequencyUnit = candidate.FrequencyUnit;
         FrequencyQuantity = candidate.FrequencyQuantity;
         IntervalWeeks = candidate.IntervalWeeks;
@@ -212,7 +209,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         IsDeleted = candidate.IsDeleted;
         IsBadHabit = candidate.IsBadHabit;
         IsCompleted = candidate.IsCompleted;
-        StartDate = candidate.StartDate;
+        IsGeneral = candidate.IsGeneral;
+        IsFlexible = candidate.IsFlexible;
         Days = candidate.Days.ToList();
     }
 

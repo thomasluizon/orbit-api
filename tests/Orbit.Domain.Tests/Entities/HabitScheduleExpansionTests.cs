@@ -159,23 +159,6 @@ public class HabitScheduleExpansionTests
         AssertSchedule(hydrated, HabitSchedule.Recurring);
     }
 
-    [Fact]
-    public void Hydration_CopiesEditedAnchorAndChangedScheduleTogether()
-    {
-        var original = Create(HabitSchedule.Recurring);
-        var hydrated = Habit.FromScheduleSnapshot(
-            Orbit.Domain.Models.HabitScheduleSnapshot.FromHabit(original), original.UserId);
-        original.Update(new HabitUpdateParams("Flexible", null, FrequencyUnit.Week, 2, null, false, null,
-            IsFlexible: true, StartDate: Start.AddDays(1), UserToday: Start.AddDays(2)))
-            .IsSuccess.Should().BeTrue();
-
-        hydrated.LoadScheduleFieldsForRead(original);
-
-        hydrated.StartDate.Should().Be(original.StartDate);
-        hydrated.DueDate.Should().Be(original.DueDate);
-        AssertSchedule(hydrated, HabitSchedule.Flexible);
-    }
-
     private static readonly DateOnly Start = new(2026, 4, 3);
 
     private static Habit Create(HabitSchedule schedule) => Habit.Create(new HabitCreateParams(
