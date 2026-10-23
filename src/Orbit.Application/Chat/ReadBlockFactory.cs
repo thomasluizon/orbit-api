@@ -49,6 +49,12 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             node["date_to"] ??= tool == "get_daily_summary" ? node["date_from"]!.DeepClone() : Iso(to);
         }
         ApplyDefaults(tool, node);
+        if (tool is "get_daily_summary" or "get_retrospective")
+        {
+            var user = await users.GetByIdAsync(userId, ct);
+            node["language"] = !string.IsNullOrWhiteSpace(user?.Language)
+                ? user.Language : node["language"]?.GetValue<string>() ?? "en";
+        }
         if (tool is "query_goals" or "review_goals" or "get_gamification_overview" or "get_calendar_overview" or "get_habit_metrics")
             node["as_of"] ??= Iso(today);
         if (tool == "get_calendar_overview")

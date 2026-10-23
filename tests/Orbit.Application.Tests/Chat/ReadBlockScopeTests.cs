@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -31,6 +32,7 @@ public sealed class ReadBlockScopeTests
         Audience = "test"
     }));
     private readonly ReadBlockFactory _blocks;
+    private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly DateOnly _day = new(2026, 4, 1);
 
     public ReadBlockScopeTests()
@@ -39,7 +41,76 @@ public sealed class ReadBlockScopeTests
         _dates.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
         _dates.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"));
         _flags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
-        _blocks = new(_dates, _tokens, Substitute.For<IGenericRepository<User>>());
+        _blocks = new(_dates, _tokens, _users);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"language\":\"en\"}")]
+    public async Task RetrospectiveUsesProfileLanguageAndDoesNotReuseEnglishCache(string arguments)
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetLanguage("en");
+        _users.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
+        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1, _day)).Value;
+        habit.Log(_day);
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(new[] { habit });
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanUseRetrospective(_userId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var narratives = Substitute.For<IRetrospectiveService>();
+        narratives.GenerateRetrospectiveAsync(Arg.Any<List<Habit>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
+            "week", Arg.Any<string>(), Arg.Any<CancellationToken>(), 1).Returns(call => Result.Success(
+                new RetrospectiveNarrative(call.ArgAt<string>(4) == "pt-BR" ? "Você leu." : "You read.", "", "", "")));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new GetRetrospectiveQueryHandler(habits, payGate, narratives,
+            Substitute.For<IUserStreakService>(), _dates, cache);
+        var responses = new List<RetrospectiveResponse>();
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var result = await handler.Handle(call.Arg<GetRetrospectiveQuery>(), call.Arg<CancellationToken>());
+            responses.Add(result.Value);
+            return result;
+        });
+        var tool = new GetRetrospectiveTool(mediator, _dates);
+        var executor = Executor(tool);
+        var english = await executor.ExecuteAsync(new(_userId, tool.Name, Json(arguments),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        english.Operation.ReadBlock!.Block.Should().BeOfType<PeriodInsightCard>()
+            .Which.Narrative.Highlights.Should().Be("You read.");
+
+        user.SetLanguage("pt-BR");
+        var portuguese = await executor.ExecuteAsync(new(_userId, tool.Name, Json(arguments),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+
+        portuguese.Operation.ReadBlock!.Block.Should().BeOfType<PeriodInsightCard>()
+            .Which.Narrative.Highlights.Should().Be("Você leu.");
+        portuguese.Operation.ReadBlock.Read.Scope.GetProperty("language").GetString().Should().Be("pt-BR");
+        responses.Select(response => response.FromCache).Should().Equal(false, false);
+        await executor.ExecuteAsync(new(_userId, tool.Name, Json(arguments),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        responses.Select(response => response.FromCache).Should().Equal(false, false, true);
+        await narratives.Received(1).GenerateRetrospectiveAsync(Arg.Any<List<Habit>>(), Arg.Any<DateOnly>(),
+            Arg.Any<DateOnly>(), "week", "pt-BR", Arg.Any<CancellationToken>(), 1);
+    }
+
+    [Theory]
+    [InlineData("get_daily_summary")]
+    [InlineData("get_retrospective")]
+    public async Task NarrativeScopeUsesCurrentProfileLanguageEvenWhenReplayed(string tool)
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetLanguage("pt-BR");
+        _users.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var scope = await _blocks.ResolveAsync(tool, Json("{\"language\":\"en\"}"), _userId, default);
+
+        scope.GetProperty("language").GetString().Should().Be("pt-BR");
+        user.SetLanguage("en");
+        (await _blocks.ResolveAsync(tool, scope, _userId, default))
+            .GetProperty("language").GetString().Should().Be("en");
     }
 
     [Fact]
