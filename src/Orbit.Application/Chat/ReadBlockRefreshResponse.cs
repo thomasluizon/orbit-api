@@ -22,3 +22,11 @@ public sealed record ReadBlockRefreshResponse(string Kind, ReadBlockCard Block, 
         ? new(read.Kind, card, read.Read)
         : throw new InvalidOperationException("A read block must carry a declared read card.");
 }
+
+public sealed record GamificationReadBlockRefreshResponse(string Kind, GamificationCard Block, ReadBlockMetadata Read)
+{
+    public static GamificationReadBlockRefreshResponse From(QueryReadBlock read) =>
+        read is { Kind: "gamification", Block: GamificationCard card }
+            ? new(read.Kind, card, read.Read)
+            : throw new InvalidOperationException("A gamification refresh must carry a gamification card.");
+}

@@ -464,7 +464,7 @@ public partial class ProcessUserChatCommandHandler
         var executionResponse = correctionRequest is null
             ? await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken)
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
-        var operationResult = executionResponse.Operation;
+        var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation, request.ClientContext);
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
 

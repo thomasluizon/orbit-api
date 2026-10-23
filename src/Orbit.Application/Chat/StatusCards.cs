@@ -17,6 +17,11 @@ public record StreakAchievement(string Id, string IconKey, DateTime EarnedAt);
 
 public record StreakAchievementDisc(string Id, string IconKey, DateTime? EarnedAt);
 
+public sealed record GamificationCard(
+    GamificationOverviewPayload State,
+    string SurfaceId = "progress",
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null);
+
 public record StreakCard(
     int CurrentStreak, int LongestStreak, int Level, int TotalXp, int XpForNextLevel,
     DateOnly? LastActiveDate, bool IsFrozenToday, IReadOnlyList<DateOnly> RecentFreezeDates,
@@ -42,6 +47,21 @@ public record CalendarCard(
 
 public static class StatusCardBuilder
 {
+    internal static Orbit.Domain.Models.AgentOperationResult ForClient(
+        Orbit.Domain.Models.AgentOperationResult operation, Orbit.Domain.Models.AgentClientContext? client) =>
+        operation.ReadBlock?.Block is GamificationCard && !IsSupported("gamification", client)
+            ? operation with { ReadBlock = null } : operation;
+
+    internal static bool IsSupported(string kind, Orbit.Domain.Models.AgentClientContext? client) => kind switch
+    {
+        "daySummary" => client?.SupportsDaySummaryCard == true,
+        "streak" => client?.SupportsStreakCard == true,
+        "calendar" => client?.SupportsCalendarCard == true,
+        "gamification" => client?.SupportsParts == true
+            && client.PartKinds?.Contains(kind, StringComparer.Ordinal) == true,
+        _ => false
+    };
+
     public const string DayDirective = "[[orbit:day]]";
     public const string StreakDirective = "[[orbit:streak]]";
     public const string CalendarDirective = "[[orbit:calendar]]";
