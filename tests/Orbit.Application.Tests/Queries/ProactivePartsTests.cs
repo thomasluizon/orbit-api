@@ -95,6 +95,50 @@ public sealed class ProactivePartsTests
     }
 
     [Theory]
+    [MemberData(nameof(Triggers))]
+    public async Task Current_UnadvertisedKindKeepsLegacyResponseWithoutReadingData(ProactiveTrigger trigger, string locale)
+    {
+        using var h = new Harness(trigger, locale);
+
+        var response = (await h.Handler.Handle(new(h.User.Id, h.Client with { PartKinds = [] }), default)).Value!;
+
+        response.Parts.Should().BeNull();
+        response.Text.Should().Be(h.Item.Text);
+        h.Mediator.ReceivedCalls().Should().BeEmpty();
+        await h.Habits.DidNotReceiveWithAnyArgs().FindAsync(default!, default!, default);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Current_WeeklyReviewIncludesScheduledWeekWithZeroActivity(string locale)
+    {
+        using var h = new Harness(ProactiveTrigger.WeeklyReview, locale, hasLogs: false);
+
+        var response = (await h.Handler.Handle(new(h.User.Id, h.Client), default)).Value!;
+
+        var card = response.Parts.Should().ContainSingle().Subject.Should().BeOfType<ChatBlockPart>().Subject.Block
+            .Should().BeOfType<PeriodInsightCard>().Subject;
+        card.TotalCompletions.Should().Be(0);
+        card.TotalScheduled.Should().Be(7);
+        card.Read!.Completeness.Should().Be("complete");
+        h.Narratives.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Current_FailedSourceReadKeepsLegacyResponseWithoutABlock()
+    {
+        using var h = new Harness(ProactiveTrigger.WeeklyReview, "en");
+        h.Mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod));
+
+        var response = (await h.Handler.Handle(new(h.User.Id, h.Client), default)).Value!;
+
+        response.Parts.Should().BeNull();
+        response.Text.Should().Be(h.Item.Text);
+    }
+
+    [Theory]
     [InlineData("parts")]
     [InlineData("kind")]
     [InlineData("card")]
@@ -158,7 +202,7 @@ public sealed class ProactivePartsTests
         public GetCurrentProactiveQueryHandler Handler { get; }
         public AgentClientContext Client { get; }
 
-        public Harness(ProactiveTrigger trigger, string locale)
+        public Harness(ProactiveTrigger trigger, string locale, bool hasLogs = true)
         {
             User.SetLanguage(locale);
             User.SetTimeZone("America/Sao_Paulo");
@@ -171,7 +215,7 @@ public sealed class ProactivePartsTests
             users.GetByIdAsync(User.Id, Arg.Any<CancellationToken>()).Returns(User);
             _habit = Habit.Create(new HabitCreateParams(User.Id, "Read", FrequencyUnit.Day, 1, Day.AddDays(-10),
                 CreatedAtUtc: new(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
-            _habit.Log(Day.AddDays(-2), advanceDueDate: false);
+            if (hasLogs) _habit.Log(Day.AddDays(-2), advanceDueDate: false);
             Habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(new[] { _habit });
             var gate = Substitute.For<IPayGateService>();

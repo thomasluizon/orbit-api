@@ -46,6 +46,32 @@ public sealed class ProactiveAstraControllerTests
     }
 
     [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
+    public void Current_PublishedContractAppendsOptionalChatPartsAndQueryNegotiation(string name)
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api", name));
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var schema = document.RootElement.GetProperty("components").GetProperty("schemas").GetProperty("ProactiveItemResponse");
+        var properties = schema.GetProperty("properties");
+        properties.EnumerateObject().Select(property => property.Name).Should().BeEquivalentTo(
+            "id", "trigger", "localDate", "text", "actionLabel", "actionPrompt", "createdAtUtc", "shownAtUtc", "pushedAtUtc", "facts", "parts");
+        var parts = properties.GetProperty("parts");
+        parts.GetProperty("type").EnumerateArray().Select(type => type.GetString()).Should().BeEquivalentTo("array", "null");
+        parts.GetProperty("items").GetProperty("$ref").GetString().Should().Be("#/components/schemas/ChatResponsePart");
+        if (schema.TryGetProperty("required", out var required))
+            required.EnumerateArray().Select(value => value.GetString()).Should().NotContain("parts");
+        var operation = document.RootElement.GetProperty("paths").GetProperty("/api/ai/proactive/current").GetProperty("get");
+        var context = operation.GetProperty("parameters").EnumerateArray()
+            .Single(parameter => parameter.GetProperty("name").GetString() == "clientContext");
+        context.GetProperty("in").GetString().Should().Be("query");
+        context.TryGetProperty("required", out var mandatory).Should().BeFalse();
+        operation.GetProperty("responses").TryGetProperty("204", out _).Should().BeTrue();
+    }
+
+    [Theory]
     [InlineData("active")]
     [InlineData("ended")]
     public async Task Status_ReturnsOnlyIdAndLifecycleForAuthenticatedOwner(string status)

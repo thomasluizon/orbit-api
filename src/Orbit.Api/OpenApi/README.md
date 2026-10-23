@@ -117,3 +117,9 @@ achievement-only and other partial gamification selections is documented in
 [GamificationReadBlocks.md](GamificationReadBlocks.md). Combined reads preserve
 the existing `streak` contract. Deploy this producer before the carrying consumer
 advertises the new kind. Tracks thomasluizon/orbit-tickets#1631.
+
+The append-only proactive `parts` field and capability negotiation for
+thomasluizon/orbit-tickets#1662 are documented in
+[ProactiveAnswerParts.md](ProactiveAnswerParts.md). The existing chat read blocks
+cover every proactive trigger. Publish the producer before updating the paired
+consumer's shared snapshot and enabling proactive block rendering.
