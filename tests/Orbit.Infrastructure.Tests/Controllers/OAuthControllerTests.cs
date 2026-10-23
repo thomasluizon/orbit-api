@@ -149,7 +149,7 @@ public class OAuthControllerTests : IDisposable
         var (verifier, challenge) = GeneratePkce();
         var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge,
             "https://claude.ai/callback", "client", "state", null, language));
-        _controller.HttpContext.Request.QueryString = new QueryString(language == "en" ? "?lang=pt-BR" : "?lang=en");
+        _controller.HttpContext.Request.Headers.AcceptLanguage = language == "en" ? "pt-BR" : "en";
 
         var grant = _controller.GrantConsent(ticket, "requested").Should().BeOfType<RedirectResult>().Subject;
         var code = ExtractQueryParam(grant.Url, "code");
