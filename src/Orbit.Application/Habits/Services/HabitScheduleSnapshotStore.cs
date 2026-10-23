@@ -1,4 +1,5 @@
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -18,7 +19,7 @@ public sealed class HabitScheduleSnapshotStore(IGenericRepository<Habit> habits)
                 snapshot = habits.ProjectAsync(
                     habit => habit.UserId == userId
                         && (!habit.IsBadHabit
-                            || (!habit.IsCompleted && !habit.IsGeneral && habit.ParentHabitId == null)),
+                            || (!habit.IsCompleted && habit.Schedule != HabitSchedule.General && habit.ParentHabitId == null)),
                     HabitScheduleProjection.Select,
                     cancellationToken);
                 _snapshots.Add(userId, snapshot);

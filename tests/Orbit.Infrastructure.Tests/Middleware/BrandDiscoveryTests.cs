@@ -24,6 +24,7 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     [InlineData("/favicon.svg", "image/svg+xml")]
     [InlineData("/apple-touch-icon.png", "image/png")]
     [InlineData("/orbit-icon-512.png", "image/png")]
+    [InlineData("/bimi/orbit.svg", "image/svg+xml")]
     public async Task IconRoute_ServesAnonymousImageBeforeAuthenticationAndRateLimits(string path, string contentType)
     {
         await using var app = await CreateApplication();
@@ -49,7 +50,8 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
         else if (contentType == "image/x-icon")
             bytes.Take(6).Should().Equal(new byte[] { 0, 0, 1, 0, 3, 0 });
         else
-            Encoding.UTF8.GetString(bytes).Should().Contain("<svg").And.Contain("orbit-title");
+            XDocument.Parse(Encoding.UTF8.GetString(bytes)).Root!.Name
+                .Should().Be(XName.Get("svg", "http://www.w3.org/2000/svg"));
     }
 
     [Theory]
@@ -57,6 +59,7 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     [InlineData("/favicon.svg")]
     [InlineData("/apple-touch-icon.png")]
     [InlineData("/orbit-icon-512.png")]
+    [InlineData("/bimi/orbit.svg")]
     public async Task IconHead_ReturnsHeadersWithoutABody(string path)
     {
         await using var app = await CreateApplication();
@@ -73,6 +76,8 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     [InlineData("GET", "/favicon.svg/extra")]
     [InlineData("GET", "/appsettings.json")]
     [InlineData("POST", "/favicon.ico")]
+    [InlineData("GET", "/bimi/orbit.svg/extra")]
+    [InlineData("POST", "/bimi/orbit.svg")]
     public async Task OtherRequests_StillReachTheRejectingRateLimiter(string method, string path)
     {
         await using var app = await CreateApplication();

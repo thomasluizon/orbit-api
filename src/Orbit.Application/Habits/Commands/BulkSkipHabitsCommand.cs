@@ -5,6 +5,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -137,19 +138,19 @@ public class BulkSkipHabitsCommandHandler(
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.CannotSkipCompletedHabit.Message, ErrorCode: ErrorMessages.CannotSkipCompletedHabit.Code);
 
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             habit.PostponeTo(today.AddDays(1));
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
         }
 
-        if (!habit.IsFlexible && habit.DueDate > targetDate)
+        if (habit.Schedule != HabitSchedule.Flexible && habit.DueDate > targetDate)
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotYetDue.Message, ErrorCode: ErrorMessages.HabitNotYetDue.Code);
 
         if (!HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = !habit.IsFlexible
+            var isOverdue = habit.Schedule != HabitSchedule.Flexible
                 && targetDate == today
                 && HabitScheduleService.HasMissedPastOccurrence(
                     habit,
@@ -161,7 +162,7 @@ public class BulkSkipHabitsCommandHandler(
                     Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);
         }
 
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
             return await SkipFlexibleAsync(index, habitId, habit, targetDate, weekStartDay, cancellationToken);
 
         habit.AdvanceDueDate(targetDate, weekStartDay);

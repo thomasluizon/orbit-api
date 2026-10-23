@@ -1,4 +1,5 @@
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Habits.Services;
@@ -21,8 +22,8 @@ public static class HabitScheduleProjection
             habit.IsDeleted,
             habit.IsBadHabit,
             habit.IsCompleted,
-            habit.IsGeneral,
-            habit.IsFlexible,
+            habit.Schedule == HabitSchedule.General,
+            habit.Schedule == HabitSchedule.Flexible,
             habit.Days.ToList(),
             habit.Schedule,
             habit.StartDate));
@@ -45,8 +46,8 @@ public static class HabitScheduleProjection
                 habit.IsDeleted,
                 habit.IsBadHabit,
                 habit.IsCompleted,
-                habit.IsGeneral,
-                habit.IsFlexible,
+                habit.Schedule == HabitSchedule.General,
+                habit.Schedule == HabitSchedule.Flexible,
                 habit.Days.ToList(),
                 habit.Schedule,
                 habit.StartDate)));

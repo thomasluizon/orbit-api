@@ -114,7 +114,7 @@ public partial class CreateHabitCommandHandler(
         var habit = habitResult.Value;
         if (request.StartDate.HasValue)
         {
-            if (!habit.IsFlexible)
+            if (habit.Schedule != HabitSchedule.Flexible)
             {
                 var catchUp = habit.CatchUpDueDate(today, weekStartDay);
                 if (catchUp.IsFailure)

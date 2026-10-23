@@ -24,7 +24,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(39);
+        differences.Should().HaveCount(39 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         var preference = differences.OfType<AlterColumnOperation>().Should().ContainSingle().Subject;
         preference.Table.Should().Be("Users");
         preference.Name.Should().Be("ProactiveAstraEnabled");
@@ -66,7 +66,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(10);
+        differences.Should().HaveCount(10 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         differences.OfType<AddColumnOperation>().Should().HaveCount(7);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);

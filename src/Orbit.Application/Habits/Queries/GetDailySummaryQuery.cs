@@ -5,6 +5,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
@@ -77,7 +78,7 @@ public class GetDailySummaryQueryHandler(
             && cached.From == request.DateFrom && cached.To == request.DateTo;
 
         var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && !h.IsGeneral,
+            h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
             q => q.Include(h => h.Goals),
             cancellationToken);
 
@@ -154,14 +155,14 @@ public class GetDailySummaryQueryHandler(
             var historyTo = dateTo < userToday ? dateTo : userToday;
             var historyFrom = historyTo.AddDays(-Math.Min(AppConstants.DailySummaryHistoryDays - 1, historyTo.DayNumber));
             windows.Add(new HabitSummaryLogWindow(habit.Id, historyFrom, historyTo));
-            if (habit.IsFlexible && habit.FrequencyUnit is not null)
+            if (habit.Schedule == HabitSchedule.Flexible && habit.FrequencyUnit is not null)
             {
                 windows.Add(new HabitSummaryLogWindow(habit.Id,
                     HabitScheduleService.GetWindowStart(habit, dateFrom, weekStartDay),
                     HabitScheduleService.GetWindowEnd(habit, dateTo, weekStartDay)));
             }
-            if (!habit.IsBadHabit && !habit.IsFlexible && !habit.IsCompleted
-                && habit.FrequencyUnit is not null && habit.DueDate < userToday
+            if (!habit.IsBadHabit && habit.Schedule == HabitSchedule.Recurring && !habit.IsCompleted
+                && habit.DueDate < userToday
                 && !HabitScheduleService.IsHabitDueOnDate(habit, userToday, weekStartDay))
             {
                 var latest = userToday.AddDays(-1);

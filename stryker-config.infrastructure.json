@@ -1,7 +1,10 @@
 {
   "stryker-config": {
     "project": "Orbit.Infrastructure.csproj",
-    "test-projects": ["tests/Orbit.Infrastructure.Tests/Orbit.Infrastructure.Tests.csproj"],
+    "test-projects": [
+      "tests/Orbit.Infrastructure.Tests/Orbit.Infrastructure.Tests.csproj",
+      "tests/Orbit.Application.Tests/Orbit.Application.Tests.csproj"
+    ],
     "mutate": [
       "**/Services/JwtTokenService.cs",
       "**/Services/AuthSessionService.cs",
@@ -11,7 +14,9 @@
       "!**/Services/GoogleTokenService.cs",
       "!**/Services/GooglePlayPushTokenValidator.cs",
       "!**/Services/UserDateService.cs",
-      "!**/Services/StreakFreezeAutoActivationService.cs"
+      "!**/Services/StreakFreezeAutoActivationService.cs",
+      "**/Services/AgentOperationExecutor.cs",
+      "**/Services/Prompts/Sections/Static/ToolFailureSection.cs"
     ],
     "mutation-level": "Standard",
     "reporters": ["cleartext", "html", "json"],

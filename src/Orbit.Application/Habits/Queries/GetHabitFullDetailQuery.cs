@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
@@ -61,14 +62,14 @@ public class GetHabitFullDetailQueryHandler(
         var allRootLogs = await habitLogRepository.FindAsync(
             l => l.HabitId == request.HabitId,
             cancellationToken);
-        var isCompleted = habit.IsGeneral
+        var isCompleted = habit.Schedule == HabitSchedule.General
             ? allRootLogs.Any(l => !l.IsDeleted && l.Date == userToday && l.Value > 0)
             : habit.IsCompleted;
 
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
-            habit.IsBadHabit, isCompleted, habit.IsGeneral, habit.IsFlexible,
+            habit.IsBadHabit, isCompleted, habit.Schedule == HabitSchedule.General, habit.Schedule == HabitSchedule.Flexible,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),

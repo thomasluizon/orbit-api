@@ -16,6 +16,16 @@ public class SetTimezoneCommandHandler(
 {
     public async Task<Result> Handle(SetTimezoneCommand request, CancellationToken cancellationToken)
     {
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            ct => SetTimezoneAsync(request, ct), cancellationToken);
+        if (result.IsSuccess)
+            await userDateService.InvalidateUserDatePreferencesAsync(request.UserId, cancellationToken);
+        return result;
+    }
+
+    private async Task<Result> SetTimezoneAsync(SetTimezoneCommand request, CancellationToken cancellationToken)
+    {
+        await unitOfWork.AcquireUserRowLockAsync(request.UserId, cancellationToken);
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);
@@ -23,13 +33,13 @@ public class SetTimezoneCommandHandler(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
+        await userRepository.ReloadAsync(user, cancellationToken);
         var result = user.SetTimeZone(request.TimeZone);
 
         if (result.IsFailure)
             return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await userDateService.InvalidateUserDatePreferencesAsync(request.UserId, cancellationToken);
 
         return Result.Success();
     }

@@ -29,7 +29,7 @@ public class AccountabilityDeletionTests
 
     [Theory]
     [MemberData(nameof(DeletionCases))]
-    public async Task DeleteAccount_RemovesPairsAndDependents_PreservesOtherParticipantsData(
+    public async Task DeleteAccount_CascadesOnErasureAndPreservesFrozenRowsOnReset(
         AccountabilityPairStatus status, bool isRequester, bool permanentlyDelete)
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -100,12 +100,17 @@ public class AccountabilityDeletionTests
             .Should().Contain([buddy.Id, unrelatedRequester.Id, unrelatedAddressee.Id]);
         (await context.Habits.IgnoreQueryFilters().Select(habit => habit.Id).ToListAsync())
             .Should().BeEquivalentTo([buddyHabit.Id, unrelatedHabit.Id]);
+        var expectedPairs = permanentlyDelete ? new[] { unrelatedPair.Id } : [unrelatedPair.Id, pair.Id];
+        var expectedLinks = !permanentlyDelete && status != AccountabilityPairStatus.Pending
+            ? new[] { unrelatedPair.Id, pair.Id } : [unrelatedPair.Id];
+        var expectedCheckIns = !permanentlyDelete && status != AccountabilityPairStatus.Pending
+            ? new[] { unrelatedPair.Id, pair.Id, pair.Id } : [unrelatedPair.Id];
         (await context.AccountabilityPairs.Select(remaining => remaining.Id).ToListAsync())
-            .Should().BeEquivalentTo([unrelatedPair.Id]);
+            .Should().BeEquivalentTo(expectedPairs);
         (await context.AccountabilityPairHabits.Select(link => link.PairId).ToListAsync())
-            .Should().BeEquivalentTo([unrelatedPair.Id]);
+            .Should().BeEquivalentTo(expectedLinks);
         (await context.AccountabilityCheckIns.Select(checkIn => checkIn.PairId).ToListAsync())
-            .Should().BeEquivalentTo([unrelatedPair.Id]);
+            .Should().BeEquivalentTo(expectedCheckIns);
     }
 
     private static Habit CreateHabit(Guid userId) => Habit.Create(new HabitCreateParams(

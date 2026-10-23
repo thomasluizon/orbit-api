@@ -78,7 +78,7 @@ public partial class LogHabitCommandHandler(
             return dateWindowValidation.PropagateError<LogHabitResponse>();
 
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
-        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
+        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible && !habit.IsBadHabit)
         {
             if (!request.ToggleExisting)
                 return Result.Failure<LogHabitResponse>(DomainErrors.AlreadyLoggedForDate);
@@ -127,7 +127,7 @@ public partial class LogHabitCommandHandler(
         var window = ValidateDateWindow(habit, target, today);
         if (window.IsFailure)
             return window;
-        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && !habit.IsFlexible && !habit.IsBadHabit)
+        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible && !habit.IsBadHabit)
             return request.ToggleExisting ? Result.Success() : Result.Failure(DomainErrors.AlreadyLoggedForDate);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit], today.AddDays(-AppConstants.MaxRangeDays), ct);
@@ -157,10 +157,10 @@ public partial class LogHabitCommandHandler(
         int weekStartDay,
         bool dueDateResolved)
     {
-        if (habit.FrequencyUnit is not null
+        if (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = !habit.IsFlexible
+            var isOverdue = habit.Schedule != HabitSchedule.Flexible
                 && targetDate == today
                 && HabitScheduleService.HasMissedPastOccurrence(
                     habit,
@@ -176,7 +176,7 @@ public partial class LogHabitCommandHandler(
 
     private static Result ValidateDateWindow(Habit habit, DateOnly targetDate, DateOnly today)
     {
-        if (targetDate > today && habit.FrequencyUnit is not null)
+        if (targetDate > today && habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible)
             return Result.Failure(ErrorMessages.CannotLogFutureDate);
 
         if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))

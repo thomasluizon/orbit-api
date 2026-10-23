@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
@@ -63,9 +64,8 @@ public partial class HabitDueDateAdvancementService(
 
     internal static Expression<Func<Habit, bool>> StaleBadHabitFilter(DateOnly cutoff) =>
         h => !h.IsCompleted
-            && h.FrequencyUnit != null
+            && h.Schedule == HabitSchedule.Recurring
             && h.FrequencyQuantity != null
-            && !h.IsFlexible
             && h.IsBadHabit
             && h.DueDate < cutoff;
 

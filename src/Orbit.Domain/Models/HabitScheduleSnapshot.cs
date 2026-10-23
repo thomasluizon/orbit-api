@@ -39,8 +39,8 @@ public sealed record HabitScheduleSnapshot(
         habit.IsDeleted,
         habit.IsBadHabit,
         habit.IsCompleted,
-        habit.IsGeneral,
-        habit.IsFlexible,
+        habit.Schedule == HabitSchedule.General,
+        habit.Schedule == HabitSchedule.Flexible,
         habit.Days.ToList(),
         habit.Schedule,
         habit.StartDate);

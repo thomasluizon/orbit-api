@@ -59,7 +59,7 @@ public static class HabitMetricsCalculator
         var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
         var habitStartDate = ResolveHabitStartDate(habit, logs, userTimeZone);
         var expectedDates = GenerateExpectedDates(habit, today, habitStartDate, weekStartDay).ToList();
-        var streakCompletionDates = habit.IsFlexible
+        var streakCompletionDates = habit.Schedule == HabitSchedule.Flexible
             ? GenerateCompletedFlexibleWindowDates(
                 habit,
                 logs,
@@ -71,12 +71,13 @@ public static class HabitMetricsCalculator
 
         var currentStreak = CalculateCurrentStreak(
             habit, expectedDates, streakCompletionDates, today, out currentStreakLogStart);
-        if (habit.IsFlexible && currentStreakLogStart is { } marker)
+        if (habit.Schedule == HabitSchedule.Flexible && currentStreakLogStart is { } marker)
         {
             var windowStart = HabitScheduleService.GetWindowStart(habit, marker, weekStartDay);
             currentStreakLogStart = windowStart > habitStartDate ? windowStart : habitStartDate;
         }
-        if (habit.ScheduledStartDate is null && habit.FrequencyUnit is not null && !habit.IsBadHabit)
+        if (habit.ScheduledStartDate is null
+            && (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible) && !habit.IsBadHabit)
         {
             var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
                 habit.CreatedAtUtc, userTimeZone ?? TimeZoneInfo.Utc));
@@ -118,10 +119,10 @@ public static class HabitMetricsCalculator
         DateOnly habitStartDate,
         int weekStartDay)
     {
-        if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
+        if ((habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) || habit.FrequencyQuantity is null)
             return [habitStartDate];
 
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
             return GenerateFlexibleWindowDates(habit, today, habitStartDate, weekStartDay);
 
         if (habit.IntervalWeeks is > 1)
@@ -269,7 +270,7 @@ public static class HabitMetricsCalculator
         IReadOnlyCollection<HabitMetricLog> logs,
         DateOnly createdDate)
     {
-        if (habit.FrequencyUnit is null || habit.IsBadHabit)
+        if ((habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) || habit.IsBadHabit)
             return false;
 
         var resolvedDates = logs

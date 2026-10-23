@@ -707,8 +707,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(f => f.RequesterId);
             entity.HasIndex(f => f.AddresseeId);
             entity.Property(f => f.Status).HasConversion<string>().HasMaxLength(32);
-            entity.HasOne<User>().WithMany().HasForeignKey(f => f.RequesterId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<User>().WithMany().HasForeignKey(f => f.AddresseeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(f => f.RequesterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(f => f.AddresseeId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -720,9 +720,9 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(c => new { c.SenderId, c.CreatedAtUtc });
             entity.HasIndex(c => c.HabitId);
             entity.Property(c => c.Note).HasMaxLength(DomainConstants.MaxCheerNoteLength);
-            entity.HasOne<User>().WithMany().HasForeignKey(c => c.SenderId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<User>().WithMany().HasForeignKey(c => c.RecipientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<Habit>().WithMany().HasForeignKey(c => c.HabitId).IsRequired(false).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.SenderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.RecipientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Habit>().WithMany().HasForeignKey(c => c.HabitId).IsRequired(false).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -731,8 +731,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<BlockedUser>(entity =>
         {
             entity.HasIndex(b => new { b.BlockerId, b.BlockedId }).IsUnique();
-            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockerId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockedId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockerId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockedId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -746,8 +746,8 @@ public class OrbitDbContext : DbContext
             entity.Property(r => r.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(r => r.Details).HasMaxLength(DomainConstants.MaxReportDetailsLength);
             entity.Property(r => r.ReviewedAtUtc).HasField("_reviewedAtUtc");
-            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReportedUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReportedUserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Cheer>().WithMany().HasForeignKey(r => r.CheerId).OnDelete(DeleteBehavior.SetNull);
         });
     }
@@ -801,7 +801,7 @@ public class OrbitDbContext : DbContext
                 .HasFilter("\"AchievementId\" IS NULL");
             entity.Property(e => e.Type).HasConversion<string>().HasMaxLength(32);
             entity.Property(e => e.AchievementId).HasMaxLength(50);
-            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ActorUserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -817,7 +817,7 @@ public class OrbitDbContext : DbContext
             entity.Property(c => c.JoinCode).HasMaxLength(16);
             entity.Property(c => c.Title).HasMaxLength(Orbit.Application.Common.AppConstants.MaxChallengeTitleLength);
             entity.Property(c => c.Description).HasMaxLength(Orbit.Application.Common.AppConstants.MaxChallengeDescriptionLength);
-            entity.HasOne<User>().WithMany().HasForeignKey(c => c.CreatorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.CreatorId).OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(c => c.Participants)
                 .WithOne()
                 .HasForeignKey(p => p.ChallengeId)
@@ -833,7 +833,7 @@ public class OrbitDbContext : DbContext
                 .IsUnique()
                 .HasFilter("\"LeftAtUtc\" IS NULL");
             entity.HasIndex(p => p.UserId);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(p => p.LinkedHabits)
                 .WithOne()
                 .HasForeignKey(h => h.ChallengeParticipantId)
@@ -1052,6 +1052,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<UserFact>(entity =>
         {
             entity.HasIndex(f => new { f.UserId, f.IsDeleted });
+            entity.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasQueryFilter(f => !f.IsDeleted);
 
             if (encConverter is null)

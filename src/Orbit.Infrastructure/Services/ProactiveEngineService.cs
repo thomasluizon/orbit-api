@@ -189,7 +189,7 @@ public sealed partial class ProactiveEngineService(
     internal List<ProactiveFacts> BuildFacts(Batch batch, User user, DateOnly today, ProactiveCalendarDay? calendarDay)
     {
         var result = new List<ProactiveFacts>();
-        var allHabits = batch.Habits.Where(h => h.UserId == user.Id && !h.IsGeneral).ToList();
+        var allHabits = batch.Habits.Where(h => h.UserId == user.Id && h.Schedule != HabitSchedule.General).ToList();
         var habits = allHabits.Where(h => !h.IsBadHabit && !h.IsDeleted && !h.IsCompleted).ToList();
         var due = habits.Where(h => IsDueForAction(h, today, user.WeekStartDay)).ToList();
         var open = habits.Where(h => (due.Contains(h) || HabitScheduleService.IsOverdueOnDate(h, today, user.WeekStartDay))
@@ -230,7 +230,7 @@ public sealed partial class ProactiveEngineService(
 
     private static bool IsDueForAction(Habit habit, DateOnly date, int weekStartDay) =>
         HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay)
-        && (!habit.IsFlexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay));
+        && (habit.Schedule != HabitSchedule.Flexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay));
 
     private static ProactiveFacts? WeeklyFacts(List<Habit> allHabits, User user, DateOnly today, TimeZoneInfo timeZone)
     {
@@ -266,12 +266,7 @@ public sealed partial class ProactiveEngineService(
         batch.CalendarDays.Add(day);
         try
         {
-            var tokenUser = db.Users.Local.FirstOrDefault(u => u.Id == user.Id) ?? user;
-            if (db.Entry(tokenUser).State == EntityState.Detached) db.Users.Attach(tokenUser);
-            var token = tokenUser.GoogleRefreshToken is null
-                ? await tokens.GetValidAccessTokenAsync(tokenUser, ct)
-                : (await tokens.TryRefreshAsync(tokenUser, ct)).AccessToken;
-            await db.SaveChangesAsync(ct);
+            var token = await ReadCalendarTokenAsync(user.Id, ct);
             if (token is null) return day;
             var events = await calendar.FetchAsync(token, user.GetSelectedCalendarIds(), null, ct);
             var zone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
@@ -285,6 +280,33 @@ public sealed partial class ProactiveEngineService(
         }
         return day;
     }
+
+    private Task<string?> ReadCalendarTokenAsync(Guid userId, CancellationToken ct) =>
+        db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+                ? await db.Database.BeginTransactionAsync(ct) : null;
+            await UserRowLock.AcquireAsync(db, userId, ct);
+            var tokenUser = await db.Users.SingleOrDefaultAsync(user => user.Id == userId, ct);
+            if (tokenUser is null) return null;
+            try
+            {
+                await db.Entry(tokenUser).ReloadAsync(ct);
+                var token = tokenUser.GoogleRefreshToken is null
+                    ? await tokens.GetValidAccessTokenAsync(tokenUser, ct)
+                    : (await tokens.TryRefreshAsync(tokenUser, ct)).AccessToken;
+                await db.SaveChangesAsync(ct);
+                if (transaction is not null) await transaction.CommitAsync(ct);
+                return token;
+            }
+            catch
+            {
+                var entry = db.Entry(tokenUser);
+                entry.CurrentValues.SetValues(entry.OriginalValues);
+                entry.State = EntityState.Unchanged;
+                throw;
+            }
+        });
 
     internal static List<(DateTime Start, DateTime End)> TimedRanges(List<CalendarEventItem> events, DateOnly today, TimeZoneInfo zone)
     {

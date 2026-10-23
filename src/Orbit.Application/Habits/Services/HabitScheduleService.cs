@@ -22,7 +22,7 @@ public static class HabitScheduleService
         if (habit.EndDate.HasValue && target > habit.EndDate.Value)
             return false;
 
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
         {
             if (habit.FrequencyUnit is null) return false;
             return target >= habit.DueDate
@@ -33,7 +33,7 @@ public static class HabitScheduleService
         var unit = habit.FrequencyUnit;
         var qty = habit.FrequencyQuantity ?? 1;
 
-        if (unit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             return target == habit.DueDate;
         }
@@ -125,9 +125,8 @@ public static class HabitScheduleService
     {
         if (habit.IsDeleted) return false;
         if (habit.IsBadHabit) return false;
-        if (habit.IsGeneral) return false;
-        if (habit.IsFlexible) return false;
-        if (habit.FrequencyUnit is null && habit.IsCompleted) return false;
+        if (habit.Schedule is HabitSchedule.General or HabitSchedule.Flexible) return false;
+        if (habit.Schedule == HabitSchedule.OneTime && habit.IsCompleted) return false;
         return true;
     }
 
@@ -255,12 +254,12 @@ public static class HabitScheduleService
         DateOnly recurrenceAnchor,
         int weekStartDay)
     {
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
             return habit.FrequencyUnit is not null
                 && IsActiveIntervalWeek(habit, target, weekStartDay, recurrenceAnchor);
 
         var unit = habit.FrequencyUnit;
-        if (unit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return target == habit.DueDate;
 
         return MatchesFrequency(
@@ -286,7 +285,7 @@ public static class HabitScheduleService
         if (habit.EndDate.HasValue && target > habit.EndDate.Value)
             return false;
 
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
         {
             if (habit.FrequencyUnit is null) return false;
             return target >= habitCreationDate
@@ -294,7 +293,7 @@ public static class HabitScheduleService
         }
 
         var unit = habit.FrequencyUnit;
-        if (unit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return target == habit.DueDate;
 
         if (target < habitCreationDate) return false;
@@ -333,7 +332,7 @@ public static class HabitScheduleService
         bool dueDateResolved = false,
         IReadOnlySet<DateOnly>? resolvedDates = null)
     {
-        if (habit.FrequencyUnit is null || habit.IsBadHabit || habit.IsFlexible)
+        if (habit.Schedule != HabitSchedule.Recurring || habit.IsBadHabit)
             return false;
         if (habit.DueDate >= today)
             return false;
@@ -386,10 +385,10 @@ public static class HabitScheduleService
         bool dueDateResolved = false,
         IReadOnlySet<DateOnly>? resolvedDates = null)
     {
-        if (habit.IsFlexible || habit.IsBadHabit)
+        if (habit.Schedule == HabitSchedule.Flexible || habit.IsBadHabit)
             return false;
 
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return !habit.IsCompleted
                 && habit.DueDate < referenceDate
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= referenceDate);
@@ -406,7 +405,7 @@ public static class HabitScheduleService
     /// </summary>
     public static bool IsFlexibleHabitDueOnDate(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
-        if (!habit.IsFlexible || habit.FrequencyUnit is null) return false;
+        if (habit.Schedule != HabitSchedule.Flexible || habit.FrequencyUnit is null) return false;
         if (target < habit.DueDate) return false;
         if (!IsActiveIntervalWeek(habit, target, weekStartDay)) return false;
         return GetRemainingCompletions(habit, target, logs, weekStartDay) > 0;
@@ -492,13 +491,13 @@ public static class HabitScheduleService
         int overdueWindowDays = AppConstants.DefaultOverdueWindowDays,
         int weekStartDay = 1)
     {
-        if (habit.IsCompleted || habit.IsFlexible)
+        if (habit.IsCompleted || habit.Schedule == HabitSchedule.Flexible)
             return [];
 
         if (dateTo.DayNumber - dateFrom.DayNumber > AppConstants.MaxInstanceHorizonDays)
             dateTo = dateFrom.AddDays(AppConstants.MaxInstanceHorizonDays);
 
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return GetOneTimeTaskInstance(habit, dateFrom, dateTo, userToday);
 
         return GetRecurringInstances(habit, dateFrom, dateTo, userToday, overdueWindowDays, weekStartDay);
@@ -586,7 +585,9 @@ public static class HabitScheduleService
         Guid userId, DateOnly today, CancellationToken ct, int weekStartDay = 1)
     {
         var staleBadHabits = await habitRepository.FindTrackedAsync(
-            h => h.UserId == userId && h.IsBadHabit && h.FrequencyUnit != null && h.FrequencyQuantity != null && h.DueDate < today
+            h => h.UserId == userId && h.IsBadHabit
+                && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible)
+                && h.FrequencyQuantity != null && h.DueDate < today
                 && (!h.EndDate.HasValue || h.EndDate.Value >= today), ct);
         if (staleBadHabits.Count > 0)
         {

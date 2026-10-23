@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,72 @@ function repository(t) {
 function names(matrix) {
   return matrix.map((entry) => entry.shard ?? entry.project);
 }
+
+function mergeWithMovedBase(t) {
+  const repo = repository(t);
+  repo.git("checkout", "--quiet", "-b", "pull-request");
+  repo.write("src/Orbit.Application/Changed.cs");
+  repo.commit();
+  repo.git("checkout", "--quiet", "base");
+  const base = repo.git("rev-parse", "HEAD").trim();
+  repo.git("-c", "user.name=Mutation test", "-c", "user.email=mutation@example.com", "merge", "--quiet", "--no-ff", "pull-request", "-m", "Test merge");
+  const merge = repo.git("rev-parse", "HEAD").trim();
+  assert.equal(repo.git("rev-parse", "HEAD^1").trim(), base);
+  repo.git("checkout", "--quiet", "--detach", merge);
+  repo.git("branch", "--force", "base", base);
+  repo.git("checkout", "--quiet", "base");
+  repo.write("src/Orbit.Infrastructure/BaseOnly.cs");
+  repo.commit();
+  const movedBase = repo.git("rev-parse", "HEAD").trim();
+  repo.git("checkout", "--quiet", "--detach", merge);
+  repo.git("remote", "add", "origin", repo.root);
+  repo.git("fetch", "--quiet", "origin", "base");
+  assert.equal(repo.git("rev-parse", "origin/base").trim(), movedBase);
+  assert.notEqual(base, movedBase);
+  return { ...repo, base, movedBase };
+}
+
+function workflowStep(name) {
+  const workflow = readFileSync(new URL("../workflows/mutation.yml", import.meta.url), "utf8");
+  const step = workflow.split(`      - name: ${name}\n`)[1]?.split(/\n      - /)[0];
+  const script = step?.match(/        run: \|\n((?:          [^\n]*\n|\n)*)/)?.[1];
+  assert.ok(script, `Workflow step ${name} must have a shell script`);
+  return script.replace(/^          /gm, "");
+}
+
+test("the PR Stryker step uses the merge first parent after the base branch moves", (t) => {
+  const repo = mergeWithMovedBase(t);
+  const capture = join(repo.root, "stryker-args");
+  const script = workflowStep("Run Stryker (PR changed in-scope files only)")
+    .replaceAll("${{ github.base_ref }}", "base")
+    .replaceAll("${{ matrix.project }}", "application");
+  execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail"], {
+    cwd: repo.root,
+    env: { ...process.env, MUTATE_FILES: "", STRYKER_ARGS: capture },
+    input: `nproc() { printf '2\\n'; }\ndotnet() { printf '%s\\0' "$@" > "$STRYKER_ARGS"; }\n${script}`,
+    encoding: "utf8",
+  });
+  const args = readFileSync(capture, "utf8").split("\0").filter(Boolean);
+  const since = args.find((arg) => arg.startsWith("--since:"));
+  assert.ok(since, "Stryker must receive a since target");
+  const target = since.slice("--since:".length);
+  assert.equal(repo.git("rev-parse", target).trim(), repo.base);
+  assert.equal(target, repo.base, "The target must be the immutable first-parent commit ID");
+});
+
+test("project selection excludes moved-base changes after a test merge", (t) => {
+  const repo = mergeWithMovedBase(t);
+  const output = join(repo.root, "selection-output");
+  execFileSync("bash", ["--noprofile", "--norc", "-eo", "pipefail"], {
+    cwd: repo.root,
+    env: { ...process.env, BASE_REF: "origin/base", GITHUB_OUTPUT: output },
+    input: workflowStep("Select changed projects").replaceAll("node .github/scripts/mutation-matrix.mjs", `node "${selector}"`),
+    encoding: "utf8",
+  });
+  const matrixLine = readFileSync(output, "utf8").split("\n").find((line) => line.startsWith("matrix="));
+  assert.ok(matrixLine);
+  assert.deepEqual(names(JSON.parse(matrixLine.slice("matrix=".length)).include), ["application"]);
+});
 
 test("an empty changed-file list selects no shards", () => {
   assert.deepEqual(selectPaths([]), []);

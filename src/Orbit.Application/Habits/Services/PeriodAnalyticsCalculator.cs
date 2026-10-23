@@ -1,6 +1,7 @@
 using Orbit.Application.Habits.Queries;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Habits.Services;
@@ -33,7 +34,7 @@ public static class PeriodAnalyticsCalculator
             records += logs.Count;
             var positiveDates = logs.Select(l => l.Date).ToHashSet();
             loggedDates.UnionWith(positiveDates);
-            if (habit.IsGeneral || habit.IsBadHabit)
+            if (habit.Schedule == HabitSchedule.General || habit.IsBadHabit)
                 continue;
             var dates = new List<DateOnly>();
             for (var start = window.From; start <= window.To;)

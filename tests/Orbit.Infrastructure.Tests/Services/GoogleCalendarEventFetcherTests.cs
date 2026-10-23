@@ -60,7 +60,7 @@ public class GoogleCalendarEventFetcherTests
             .Returns(calendars.ToList());
 
     private void StubEvents(string calendarId, params Event[] events)
-        => _api.ListEventsAsync(Token, calendarId, Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        => _api.ListEventsAsync(Token, calendarId, Arg.Any<DateTime?>(), Arg.Any<CancellationToken>(), Arg.Any<CalendarReadWindow?>())
             .Returns(events.ToList());
 
     [Fact]
@@ -352,7 +352,7 @@ public class GoogleCalendarEventFetcherTests
     }
 
     [Fact]
-    public async Task FetchAsync_ListCalendarsAuthError_ThrowsReconnectRequired()
+    public async Task FetchAsync_ListCalendarsMissingScope_ThrowsMissingScope()
     {
         _api.ListCalendarsAsync(Token, Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<CalendarListEntry>>>(_ => throw new Google.GoogleApiException("calendar", "insufficient authentication scopes")
@@ -363,8 +363,95 @@ public class GoogleCalendarEventFetcherTests
         var act = async () => await _fetcher.FetchAsync(Token, null, null, CancellationToken.None);
 
         var ex = await act.Should().ThrowAsync<CalendarProviderException>();
-        ex.Which.Kind.Should().Be(CalendarFetchErrorKind.ReconnectRequired);
+        ex.Which.Kind.Should().Be(CalendarFetchErrorKind.MissingScope);
     }
+
+    [Theory]
+    [InlineData("list", false, "insufficientPermissions", "Insufficient Permission")]
+    [InlineData("events", false, "insufficientPermissions", "Insufficient Permission")]
+    [InlineData("events", true, "insufficientPermissions", "Insufficient Permission")]
+    [InlineData("master", false, "insufficientPermissions", "Insufficient Permission")]
+    [InlineData("master", true, "insufficientPermissions", "Insufficient Permission")]
+    [InlineData("list", false, null, "Request had insufficient authentication scopes.")]
+    [InlineData("events", false, null, "Request had insufficient authentication scopes.")]
+    [InlineData("master", false, null, "Request had insufficient authentication scopes.")]
+    public async Task MissingScope_OnEveryGoogleCall_IsDistinctFromInvalidToken(
+        string operation, bool exactWindow, string? reason, string message)
+    {
+        var error = GoogleError(System.Net.HttpStatusCode.Forbidden, reason, message);
+        StubGoogleFailure(operation, error);
+        var window = exactWindow
+            ? new CalendarReadWindow(new DateTime(2026, 5, 1), new DateTime(2026, 5, 2))
+            : null;
+
+        var act = async () => operation == "list"
+            ? (object)await _fetcher.ListCalendarsAsync(Token, default)
+            : await _fetcher.FetchAsync(Token, null, null, default, window);
+
+        var failure = await act.Should().ThrowAsync<CalendarProviderException>();
+        failure.Which.Kind.Should().Be(CalendarFetchErrorKind.MissingScope);
+        failure.Which.InnerException.Should().BeSameAs(error);
+    }
+
+    [Theory]
+    [InlineData("list")]
+    [InlineData("events")]
+    [InlineData("master")]
+    public async Task InvalidToken_OnEveryGoogleCall_RequiresReconnect(string operation)
+    {
+        StubGoogleFailure(operation, GoogleError(System.Net.HttpStatusCode.Unauthorized, "authError", "Invalid Credentials"));
+
+        var act = async () => operation == "list"
+            ? (object)await _fetcher.ListCalendarsAsync(Token, default)
+            : await _fetcher.FetchAsync(Token, null, null, default);
+
+        var failure = await act.Should().ThrowAsync<CalendarProviderException>();
+        failure.Which.Kind.Should().Be(CalendarFetchErrorKind.ReconnectRequired);
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.Forbidden, "rateLimitExceeded")]
+    [InlineData(System.Net.HttpStatusCode.Forbidden, "userRateLimitExceeded")]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError, "backendError")]
+    public async Task ListCalendarsAsync_ProviderFailure_DoesNotInvalidateGrant(
+        System.Net.HttpStatusCode status, string reason)
+    {
+        StubGoogleFailure("list", GoogleError(status, reason, "Provider unavailable"));
+
+        var act = async () => await _fetcher.ListCalendarsAsync(Token, default);
+
+        var failure = await act.Should().ThrowAsync<CalendarProviderException>();
+        failure.Which.Kind.Should().Be(CalendarFetchErrorKind.Transient);
+    }
+
+    private void StubGoogleFailure(string operation, Google.GoogleApiException error)
+    {
+        StubCalendars(Calendar("a", "owner"), Calendar("b", "owner"));
+        if (operation == "list")
+            _api.ListCalendarsAsync(Token, Arg.Any<CancellationToken>())
+                .Returns<Task<IReadOnlyList<CalendarListEntry>>>(_ => throw error);
+        else if (operation == "events")
+            _api.ListEventsAsync(Token, "a", Arg.Any<DateTime?>(), Arg.Any<CancellationToken>(), Arg.Any<CalendarReadWindow?>())
+                .Returns<Task<IReadOnlyList<Event>>>(_ => throw error);
+        else
+        {
+            StubEvents("a", TimedEvent("instance", "Recurring", "master"));
+            _api.GetEventAsync(Token, "a", "master", Arg.Any<CancellationToken>())
+                .Returns<Task<Event>>(_ => throw error);
+        }
+    }
+
+    internal static Google.GoogleApiException GoogleError(
+        System.Net.HttpStatusCode status, string? reason, string message) => new("calendar", message)
+        {
+            HttpStatusCode = status,
+            Error = new Google.Apis.Requests.RequestError
+            {
+                Code = (int)status,
+                Message = message,
+                Errors = reason is null ? [] : [new Google.Apis.Requests.SingleError { Reason = reason }]
+            }
+        };
 
     [Fact]
     public async Task ListCalendarsAsync_MapsEntriesAndComputesDefaultOwned()

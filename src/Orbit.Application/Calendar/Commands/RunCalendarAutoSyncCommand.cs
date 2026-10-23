@@ -63,6 +63,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CalendarAutoSyncResult>();
 
+        await deps.UnitOfWork.AcquireUserRowLockAsync(request.UserId, cancellationToken);
         var user = await deps.UserRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);
@@ -124,10 +125,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
             fetched = await deps.EventFetcher.FetchAsync(
                 accessToken, user.GetSelectedCalendarIds(), updatedMin: null, ct);
         }
-        catch (CalendarProviderException ex) when (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
+        catch (CalendarProviderException ex) when (ex.Kind is CalendarFetchErrorKind.ReconnectRequired or CalendarFetchErrorKind.MissingScope)
         {
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogReconnectRequired(logger, user.Id, ex.RawErrorCode);
+            LogReconnectRequired(logger, user.Id, ex.RawErrorCode);
             await HandleReconnectRequired(user, ex.RawErrorCode ?? "reconnect_required", ct);
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.ReconnectRequired));
         }
@@ -373,7 +373,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Google API error during auto-sync for user {UserId}")]
     private static partial void LogGoogleApiError(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Google Calendar reconnect required during auto-sync for user {UserId} (code: {ErrorCode})")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Google Calendar reconnect required during auto-sync for user {UserId} (code: {ErrorCode})")]
     private static partial void LogReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id skipped during auto-sync for user {UserId}: {GoogleEventId}")]

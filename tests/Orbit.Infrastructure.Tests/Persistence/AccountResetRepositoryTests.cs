@@ -263,7 +263,7 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.Habits.IgnoreQueryFilters().CountAsync(h => h.UserId == _userId)).Should().Be(0);
         (await _dbContext.Goals.IgnoreQueryFilters().CountAsync(g => g.UserId == _userId)).Should().Be(0);
         (await _dbContext.Tags.IgnoreQueryFilters().CountAsync(t => t.UserId == _userId)).Should().Be(0);
-        (await _dbContext.UserFacts.IgnoreQueryFilters().CountAsync(f => f.UserId == _userId)).Should().Be(0);
+        (await _dbContext.UserFacts.IgnoreQueryFilters().CountAsync(f => f.UserId == _userId)).Should().Be(1);
         (await _dbContext.Notifications.IgnoreQueryFilters().CountAsync(n => n.UserId == _userId)).Should().Be(0);
         (await _dbContext.UserAchievements.CountAsync(ua => ua.UserId == _userId)).Should().Be(0);
         (await _dbContext.XpAwardLogs.CountAsync(award => award.UserId == _userId)).Should().Be(0);
@@ -331,7 +331,7 @@ public class AccountResetRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteAllUserDataAsync_RemovesSocialGraphForUser_LeavesUnrelatedUsersData()
+    public async Task DeleteAllUserDataAsync_PreservesFrozenSocialGraph()
     {
         var unrelatedUserId = Guid.NewGuid();
         var unrelatedCounterpartId = Guid.NewGuid();
@@ -353,15 +353,15 @@ public class AccountResetRepositoryTests : IDisposable
         await _repository.DeleteAllUserDataAsync(_userId);
 
         (await _dbContext.Friendships.CountAsync(f => f.RequesterId == _userId || f.AddresseeId == _userId))
-            .Should().Be(0);
+            .Should().Be(1);
         (await _dbContext.Cheers.CountAsync(c => c.SenderId == _userId || c.RecipientId == _userId))
-            .Should().Be(0);
+            .Should().Be(2);
         (await _dbContext.BlockedUsers.CountAsync(b => b.BlockerId == _userId || b.BlockedId == _userId))
-            .Should().Be(0);
+            .Should().Be(1);
         (await _dbContext.Reports.CountAsync(r => r.ReporterId == _userId || r.ReportedUserId == _userId))
-            .Should().Be(0);
+            .Should().Be(1);
         (await _dbContext.FriendFeedEvents.CountAsync(e => e.ActorUserId == _userId))
-            .Should().Be(0);
+            .Should().Be(1);
 
         (await _dbContext.Friendships.CountAsync(f => f.RequesterId == unrelatedUserId)).Should().Be(1);
         (await _dbContext.FriendFeedEvents.CountAsync(e => e.ActorUserId == unrelatedUserId)).Should().Be(1);
