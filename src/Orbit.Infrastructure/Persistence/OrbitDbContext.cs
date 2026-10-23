@@ -33,7 +33,6 @@ public class OrbitDbContext : DbContext
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitSkipUndo> HabitSkipUndos => Set<HabitSkipUndo>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
-    public DbSet<UserFact> UserFacts => Set<UserFact>();
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
@@ -71,20 +70,8 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
-    public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
-    public DbSet<Friendship> Friendships => Set<Friendship>();
-    public DbSet<Cheer> Cheers => Set<Cheer>();
-    public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
-    public DbSet<Report> Reports => Set<Report>();
-    public DbSet<FriendFeedEvent> FriendFeedEvents => Set<FriendFeedEvent>();
-    public DbSet<Challenge> Challenges => Set<Challenge>();
-    public DbSet<ChallengeParticipant> ChallengeParticipants => Set<ChallengeParticipant>();
-    public DbSet<ChallengeParticipantHabit> ChallengeParticipantHabits => Set<ChallengeParticipantHabit>();
-    public DbSet<AccountabilityPair> AccountabilityPairs => Set<AccountabilityPair>();
-    public DbSet<AccountabilityPairHabit> AccountabilityPairHabits => Set<AccountabilityPairHabit>();
-    public DbSet<AccountabilityCheckIn> AccountabilityCheckIns => Set<AccountabilityCheckIn>();
     public DbSet<ClosedMonthRecap> ClosedMonthRecaps => Set<ClosedMonthRecap>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -121,7 +108,6 @@ public class OrbitDbContext : DbContext
             entity.HasOne<Habit>().WithMany().HasForeignKey(skip => skip.HabitId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-        ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureNotionEntities(modelBuilder, encConverter, nullableEncConverter);
         ConfigureTagEntity(modelBuilder);
@@ -138,7 +124,6 @@ public class OrbitDbContext : DbContext
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
-        ConfigureAiFactExtractionBatchEntity(modelBuilder);
         ConfigureAiUsageDailyEntity(modelBuilder);
         modelBuilder.Entity<ConversationTurn>(entity =>
         {
@@ -210,17 +195,6 @@ public class OrbitDbContext : DbContext
             entity.HasOne<User>().WithMany().HasForeignKey(account => account.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         ConfigureContentBlockEntity(modelBuilder);
-        ConfigureFriendshipEntity(modelBuilder);
-        ConfigureCheerEntity(modelBuilder);
-        ConfigureBlockedUserEntity(modelBuilder);
-        ConfigureReportEntity(modelBuilder);
-        ConfigureFriendFeedEventEntity(modelBuilder);
-        ConfigureChallengeEntity(modelBuilder);
-        ConfigureChallengeParticipantEntity(modelBuilder);
-        ConfigureChallengeParticipantHabitEntity(modelBuilder);
-        ConfigureAccountabilityPairEntity(modelBuilder);
-        ConfigureAccountabilityPairHabitEntity(modelBuilder);
-        ConfigureAccountabilityCheckInEntity(modelBuilder);
         ConfigureClosedMonthRecapEntity(modelBuilder);
     }
 
@@ -369,20 +343,6 @@ public class OrbitDbContext : DbContext
             entity.Property(request => request.IdempotencyKey).IsRequired().HasMaxLength(200);
             entity.Property(request => request.RequestType).IsRequired().HasMaxLength(256);
             entity.HasOne<User>().WithMany().HasForeignKey(request => request.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureAiFactExtractionBatchEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<AiFactExtractionBatch>(entity =>
-        {
-            entity.HasIndex(b => b.Status);
-            entity.HasIndex(b => b.BatchId).IsUnique();
-            entity.Property(b => b.BatchId).IsRequired().HasMaxLength(255);
-            entity.Property(b => b.InputFileId).IsRequired().HasMaxLength(255);
-            entity.Property(b => b.OutputFileId).HasMaxLength(255);
-            entity.Property(b => b.Status).HasConversion<string>().HasMaxLength(32);
-            entity.HasOne<User>().WithMany().HasForeignKey(b => b.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -588,7 +548,6 @@ public class OrbitDbContext : DbContext
             entity.Property(c => c.Description).HasMaxLength(500);
 
             entity.HasData(
-                AppConfig.Create("MaxUserFacts", "50", "Maximum number of facts the AI can remember per user"),
                 AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"),
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
@@ -693,157 +652,6 @@ public class OrbitDbContext : DbContext
             entity.Property(cb => cb.Key).HasMaxLength(100);
             entity.Property(cb => cb.Locale).HasMaxLength(10);
             entity.Property(cb => cb.Category).HasMaxLength(50);
-        });
-    }
-
-    private static void ConfigureFriendshipEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Friendship>(entity =>
-        {
-            entity.HasIndex(f => f.RequesterId);
-            entity.HasIndex(f => f.AddresseeId);
-            entity.Property(f => f.Status).HasConversion<string>().HasMaxLength(32);
-            entity.HasOne<User>().WithMany().HasForeignKey(f => f.RequesterId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<User>().WithMany().HasForeignKey(f => f.AddresseeId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureCheerEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Cheer>(entity =>
-        {
-            entity.HasIndex(c => c.RecipientId);
-            entity.HasIndex(c => new { c.SenderId, c.CreatedAtUtc });
-            entity.HasIndex(c => c.HabitId);
-            entity.Property(c => c.Note).HasMaxLength(DomainConstants.MaxCheerNoteLength);
-            entity.HasOne<User>().WithMany().HasForeignKey(c => c.SenderId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<User>().WithMany().HasForeignKey(c => c.RecipientId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<Habit>().WithMany().HasForeignKey(c => c.HabitId).IsRequired(false).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureBlockedUserEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<BlockedUser>(entity =>
-        {
-            entity.HasIndex(b => new { b.BlockerId, b.BlockedId }).IsUnique();
-            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockerId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockedId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureReportEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Report>(entity =>
-        {
-            entity.HasIndex(r => r.ReportedUserId);
-            entity.HasIndex(r => r.Status);
-            entity.Property(r => r.Reason).HasConversion<string>().HasMaxLength(32);
-            entity.Property(r => r.Status).HasConversion<string>().HasMaxLength(32);
-            entity.Property(r => r.Details).HasMaxLength(DomainConstants.MaxReportDetailsLength);
-            entity.Property(r => r.ReviewedAtUtc).HasField("_reviewedAtUtc");
-            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReportedUserId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<Cheer>().WithMany().HasForeignKey(r => r.CheerId).OnDelete(DeleteBehavior.SetNull);
-        });
-    }
-
-    private static void ConfigureAccountabilityPairEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<AccountabilityPair>(entity =>
-        {
-            entity.HasIndex(p => p.RequesterId);
-            entity.HasIndex(p => p.AddresseeId);
-            entity.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
-            entity.Property(p => p.Cadence).HasConversion<string>().HasMaxLength(32);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.RequesterId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.AddresseeId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureAccountabilityPairHabitEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<AccountabilityPairHabit>(entity =>
-        {
-            entity.HasIndex(ph => new { ph.PairId, ph.UserId, ph.HabitId }).IsUnique();
-            entity.HasIndex(ph => ph.HabitId);
-            entity.HasOne<AccountabilityPair>().WithMany().HasForeignKey(ph => ph.PairId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<Habit>().WithMany().HasForeignKey(ph => ph.HabitId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureAccountabilityCheckInEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<AccountabilityCheckIn>(entity =>
-        {
-            entity.HasIndex(c => new { c.PairId, c.UserId, c.Date }).IsUnique();
-            entity.HasIndex(c => new { c.PairId, c.CreatedAtUtc });
-            entity.Property(c => c.Note).HasMaxLength(DomainConstants.MaxAccountabilityNoteLength);
-            entity.HasOne<AccountabilityPair>().WithMany().HasForeignKey(c => c.PairId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureFriendFeedEventEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<FriendFeedEvent>(entity =>
-        {
-            entity.HasIndex(e => new { e.ActorUserId, e.CreatedAtUtc, e.Id })
-                .IsDescending(false, true, true);
-            entity.HasIndex(e => new { e.ActorUserId, e.AchievementId })
-                .IsUnique()
-                .HasFilter("\"AchievementId\" IS NOT NULL");
-            entity.HasIndex(e => new { e.ActorUserId, e.Type, e.Value })
-                .IsUnique()
-                .HasFilter("\"AchievementId\" IS NULL");
-            entity.Property(e => e.Type).HasConversion<string>().HasMaxLength(32);
-            entity.Property(e => e.AchievementId).HasMaxLength(50);
-            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ActorUserId).OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureChallengeEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Challenge>(entity =>
-        {
-            entity.HasIndex(c => c.CreatorId);
-            entity.HasIndex(c => c.JoinCode).IsUnique();
-            entity.HasQueryFilter(c => !c.IsDeleted);
-            entity.Property(c => c.Type).HasConversion<string>().HasMaxLength(32);
-            entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(32);
-            entity.Property(c => c.JoinCode).HasMaxLength(16);
-            entity.Property(c => c.Title).HasMaxLength(Orbit.Application.Common.AppConstants.MaxChallengeTitleLength);
-            entity.Property(c => c.Description).HasMaxLength(Orbit.Application.Common.AppConstants.MaxChallengeDescriptionLength);
-            entity.HasOne<User>().WithMany().HasForeignKey(c => c.CreatorId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasMany(c => c.Participants)
-                .WithOne()
-                .HasForeignKey(p => p.ChallengeId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureChallengeParticipantEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<ChallengeParticipant>(entity =>
-        {
-            entity.HasIndex(p => new { p.ChallengeId, p.UserId })
-                .IsUnique()
-                .HasFilter("\"LeftAtUtc\" IS NULL");
-            entity.HasIndex(p => p.UserId);
-            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasMany(p => p.LinkedHabits)
-                .WithOne()
-                .HasForeignKey(h => h.ChallengeParticipantId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-    }
-
-    private static void ConfigureChallengeParticipantHabitEntity(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<ChallengeParticipantHabit>(entity =>
-        {
-            entity.HasIndex(h => new { h.ChallengeParticipantId, h.HabitId }).IsUnique();
-            entity.HasIndex(h => h.HabitId);
-            entity.HasOne<Habit>().WithMany().HasForeignKey(h => h.HabitId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -1064,21 +872,6 @@ public class OrbitDbContext : DbContext
                 return;
 
             entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text").HasMaxLength(1000);
-        });
-    }
-
-    private static void ConfigureUserFactEntity(ModelBuilder modelBuilder, EncryptionValueConverter? encConverter)
-    {
-        modelBuilder.Entity<UserFact>(entity =>
-        {
-            entity.HasIndex(f => new { f.UserId, f.IsDeleted });
-            entity.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasQueryFilter(f => !f.IsDeleted);
-
-            if (encConverter is null)
-                return;
-
-            entity.Property(f => f.FactText).HasConversion(encConverter).HasColumnType("text");
         });
     }
 

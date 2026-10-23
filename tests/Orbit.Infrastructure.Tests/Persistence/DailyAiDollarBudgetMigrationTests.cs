@@ -38,18 +38,18 @@ public class DailyAiDollarBudgetMigrationTests
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
-        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Table == "PendingAgentOperations");
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        differences.Should().HaveCount(16 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(15 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);

@@ -23,7 +23,8 @@ public class ConversationMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         context.Database.HasPendingModelChanges().Should().BeFalse();
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         generator.Generate(migration.UpOperations, model).Should().NotBeEmpty();
         generator.Generate(migration.DownOperations, model).Should().NotBeEmpty();
         var initializer = context.GetService<IModelRuntimeInitializer>();
@@ -40,8 +41,7 @@ public class ConversationMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        remaining.Should().HaveCount(12 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(remaining));
-        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(remaining);
+        remaining.Should().HaveCount(11 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(remaining));
         remaining.OfType<AddColumnOperation>().Should().HaveCount(8);
         remaining.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "ConversationTurns"
             && column.Name == "ResponseJson" && column.IsNullable && column.ClrType == typeof(string));

@@ -12,6 +12,19 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class DropSentProactiveCheckinsMigrationTests
 {
     [Fact]
+    public void Migration_IsLastAndFollowsRetiredFeatureContraction()
+    {
+        using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=unused").Options);
+        var migrations = context.GetService<IMigrationsAssembly>().Migrations;
+        var retiredFeatures = migrations.Single(pair => pair.Value.AsType() == typeof(DropRetiredFeatureTables)).Key;
+        var retiredLedger = migrations.Single(pair => pair.Value.AsType() == typeof(DropSentProactiveCheckins)).Key;
+
+        migrations.Keys.Should().ContainInOrder(retiredFeatures, retiredLedger);
+        migrations.Keys.Last().Should().Be(retiredLedger);
+    }
+
+    [Fact]
     public void CurrentModelAndSnapshot_ExcludeRetiredLedgerAndPreserveProactiveTables()
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -19,6 +32,8 @@ public class DropSentProactiveCheckinsMigrationTests
         {
             var tables = model.GetEntityTypes().Select(entity => entity.GetTableName()).ToArray();
             tables.Should().NotContain("SentProactiveCheckins");
+            tables.Should().NotIntersectWith(new DropRetiredFeatureTables().UpOperations
+                .OfType<DropTableOperation>().Select(operation => operation.Name));
             tables.Should().Contain("ProactiveItems").And.Contain("ProactiveCalendarDays");
         }
     }
@@ -33,7 +48,7 @@ public class DropSentProactiveCheckinsMigrationTests
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
         var initializer = context.GetService<IModelRuntimeInitializer>();
-        var previous = initializer.Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
+        var previous = initializer.Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var target = initializer.Initialize(migration.TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
         var differ = context.GetService<IMigrationsModelDiffer>();

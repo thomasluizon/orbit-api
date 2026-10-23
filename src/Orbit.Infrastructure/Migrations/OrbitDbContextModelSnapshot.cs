@@ -52,106 +52,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("HabitTags");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityCheckIn", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("PairId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PairId", "CreatedAtUtc");
-
-                    b.HasIndex("PairId", "UserId", "Date")
-                        .IsUnique();
-
-                    b.ToTable("AccountabilityCheckIns");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPair", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("AcceptedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("AddresseeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Cadence")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("EndedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RequesterId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AddresseeId");
-
-                    b.HasIndex("RequesterId");
-
-                    b.ToTable("AccountabilityPairs");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPairHabit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("HabitId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PairId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HabitId");
-
-                    b.HasIndex("PairId", "UserId", "HabitId")
-                        .IsUnique();
-
-                    b.ToTable("AccountabilityPairHabits");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.AgentAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -305,52 +205,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("AiBudgetCalls");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.AiFactExtractionBatch", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("BatchId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("InputFileId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("OutputFileId")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BatchId")
-                        .IsUnique();
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("AiFactExtractionBatches");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.AiUsageDaily", b =>
                 {
                     b.Property<Guid>("Id")
@@ -480,12 +334,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("AppConfigs");
 
                     b.HasData(
-                        new
-                        {
-                            Key = "MaxUserFacts",
-                            Description = "Maximum number of facts the AI can remember per user",
-                            Value = "50"
-                        },
                         new
                         {
                             Key = "MaxHabitDepth",
@@ -734,149 +582,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("AppFeatureFlagAccounts");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.BlockedUser", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BlockedId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BlockerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BlockedId");
-
-                    b.HasIndex("BlockerId", "BlockedId")
-                        .IsUnique();
-
-                    b.ToTable("BlockedUsers");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Challenge", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreatorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("JoinCode")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<DateOnly?>("PeriodEndUtc")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("PeriodStartUtc")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<int?>("TargetCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatorId");
-
-                    b.HasIndex("JoinCode")
-                        .IsUnique();
-
-                    b.ToTable("Challenges");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChallengeParticipant", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ChallengeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("JoinedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LeftAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("ChallengeId", "UserId")
-                        .IsUnique()
-                        .HasFilter("\"LeftAtUtc\" IS NULL");
-
-                    b.ToTable("ChallengeParticipants");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChallengeParticipantHabit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ChallengeParticipantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("HabitId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HabitId");
-
-                    b.HasIndex("ChallengeParticipantId", "HabitId")
-                        .IsUnique();
-
-                    b.ToTable("ChallengeParticipantHabits");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.ChecklistTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -918,39 +623,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "UpdatedAtUtc");
 
                     b.ToTable("ChecklistTemplates");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Cheer", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("HabitId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("RecipientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SenderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HabitId");
-
-                    b.HasIndex("RecipientId");
-
-                    b.HasIndex("SenderId", "CreatedAtUtc");
-
-                    b.ToTable("Cheers");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ClosedMonthRecap", b =>
@@ -1102,78 +774,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DistributedRateLimitBuckets");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.FriendFeedEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AchievementId")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("ActorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<int?>("Value")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActorUserId", "AchievementId")
-                        .IsUnique()
-                        .HasFilter("\"AchievementId\" IS NOT NULL");
-
-                    b.HasIndex("ActorUserId", "CreatedAtUtc", "Id")
-                        .IsDescending(false, true, true);
-
-                    b.HasIndex("ActorUserId", "Type", "Value")
-                        .IsUnique()
-                        .HasFilter("\"AchievementId\" IS NULL");
-
-                    b.ToTable("FriendFeedEvents");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Friendship", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AddresseeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RequesterId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("RespondedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AddresseeId");
-
-                    b.HasIndex("RequesterId");
-
-                    b.ToTable("Friendships");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Goal", b =>
@@ -2384,54 +1984,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("Referrals");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.Report", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CheerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Details")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid>("ReportedUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ReporterId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ReviewedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CheerId");
-
-                    b.HasIndex("ReportedUserId");
-
-                    b.HasIndex("ReporterId");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("Reports");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.SentReminder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2950,41 +2502,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("UserAchievements");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.UserFact", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Category")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExtractedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FactText")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "IsDeleted");
-
-                    b.ToTable("UserFacts");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.UserSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3114,55 +2631,7 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityCheckIn", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.AccountabilityPair", null)
-                        .WithMany()
-                        .HasForeignKey("PairId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPair", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("AddresseeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RequesterId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPairHabit", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Habit", null)
-                        .WithMany()
-                        .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.AccountabilityPair", null)
-                        .WithMany()
-                        .HasForeignKey("PairId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.AiBudgetCall", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AiFactExtractionBatch", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
@@ -3195,85 +2664,11 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.BlockedUser", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("BlockedId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("BlockerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Challenge", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("CreatorId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChallengeParticipant", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Challenge", null)
-                        .WithMany("Participants")
-                        .HasForeignKey("ChallengeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChallengeParticipantHabit", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.ChallengeParticipant", null)
-                        .WithMany("LinkedHabits")
-                        .HasForeignKey("ChallengeParticipantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.Habit", null)
-                        .WithMany()
-                        .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.ChecklistTemplate", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Cheer", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Habit", null)
-                        .WithMany()
-                        .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RecipientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("SenderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -3292,30 +2687,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.FriendFeedEvent", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ActorUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Friendship", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("AddresseeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RequesterId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -3451,26 +2822,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.Report", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Cheer", null)
-                        .WithMany()
-                        .HasForeignKey("CheerId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ReportedUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ReporterId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.StreakFreeze", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
@@ -3481,15 +2832,6 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Tag", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.UserFact", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
@@ -3523,16 +2865,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Challenge", b =>
-                {
-                    b.Navigation("Participants");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChallengeParticipant", b =>
-                {
-                    b.Navigation("LinkedHabits");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Goal", b =>

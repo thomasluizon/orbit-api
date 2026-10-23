@@ -17,7 +17,7 @@ public class RollingMigrationGateTests
     [Fact]
     public void ProactiveLedgerContract_RequiresRecordedWebAndBackgroundDrainEvidence()
     {
-        const string id = "20261023102941_DropSentProactiveCheckins";
+        const string id = "20261023111014_DropSentProactiveCheckins";
         var migration = new DropSentProactiveCheckins { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
         var barriers = ReadBarriers(RepositoryRoot());
 
@@ -39,6 +39,17 @@ public class RollingMigrationGateTests
 
         RollingMigrationGate.Check(id, migration.UpOperations).Should()
             .ContainSingle().Which.Should().Contain("deployment barrier").And.Contain(nameof(SqlOperation));
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(RepositoryRoot()), (_, _) => true)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RetiredFeatureDrop_RequiresRecordedDeploymentBarrier()
+    {
+        const string id = "20261023103527_DropRetiredFeatureTables";
+        var migration = new DropRetiredFeatureTables { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should().NotBeEmpty();
         RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(RepositoryRoot()), (_, _) => true)
             .Should().BeEmpty();
     }

@@ -61,6 +61,11 @@ public class AppStoreMigrationTests
         var appleIds = appleMigrations.Select(apple =>
             migrations.Single(pair => pair.Value.AsType() == apple.GetType()).Key).ToArray();
         migrations.Keys.Should().ContainInOrder(new[] { mainId }.Concat(appleIds));
+        migrations.Keys.Should().ContainInOrder(appleIds.Append(
+            migrations.Single(pair => pair.Value.AsType() == typeof(DropRetiredFeatureTables)).Key));
+        migrations.Keys.Should().ContainInOrder(
+            migrations.Single(pair => pair.Value.AsType() == typeof(DropRetiredFeatureTables)).Key,
+            migrations.Single(pair => pair.Value.AsType() == typeof(DropSentProactiveCheckins)).Key);
         migrations.Keys.Last().Should().EndWith("_DropSentProactiveCheckins");
 
         foreach (var apple in appleMigrations)
@@ -72,10 +77,17 @@ public class AppStoreMigrationTests
 
         var latest = context.GetService<IModelRuntimeInitializer>()
             .Initialize(appleMigrations.Last().TargetModel, designTime: true);
+        var preceding = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+        WithoutAppleAdditions(context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(preceding.GetRelationalModel(), latest.GetRelationalModel())).Should().BeEmpty();
+        var contracted = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(latest.GetRelationalModel(), current.GetRelationalModel());
+            .GetDifferences(contracted.GetRelationalModel(), current.GetRelationalModel());
         differences.Should().ContainSingle();
         DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
+        context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 }

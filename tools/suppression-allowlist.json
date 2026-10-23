@@ -113,16 +113,6 @@
         "reason": "The _resolvedAtUtc field must remain mapped and writable by EF for atomic clarification resolution; absence of a C# assignment does not mean it is unused."
       }
     },
-    "src/Orbit.Domain/Entities/Report.cs": {
-      "CS0649": {
-        "count": 1,
-        "reason": "EF materializes retained report _reviewedAtUtc through the configured ReviewedAtUtc backing field; the persisted review stamp has no C# assignment."
-      },
-      "S3459": {
-        "count": 1,
-        "reason": "The retained Report.ReviewedAtUtc property reads _reviewedAtUtc from EF materialization, so the private field cannot be removed as unassigned."
-      }
-    },
     "src/Orbit.Infrastructure/AI/AiUsageRecorder.cs": {
       "ORBIT0004": {
         "count": 1,

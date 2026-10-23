@@ -20,13 +20,13 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(Migration.TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
-        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
-        differences.Should().HaveCount(41 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(40 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         var preference = differences.OfType<AlterColumnOperation>().Should().ContainSingle().Subject;
         preference.Table.Should().Be("Users");
         preference.Name.Should().Be("ProactiveAstraEnabled");
@@ -66,12 +66,12 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new AddAstraEvalTraceFlag().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
-        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
-        differences.Should().HaveCount(12 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(11 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
