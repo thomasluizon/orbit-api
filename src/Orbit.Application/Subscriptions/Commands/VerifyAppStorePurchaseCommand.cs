@@ -22,12 +22,12 @@ public sealed class VerifyAppStorePurchaseCommandHandler(
         {
             var transaction = appStore.VerifyTransaction(request.SignedTransaction);
             if (transaction.AppAccountToken != request.UserId)
-                return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.PlayPurchaseAccountMismatch);
+                return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.AppStorePurchaseAccountMismatch);
             var state = await appStore.GetCurrentStateAsync(transaction, cancellationToken);
             if (state is null || !state.GrantsPro)
-                return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.PlayPurchaseNotActive);
+                return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.AppStorePurchaseNotActive);
             if (state.Transaction.AppAccountToken != request.UserId || state.Transaction.OriginalTransactionId != transaction.OriginalTransactionId)
-                return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.PlayPurchaseAccountMismatch);
+                return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.AppStorePurchaseAccountMismatch);
             return await unitOfWork.ExecuteInTransactionAsync(async ct =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"app-store:{transaction.OriginalTransactionId}", ct);
@@ -36,7 +36,7 @@ public sealed class VerifyAppStorePurchaseCommandHandler(
                 if (user is null)
                     return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.UserNotFound);
                 if (await users.AnyIgnoringFiltersAsync(u => u.AppStoreOriginalTransactionId == transaction.OriginalTransactionId && u.Id != user.Id, ct))
-                    return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.PlayPurchaseAccountMismatch);
+                    return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.AppStorePurchaseAccountMismatch);
                 AppStoreEntitlement.Apply(user, state);
                 await unitOfWork.SaveChangesAsync(ct);
                 return Result.Success(new AppStoreVerifyResponse(user.HasProAccess, user.SubscriptionSource.ToApiValue(),
@@ -45,7 +45,7 @@ public sealed class VerifyAppStorePurchaseCommandHandler(
         }
         catch (AppleVerificationException)
         {
-            return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.PlayPurchaseNotActive);
+            return Result.Failure<AppStoreVerifyResponse>(ErrorMessages.AppStorePurchaseNotActive);
         }
         catch (BillingProviderException)
         {

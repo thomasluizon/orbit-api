@@ -59,7 +59,7 @@ public class AppStoreCommandTests
         else
             _apple.VerifyTransaction("signed").Returns(Transaction with { AppAccountToken = Guid.NewGuid() });
         var result = await new VerifyAppStorePurchaseCommandHandler(_apple, _users, _work).Handle(new(_user.Id, "signed"), default);
-        result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseAccountMismatch);
+        result.ErrorCode.Should().Be("APP_STORE_PURCHASE_ACCOUNT_MISMATCH");
         await _work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
         _user.AppStoreOriginalTransactionId.Should().BeNull();
     }
