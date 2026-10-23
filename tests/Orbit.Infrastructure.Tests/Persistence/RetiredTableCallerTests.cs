@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Goals.Services;
@@ -15,6 +17,8 @@ using Orbit.Domain.Events;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Migrations;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Tests.Services;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -115,6 +119,57 @@ public class RetiredTableCallerTests
         migration.UpOperations.OfType<AddForeignKeyOperation>().Should()
             .OnlyContain(foreignKey => foreignKey.OnDelete == ReferentialAction.Cascade);
         RollingMigrationGate.CheckRelease([("compatibility", migration.UpOperations)]).Should().BeEmpty();
+    }
+
+    internal static int AssertCompatibilityForeignKeys(IReadOnlyList<MigrationOperation> operations)
+    {
+        var expected = new CascadeRetiredFeatureParents { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" }.UpOperations;
+        var names = expected.OfType<AddForeignKeyOperation>().Select(key => key.Name).ToHashSet();
+        var compatibility = operations.Where(operation =>
+            operation is AddForeignKeyOperation add && names.Contains(add.Name)
+            || operation is DropForeignKeyOperation drop && names.Contains(drop.Name)).ToArray();
+        compatibility.OfType<DropForeignKeyOperation>().Select(key => new { key.Name, key.Table }).Should()
+            .BeEquivalentTo(expected.OfType<DropForeignKeyOperation>().Select(key => new { key.Name, key.Table }));
+        compatibility.OfType<AddForeignKeyOperation>()
+            .Select(key => new { key.Name, key.Table, key.Columns, key.PrincipalTable, key.PrincipalColumns, key.OnDelete }).Should()
+            .BeEquivalentTo(expected.OfType<AddForeignKeyOperation>()
+                .Select(key => new { key.Name, key.Table, key.Columns, key.PrincipalTable, key.PrincipalColumns, key.OnDelete }));
+        return expected.Count;
+    }
+
+    [Fact]
+    public async Task PermanentDeletion_RemovesEveryRetiredTableRowThroughTheScheduledService()
+    {
+        var commands = new CommandCapture();
+        using var factory = new SqliteOrbitDbContextFactory(commands);
+        var db = factory.Context;
+        var user = await SeedRetiredRows(db);
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        using var provider = new ServiceCollection()
+            .AddSingleton(db)
+            .AddSingleton<IObjectStorageDeletionService>(new FakeObjectStore())
+            .AddSingleton<IUnitOfWork>(new UnitOfWork(db, new DatabaseConnectionSettings()))
+            .AddSingleton<IAccountResetRepository>(new AccountResetRepository(db, Substitute.For<IAccountEventCollector>()))
+            .AddSingleton<IGenericRepository<MarketingContact>>(new GenericRepository<MarketingContact>(db))
+            .BuildServiceProvider();
+        var logger = Substitute.For<ILogger<AccountDeletionService>>();
+        logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+        using var service = new AccountDeletionService(provider.GetRequiredService<IServiceScopeFactory>(),
+            logger, new ConfigurationBuilder().Build());
+        commands.Sql.Clear();
+
+        await service.RunAsync(CancellationToken.None);
+
+        logger.ReceivedCalls().SelectMany(call => call.GetArguments()).OfType<Exception>().Should().BeEmpty();
+        AssertNoRetiredCommands(commands);
+        (await db.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeFalse();
+        foreach (var table in Tables)
+        {
+            var sql = $"SELECT COUNT(*) AS Value FROM \"{table}\"";
+            (await db.Database.SqlQueryRaw<int>(sql).SingleAsync()).Should().Be(0, "{0} must cascade during erasure", table);
+        }
     }
 
     [Fact]
