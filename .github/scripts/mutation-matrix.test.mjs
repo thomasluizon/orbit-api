@@ -257,3 +257,13 @@ for (const path of ["tests/Orbit.Domain.Tests/Entities/User.cs", "src/Orbit.Appl
     assert.deepEqual(select(change(t, path), "base"), []);
   });
 }
+
+test("diff spans: the full User source with the PR 876 doc-only edit selects nothing", (t) => {
+  const source = readFileSync(new URL(`../../${userPath}`, import.meta.url), "utf8");
+  const revised = source.replace(
+    "Social storage retained until https://github.com/thomasluizon/orbit-tickets/issues/1555 contracts the schema.",
+    "Compatibility-only storage with no runtime caller or mapped writes, retained until https://github.com/thomasluizon/orbit-tickets/issues/1654 contracts the schema.",
+  );
+  assert.notEqual(source, revised);
+  assert.deepEqual(select(change(t, userPath, source, revised), "base"), []);
+});
