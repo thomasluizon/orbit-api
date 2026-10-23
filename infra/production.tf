@@ -75,6 +75,10 @@ resource "render_static_site" "landing" {
   auto_deploy    = false
   custom_domains = length(var.landing_custom_domains) > 0 ? [for domain in var.landing_custom_domains : { name = domain }] : null
 
+  env_vars = {
+    PUBLIC_TURNSTILE_SITE_KEY = { value = cloudflare_turnstile_widget.orbit.sitekey }
+  }
+
   headers = [
     { path = "/", name = "Link", value = "<https://useorbit.org/>; rel=\"canonical\"" },
     { path = "/*", name = "X-Content-Type-Options", value = "nosniff" },
