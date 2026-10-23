@@ -30,7 +30,7 @@ public class HabitSchedulePropertyTests
     public void RecurringHabit_IsNeverOverdue_OnOrBeforeItsDueDate(RecurringHabit recurring, int rawOffset)
     {
         var habit = recurring.Habit;
-        var referenceDate = habit.DueDate.AddDays(-Math.Abs(rawOffset % 401));
+        var referenceDate = habit.NextDueDate.AddDays(-Math.Abs(rawOffset % 401));
 
         HabitScheduleService.IsOverdueOnDate(habit, referenceDate).Should().BeFalse();
     }
@@ -39,10 +39,10 @@ public class HabitSchedulePropertyTests
     public void RecurringHabit_MissedPastOccurrence_IffDueDateBeforeReference(RecurringHabit recurring, int rawOffset)
     {
         var habit = recurring.Habit;
-        var reference = habit.DueDate.AddDays(rawOffset % 401);
+        var reference = habit.NextDueDate.AddDays(rawOffset % 401);
 
         HabitScheduleService.HasMissedPastOccurrence(habit, reference, weekStartDay: 1)
-            .Should().Be(habit.DueDate < reference);
+            .Should().Be(habit.NextDueDate < reference);
     }
 
     [Property]
@@ -77,7 +77,7 @@ public class HabitSchedulePropertyTests
     {
         var habit = flexible.Habit;
         var weekStartDay = Math.Abs(rawWeekStart % 2);
-        var target = habit.DueDate;
+        var target = habit.NextDueDate;
 
         foreach (var raw in rawOffsets)
         {

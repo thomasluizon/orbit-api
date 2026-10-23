@@ -329,7 +329,7 @@ public class QueryHabitsToolTests
     {
         var habit = CreateHabit("Drink water", FrequencyUnit.Day, 1, dueDate: Today);
         habit.Log(Today).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
 
         await AssertDoneScheduleAsync(habit, date);
     }
@@ -801,7 +801,7 @@ public class QueryHabitsToolTests
         {
             var ids = callInfo.ArgAt<IReadOnlyCollection<Guid>>(0);
             return (IReadOnlySet<Guid>)habits.Where(habit => ids.Contains(habit.Id)
-                    && habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.DueDate))
+                    && habit.Logs.Any(log => !log.IsDeleted && log.Date == habit.NextDueDate))
                 .Select(habit => habit.Id).ToHashSet();
         });
         _habitRepo.FindAsync(

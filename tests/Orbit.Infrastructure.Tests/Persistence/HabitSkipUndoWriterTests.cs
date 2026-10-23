@@ -48,7 +48,7 @@ public sealed class HabitSkipUndoWriterTests
 
         await using var verify = factory.CreateContext();
         var restored = await verify.Habits.SingleAsync();
-        restored.DueDate.Should().Be(concurrentEdit ? today.AddDays(7) : today);
+        restored.NextDueDate.Should().Be(concurrentEdit ? today.AddDays(7) : today);
         restored.ReminderProbeVersion.Should().Be(1);
     }
 }

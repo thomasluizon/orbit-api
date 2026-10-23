@@ -54,7 +54,7 @@ public class PromptHabitIndexTests
 
         var result = ProcessUserChatCommandHandler.BuildPromptHabitIndex([habit], Today);
 
-        result.Habits.Should().ContainSingle().Which.DueDate.Should().Be(Today.AddDays(1));
+        result.Habits.Should().ContainSingle().Which.NextDueDate.Should().Be(Today.AddDays(1));
         result.DoneTodayHabitIds.Should().Contain(habit.Id);
     }
 

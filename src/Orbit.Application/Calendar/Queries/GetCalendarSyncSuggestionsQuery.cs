@@ -62,7 +62,7 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         var importedLegacyKeys = habits
             .Select(h => LegacyCalendarMatchKey.BuildLegacyMatchKey(
                 h.Title,
-                h.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                h.NextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 h.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture)))
             .ToHashSet(StringComparer.Ordinal);
 

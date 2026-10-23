@@ -58,109 +58,70 @@ namespace Orbit.Infrastructure.Migrations
                 name: "FK_Reports_Users_ReporterId",
                 table: "Reports");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_BlockedUsers_Users_BlockedId",
-                table: "BlockedUsers",
-                column: "BlockedId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "BlockedUsers" ADD CONSTRAINT "FK_BlockedUsers_Users_BlockedId" FOREIGN KEY ("BlockedId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_BlockedUsers_Users_BlockerId",
-                table: "BlockedUsers",
-                column: "BlockerId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "BlockedUsers" ADD CONSTRAINT "FK_BlockedUsers_Users_BlockerId" FOREIGN KEY ("BlockerId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_ChallengeParticipants_Users_UserId",
-                table: "ChallengeParticipants",
-                column: "UserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "ChallengeParticipants" ADD CONSTRAINT "FK_ChallengeParticipants_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Challenges_Users_CreatorId",
-                table: "Challenges",
-                column: "CreatorId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Challenges" ADD CONSTRAINT "FK_Challenges_Users_CreatorId" FOREIGN KEY ("CreatorId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Cheers_Habits_HabitId",
-                table: "Cheers",
-                column: "HabitId",
-                principalTable: "Habits",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Cheers" ADD CONSTRAINT "FK_Cheers_Habits_HabitId" FOREIGN KEY ("HabitId") REFERENCES "Habits" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Cheers_Users_RecipientId",
-                table: "Cheers",
-                column: "RecipientId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Cheers" ADD CONSTRAINT "FK_Cheers_Users_RecipientId" FOREIGN KEY ("RecipientId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Cheers_Users_SenderId",
-                table: "Cheers",
-                column: "SenderId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Cheers" ADD CONSTRAINT "FK_Cheers_Users_SenderId" FOREIGN KEY ("SenderId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_FriendFeedEvents_Users_ActorUserId",
-                table: "FriendFeedEvents",
-                column: "ActorUserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "FriendFeedEvents" ADD CONSTRAINT "FK_FriendFeedEvents_Users_ActorUserId" FOREIGN KEY ("ActorUserId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Friendships_Users_AddresseeId",
-                table: "Friendships",
-                column: "AddresseeId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Friendships" ADD CONSTRAINT "FK_Friendships_Users_AddresseeId" FOREIGN KEY ("AddresseeId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Friendships_Users_RequesterId",
-                table: "Friendships",
-                column: "RequesterId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Friendships" ADD CONSTRAINT "FK_Friendships_Users_RequesterId" FOREIGN KEY ("RequesterId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Reports_Users_ReportedUserId",
-                table: "Reports",
-                column: "ReportedUserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Reports" ADD CONSTRAINT "FK_Reports_Users_ReportedUserId" FOREIGN KEY ("ReportedUserId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Reports_Users_ReporterId",
-                table: "Reports",
-                column: "ReporterId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Reports" ADD CONSTRAINT "FK_Reports_Users_ReporterId" FOREIGN KEY ("ReporterId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_UserFacts_Users_UserId",
-                table: "UserFacts",
-                column: "UserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "UserFacts" ADD CONSTRAINT "FK_UserFacts_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE NOT VALID;
+                """);
         }
 
         /// <inheritdoc />
@@ -218,101 +179,65 @@ namespace Orbit.Infrastructure.Migrations
                 name: "FK_UserFacts_Users_UserId",
                 table: "UserFacts");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_BlockedUsers_Users_BlockedId",
-                table: "BlockedUsers",
-                column: "BlockedId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "BlockedUsers" ADD CONSTRAINT "FK_BlockedUsers_Users_BlockedId" FOREIGN KEY ("BlockedId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_BlockedUsers_Users_BlockerId",
-                table: "BlockedUsers",
-                column: "BlockerId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "BlockedUsers" ADD CONSTRAINT "FK_BlockedUsers_Users_BlockerId" FOREIGN KEY ("BlockerId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_ChallengeParticipants_Users_UserId",
-                table: "ChallengeParticipants",
-                column: "UserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "ChallengeParticipants" ADD CONSTRAINT "FK_ChallengeParticipants_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Challenges_Users_CreatorId",
-                table: "Challenges",
-                column: "CreatorId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Challenges" ADD CONSTRAINT "FK_Challenges_Users_CreatorId" FOREIGN KEY ("CreatorId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Cheers_Habits_HabitId",
-                table: "Cheers",
-                column: "HabitId",
-                principalTable: "Habits",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Cheers" ADD CONSTRAINT "FK_Cheers_Habits_HabitId" FOREIGN KEY ("HabitId") REFERENCES "Habits" ("Id") ON DELETE SET NULL NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Cheers_Users_RecipientId",
-                table: "Cheers",
-                column: "RecipientId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Cheers" ADD CONSTRAINT "FK_Cheers_Users_RecipientId" FOREIGN KEY ("RecipientId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Cheers_Users_SenderId",
-                table: "Cheers",
-                column: "SenderId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Cheers" ADD CONSTRAINT "FK_Cheers_Users_SenderId" FOREIGN KEY ("SenderId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_FriendFeedEvents_Users_ActorUserId",
-                table: "FriendFeedEvents",
-                column: "ActorUserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "FriendFeedEvents" ADD CONSTRAINT "FK_FriendFeedEvents_Users_ActorUserId" FOREIGN KEY ("ActorUserId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Friendships_Users_AddresseeId",
-                table: "Friendships",
-                column: "AddresseeId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Friendships" ADD CONSTRAINT "FK_Friendships_Users_AddresseeId" FOREIGN KEY ("AddresseeId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Friendships_Users_RequesterId",
-                table: "Friendships",
-                column: "RequesterId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Friendships" ADD CONSTRAINT "FK_Friendships_Users_RequesterId" FOREIGN KEY ("RequesterId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Reports_Users_ReportedUserId",
-                table: "Reports",
-                column: "ReportedUserId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Reports" ADD CONSTRAINT "FK_Reports_Users_ReportedUserId" FOREIGN KEY ("ReportedUserId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Reports_Users_ReporterId",
-                table: "Reports",
-                column: "ReporterId",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Restrict);
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "Reports" ADD CONSTRAINT "FK_Reports_Users_ReporterId" FOREIGN KEY ("ReporterId") REFERENCES "Users" ("Id") ON DELETE RESTRICT NOT VALID;
+                """);
         }
     }
 }

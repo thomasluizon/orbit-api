@@ -21,7 +21,7 @@ public sealed partial class HabitCorrectionProposalValidator : AbstractValidator
             if (error is not null || changes is null)
                 return;
             var current = proposal.Current;
-            var update = HabitUpdateValidation.ResolveSingleUpdate(current, changes, current.DueDate);
+            var update = HabitUpdateValidation.ResolveSingleUpdate(current, changes, current.NextDueDate);
             if (OneTimeEdit().IsMatch(proposal.Message) && !HabitProposalValidator.RequestsRepetition(proposal.Message)
                 && update.FrequencyUnit is not null)
             {

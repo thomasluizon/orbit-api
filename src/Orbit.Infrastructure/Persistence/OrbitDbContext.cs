@@ -969,6 +969,12 @@ public class OrbitDbContext : DbContext
             entity.Property(h => h.IntervalWeeks).HasColumnType("integer");
             entity.Property(h => h.Schedule).HasConversion<int>().HasDefaultValue(HabitSchedule.OneTime);
             entity.Property(h => h.StartDate).HasDefaultValueSql("'0001-01-01'");
+            entity.Property(h => h.NextDueDate).HasDefaultValueSql("'0001-01-01'");
+            if (usePostgresArrayColumns)
+            {
+                // https://github.com/thomasluizon/orbit-tickets/issues/227: the compatibility trigger mirrors NextDueDate into the legacy column while old API instances overlap.
+                entity.Property<DateOnly>("DueDate").ValueGeneratedOnAddOrUpdate();
+            }
             entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
                 .HasFilter("\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE")
                 .IsUnique();

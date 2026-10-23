@@ -419,7 +419,7 @@ public class ApplyOnboardingCommandHandlerTests
         created.Should().ContainSingle();
         created[0].IntervalWeeks.Should().BeNull();
         created[0].Days.Should().Equal(DayOfWeek.Monday);
-        created[0].DueDate.Should().Be(FirstMonday);
+        created[0].NextDueDate.Should().Be(FirstMonday);
         HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(7)).Should().BeTrue();
     }
 

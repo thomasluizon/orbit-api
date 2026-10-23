@@ -99,7 +99,7 @@ public class ActiveHabitsSection : IPromptSection
         if (habit.IsBadHabit) labels.Add("BAD");
         if (habit.IsCompleted) labels.Add("COMPLETED");
         if (habit.Schedule != HabitSchedule.General)
-            labels.Add($"DueDate: {habit.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+            labels.Add($"DueDate: {habit.NextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
         return labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "";
     }
 
@@ -111,7 +111,7 @@ public class ActiveHabitsSection : IPromptSection
 
     private static bool IsOverdue(Habit habit, PromptContext context) =>
         habit.Schedule != HabitSchedule.General && !habit.IsCompleted && context.UserToday.HasValue
-        && (context.OverdueHabitIds?.Contains(habit.Id) ?? habit.DueDate < context.UserToday.Value);
+        && (context.OverdueHabitIds?.Contains(habit.Id) ?? habit.NextDueDate < context.UserToday.Value);
 
     private static bool IsDoneToday(Habit habit, PromptContext context) =>
         !habit.IsBadHabit && context.UserToday.HasValue

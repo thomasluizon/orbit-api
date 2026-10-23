@@ -387,7 +387,7 @@ public class BulkLogHabitsCommandHandlerTests
         first.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         first.Value.PreviousStreak.Should().Be(0);
         first.Value.CurrentStreak.Should().Be(1);
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

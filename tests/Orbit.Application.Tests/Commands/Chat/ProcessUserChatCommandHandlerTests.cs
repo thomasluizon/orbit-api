@@ -1015,7 +1015,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.TodayHabitIds!.Contains(habit.Id)
             && request.DoneTodayHabitIds!.Contains(habit.Id)
-            && request.ActiveHabits.Single().DueDate == Today.AddDays(1)));
+            && request.ActiveHabits.Single().NextDueDate == Today.AddDays(1)));
     }
 
     [Theory]

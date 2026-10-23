@@ -167,7 +167,7 @@ public class GoalCompletionServiceTests
         await dbContext.SaveChangesAsync();
 
         habit.AdvanceDueDate(Today);
-        var advancedDueDate = habit.DueDate;
+        var advancedDueDate = habit.NextDueDate;
         var unitOfWork = new SaveCountingUnitOfWork(CreateUnitOfWork(dbContext));
         var service = CreateCompletionService(dbContext, Substitute.For<IGamificationService>(), unitOfWork);
 
@@ -177,7 +177,7 @@ public class GoalCompletionServiceTests
         unitOfWork.SaveCount.Should().Be(1);
         dbContext.ChangeTracker.Clear();
         var persistedHabit = await dbContext.Habits.AsNoTracking().SingleAsync(candidate => candidate.Id == habit.Id);
-        persistedHabit.DueDate.Should().Be(advancedDueDate);
+        persistedHabit.NextDueDate.Should().Be(advancedDueDate);
     }
 
     [Fact]

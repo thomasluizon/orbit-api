@@ -17,7 +17,7 @@ public class HabitParentGuardsTests
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15],
             ChecklistItems: [new("Same", true), new("Same", false)])).Value;
         habit.Log(start).IsSuccess.Should().BeTrue();
-        var due = habit.DueDate;
+        var due = habit.NextDueDate;
         var logs = habit.Logs.ToArray();
         var checklist = habit.ChecklistItems.ToArray();
         var parent = Guid.NewGuid();
@@ -25,7 +25,7 @@ public class HabitParentGuardsTests
         habit.SetParentHabitId(parent);
         habit.SetParentHabitId(null);
         habit.StartDate.Should().Be(start);
-        habit.DueDate.Should().Be(due);
+        habit.NextDueDate.Should().Be(due);
         habit.OriginalDayOfMonth.Should().Be(31);
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Month);
         habit.FrequencyQuantity.Should().Be(1);

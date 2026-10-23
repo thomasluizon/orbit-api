@@ -26,7 +26,7 @@ public class EditableHabitStartDateTests
 
         child.InheritResolvedOccurrence(parent);
 
-        child.DueDate.Should().Be(new DateOnly(2026, 10, terminal ? 14 : 21));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 10, terminal ? 14 : 21));
         child.IsCompleted.Should().Be(terminal);
         child.StartDate.Should().Be(anchor);
         child.ScheduledStartDate.Should().Be(anchor);
@@ -50,7 +50,7 @@ public class EditableHabitStartDateTests
         var act = () => child.InheritResolvedOccurrence(parent);
 
         act.Should().Throw<ArgumentException>();
-        child.DueDate.Should().Be(Today);
+        child.NextDueDate.Should().Be(Today);
         child.IsCompleted.Should().BeFalse();
         child.StartDate.Should().Be(Today);
         child.UpdatedAtUtc.Should().Be(updatedAtUtc);
@@ -67,7 +67,7 @@ public class EditableHabitStartDateTests
 
         habit.PostponeTo(Today.AddDays(2));
 
-        habit.DueDate.Should().Be(Today.AddDays(2));
+        habit.NextDueDate.Should().Be(Today.AddDays(2));
         habit.IsCompleted.Should().Be(completed);
         habit.StartDate.Should().Be(Today);
     }
@@ -80,7 +80,7 @@ public class EditableHabitStartDateTests
             anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
         habit.Update(new("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Wednesday], false, anchor.AddDays(2),
             StartDate: anchor, UserToday: Today)).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(anchor.AddDays(2));
+        habit.NextDueDate.Should().Be(anchor.AddDays(2));
         habit.StartDate.Should().Be(anchor);
         habit.ScheduledStartDate.Should().Be(anchor);
     }
@@ -95,7 +95,7 @@ public class EditableHabitStartDateTests
             anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
         habit.Update(new("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, null,
             StartDate: anchor, UserToday: Today, IntervalWeeks: 2, WeekStartDay: weekStart)).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(DateOnly.Parse(expected));
+        habit.NextDueDate.Should().Be(DateOnly.Parse(expected));
         habit.ScheduledStartDate.Should().Be(anchor);
     }
 
@@ -108,7 +108,7 @@ public class EditableHabitStartDateTests
         habit.CatchUpDueDate(Today).IsSuccess.Should().BeTrue();
         habit.Update(new("Read", null, FrequencyUnit.Day, 3, null, false, null,
             StartDate: anchor, UserToday: Today)).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         habit.ScheduledStartDate.Should().Be(anchor);
     }
 
@@ -121,11 +121,11 @@ public class EditableHabitStartDateTests
         habit.Log(anchor).IsSuccess.Should().BeTrue();
         habit.Update(new("Read", null, FrequencyUnit.Month, 2, null, false, null,
             StartDate: anchor, UserToday: new DateOnly(2028, 2, 1))).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2028, 3, 31));
+        habit.NextDueDate.Should().Be(new DateOnly(2028, 3, 31));
         habit.ScheduledStartDate.Should().Be(anchor);
         habit.OriginalDayOfMonth.Should().Be(31);
-        habit.Log(habit.DueDate).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2028, 5, 31));
+        habit.Log(habit.NextDueDate).IsSuccess.Should().BeTrue();
+        habit.NextDueDate.Should().Be(new DateOnly(2028, 5, 31));
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class EditableHabitStartDateTests
         var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
             anchor.AddDays(2), Days: [DayOfWeek.Wednesday], StartDate: anchor)).Value;
         habit.StartDate.Should().Be(anchor);
-        habit.DueDate.Should().Be(anchor.AddDays(2));
+        habit.NextDueDate.Should().Be(anchor.AddDays(2));
         habit.ScheduledStartDate.Should().Be(anchor);
     }
 
@@ -155,11 +155,11 @@ public class EditableHabitStartDateTests
         habit.Update(update).IsSuccess.Should().BeTrue();
         habit.StartDate.Should().Be(anchor);
         habit.ScheduledStartDate.Should().Be(anchor);
-        habit.DueDate.Should().Be(flexible ? Today : Today.AddDays(2));
+        habit.NextDueDate.Should().Be(flexible ? Today : Today.AddDays(2));
         habit.Logs.Select(log => (log.Id, log.Date, log.Value, log.IsDeleted)).Should().Equal(logs);
-        var cursor = habit.DueDate;
+        var cursor = habit.NextDueDate;
         habit.Update(update with { Title = "Renamed", Emoji = "📖" }).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(cursor);
+        habit.NextDueDate.Should().Be(cursor);
         habit.PostponeTo(Today.AddDays(8));
         habit.CatchUpDueDate(Today.AddDays(10)).IsSuccess.Should().BeTrue();
         habit.Log(Today.AddDays(10)).IsSuccess.Should().BeTrue();
@@ -173,12 +173,12 @@ public class EditableHabitStartDateTests
         var start = new DateOnly(2028, 1, 31);
         var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Month, 1, start)).Value;
         habit.Log(start).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2028, 2, 29));
-        habit.Update(new HabitUpdateParams("Renamed", null, FrequencyUnit.Month, 1, null, false, habit.DueDate,
+        habit.NextDueDate.Should().Be(new DateOnly(2028, 2, 29));
+        habit.Update(new HabitUpdateParams("Renamed", null, FrequencyUnit.Month, 1, null, false, habit.NextDueDate,
             StartDate: start, UserToday: start)).IsSuccess.Should().BeTrue();
         habit.OriginalDayOfMonth.Should().Be(31);
-        habit.Log(habit.DueDate).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2028, 3, 31));
+        habit.Log(habit.NextDueDate).IsSuccess.Should().BeTrue();
+        habit.NextDueDate.Should().Be(new DateOnly(2028, 3, 31));
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public class EditableHabitStartDateTests
         habit.Log(Today).IsSuccess.Should().BeTrue();
         habit.Update(new HabitUpdateParams("Read", null, FrequencyUnit.Day, 1, null, false, null,
             StartDate: Today.AddDays(-1), UserToday: Today)).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         habit.Logs.Should().ContainSingle();
     }
 
@@ -202,7 +202,7 @@ public class EditableHabitStartDateTests
             StartDate: anchor, UserToday: Today, IntervalWeeks: 2)).IsSuccess.Should().BeTrue();
         habit.StartDate.Should().Be(anchor);
         habit.ScheduledStartDate.Should().Be(anchor);
-        habit.DueDate.Should().Be(new DateOnly(2026, 11, 2));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 11, 2));
     }
 
     [Fact]

@@ -94,7 +94,7 @@ public partial class ProcessUserChatCommandHandlerTests
         saved.Should().HaveCount(2).And.OnlyHaveUniqueItems(habit => habit.Title);
         saved[1].Days.Should().BeEquivalentTo([DayOfWeek.Sunday, DayOfWeek.Wednesday]);
         saved[1].FrequencyUnit.Should().Be(FrequencyUnit.Day);
-        saved[1].DueDate.Should().Be(new DateOnly(2026, 9, 15));
+        saved[1].NextDueDate.Should().Be(new DateOnly(2026, 9, 15));
         result.Value.Actions.Should().HaveCount(2).And.OnlyContain(action => action.Status == ActionStatus.Success);
         result.Value.Operations.Should().HaveCount(2).And.OnlyContain(operation => operation.Status == AgentOperationStatus.Succeeded);
         await _payGate.Received(1).TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());

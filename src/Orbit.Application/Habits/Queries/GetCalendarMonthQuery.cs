@@ -131,7 +131,7 @@ public class GetCalendarMonthQueryHandler(
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             return !habit.IsCompleted
-                && habit.DueDate < dateFrom
+                && habit.NextDueDate < dateFrom
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom);
         }
 
@@ -149,7 +149,7 @@ public class GetCalendarMonthQueryHandler(
         var qty = habit.FrequencyQuantity ?? 1;
         var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
         var lookbackStart = dateFrom.AddDays(-lookbackDays);
-        if (habit.DueDate > lookbackStart) lookbackStart = habit.DueDate;
+        if (habit.NextDueDate > lookbackStart) lookbackStart = habit.NextDueDate;
         var pastDates = HabitScheduleService.GetScheduledDates(
             habit,
             lookbackStart,
@@ -203,7 +203,7 @@ public class GetCalendarMonthQueryHandler(
             habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.IsBadHabit, habit.IsCompleted, habit.Schedule == HabitSchedule.General, habit.Schedule == HabitSchedule.Flexible,
             habit.Days.ToList(), habit.Position, habit.CreatedAtUtc,
-            habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
+            habit.NextDueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             scheduledDates, isOverdue,
             habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),
             habit.SlipAlertEnabled, habit.ChecklistItems,
@@ -274,7 +274,7 @@ public class GetCalendarMonthQueryHandler(
             child.Id, child.Title, child.Description,
             child.FrequencyUnit, child.FrequencyQuantity,
             child.IsBadHabit, child.IsCompleted, child.Schedule == HabitSchedule.General, child.Schedule == HabitSchedule.Flexible,
-            child.Days.ToList(), child.DueDate, child.DueTime, child.DueEndTime, child.EndDate, scheduledDates, isOverdue,
+            child.Days.ToList(), child.NextDueDate, child.DueTime, child.DueEndTime, child.EndDate, scheduledDates, isOverdue,
             child.Position, child.ChecklistItems,
             child.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             grandchildren, grandchildren.Count > 0,

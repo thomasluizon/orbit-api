@@ -370,7 +370,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         payload.GetProperty("applied_count").GetInt32().Should().Be(250);
         payload.GetProperty("total_matched").GetInt32().Should().Be(250);
         _handlerCalls.Should().Be(3);
-        (await _dbContext.Habits.AsNoTracking().CountAsync(habit => habit.DueDate > today || habit.IsCompleted))
+        (await _dbContext.Habits.AsNoTracking().CountAsync(habit => habit.NextDueDate > today || habit.IsCompleted))
             .Should().Be(250);
         (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.HabitId).Distinct().CountAsync())
             .Should().Be(skip ? 100 : 250);
@@ -955,7 +955,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         _handlerCalls.Should().Be(1);
         (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(1);
         (await _dbContext.Tags.AsNoTracking().CountAsync()).Should().Be(0);
-        (await _dbContext.Habits.AsNoTracking().SingleAsync()).DueDate.Should().Be(today);
+        (await _dbContext.Habits.AsNoTracking().SingleAsync()).NextDueDate.Should().Be(today);
         await streakService.DidNotReceive().RecalculateAsync(
             _userId, cancellationToken: Arg.Any<CancellationToken>());
         await gamificationService.DidNotReceive().ProcessHabitLogged(

@@ -64,7 +64,7 @@ public class GetRescheduleSuggestionQueryHandler(
                 dueDateResolution.Contains(habit.Id)))
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotOverdue);
 
-        var cacheKey = CacheKey(request.HabitId, habit.DueDate, effectiveLanguage);
+        var cacheKey = CacheKey(request.HabitId, habit.NextDueDate, effectiveLanguage);
         if (cache.TryGetValue(cacheKey, out RescheduleSuggestionResponse? cached) && cached is not null)
             return Result.Success(cached with { FromCache = true });
 

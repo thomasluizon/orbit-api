@@ -179,7 +179,7 @@ public sealed class UpdateHabitTagTests : IDisposable
         Snapshot().Should().Be(afterFirst);
         _habit.Title.Should().Be("Changed");
         _habit.Description.Should().Be("Changed");
-        _habit.DueDate.Should().Be(Today.AddDays(2));
+        _habit.NextDueDate.Should().Be(Today.AddDays(2));
         _habit.DueTime.Should().Be(new TimeOnly(10, 0));
         _habit.EndDate.Should().Be(Today.AddDays(5));
         _habit.ReminderEnabled.Should().BeFalse();
@@ -306,7 +306,7 @@ public sealed class UpdateHabitTagTests : IDisposable
         _habit.ParentHabitId,
         _habit.Title,
         _habit.Description,
-        _habit.DueDate,
+        _habit.NextDueDate,
         _habit.DueTime,
         _habit.EndDate,
         _habit.ReminderEnabled,

@@ -340,7 +340,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.FrequencyQuantity,
             habit.IsBadHabit,
             habit.IsCompleted,
-            habit.DueDate,
+            habit.NextDueDate,
             habit.DueTime,
             habit.DueEndTime,
             habit.ReminderEnabled,

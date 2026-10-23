@@ -21,7 +21,7 @@ public class HabitScheduleCharacterizationTests
         var habit = Create(type);
         var log = habit.Log(Start);
         log.IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(Start.AddDays(dueOffset));
+        habit.NextDueDate.Should().Be(Start.AddDays(dueOffset));
         habit.IsCompleted.Should().Be(completed);
         habit.StartDate.Should().Be(Start);
         log.Value.Date.Should().Be(Start);
@@ -29,7 +29,7 @@ public class HabitScheduleCharacterizationTests
 
         habit.Unlog(Start).IsSuccess.Should().BeTrue();
         habit.IsCompleted.Should().BeFalse();
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
         habit.StartDate.Should().Be(Start);
         habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeTrue();
     }
@@ -45,7 +45,7 @@ public class HabitScheduleCharacterizationTests
 
         habit.CatchUpDueDate(Start.AddDays(3)).IsSuccess.Should().BeTrue();
 
-        habit.DueDate.Should().Be(Start.AddDays(dueOffset));
+        habit.NextDueDate.Should().Be(Start.AddDays(dueOffset));
         habit.IsCompleted.Should().BeFalse();
         habit.Logs.Should().BeEmpty();
     }
@@ -61,7 +61,7 @@ public class HabitScheduleCharacterizationTests
 
         habit.AdvanceDueDate(Start.AddDays(3)).IsSuccess.Should().BeTrue();
 
-        habit.DueDate.Should().Be(Start.AddDays(dueOffset));
+        habit.NextDueDate.Should().Be(Start.AddDays(dueOffset));
         habit.IsCompleted.Should().BeFalse();
         habit.Logs.Should().BeEmpty();
     }
@@ -78,7 +78,7 @@ public class HabitScheduleCharacterizationTests
         var result = habit.SkipFlexible(Start);
 
         result.IsSuccess.Should().Be(type == 2);
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
         habit.IsCompleted.Should().BeFalse();
         if (type == 2)
         {
@@ -109,7 +109,7 @@ public class HabitScheduleCharacterizationTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(DomainErrors.CannotSkipOneTimeTask.Message);
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
         habit.IsCompleted.Should().BeFalse();
         habit.Logs.Should().BeEmpty();
         habit.UpdatedAtUtc.Should().Be(updatedAtUtc);
@@ -126,7 +126,7 @@ public class HabitScheduleCharacterizationTests
 
         habit.PostponeTo(Start.AddDays(4));
 
-        habit.DueDate.Should().Be(Start.AddDays(4));
+        habit.NextDueDate.Should().Be(Start.AddDays(4));
         habit.IsCompleted.Should().BeFalse();
         habit.Logs.Should().BeEmpty();
     }
@@ -161,7 +161,7 @@ public class HabitScheduleCharacterizationTests
 
         habit.Logs.Select(log => log.CompletionOrdinal).Should().Equal(0, 1, 2);
         habit.Logs.Count(log => !log.IsDeleted).Should().Be(2);
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
         habit.StartDate.Should().Be(Start);
     }
 

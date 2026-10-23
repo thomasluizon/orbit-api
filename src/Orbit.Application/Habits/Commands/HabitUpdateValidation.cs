@@ -83,7 +83,7 @@ internal static class HabitUpdateValidation
             changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
             changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
             changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
-            changes.HasDueDate ? changes.DueDate : habit.DueDate,
+            changes.HasDueDate ? changes.DueDate : habit.NextDueDate,
             DueTime: dueTime,
             DueEndTime: habit.DueEndTime,
             ReminderEnabled: changes.HasReminderEnabled ? changes.ReminderEnabled : null,

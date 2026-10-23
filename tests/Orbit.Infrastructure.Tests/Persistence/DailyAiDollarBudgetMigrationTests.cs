@@ -48,8 +48,9 @@ public class DailyAiDollarBudgetMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        differences.Should().HaveCount(14 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(15 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
+        ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);

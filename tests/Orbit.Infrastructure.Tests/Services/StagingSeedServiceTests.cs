@@ -26,7 +26,7 @@ public class StagingSeedServiceTests
         (await db.Habits.SingleAsync(h => h.Title == "Stretch for five minutes")).ParentHabitId.Should().NotBeNull();
         (await db.Habits.SingleAsync(h => h.Title == "Morning routine")).ChecklistItems.Should().HaveCount(2);
         var task = await db.Habits.SingleAsync(h => h.Title == "Submit a document");
-        task.DueDate.Should().Be(Today);
+        task.NextDueDate.Should().Be(Today);
         task.IsCompleted.Should().BeFalse();
         (await db.Goals.SingleAsync(g => g.Title == "Build a hydration streak")).CurrentValue.Should().BeGreaterThan(0);
         (await db.Habits.SingleAsync(h => h.Title == "Drink water")).CreatedAtUtc.Should().BeBefore(DateTime.UtcNow.AddDays(-28));

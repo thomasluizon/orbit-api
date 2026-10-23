@@ -44,7 +44,7 @@ public static class RetrospectiveMetricsCalculator
             (habit, from, to) => HabitScheduleService.GetScheduledDates(
                 habit, from, to, weekStartDay,
                 habit.Schedule == HabitSchedule.Recurring
-                    ? habit.ScheduledStartDate ?? habit.DueDate
+                    ? habit.ScheduledStartDate ?? habit.NextDueDate
                     : null));
     }
 
@@ -116,7 +116,7 @@ public static class RetrospectiveMetricsCalculator
 
             if (habit.Schedule == HabitSchedule.Recurring)
             {
-                var recurrenceStart = habit.ScheduledStartDate ?? habit.DueDate;
+                var recurrenceStart = habit.ScheduledStartDate ?? habit.NextDueDate;
                 var occurrenceDates = ResolveOccurrences(
                     habit, recurrenceStart, dateTo, resolveScheduledDates).ToHashSet();
                 var unresolvedDates = new SortedSet<DateOnly>(occurrenceDates);

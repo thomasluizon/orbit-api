@@ -15,7 +15,7 @@ public class HabitScheduleExpansionTests
         for (var offset = 0; offset < 10; offset++)
             habit.Log(start.AddDays(offset)).IsSuccess.Should().BeTrue();
 
-        habit.DueDate.Should().Be(start.AddDays(10));
+        habit.NextDueDate.Should().Be(start.AddDays(10));
         habit.StartDate.Should().Be(start);
     }
 
@@ -48,32 +48,32 @@ public class HabitScheduleExpansionTests
             case "Unlog":
                 habit.Log(Start.AddDays(1)).IsSuccess.Should().BeTrue();
                 habit.Unlog(Start.AddDays(1)).IsSuccess.Should().BeTrue();
-                habit.DueDate.Should().Be(Start.AddDays(1));
+                habit.NextDueDate.Should().Be(Start.AddDays(1));
                 break;
             case "CatchUp":
                 habit.CatchUpDueDate(Start.AddDays(4)).IsSuccess.Should().BeTrue();
-                habit.DueDate.Should().Be(Start.AddDays(4));
+                habit.NextDueDate.Should().Be(Start.AddDays(4));
                 break;
             case "Postpone":
                 habit.PostponeTo(Start.AddDays(4));
-                habit.DueDate.Should().Be(Start.AddDays(4));
+                habit.NextDueDate.Should().Be(Start.AddDays(4));
                 break;
             case "Update":
                 habit.Update(new HabitUpdateParams(
                     "Updated", null, FrequencyUnit.Day, 1, null, false, Start.AddDays(4)))
                     .IsSuccess.Should().BeTrue();
-                habit.DueDate.Should().Be(Start.AddDays(4));
+                habit.NextDueDate.Should().Be(Start.AddDays(4));
                 habit.ScheduledStartDate.Should().Be(Start.AddDays(4));
                 break;
             case "UpdateEarlier":
                 habit.Update(new HabitUpdateParams(
                     "Updated", null, FrequencyUnit.Day, 1, null, false, Start.AddDays(-4)))
                     .IsSuccess.Should().BeTrue();
-                habit.DueDate.Should().Be(Start.AddDays(-4));
+                habit.NextDueDate.Should().Be(Start.AddDays(-4));
                 break;
             case "PostponeEarlier":
                 habit.PostponeTo(Start.AddDays(-4));
-                habit.DueDate.Should().Be(Start.AddDays(-4));
+                habit.NextDueDate.Should().Be(Start.AddDays(-4));
                 break;
             case "Skip":
                 habit.SkipFlexible(Start).IsSuccess.Should().BeTrue();
@@ -128,7 +128,7 @@ public class HabitScheduleExpansionTests
             .IsFailure.Should().BeTrue();
         AssertSchedule(habit, HabitSchedule.Recurring);
         habit.StartDate.Should().Be(Start);
-        habit.DueDate.Should().Be(Start);
+        habit.NextDueDate.Should().Be(Start);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class HabitScheduleExpansionTests
         var snapshot = Orbit.Domain.Models.HabitScheduleSnapshot.FromHabit(original);
         var hydrated = Habit.FromScheduleSnapshot(snapshot, original.UserId);
         hydrated.StartDate.Should().Be(Start);
-        hydrated.DueDate.Should().Be(Start.AddDays(1));
+        hydrated.NextDueDate.Should().Be(Start.AddDays(1));
         AssertSchedule(hydrated, HabitSchedule.Recurring);
 
         original.Update(new HabitUpdateParams(
@@ -155,7 +155,7 @@ public class HabitScheduleExpansionTests
             .IsSuccess.Should().BeTrue();
         hydrated.LoadScheduleFieldsForRead(original);
         hydrated.StartDate.Should().Be(Start);
-        hydrated.DueDate.Should().Be(Start.AddDays(2));
+        hydrated.NextDueDate.Should().Be(Start.AddDays(2));
         AssertSchedule(hydrated, HabitSchedule.Recurring);
     }
 

@@ -25,7 +25,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
-        differences.Should().HaveCount(39 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(40 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         var preference = differences.OfType<AlterColumnOperation>().Should().ContainSingle().Subject;
         preference.Table.Should().Be("Users");
         preference.Name.Should().Be("ProactiveAstraEnabled");
@@ -35,6 +35,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         preference.OldColumn.IsNullable.Should().BeFalse();
         preference.OldColumn.DefaultValue.Should().BeNull();
         preference.DefaultValue.Should().Be(true);
+        ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         differences.OfType<CreateTableOperation>().Select(table => table.Name)
@@ -42,7 +43,7 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
                 "NotionConnections", "NotionOAuthStates", "NotionTasks", "OAuthStates",
                 "ProactiveCalendarDays", "ProactiveItems");
         differences.OfType<CreateIndexOperation>().Should().HaveCount(18);
-        differences.OfType<AddColumnOperation>().Should().HaveCount(8);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(9);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
@@ -68,8 +69,9 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
-        differences.Should().HaveCount(10 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
-        differences.OfType<AddColumnOperation>().Should().HaveCount(7);
+        differences.Should().HaveCount(11 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.OfType<AddColumnOperation>().Should().HaveCount(8);
+        ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Should()

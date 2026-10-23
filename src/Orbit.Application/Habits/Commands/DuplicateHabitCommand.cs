@@ -136,7 +136,7 @@ public class DuplicateHabitCommandHandler(
             source.Title,
             source.FrequencyUnit,
             source.FrequencyQuantity,
-            source.DueDate,
+            source.NextDueDate,
             source.Description,
             Emoji: source.Emoji,
             Days: source.Days.ToList(),

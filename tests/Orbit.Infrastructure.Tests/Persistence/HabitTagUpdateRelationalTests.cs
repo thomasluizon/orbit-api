@@ -181,7 +181,7 @@ public class HabitTagUpdateRelationalTests
         habit.ParentHabitId.Should().Be(parentId);
         habit.Title.Should().Be("Changed");
         habit.Description.Should().Be("Details");
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         habit.DueTime.Should().Be(new TimeOnly(10, 0));
         habit.EndDate.Should().Be(Today.AddDays(5));
         habit.Emoji.Should().Be("book");
@@ -212,7 +212,7 @@ public class HabitTagUpdateRelationalTests
             habit.FrequencyQuantity,
             habit.Days,
             habit.IsBadHabit,
-            habit.DueDate,
+            habit.NextDueDate,
             habit.DueTime,
             habit.DueEndTime,
             habit.ReminderEnabled,

@@ -1228,7 +1228,7 @@ public class HabitScheduleServiceTests
 
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(repo, unitOfWork, UserId, today, CancellationToken.None);
 
-        habit.DueDate.Should().Be(today);
+        habit.NextDueDate.Should().Be(today);
         HabitScheduleService.IsHabitDueOnDate(habit, today).Should().BeTrue();
         await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -1243,7 +1243,7 @@ public class HabitScheduleServiceTests
 
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(repo, unitOfWork, UserId, today, CancellationToken.None);
 
-        habit.DueDate.Should().Be(today);
+        habit.NextDueDate.Should().Be(today);
         HabitScheduleService.IsHabitDueOnDate(habit, today).Should().BeTrue();
     }
 
@@ -1256,17 +1256,17 @@ public class HabitScheduleServiceTests
                 continue;
             if (habit.IsFlexible)
             {
-                if (habit.FrequencyUnit is not null && target >= habit.DueDate)
+                if (habit.FrequencyUnit is not null && target >= habit.NextDueDate)
                     dates.Add(target);
                 continue;
             }
             if (habit.FrequencyUnit is null)
             {
-                if (target == habit.DueDate)
+                if (target == habit.NextDueDate)
                     dates.Add(target);
                 continue;
             }
-            if (target < habit.DueDate)
+            if (target < habit.NextDueDate)
                 continue;
             if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
                 continue;
@@ -1275,16 +1275,16 @@ public class HabitScheduleServiceTests
             var matches = habit.FrequencyUnit switch
             {
                 FrequencyUnit.Day => quantity == 1
-                    || LegacyTrueMod(target.DayNumber - habit.DueDate.DayNumber, quantity) == 0,
-                FrequencyUnit.Week => target.DayOfWeek == habit.DueDate.DayOfWeek
-                    && LegacyTrueMod((target.DayNumber - habit.DueDate.DayNumber) / 7, quantity) == 0,
+                    || LegacyTrueMod(target.DayNumber - habit.NextDueDate.DayNumber, quantity) == 0,
+                FrequencyUnit.Week => target.DayOfWeek == habit.NextDueDate.DayOfWeek
+                    && LegacyTrueMod((target.DayNumber - habit.NextDueDate.DayNumber) / 7, quantity) == 0,
                 FrequencyUnit.Month => target.Day == Math.Min(
-                        habit.DueDate.Day,
+                        habit.NextDueDate.Day,
                         DateTime.DaysInMonth(target.Year, target.Month))
                     && LegacyTrueMod(
-                        (target.Year - habit.DueDate.Year) * 12 + target.Month - habit.DueDate.Month,
+                        (target.Year - habit.NextDueDate.Year) * 12 + target.Month - habit.NextDueDate.Month,
                         quantity) == 0,
-                FrequencyUnit.Year => IsLegacyYearlyMatch(target, habit.DueDate, quantity),
+                FrequencyUnit.Year => IsLegacyYearlyMatch(target, habit.NextDueDate, quantity),
                 _ => false
             };
             if (matches)

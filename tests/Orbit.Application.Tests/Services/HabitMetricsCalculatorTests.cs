@@ -539,7 +539,7 @@ public class HabitMetricsCalculatorTests
 
         logResult.IsSuccess.Should().BeTrue();
         habit.ScheduledStartDate.Should().Be(Today);
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         metrics.CurrentStreak.Should().Be(0);
         metrics.LongestStreak.Should().Be(0);
     }
@@ -560,7 +560,7 @@ public class HabitMetricsCalculatorTests
         habit.CatchUpDueDate(Today);
         var metrics = HabitMetricsCalculator.Calculate(habit, Today, 1);
 
-        habit.DueDate.Should().BeAfter(Today);
+        habit.NextDueDate.Should().BeAfter(Today);
         habit.ScheduledStartDate.Should().Be(scheduledStart);
         metrics.CurrentStreak.Should().BeGreaterThan(0);
         metrics.LongestStreak.Should().BeGreaterThan(0);
@@ -615,7 +615,7 @@ public class HabitMetricsCalculatorTests
         for (var date = startDate; date <= Today; date = date.AddDays(1))
             habit.Log(date);
 
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));

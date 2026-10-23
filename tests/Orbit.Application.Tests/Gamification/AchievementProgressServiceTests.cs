@@ -405,7 +405,7 @@ public class AchievementProgressServiceTests
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, Today.AddDays(-299).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-        typeof(Habit).GetProperty(nameof(Habit.DueDate))!.SetValue(habit, Today.AddDays(1));
+        typeof(Habit).GetProperty(nameof(Habit.NextDueDate))!.SetValue(habit, Today.AddDays(1));
         typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, flexible);
         StubHabits(habit);
         StubCounts();

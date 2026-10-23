@@ -588,7 +588,7 @@ public class AgentChatWriteHoldTests : IDisposable
         stored.Revise(reordered, AgentOperationFingerprint.Compute(tool.Name, reordered),
             held.PendingOperation!.PreviewFingerprint!, DateTime.UtcNow).Should().BeTrue();
         unrelated.Update(new HabitUpdateParams("Changed unrelated habit", unrelated.Description, unrelated.FrequencyUnit,
-            unrelated.FrequencyQuantity, Days: unrelated.Days.ToList(), IsBadHabit: unrelated.IsBadHabit, DueDate: unrelated.DueDate)).IsSuccess.Should().BeTrue();
+            unrelated.FrequencyQuantity, Days: unrelated.Days.ToList(), IsBadHabit: unrelated.IsBadHabit, DueDate: unrelated.NextDueDate)).IsSuccess.Should().BeTrue();
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
         var revisions = new PendingOperationRevisionService(_pendingOperationStore, previewer,
@@ -775,7 +775,7 @@ public class AgentChatWriteHoldTests : IDisposable
         {
             var changed = await _dbContext.Habits.SingleAsync(habit => habit.Id == habits[0].Id);
             changed.Update(new HabitUpdateParams("Changed title", changed.Description, changed.FrequencyUnit,
-                changed.FrequencyQuantity, changed.Days.ToList(), changed.IsBadHabit, changed.DueDate, Emoji: changed.Emoji)).IsSuccess.Should().BeTrue();
+                changed.FrequencyQuantity, changed.Days.ToList(), changed.IsBadHabit, changed.NextDueDate, Emoji: changed.Emoji)).IsSuccess.Should().BeTrue();
             await _dbContext.SaveChangesAsync();
         }
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,

@@ -146,7 +146,7 @@ public class GetCalendarMonthQueryHandlerTests
             UserId, "Caminhar", FrequencyUnit.Week, 3,
             DueDate: loggedDate)).Value;
         habit.Log(loggedDate).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 10, 19));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 10, 19));
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -173,7 +173,7 @@ public class GetCalendarMonthQueryHandlerTests
             UserId, "Daily", FrequencyUnit.Day, 1,
             DueDate: loggedDate)).Value;
         habit.Log(loggedDate).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 10, 1));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 10, 1));
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -198,7 +198,7 @@ public class GetCalendarMonthQueryHandlerTests
             UserId, "Weekly", FrequencyUnit.Week, 1,
             DueDate: loggedDate)).Value;
         habit.Log(loggedDate).IsSuccess.Should().BeTrue();
-        habit.DueDate.Should().Be(new DateOnly(2026, 9, 14));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 9, 14));
         habit.Log(new DateOnly(2026, 9, 14), advanceDueDate: false).IsSuccess.Should().BeTrue();
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -277,11 +277,11 @@ public class GetCalendarMonthQueryHandlerTests
             var lastLog = descendant.Log(MonthEnd);
             lastLog.IsSuccess.Should().BeTrue();
             expectedLogs.Insert(0, lastLog.Value);
-            descendant.DueDate.Should().Be(MonthEnd.AddDays(1));
+            descendant.NextDueDate.Should().Be(MonthEnd.AddDays(1));
             descendant.Update(new HabitUpdateParams(
                 descendant.Title, null, frequencyUnit, 1, null, false, MonthStart))
                 .IsSuccess.Should().BeTrue();
-            descendant.DueDate.Should().Be(MonthStart);
+            descendant.NextDueDate.Should().Be(MonthStart);
         }
         descendant.IsCompleted.Should().Be(!isFlexible);
         var habits = isGrandchild ? new List<Habit> { parent, child, descendant } : [parent, descendant];
@@ -473,7 +473,7 @@ public class GetCalendarMonthQueryHandlerTests
             UserId, "Child", FrequencyUnit.Week, 3,
             DueDate: loggedDate, ParentHabitId: parent.Id)).Value;
         var childLog = child.Log(loggedDate).Value;
-        child.DueDate.Should().Be(new DateOnly(2026, 10, 19));
+        child.NextDueDate.Should().Be(new DateOnly(2026, 10, 19));
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

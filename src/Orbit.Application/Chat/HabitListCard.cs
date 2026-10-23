@@ -164,9 +164,9 @@ public static partial class HabitListCardBuilder
                 return StatusNone;
             if (habit.Schedule == HabitSchedule.General)
                 return StatusGeneral;
-            if (habit.DueDate < today)
+            if (habit.NextDueDate < today)
                 return StatusOverdue;
-            return habit.DueDate == today ? StatusToday : StatusNone;
+            return habit.NextDueDate == today ? StatusToday : StatusNone;
         }
 
         if (todayFacts.DoneTodayIds.Contains(habit.Id))

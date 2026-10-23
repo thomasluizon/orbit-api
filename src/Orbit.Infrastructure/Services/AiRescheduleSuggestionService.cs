@@ -66,7 +66,7 @@ public sealed partial class AiRescheduleSuggestionService(
     private static string BuildPrompt(Habit habit, DateOnly userToday, string language)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
-        var daysOverdue = Math.Max(0, userToday.DayNumber - habit.DueDate.DayNumber);
+        var daysOverdue = Math.Max(0, userToday.DayNumber - habit.NextDueDate.DayNumber);
         var habitKind = habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General ? "one-time task" : "recurring habit";
 
         return string.Create(System.Globalization.CultureInfo.InvariantCulture, $$"""
@@ -78,7 +78,7 @@ public sealed partial class AiRescheduleSuggestionService(
             Habit: {{PromptDataSanitizer.QuoteInline(habit.Title, 120)}}
             Type: {{habitKind}}
             Current schedule: {{DescribeSchedule(habit)}}
-            Originally due: {{habit.DueDate:yyyy-MM-dd}} ({{daysOverdue}} day(s) ago)
+            Originally due: {{habit.NextDueDate:yyyy-MM-dd}} ({{daysOverdue}} day(s) ago)
             Recent history: {{DescribeHistory(habit, userToday)}}
 
             Return ONLY a JSON object with EXACTLY these keys:

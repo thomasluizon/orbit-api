@@ -1369,6 +1369,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<DateOnly>("DueDate")
+                        .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("date");
 
                     b.Property<TimeOnly?>("DueEndTime")
@@ -1410,6 +1411,11 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<bool>("IsGeneral")
                         .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("NextDueDate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValueSql("'0001-01-01'");
 
                     b.Property<int?>("OriginalDayOfMonth")
                         .HasColumnType("integer");

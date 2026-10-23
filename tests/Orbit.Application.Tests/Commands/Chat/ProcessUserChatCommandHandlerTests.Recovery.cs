@@ -239,12 +239,12 @@ public partial class ProcessUserChatCommandHandlerTests
         saved.Should().HaveCount(2);
         saved[0].FrequencyUnit.Should().Be(FrequencyUnit.Day);
         saved[0].FrequencyQuantity.Should().Be(1);
-        saved[0].DueDate.Should().Be(new DateOnly(2026, 9, 8));
+        saved[0].NextDueDate.Should().Be(new DateOnly(2026, 9, 8));
         saved[0].EndDate.Should().Be(new DateOnly(2026, 9, 14));
         saved[1].FrequencyUnit.Should().Be(FrequencyUnit.Day);
         saved[1].FrequencyQuantity.Should().Be(1);
         saved[1].Days.Should().BeEquivalentTo([DayOfWeek.Sunday, DayOfWeek.Wednesday]);
-        saved[1].DueDate.Should().Be(new DateOnly(2026, 9, 15));
+        saved[1].NextDueDate.Should().Be(new DateOnly(2026, 9, 15));
     }
 
     private CreateHabitTool RecoveryCreateHabitTool() =>

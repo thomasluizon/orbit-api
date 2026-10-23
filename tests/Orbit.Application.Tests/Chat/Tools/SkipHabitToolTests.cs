@@ -56,7 +56,7 @@ public class SkipHabitToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Water");
-        habit.DueDate.Should().BeAfter(Today);
+        habit.NextDueDate.Should().BeAfter(Today);
         await _mediator.Received(1).Send(
             Arg.Is<SkipHabitCommand>(command => command.UserId == UserId && command.HabitId == habit.Id),
             Arg.Any<CancellationToken>());
@@ -71,7 +71,7 @@ public class SkipHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
 
         result.Success.Should().BeTrue();
-        habit.DueDate.Should().Be(Today.AddDays(1));
+        habit.NextDueDate.Should().Be(Today.AddDays(1));
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class SkipHabitToolTests
         attackerResult.Success.Should().BeFalse();
         attackerResult.ErrorCode.Should().Be(ErrorCodes.HabitNotOwned);
         await using (var afterAttack = CreateContext(databaseName))
-            (await afterAttack.Habits.SingleAsync(h => h.Id == habitId)).DueDate
+            (await afterAttack.Habits.SingleAsync(h => h.Id == habitId)).NextDueDate
                 .Should().Be(Today, "a foreign user must not advance another user's schedule");
 
         var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
@@ -199,7 +199,7 @@ public class SkipHabitToolTests
 
         ownerResult.Success.Should().BeTrue("the owner can skip their own habit");
         await using (var afterOwner = CreateContext(databaseName))
-            (await afterOwner.Habits.SingleAsync(h => h.Id == habitId)).DueDate
+            (await afterOwner.Habits.SingleAsync(h => h.Id == habitId)).NextDueDate
                 .Should().BeAfter(Today);
     }
 

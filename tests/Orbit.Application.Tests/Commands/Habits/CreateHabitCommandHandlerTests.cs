@@ -70,7 +70,7 @@ public class CreateHabitCommandHandlerTests
             StartDate: selected, Options: new HabitCommandOptions(Days: [DayOfWeek.Wednesday]));
         (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.StartDate == selected
-            && habit.DueDate == selected.AddDays(2) && habit.ScheduledStartDate == selected), Arg.Any<CancellationToken>());
+            && habit.NextDueDate == selected.AddDays(2) && habit.ScheduledStartDate == selected), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -93,8 +93,8 @@ public class CreateHabitCommandHandlerTests
 
         var parent = created.Single(habit => habit.ParentHabitId is null);
         var child = created.Single(habit => habit.ParentHabitId == parent.Id);
-        parent.DueDate.Should().Be(new DateOnly(2026, 10, startDay == 26 ? 28 : 21));
-        child.DueDate.Should().Be(parent.DueDate);
+        parent.NextDueDate.Should().Be(new DateOnly(2026, 10, startDay == 26 ? 28 : 21));
+        child.NextDueDate.Should().Be(parent.NextDueDate);
         child.StartDate.Should().Be(selected);
         child.ScheduledStartDate.Should().Be(selected);
         child.Days.Should().BeEmpty();
@@ -127,7 +127,7 @@ public class CreateHabitCommandHandlerTests
         (await _handler.Handle(command, CancellationToken.None)).IsSuccess.Should().BeTrue();
 
         var parent = created.Single(habit => habit.ParentHabitId is null);
-        parent.DueDate.Should().Be(new DateOnly(2026, 10, terminal
+        parent.NextDueDate.Should().Be(new DateOnly(2026, 10, terminal
             ? restrictedWeekdays ? 14 : 11
             : restrictedWeekdays ? 21 : 20));
         parent.IsCompleted.Should().Be(terminal);
@@ -135,7 +135,7 @@ public class CreateHabitCommandHandlerTests
         children.Should().HaveCount(2);
         children.Should().AllSatisfy(child =>
         {
-            child.DueDate.Should().Be(parent.DueDate);
+            child.NextDueDate.Should().Be(parent.NextDueDate);
             child.IsCompleted.Should().Be(terminal);
             child.StartDate.Should().Be(selected);
             child.ScheduledStartDate.Should().Be(selected);
@@ -164,9 +164,9 @@ public class CreateHabitCommandHandlerTests
 
         var parent = created.Single(habit => habit.ParentHabitId is null);
         var child = created.Single(habit => habit.ParentHabitId == parent.Id);
-        parent.DueDate.Should().Be(new DateOnly(2026, 10, explicitDueDate ? 28 : 21));
-        child.DueDate.Should().Be(requestedDueDate ?? parent.DueDate);
-        child.StartDate.Should().Be(child.DueDate);
+        parent.NextDueDate.Should().Be(new DateOnly(2026, 10, explicitDueDate ? 28 : 21));
+        child.NextDueDate.Should().Be(requestedDueDate ?? parent.NextDueDate);
+        child.StartDate.Should().Be(child.NextDueDate);
         child.IsCompleted.Should().BeFalse();
         child.Days.Should().BeEmpty();
     }
@@ -191,7 +191,7 @@ public class CreateHabitCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(habit => habit.Id == result.Value && habit.Schedule == schedule
-                && habit.StartDate == Today && habit.DueDate == Today
+                && habit.StartDate == Today && habit.NextDueDate == Today
                 && habit.IsGeneral == (schedule == HabitSchedule.General)
                 && habit.IsFlexible == (schedule == HabitSchedule.Flexible)
                 && habit.FrequencyUnit == command.FrequencyUnit
@@ -486,7 +486,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.DueDate == dueDate),
+            Arg.Is<Habit>(h => h.NextDueDate == dueDate),
             Arg.Any<CancellationToken>());
     }
 
@@ -500,7 +500,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.DueDate == Today),
+            Arg.Is<Habit>(h => h.NextDueDate == Today),
             Arg.Any<CancellationToken>());
     }
 
@@ -519,7 +519,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.DueDate == userToday && h.DueDate != utcToday),
+            Arg.Is<Habit>(h => h.NextDueDate == userToday && h.NextDueDate != utcToday),
             Arg.Any<CancellationToken>());
     }
 
@@ -557,7 +557,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.DueDate == new DateOnly(2026, 3, 21)),
+            Arg.Is<Habit>(h => h.NextDueDate == new DateOnly(2026, 3, 21)),
             Arg.Any<CancellationToken>());
     }
 
@@ -575,7 +575,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.DueDate == Today),
+            Arg.Is<Habit>(h => h.NextDueDate == Today),
             Arg.Any<CancellationToken>());
     }
 

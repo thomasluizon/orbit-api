@@ -104,7 +104,7 @@ public class CreateSubHabitCommandHandler(
 
     private static Result<Habit> BuildHabit(CreateSubHabitCommand request, Habit parent, DateOnly userToday, int position)
     {
-        var childDueDate = request.DueDate ?? (parent.DueDate > userToday ? parent.DueDate : userToday);
+        var childDueDate = request.DueDate ?? (parent.NextDueDate > userToday ? parent.NextDueDate : userToday);
         var opts = request.Options ?? new HabitCommandOptions();
 
         var frequencyUnit = request.FrequencyUnit;

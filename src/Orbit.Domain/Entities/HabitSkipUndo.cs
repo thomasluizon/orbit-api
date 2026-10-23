@@ -26,7 +26,7 @@ public class HabitSkipUndo : Entity
             Id = skipId,
             HabitId = habit.Id,
             UserId = habit.UserId,
-            PreviousDueDate = habit.DueDate,
+            PreviousDueDate = habit.NextDueDate,
             PreviousScheduledStartDate = habit.ScheduledStartDate,
             PreviousIsCompleted = habit.IsCompleted
         });
