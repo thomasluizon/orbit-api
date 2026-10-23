@@ -11,6 +11,29 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class OAuthDistributedStateTests
 {
     [Fact]
+    public void Consent_UsedTicketIsDistinguishedAcrossInstances_UntilExpiry()
+    {
+        using var database = new SqliteOrbitDbContextFactory();
+        using var firstDb = database.CreateContext();
+        using var secondDb = database.CreateContext();
+        var clock = new RefreshClock();
+        var first = new OAuthAuthorizationStore(new OAuthStateStore(firstDb, clock), clock);
+        var second = new OAuthAuthorizationStore(new OAuthStateStore(secondDb, clock), clock);
+        var entry = new ConsentEntry(Guid.NewGuid(), "challenge", "https://claude.ai/callback", "client", "state", null, "pt-BR");
+        var ticket = first.CreatePendingConsent(entry);
+
+        second.ReadPendingConsent(ticket).Should().Be(new ConsentTicket(entry, false));
+        second.ConsumePendingConsent(ticket).Should().Be(new ConsentTicket(entry, false));
+        first.ConsumePendingConsent(ticket).Should().Be(new ConsentTicket(entry, true));
+        first.ReadPendingConsent(ticket).Should().Be(new ConsentTicket(entry, true));
+        first.ReadPendingConsent("unknown").Should().BeNull();
+        first.ConsumePendingConsent("unknown").Should().BeNull();
+        clock.Advance(TimeSpan.FromMinutes(5));
+        first.ReadPendingConsent(ticket).Should().BeNull();
+        second.ConsumePendingConsent(ticket).Should().BeNull();
+    }
+
+    [Fact]
     public void ConsumedRefreshLineage_RemainsHashedAndReadableAcrossInstances_UntilFamilyExpiry()
     {
         using var database = new SqliteOrbitDbContextFactory(

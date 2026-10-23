@@ -13,6 +13,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -137,7 +138,75 @@ public class OAuthControllerTests : IDisposable
         var entry = _authStore.ExchangeCode(code, verifier, "https://claude.ai/callback");
         entry!.Scopes.Should().Equal(AgentScopes.ReadHabits);
         entry.IsReadOnly.Should().BeTrue();
-        _controller.GrantConsent(ticket, "requested").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(400);
+        _controller.GrantConsent(ticket, "requested").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
+    }
+
+    [Theory]
+    [InlineData("en", "Access allowed", "Return to Claude or your MCP client to continue.")]
+    [InlineData("pt-BR", "Acesso permitido", "Volte para o Claude ou seu cliente MCP para continuar.")]
+    public void Consent_RepeatSubmitAndGet_ShowCompletionWithoutCreatingAnotherCode(string language, string title, string body)
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge,
+            "https://claude.ai/callback", "client", "state", null, language));
+        _controller.HttpContext.Request.QueryString = new QueryString(language == "en" ? "?lang=pt-BR" : "?lang=en");
+
+        var grant = _controller.GrantConsent(ticket, "requested").Should().BeOfType<RedirectResult>().Subject;
+        var code = ExtractQueryParam(grant.Url, "code");
+        _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(1);
+
+        foreach (var result in new[] { _controller.GrantConsent(ticket, "read_only"), _controller.Consent(ticket) })
+        {
+            var page = result.Should().BeOfType<ContentResult>().Subject;
+            page.StatusCode.Should().Be(200);
+            page.ContentType.Should().Be("text/html");
+            page.Content.Should().Contain($"<html lang=\"{language}\">").And.Contain(title).And.Contain(body)
+                .And.NotContain("<form").And.NotContain("code=").And.NotContain(code);
+        }
+
+        _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(1);
+        _authStore.ExchangeCode(code, verifier, "https://claude.ai/callback").Should().NotBeNull();
+        _controller.GrantConsent(ticket, "requested").Should().BeOfType<ContentResult>().Which.StatusCode.Should().Be(200);
+        _oauthDb.Context.OAuthStates.AsNoTracking().Count(state => state.Kind == "code").Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Consent_UnknownOrExpiredTicket_KeepsInvalidRequestPage(bool expired, bool consumed)
+    {
+        var ticket = expired
+            ? _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", "https://claude.ai/callback",
+                "client", "state", null, "en"))
+            : "unknown";
+        if (expired)
+        {
+            if (consumed)
+                _controller.GrantConsent(ticket, "requested").Should().BeOfType<RedirectResult>();
+            _timeProvider.Advance(TimeSpan.FromMinutes(5));
+        }
+
+        foreach (var result in new[] { _controller.Consent(ticket), _controller.GrantConsent(ticket, "requested") })
+        {
+            var page = result.Should().BeOfType<ContentResult>().Subject;
+            page.StatusCode.Should().Be(400);
+            page.Content.Should().Contain("This authorization request is invalid or expired.");
+        }
+    }
+
+    [Fact]
+    public void Consent_FormGuardsPendingSubmissions_WithoutDisablingTheSubmitter()
+    {
+        var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, "challenge", "https://claude.ai/callback",
+            "client", "state", null, "en"));
+        var page = _controller.Consent(ticket).Should().BeOfType<ContentResult>().Subject;
+
+        page.Content.Should().Contain("id=\"consent-form\"").And.Contain("<script>")
+            .And.Contain("addEventListener('submit'").And.Contain("event.preventDefault()")
+            .And.Contain("'aria-busy', 'true'").And.Contain("'aria-disabled', 'true'")
+            .And.Contain("name=\"access\" value=\"read_only\"").And.Contain("name=\"access\" value=\"requested\"")
+            .And.NotContain(".disabled = true");
     }
 
     [Theory]

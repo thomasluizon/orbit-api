@@ -437,10 +437,12 @@ public partial class OAuthController(
     [HttpGet("/oauth/consent")]
     public IActionResult Consent([FromQuery] string ticket)
     {
-        var entry = authStore.ReadPendingConsent(ticket);
-        if (entry is null)
+        var consent = authStore.ReadPendingConsent(ticket);
+        if (consent is null)
             return InvalidGoogleState();
-        return Content(OAuthConsentPage.Render(ticket, entry), "text/html");
+        return consent.IsConsumed
+            ? CompletedConsent(consent.Entry.Language)
+            : Content(OAuthConsentPage.Render(ticket, consent.Entry), "text/html");
     }
 
     [HttpPost("/oauth/consent")]
@@ -449,9 +451,12 @@ public partial class OAuthController(
     {
         if (access is not ("read_only" or "requested"))
             return BadRequest(new { error = "invalid_request" });
-        var entry = authStore.ConsumePendingConsent(ticket);
-        if (entry is null || !IsRedirectUriAllowed(entry.RedirectUri))
+        var consent = authStore.ConsumePendingConsent(ticket);
+        if (consent is null || !IsRedirectUriAllowed(consent.Entry.RedirectUri))
             return InvalidGoogleState();
+        if (consent.IsConsumed)
+            return CompletedConsent(consent.Entry.Language);
+        var entry = consent.Entry;
         var readOnly = access == "read_only";
         var scopes = entry.Scopes ?? AgentScopes.ClaudeDefaultScopes;
         if (readOnly)
@@ -461,6 +466,13 @@ public partial class OAuthController(
         var separator = entry.RedirectUri.Contains('?') ? "&" : "?";
         return Redirect($"{entry.RedirectUri}{separator}code={Uri.EscapeDataString(code)}&state={Uri.EscapeDataString(entry.State)}");
     }
+
+    private static ContentResult CompletedConsent(string language) => new()
+    {
+        Content = OAuthConsentPage.RenderCompleted(language),
+        ContentType = "text/html",
+        StatusCode = StatusCodes.Status200OK
+    };
 
     private async Task<IActionResult> RefreshAsync(string? refreshToken, CancellationToken ct)
     {

@@ -31,7 +31,8 @@ public class OAuthPostgresRetryTests
             store.Take("consent", "consent", nowAtUtc).Should().Be("consent");
             store.Take("consent", "consent", nowAtUtc).Should().BeNull();
             db.ChangeTracker.Entries().Should().BeEmpty();
-            db.OAuthStates.AsNoTracking().Should().HaveCount(2);
+            db.OAuthStates.AsNoTracking().Should().HaveCount(3);
+            db.OAuthStates.AsNoTracking().Single(state => state.Kind == "consent").ConsumedAtUtc.Should().Be(nowAtUtc);
             return Task.CompletedTask;
         });
 
@@ -49,10 +50,10 @@ public class OAuthPostgresRetryTests
             var emailConsent = new ConsentEntry(Guid.NewGuid(), "challenge", "https://claude.ai/callback",
                 "client", "client-state", null, "en", ["read_habits"]);
             var ticket = store.CreatePendingConsent(emailConsent);
-            store.ReadPendingConsent(ticket).Should().BeEquivalentTo(emailConsent);
-            store.ConsumePendingConsent(ticket).Should().BeEquivalentTo(emailConsent);
-            store.ConsumePendingConsent(ticket).Should().BeNull();
-            db.OAuthStates.Should().BeEmpty();
+            store.ReadPendingConsent(ticket).Should().BeEquivalentTo(new ConsentTicket(emailConsent, false));
+            store.ConsumePendingConsent(ticket).Should().BeEquivalentTo(new ConsentTicket(emailConsent, false));
+            store.ConsumePendingConsent(ticket).Should().BeEquivalentTo(new ConsentTicket(emailConsent, true));
+            db.OAuthStates.AsNoTracking().Should().ContainSingle().Which.ConsumedAtUtc.Should().NotBeNull();
             return Task.CompletedTask;
         });
 
