@@ -144,7 +144,10 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(turn => new { turn.TurnId, turn.Role }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
             if (nullableEncConverter is not null)
+            {
                 entity.Property(turn => turn.Content).HasConversion(nullableEncConverter);
+                entity.Property(turn => turn.ResponseJson).HasConversion(nullableEncConverter);
+            }
             if (encConverter is not null)
                 entity.Property(turn => turn.ToolCallsJson).HasConversion(encConverter);
         });
@@ -664,6 +667,7 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
             entity.HasData(
+                new { Key = "astra_block_first", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Compose negotiated Astra answers from successful typed results", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "astra_eval_trace", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Opt-in tool-call traces for Astra evaluation accounts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "redesign", Enabled = false, PlanRequirement = (string?)null, Description = (string?)"Serve the redesigned web and Android builds to this account", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

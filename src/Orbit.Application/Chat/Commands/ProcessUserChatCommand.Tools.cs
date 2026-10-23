@@ -220,6 +220,7 @@ public partial class ProcessUserChatCommandHandler
         bool isCorrection)
     {
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
+        executionResults.CompositionRounds.Add(orderedCalls.Where(call => outcomesByCallId.ContainsKey(call.Id)).ToArray());
         if (executionResults.EvalTrace is { } evalTrace)
         {
             foreach (var call in response.ToolCalls!)

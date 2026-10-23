@@ -168,7 +168,7 @@ public class ExportUserDataQueryHandler(
             conversations.OrderBy(turn => turn.CreatedAtUtc).ThenBy(turn => turn.Role == "user" ? 0 : 1)
                 .Select(turn => new ExportedConversationTurn(turn.TurnId, turn.Role, turn.CreatedAtUtc,
                     turn.Model, turn.Content, System.Text.Json.JsonSerializer.Deserialize<
-                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [])).ToArray());
+                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [], turn.ResponseJson)).ToArray());
 
         return Result.Success(export);
     }

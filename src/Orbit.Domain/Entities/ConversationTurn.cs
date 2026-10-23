@@ -14,11 +14,12 @@ public sealed class ConversationTurn : Entity
     public string? Model { get; private set; }
     public string? Content { get; private set; }
     public string ToolCallsJson { get; private set; } = "[]";
+    public string? ResponseJson { get; private set; }
 
     private ConversationTurn() { }
 
     public static Result<ConversationTurn> Create(Guid userId, Guid turnId, string role,
-        DateTime createdAtUtc, string? model, string? content, string toolCallsJson)
+        DateTime createdAtUtc, string? model, string? content, string toolCallsJson, string? responseJson = null)
     {
         if (userId == Guid.Empty || turnId == Guid.Empty)
             return Result.Failure<ConversationTurn>("A user and turn identifier are required.");
@@ -27,7 +28,8 @@ public sealed class ConversationTurn : Entity
         if (createdAtUtc.Kind != DateTimeKind.Utc || createdAtUtc == default)
             return Result.Failure<ConversationTurn>("A UTC timestamp is required.");
         if (model is { Length: > 200 } || content is { Length: > MaxTextLength }
-            || string.IsNullOrWhiteSpace(toolCallsJson) || toolCallsJson.Length > MaxTextLength)
+            || string.IsNullOrWhiteSpace(toolCallsJson) || toolCallsJson.Length > MaxTextLength
+            || responseJson is { Length: > MaxTextLength })
             return Result.Failure<ConversationTurn>("Conversation text exceeds the recording limits.");
         if (role == "user" && string.IsNullOrWhiteSpace(content))
             return Result.Failure<ConversationTurn>("User content is required.");
@@ -36,6 +38,12 @@ public sealed class ConversationTurn : Entity
             using var document = JsonDocument.Parse(toolCallsJson);
             if (document.RootElement.ValueKind != JsonValueKind.Array)
                 return Result.Failure<ConversationTurn>("Tool calls must be a JSON array.");
+            if (responseJson is not null)
+            {
+                using var response = JsonDocument.Parse(responseJson);
+                if (role != "assistant" || response.RootElement.ValueKind != JsonValueKind.Object)
+                    return Result.Failure<ConversationTurn>("Only assistant turns can store a response object.");
+            }
         }
         catch (JsonException)
         {
@@ -49,7 +57,8 @@ public sealed class ConversationTurn : Entity
             CreatedAtUtc = createdAtUtc,
             Model = model,
             Content = content,
-            ToolCallsJson = toolCallsJson
+            ToolCallsJson = toolCallsJson,
+            ResponseJson = responseJson
         });
     }
 }

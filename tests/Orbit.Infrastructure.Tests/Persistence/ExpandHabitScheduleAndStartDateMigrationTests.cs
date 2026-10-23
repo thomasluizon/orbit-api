@@ -44,10 +44,10 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         differences.OfType<InsertDataOperation>().Should().HaveCount(2);
         AssertAiSecurityAdditions(differences);
-        ConversationMigrationTests.AssertConversationExpansion(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
         AssertEvalTraceSeed(differences);
         differences.OfType<InsertDataOperation>().Single(seed => seed.Table == "AppFeatureFlags")
-            .Values.GetLength(0).Should().Be(3);
+            .Values.GetLength(0).Should().Be(4);
         var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Name == "ArgumentSchemaVersion");
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.IsNullable.Should().BeFalse();
@@ -66,8 +66,8 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
-        differences.Should().HaveCount(8);
-        differences.OfType<AddColumnOperation>().Should().HaveCount(6);
+        differences.Should().HaveCount(10);
+        differences.OfType<AddColumnOperation>().Should().HaveCount(7);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Should()

@@ -51,7 +51,7 @@ public class DailyAiDollarBudgetMigrationTests
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);
-        ConversationMigrationTests.AssertConversationExpansion(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
         var entity = current.FindEntityType(typeof(AiBudgetCall))!;
         entity.FindProperty("ChargedTokens").Should().NotBeNull();
         entity.FindProperty(nameof(AiBudgetCall.ChargedMicroDollars)).Should().NotBeNull();

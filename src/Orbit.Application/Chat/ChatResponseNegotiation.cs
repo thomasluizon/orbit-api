@@ -1,0 +1,97 @@
+using System.Text.Json;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
+using Orbit.Application.Common;
+using Orbit.Domain.Models;
+
+namespace Orbit.Application.Chat;
+
+internal static class ChatResponseNegotiation
+{
+    public static ChatResponse ForClient(ChatResponse response, AgentClientContext? client, IReadOnlyList<string> flags)
+    {
+        if (response.Parts is null) return response;
+        var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AstraPartsDisabled);
+        var negotiated = new List<ChatResponsePart>();
+        var downgraded = false;
+        foreach (var part in response.Parts)
+        {
+            if (part is not ChatBlockPart block)
+            {
+                negotiated.Add(part);
+                continue;
+            }
+            var value = Decode(block);
+            if (supportsParts && Supported(block.Kind, value, client, flags))
+                negotiated.Add(block);
+            else
+            {
+                downgraded = true;
+                negotiated.Add(new ChatTextPart(Fallback(value)));
+            }
+        }
+        var text = string.Join("\n\n", negotiated.OfType<ChatTextPart>().Select(part => part.Text));
+        var followUps = client?.SupportsFollowUps == true && !flags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled);
+        return response with
+        {
+            Parts = supportsParts ? negotiated : null,
+            AiMessage = downgraded ? text : response.AiMessage,
+            FollowUps = followUps ? response.FollowUps : null,
+            FollowUpContext = followUps && client?.SupportsFollowUpContext == true ? response.FollowUpContext : null
+        };
+    }
+
+    private static bool Supported(string kind, object? value, AgentClientContext? client, IReadOnlyList<string> flags) =>
+        value is not null && client?.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
+        && ProcessUserChatCommandHandler.ReadSubtypeEnabled(value, client)
+        && (kind switch
+        {
+            "choice" or "pickList" => !flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled),
+            "habitRanking" => !flags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled),
+            _ => ProcessUserChatCommandHandler.ReadKindEnabled(kind, client, flags)
+        });
+
+    private static object? Decode(ChatBlockPart part)
+    {
+        if (part.Block is not JsonElement element) return part.Block;
+        Type? type = part.Kind switch
+        {
+            "habitList" => typeof(HabitListCard),
+            "goalList" => typeof(GoalListCard),
+            "metrics" => typeof(MetricsCard),
+            "daySummary" => typeof(DaySummaryCard),
+            "streak" => typeof(StreakCard),
+            "calendar" => typeof(CalendarCard),
+            "recordList" => typeof(RecordListCard),
+            "accountRows" => typeof(AccountRowsCard),
+            "periodInsight" => typeof(PeriodInsightCard),
+            "periodTotal" => typeof(PeriodTotalCard),
+            "periodComparison" => typeof(PeriodComparisonCard),
+            "habitRanking" => typeof(HabitRankingCard),
+            "choice" => typeof(AstraChoiceBlock),
+            "pickList" => typeof(AstraPickListBlock),
+            _ => null
+        };
+        try
+        {
+            return type is null ? null : element.Deserialize(type, ChatStreamEvent.SerializerOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string Fallback(object? value)
+    {
+        var text = value switch
+        {
+            HabitRankingCard card => HabitRankingCardBuilder.Readable(card.Ranking, null),
+            AstraChoiceBlock block => block.Question,
+            AstraPickListBlock block => block.Title,
+            null => null,
+            _ => ProcessUserChatCommandHandler.ReadFallback(value)
+        };
+        return string.IsNullOrWhiteSpace(text) ? "This response is unavailable on this client." : text;
+    }
+}

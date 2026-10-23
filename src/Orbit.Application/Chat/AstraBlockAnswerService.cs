@@ -121,7 +121,7 @@ public sealed class AstraBlockAnswerService(
                 return null;
             if (block.ResponseJson is null)
                 await store.CompleteAnswerAsync(block.Id, request.UserId, claim, block.CommittedResponseJson, token);
-            return await ReadReplayAsync(await store.GetAsync(block.Id, request.UserId, token), request.BlockAnswer, request.UserId, token);
+            return await ReadReplayAsync(await store.GetAsync(block.Id, request.UserId, token), request.BlockAnswer, request, token);
         }, CancellationToken.None);
     }
 
@@ -169,7 +169,7 @@ public sealed class AstraBlockAnswerService(
                         await ReleaseClaimAsync(block.Id, request.UserId, claim, block.ReservedAllowanceDate, token);
                     block = await store.GetAsync(answer.BlockId, request.UserId, token);
                 }
-                if (await ReadReplayAsync(block, answer, request.UserId, token) is { } replay)
+                if (await ReadReplayAsync(block, answer, request, token) is { } replay)
                     return Result.Success(new PreparedAstraBlockAnswer(string.Empty, replay, IsReplay: true));
                 var stateError = CheckState(block);
                 if (stateError is not null)
@@ -243,12 +243,15 @@ public sealed class AstraBlockAnswerService(
             Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
     }
 
-    private async Task<ChatResponse?> ReadReplayAsync(IssuedAstraBlock? block, AstraBlockAnswer answer, Guid userId, CancellationToken ct)
+    private async Task<ChatResponse?> ReadReplayAsync(IssuedAstraBlock? block, AstraBlockAnswer answer, ProcessUserChatCommand request, CancellationToken ct)
     {
         if (block is not { AnsweredAtUtc: not null, ResponseJson: not null } || !block.MatchesAnswer(answer))
             return null;
         var stored = JsonSerializer.Deserialize<ChatResponse>(block.ResponseJson, ChatStreamEvent.SerializerOptions)
             ?? throw new InvalidOperationException("Stored block has no response.");
+        var userId = request.UserId;
+        var flags = await featureFlags.GetEnabledKeysForUserAsync(userId, ct);
+        stored = ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags);
         if (stored.PendingOperations is not { Count: > 0 } pending)
             return stored;
         var current = new List<PendingAgentOperation>();

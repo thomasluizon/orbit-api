@@ -15017,6 +15017,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsFollowUpContext": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -16444,6 +16450,40 @@
           }
         }
       },
+      "ChatFollowUp": {
+        "required": [
+          "label",
+          "question"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "context": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "queryId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "ChatResponse": {
         "required": [
           "aiMessage",
@@ -16621,6 +16661,15 @@
                 "$ref": "#/components/schemas/ChatEvalTrace"
               }
             ]
+          },
+          "followUpContext": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ChatFollowUp"
+            }
           }
         }
       },

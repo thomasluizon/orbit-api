@@ -29,7 +29,7 @@ public class FeatureFlagAccountsMigrationTests
         differences.Should().HaveCount(51);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
-        ConversationMigrationTests.AssertConversationExpansion(differences);
+        ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
         var schemaVersion = differences.OfType<AddColumnOperation>().Should()
             .ContainSingle(column => column.Table == "PendingAgentOperations" && column.Name == "ArgumentSchemaVersion").Subject;
         schemaVersion.ClrType.Should().Be(typeof(int));
@@ -127,7 +127,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261020033359_RestoreRequiredProactiveAstraPreference",
             "20261020041243_SeparateBonusProEntitlement",
             "20261020134743_AllowExplicitHabitStartDate");
-        context.Database.GetMigrations().Last().Should().EndWith("_AllowExplicitHabitStartDate");
+        context.Database.GetMigrations().Last().Should().EndWith("_PersistComposedChatResponses");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

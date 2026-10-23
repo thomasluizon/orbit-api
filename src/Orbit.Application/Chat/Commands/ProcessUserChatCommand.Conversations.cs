@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Common;
+using Orbit.Application.Chat.Models;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -24,7 +25,8 @@ public partial class ProcessUserChatCommandHandler
         {
             conversationRecorder.TryRecord(new ConversationTurnCapture(request.UserId, Guid.NewGuid(),
                 recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
-                JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel));
+                JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
+                response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null));
         }
         catch (Exception)
         {

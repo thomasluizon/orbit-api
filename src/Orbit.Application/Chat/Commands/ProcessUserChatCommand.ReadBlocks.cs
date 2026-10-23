@@ -161,7 +161,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client);
 
-    private static string ReadFallback(object block) => block switch
+    internal static string ReadFallback(object block) => block switch
     {
         HabitListCard card => string.Join("\n", new[] { card.Date?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? card.Scope }
             .Concat(card.Items.Count == 0 ? ["0"] : card.Items.Select(item => $"{item.Title} ({item.Status})"))),
@@ -174,6 +174,15 @@ public partial class ProcessUserChatCommandHandler
         MetricsCard { PeriodMetrics: { } period } card => $"{card.HabitTitle}\npositiveLogRecords: {period.PositiveLogRecords} records ({period.Window.From:yyyy-MM-dd} to {period.Window.To:yyyy-MM-dd})"
             + (card.Period == "habit" ? $"\nLifetime completions: {card.TotalCompletions}" : string.Empty),
         MetricsCard card => $"{card.Period}: {card.TotalCompletions} records",
+        GoalListCard card => card.Items.Count == 0 ? "0 goals" : string.Join("\n", card.Items.Select(item => $"{item.Title}: {item.Current}/{item.Target} {item.Unit}")),
+        DaySummaryCard card => $"{card.Date:yyyy-MM-dd}: {card.Done}/{card.Due}",
+        StreakCard card => $"Streak: {card.CurrentStreak}; level: {card.Level}; XP: {card.TotalXp}",
+        CalendarCard card => string.Join("\n", new[] { $"{card.Events.Count} events; sync: {card.Sync?.Status}" }
+            .Concat(card.Events.Select(item => $"{item.Start}: {item.Title}"))),
+        PeriodInsightCard card => $"{card.DateFrom:yyyy-MM-dd} to {card.DateTo:yyyy-MM-dd}: {card.TotalCompletions}/{card.TotalScheduled}; {card.CompletionRate}%",
+        RecordListCard card => string.Join("\n", new[] { $"{card.Kind}: {card.TotalCount}" }
+            .Concat(card.Items.Select(item => $"{item.Title}: {item.Detail ?? item.State}"))),
+        AccountRowsCard card => string.Join("\n", card.Rows.Select(row => $"{row.Key}: {row.Value}")),
         _ => string.Empty
     };
 
