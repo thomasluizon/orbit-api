@@ -16,7 +16,8 @@ internal static class BrandAssets
             ["/favicon.ico"] = Read("favicon.ico", "image/x-icon"),
             ["/favicon.svg"] = Read("favicon.svg", "image/svg+xml"),
             ["/apple-touch-icon.png"] = Read("apple-touch-icon.png", "image/png"),
-            ["/orbit-icon-512.png"] = Read("orbit-icon-512.png", "image/png")
+            ["/orbit-icon-512.png"] = Read("orbit-icon-512.png", "image/png"),
+            ["/bimi/orbit.svg"] = Read("orbit-bimi.svg", "image/svg+xml")
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     internal static string SvgStyleHash { get; } = ComputeSvgStyleHash();
