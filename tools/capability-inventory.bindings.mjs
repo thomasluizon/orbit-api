@@ -121,7 +121,9 @@ const formats = {
 }
 const summaryChains = (source, member, receiver, common, fields = Object.keys(formats)) => Object.fromEntries(fields.map(field => [field, { steps: [
   ...common,
-  step(source, member, `${field.split(".")[0]} = ${receiver}.${field.split(".")[0]}`),
+  step(source, member, source === summary && field === "IsFlexible"
+    ? "IsFlexible = habit.Schedule == HabitSchedule.Flexible"
+    : `${field.split(".")[0]} = ${receiver}.${field.split(".")[0]}`),
   ...formats[field],
   format('return string.Join(" | ", fields)'),
 ] }]))
@@ -145,7 +147,11 @@ const calendarSelection = { status: "partial", steps: [
 ] }
 
 export const readChains = {
-  "chat:query_habits": { ...querySummary, Goals: { steps: [
+  "chat:query_habits": { ...querySummary, IsGeneral: { steps: [
+    step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "BuildLabels(habit,"),
+    step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{labelStr}"),
+    step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildLabels", 'if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL")'),
+  ] }, Goals: { steps: [
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "BuildLabels(habit,"),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{labelStr}"),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildLabels", 'habit.Goals.Select(g => $"{g.Title} ({g.Id})")'),

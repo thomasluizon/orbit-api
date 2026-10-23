@@ -5,6 +5,7 @@ using FluentValidation.Results;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -30,10 +31,12 @@ public sealed partial class HabitCorrectionProposalValidator : AbstractValidator
             }
             if (ScheduleEdit().IsMatch(proposal.Message))
                 return;
+            var isFlexible = current.Schedule == HabitSchedule.Flexible;
+            var isGeneral = current.Schedule == HabitSchedule.General;
             var end = update.ClearEndDate == true ? null : update.EndDate ?? current.EndDate;
             if (update.FrequencyUnit != current.FrequencyUnit || update.FrequencyQuantity != current.FrequencyQuantity
-                || update.IntervalWeeks != current.IntervalWeeks || (update.IsFlexible ?? current.IsFlexible) != current.IsFlexible
-                || (update.IsGeneral ?? current.IsGeneral) != current.IsGeneral || end != current.EndDate
+                || update.IntervalWeeks != current.IntervalWeeks || (update.IsFlexible ?? isFlexible) != isFlexible
+                || (update.IsGeneral ?? isGeneral) != isGeneral || end != current.EndDate
                 || !current.Days.ToHashSet().SetEquals(update.Days ?? []))
                 context.AddFailure(new ValidationFailure("frequency_unit", HabitModelInstructions.Correction)
                 { ErrorCode = "CORRECTION_PRESERVES_SCHEDULE" });

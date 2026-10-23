@@ -378,12 +378,12 @@ public sealed class PendingOperationChangePreviewer(
         ["end_date"] = AgentArgumentPreview.Format(habit.EndDate),
         ["due_time"] = AgentArgumentPreview.Format(habit.DueTime),
         [DueEndTimeField] = AgentArgumentPreview.Format(habit.DueEndTime),
-        [IsGeneralField] = AgentArgumentPreview.Format(habit.IsGeneral),
+        [IsGeneralField] = AgentArgumentPreview.Format(habit.Schedule == HabitSchedule.General),
         [SlipAlertEnabledField] = AgentArgumentPreview.Format(habit.SlipAlertEnabled),
         [RelativeRemindersField] = string.Join(", ", habit.RelativeReminders.Select(HabitFieldSummary.FormatRelative)),
         [ScheduledRemindersField] = string.Join(", ", habit.GetScheduledRemindersForLegacyClients().Select(FormatScheduledReminder)),
         [IsBadHabitField] = AgentArgumentPreview.Format(habit.IsBadHabit),
-        [IsFlexibleField] = AgentArgumentPreview.Format(habit.IsFlexible),
+        [IsFlexibleField] = AgentArgumentPreview.Format(habit.Schedule == HabitSchedule.Flexible),
         [ReminderEnabledField] = AgentArgumentPreview.Format(habit.ReminderEnabled),
         [ReminderTimesField] = string.Join(", ", habit.ReminderTimes),
         [ChecklistItemsField] = string.Join(", ", habit.ChecklistItems.Select(FormatChecklistItem))
@@ -458,7 +458,7 @@ public sealed class PendingOperationChangePreviewer(
             field == "emoji" ? habit.Emoji : null, value,
             field == "emoji" ? "emoji" : field == "date" ? "date" : "action",
             field == "delete" ? null : JsonSerializer.SerializeToElement(value),
-            field != "delete" && !(operationId == "bulk_skip_habits" && habit.FrequencyUnit is null));
+            field != "delete" && !(operationId == "bulk_skip_habits" && habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General));
     }
 
     private static void AddProposedFields(List<PendingOperationChange> fields, Habit habit,
@@ -659,14 +659,14 @@ public sealed class PendingOperationChangePreviewer(
             habit.DueDate,
             habit.DueTime,
             habit.DueEndTime,
-            habit.IsGeneral,
+            IsGeneral = habit.Schedule == HabitSchedule.General,
             habit.SlipAlertEnabled,
             habit.EndDate,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
             habit.IntervalWeeks,
             habit.IsBadHabit,
-            habit.IsFlexible,
+            IsFlexible = habit.Schedule == HabitSchedule.Flexible,
             habit.ReminderEnabled,
             habit.ReminderTimes,
             habit.Days,
@@ -704,13 +704,13 @@ public sealed class PendingOperationChangePreviewer(
         Add("end_date", habit.EndDate, effective.EndDate, "date");
         Add("due_time", habit.DueTime, effective.DueTime, "time");
         Add(DueEndTimeField, habit.DueEndTime, effective.DueEndTime, "time");
-        Add(IsGeneralField, habit.IsGeneral, effective.IsGeneral, JsonSchemaTypes.Boolean);
+        Add(IsGeneralField, habit.Schedule == HabitSchedule.General, effective.Schedule == HabitSchedule.General, JsonSchemaTypes.Boolean);
         Add(SlipAlertEnabledField, habit.SlipAlertEnabled, effective.SlipAlertEnabled, JsonSchemaTypes.Boolean);
         AddList(RelativeRemindersField, habit.RelativeReminders, effective.RelativeReminders,
             HabitFieldSummary.FormatRelative,
             JsonSerializer.SerializeToElement(effective.RelativeReminders.Select(RelativeReminderValue)));
         Add(IsBadHabitField, habit.IsBadHabit, effective.IsBadHabit, JsonSchemaTypes.Boolean);
-        Add(IsFlexibleField, habit.IsFlexible, effective.IsFlexible, JsonSchemaTypes.Boolean);
+        Add(IsFlexibleField, habit.Schedule == HabitSchedule.Flexible, effective.Schedule == HabitSchedule.Flexible, JsonSchemaTypes.Boolean);
         Add("is_completed", habit.IsCompleted, effective.IsCompleted, JsonSchemaTypes.Boolean);
         Add(ReminderEnabledField, habit.ReminderEnabled, effective.ReminderEnabled, JsonSchemaTypes.Boolean);
         AddList(ReminderTimesField, habit.ReminderTimes, effective.ReminderTimes,
@@ -757,8 +757,8 @@ public sealed class PendingOperationChangePreviewer(
                 or "interval_weeks" or "due_date" or "due_time" or IsBadHabitField
                 or IsFlexibleField or ReminderEnabledField or ChecklistItemsField
                 or DueEndTimeField or IsGeneralField or SlipAlertEnabledField or RelativeRemindersField => true,
-            "days" => !effective.IsFlexible,
-            "end_date" => !habit.IsGeneral,
+            "days" => effective.Schedule != HabitSchedule.Flexible,
+            "end_date" => habit.Schedule != HabitSchedule.General,
             ReminderTimesField => effective.DueTime is null
                 || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },
             ScheduledRemindersField => effective.DueTime is null,

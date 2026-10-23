@@ -20,9 +20,13 @@ public class RemainingHabitScheduleReaderTests
 
     [Theory]
     [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
     [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
     public void FieldSummary_KeepsFlexibleLabel(HabitSchedule schedule, bool divergentFlags)
     {
         var summary = HabitFieldSummary.From(Create(schedule, divergentFlags));
@@ -33,9 +37,13 @@ public class RemainingHabitScheduleReaderTests
 
     [Theory]
     [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
     [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
     public void CardsAndTodayFacts_KeepCompletionAfterCursorAdvances(HabitSchedule schedule, bool divergentFlags)
     {
         var habit = Create(schedule, divergentFlags);
@@ -59,9 +67,13 @@ public class RemainingHabitScheduleReaderTests
 
     [Theory]
     [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
     [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
     public void Correction_KeepsScheduleAndRejectsUnrequestedTypeChange(HabitSchedule schedule, bool divergentFlags)
     {
         var habit = Create(schedule, divergentFlags);
@@ -80,9 +92,13 @@ public class RemainingHabitScheduleReaderTests
 
     [Theory]
     [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
     [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
     public void PerfectAchievements_KeepGeneralAndCompletedTaskExclusions(HabitSchedule schedule, bool divergentFlags)
     {
         var habit = Create(schedule, divergentFlags);
@@ -101,9 +117,13 @@ public class RemainingHabitScheduleReaderTests
 
     [Theory]
     [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
     [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
     public async Task QueryTool_KeepsGeneralFilterAndTypedStatus(HabitSchedule schedule, bool divergentFlags)
     {
         var habit = Create(schedule, divergentFlags);

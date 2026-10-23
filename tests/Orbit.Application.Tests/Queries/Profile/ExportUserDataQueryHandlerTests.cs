@@ -80,9 +80,13 @@ public class ExportUserDataQueryHandlerTests
 
     [Theory]
     [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
     [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
     public async Task Export_KeepsFourSchedulePayloads(HabitSchedule schedule, bool divergentFlags)
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",

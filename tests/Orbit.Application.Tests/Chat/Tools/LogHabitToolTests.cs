@@ -106,12 +106,16 @@ public class LogHabitToolTests
         result.Error.Should().NotBeNullOrEmpty();
     }
 
-    [Fact]
-    public async Task FlexibleHabit_RejectsLogAfterWindowTarget()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FlexibleHabit_RejectsLogAfterWindowTarget(bool divergentFlags)
     {
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today, IsFlexible: true)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
+        if (divergentFlags)
+            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, false);
         SetupHabitFound(habit);
         _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
