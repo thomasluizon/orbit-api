@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Orbit.Application\Orbit.Application.csproj" />
@@ -38,6 +38,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Email\Templates\**" />
+    <EmbeddedResource Include="Certificates\AppleRootCA-G3.cer" />
   </ItemGroup>
 
 </Project>

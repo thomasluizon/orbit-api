@@ -38,6 +38,25 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
+    public async Task AppStoreVerify_DispatchesAuthenticatedUserAndReturnsCompatibleResponse()
+    {
+        _mediator.Send(Arg.Any<VerifyAppStorePurchaseCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AppStoreVerifyResponse(true, null, "monthly", DateTime.UtcNow.AddDays(30), "app_store")));
+        var result = await _controller.VerifyAppStorePurchase(new("signed"), default);
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received().Send(Arg.Is<VerifyAppStorePurchaseCommand>(command => command.UserId == UserId && command.SignedTransaction == "signed"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AppStoreNotification_InvalidSignature_ReturnsUnauthorized()
+    {
+        _mediator.Send(Arg.Any<HandleAppStoreNotificationCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.InvalidSession));
+        var result = await _controller.HandleAppStoreNotification(new("forged"), default);
+        ((ObjectResult)result).StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
     public void ClaimAdReward_RouteRemainsAvailableAndDeprecated()
     {
         var routes = typeof(SubscriptionController).GetMethods()

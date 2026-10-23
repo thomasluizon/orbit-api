@@ -16,7 +16,8 @@ public record SubscriptionStatusResponse(
     string? SubscriptionInterval,
     string? Source,
     string? LapseReason = null,
-    DateTime? SubscriptionEndedAtUtc = null);
+    DateTime? SubscriptionEndedAtUtc = null,
+    string? BillingProvider = null);
 
 public record PlayVerifyResponse(
     bool HasProAccess,

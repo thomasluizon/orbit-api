@@ -125,7 +125,8 @@ public partial class User : Entity
     public bool HasActivePaidSubscription => SubscriptionPlan == UserPlan.Pro
         && SubscriptionExpiresAtUtc > _timeProvider.GetUtcNow().UtcDateTime
         && (SubscriptionSource == Enums.SubscriptionSource.Stripe && !string.IsNullOrWhiteSpace(StripeSubscriptionId)
-            || SubscriptionSource == Enums.SubscriptionSource.GooglePlay && !string.IsNullOrWhiteSpace(PlayPurchaseToken));
+            || SubscriptionSource == Enums.SubscriptionSource.GooglePlay && !string.IsNullOrWhiteSpace(PlayPurchaseToken)
+            || SubscriptionSource == Enums.SubscriptionSource.AppStore && !string.IsNullOrWhiteSpace(AppStoreOriginalTransactionId));
 
     private User() { }
 

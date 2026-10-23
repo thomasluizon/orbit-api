@@ -150,6 +150,10 @@ public static partial class ServiceCollectionExtensions
 
     private static void AddGooglePlayBilling(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
+        builder.Services.Configure<AppStoreSettings>(builder.Configuration.GetSection(AppStoreSettings.SectionName));
+        builder.Services.AddSingleton<AppStoreJwsVerifier>();
+        builder.Services.AddHttpClient<IAppStoreService, AppStoreService>(client => client.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         builder.Services.Configure<GooglePlaySettings>(
             builder.Configuration.GetSection(GooglePlaySettings.SectionName));
         builder.Services.AddSingleton(sp =>

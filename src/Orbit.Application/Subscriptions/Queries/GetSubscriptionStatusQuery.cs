@@ -33,6 +33,7 @@ public class GetSubscriptionStatusQueryHandler(
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
             user.SubscriptionSource.ToApiValue(),
             user.SubscriptionLapseReason.ToApiValue(),
-            user.SubscriptionEndedAtUtc));
+            user.SubscriptionEndedAtUtc,
+            user.SubscriptionSource.ToBillingProvider()));
     }
 }

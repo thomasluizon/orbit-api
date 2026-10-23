@@ -2180,6 +2180,31 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("ProactiveItems");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ProcessedAppStoreNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("NotificationUuid")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NotificationUuid")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedAppStoreNotifications");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.ProcessedPlayNotification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2576,6 +2601,17 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiSummaryEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("AppStoreEnvironment")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("AppStoreOriginalTransactionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("AppStoreStateSignedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("BonusProExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2833,6 +2869,10 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AppStoreOriginalTransactionId")
+                        .IsUnique()
+                        .HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
 
                     b.HasIndex("Email")
                         .IsUnique();

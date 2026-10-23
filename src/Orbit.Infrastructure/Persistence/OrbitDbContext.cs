@@ -67,6 +67,7 @@ public class OrbitDbContext : DbContext
     public DbSet<NotionConnection> NotionConnections => Set<NotionConnection>();
     public DbSet<NotionTask> NotionTasks => Set<NotionTask>();
     public DbSet<NotionOAuthState> NotionOAuthStates => Set<NotionOAuthState>();
+    public DbSet<ProcessedAppStoreNotification> ProcessedAppStoreNotifications => Set<ProcessedAppStoreNotification>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
@@ -128,6 +129,12 @@ public class OrbitDbContext : DbContext
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureProactiveEntities(modelBuilder);
+        modelBuilder.Entity<ProcessedAppStoreNotification>(entity =>
+        {
+            entity.HasKey(notification => notification.Id);
+            entity.HasIndex(notification => notification.NotificationUuid).IsUnique();
+            entity.Property(notification => notification.Environment).HasMaxLength(20).IsRequired();
+        });
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
@@ -859,6 +866,9 @@ public class OrbitDbContext : DbContext
 
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
+            entity.Property(u => u.AppStoreOriginalTransactionId).HasMaxLength(255);
+            entity.Property(u => u.AppStoreEnvironment).HasMaxLength(20);
+            entity.HasIndex(u => u.AppStoreOriginalTransactionId).IsUnique().HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
