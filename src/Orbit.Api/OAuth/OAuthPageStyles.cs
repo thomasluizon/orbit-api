@@ -216,7 +216,7 @@ h1 {
 }
 .btn-google { padding-inline: var(--s-3); gap: 10px; }
 .btn-google img { flex-shrink: 0; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--primary); color: var(--fg-on-primary); }
 .btn-ghost { background: transparent; color: var(--fg-1); box-shadow: inset 0 0 0 1.5px var(--hairline-strong); }
 .btn-sm {
@@ -236,11 +236,11 @@ h1 {
   transform: translateY(-50%);
 }
 @media (hover: hover) and (pointer: fine) {
-  .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
-  .btn-ghost:hover:not(:disabled) { background: var(--bg-card); }
+  .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--primary-hover); }
+  .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-card); }
 }
-.btn-primary:active:not(:disabled) { background: var(--primary-pressed); transform: scale(0.96); }
-.btn-ghost:active:not(:disabled) { transform: scale(0.96); }
+.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background: var(--primary-pressed); transform: scale(0.96); }
+.btn-ghost:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
 .divider { display: flex; align-items: center; gap: var(--s-3); }
 .divider span[data-rule] { flex: 1; height: 1px; background: var(--hairline); }
 .divider span[data-label] { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--fg-4); }

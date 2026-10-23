@@ -78,7 +78,7 @@ public class OAuthAppleControllerTests
         var location = _controller.Response.Headers.Location.ToString();
         location.Should().StartWith("/oauth/consent?ticket=");
         var ticket = location.Split('=')[1];
-        var consent = _store.ConsumePendingConsent(ticket)!;
+        var consent = _store.ConsumePendingConsent(ticket)!.Entry;
         consent.UserId.Should().NotBeEmpty();
         consent.ClientId.Should().Be("client");
         consent.RedirectUri.Should().Be(Redirect);
