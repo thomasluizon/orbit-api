@@ -84,8 +84,9 @@ public class HabitScheduleSnapshotInvalidationTests
         var after = await store.GetAsync(user.Id, CancellationToken.None);
 
         after.Should().BeSameAs(before);
-        counter.Commands.Count(command => command.Sql.Contains("\"IsBadHabit\"", StringComparison.Ordinal)
-            && command.Sql.Contains("\"IsGeneral\"", StringComparison.Ordinal)).Should().Be(1);
+        var scheduleRead = counter.Commands.Where(command => command.Sql.Contains("\"IsBadHabit\"", StringComparison.Ordinal)
+            && command.Sql.Contains("\"Schedule\"", StringComparison.Ordinal)).Should().ContainSingle().Subject;
+        scheduleRead.Sql.Should().NotContain("\"IsGeneral\"").And.NotContain("\"IsFlexible\"");
     }
 
     [Fact]

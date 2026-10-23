@@ -292,9 +292,11 @@ public class StreakProjectionQueryTests
         sql.Should().Contain("\"IsDeleted\"")
             .And.Contain("\"IsBadHabit\"")
             .And.Contain("\"IsCompleted\"")
-            .And.Contain("\"IsGeneral\"")
+            .And.Contain("\"Schedule\"")
             .And.Contain("\"ParentHabitId\"")
             .And.Contain("\"Days\"")
+            .And.NotContain("\"IsGeneral\"")
+            .And.NotContain("\"IsFlexible\"")
             .And.NotContain("\"Description\"")
             .And.NotContain("\"Emoji\"");
         if (excludedHabitCount > 0)
