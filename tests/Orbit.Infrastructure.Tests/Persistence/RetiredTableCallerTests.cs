@@ -110,31 +110,37 @@ public class RetiredTableCallerTests
     }
 
     [Fact]
-    public void CompatibilityMigration_OnlyChangesForeignKeysAndNeedsNoBarrier()
+    public void CompatibilityMigration_OnlyChangesForeignKeys()
     {
         var migration = new CascadeRetiredFeatureParents { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
         migration.UpOperations.Should().NotBeEmpty();
         migration.UpOperations.Should().OnlyContain(operation =>
-            operation is DropForeignKeyOperation || operation is AddForeignKeyOperation);
-        migration.UpOperations.OfType<AddForeignKeyOperation>().Should()
-            .OnlyContain(foreignKey => foreignKey.OnDelete == ReferentialAction.Cascade);
-        RollingMigrationGate.CheckRelease([("compatibility", migration.UpOperations)]).Should().BeEmpty();
+            operation is DropForeignKeyOperation || operation is SqlOperation);
+        migration.UpOperations.OfType<SqlOperation>().Should().HaveCount(13)
+            .And.OnlyContain(operation => operation.Sql.EndsWith("ON DELETE CASCADE NOT VALID;", StringComparison.Ordinal));
     }
 
     internal static int AssertCompatibilityForeignKeys(IReadOnlyList<MigrationOperation> operations)
     {
-        var expected = new CascadeRetiredFeatureParents { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" }.UpOperations;
-        var names = expected.OfType<AddForeignKeyOperation>().Select(key => key.Name).ToHashSet();
+        var expected = CascadeRetiredFeatureParentsMigrationTests.ForeignKeys.Select(key => new
+        {
+            Name = $"FK_{key.Table}_{key.PrincipalTable}_{key.Column}",
+            key.Table,
+            Columns = new[] { key.Column },
+            key.PrincipalTable,
+            PrincipalColumns = new[] { "Id" },
+            OnDelete = ReferentialAction.Cascade
+        }).ToArray();
+        var names = expected.Select(key => key.Name).ToHashSet();
         var compatibility = operations.Where(operation =>
             operation is AddForeignKeyOperation add && names.Contains(add.Name)
             || operation is DropForeignKeyOperation drop && names.Contains(drop.Name)).ToArray();
         compatibility.OfType<DropForeignKeyOperation>().Select(key => new { key.Name, key.Table }).Should()
-            .BeEquivalentTo(expected.OfType<DropForeignKeyOperation>().Select(key => new { key.Name, key.Table }));
+            .BeEquivalentTo(expected.Where(key => key.Table != "UserFacts").Select(key => new { key.Name, key.Table }));
         compatibility.OfType<AddForeignKeyOperation>()
             .Select(key => new { key.Name, key.Table, key.Columns, key.PrincipalTable, key.PrincipalColumns, key.OnDelete }).Should()
-            .BeEquivalentTo(expected.OfType<AddForeignKeyOperation>()
-                .Select(key => new { key.Name, key.Table, key.Columns, key.PrincipalTable, key.PrincipalColumns, key.OnDelete }));
-        return expected.Count;
+            .BeEquivalentTo(expected);
+        return expected.Length + expected.Count(key => key.Table != "UserFacts");
     }
 
     [Fact]

@@ -15,6 +15,18 @@ public class RollingMigrationGateTests
     private const string DeployedCommit = "7472203c7450bdd914c68282fefa905d9b432653";
 
     [Fact]
+    public void RetiredFeatureCascade_RequiresRecordedCompatibilityEvidence()
+    {
+        const string id = "20261023054236_CascadeRetiredFeatureParents";
+        var migration = new CascadeRetiredFeatureParents { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should()
+            .ContainSingle().Which.Should().Contain("deployment barrier").And.Contain(nameof(SqlOperation));
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(RepositoryRoot()), (_, _) => true)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void BaseDeploymentEvidence_OnlyCoversUnchangedMigrationSource()
     {
         var current = Barriers(HistoricalId);

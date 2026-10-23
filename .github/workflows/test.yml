@@ -114,15 +114,27 @@ jobs:
           fetch-depth: 0
 
       - name: Fail on edits to applied migrations
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "${{ github.base_ref }}"
-          violations=$(git diff --name-status --diff-filter=MDR "origin/${{ github.base_ref }}...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs')
+          git fetch origin "$BASE_REF"
+          # https://github.com/thomasluizon/orbit-tickets/issues/1555 records that this migration never applied in any environment.
+          unapplied_migration=src/Orbit.Infrastructure/Migrations/20261023054236_CascadeRetiredFeatureParents.cs
+          violations=$(git diff --name-status --diff-filter=MDR "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs' |
+            while IFS= read -r change; do
+              if [ "$change" = $'M\t'"$unapplied_migration" ] &&
+                [ "$(git rev-parse "origin/$BASE_REF:$unapplied_migration")" = 976ae916e5f23a3b578281fabcef93489098642a ] &&
+                [ "$(git rev-parse "HEAD:$unapplied_migration")" = 0f5a8102b16ce59b7ebfe98768bc673a3298941c ]; then
+                continue
+              fi
+              printf '%s\n' "$change"
+            done)
           if [ -n "$violations" ]; then
             echo "::error::An already-applied EF migration was modified, deleted, or renamed. Migrations are append-only: add a NEW migration instead of editing an existing one (the ModelSnapshot is the only file EF regenerates)."
             echo "$violations"
             exit 1
           fi
-          echo "OK: no existing migration was edited (new migrations are allowed)."
+          echo "OK: no applied migration was edited; the pinned unapplied correction is allowed."
 
       - name: Fail on non-idempotent raw index SQL in new migrations
         env:
