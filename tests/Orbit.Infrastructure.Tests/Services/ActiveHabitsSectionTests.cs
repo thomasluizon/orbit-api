@@ -64,6 +64,35 @@ public class ActiveHabitsSectionTests
             IsHabitIndexPartial: isHabitIndexPartial);
     }
 
+    [Theory]
+    [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.General, false)]
+    public void Prompt_KeepsFourScheduleLabelsAfterLogging(HabitSchedule schedule, bool divergentFlags)
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Habit",
+            schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
+            schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
+            Today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+        if (divergentFlags)
+        {
+            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
+            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
+        }
+        var before = _sut.Build(CreateContext([habit]));
+        before.Contains("1 general").Should().Be(schedule == HabitSchedule.General);
+        before.Contains("[GENERAL]").Should().Be(schedule == HabitSchedule.General);
+        before.Contains("DueDate:").Should().Be(schedule != HabitSchedule.General);
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        var after = _sut.Build(CreateContext([habit]));
+
+        after.Should().Contain("DONE TODAY");
+        after.Contains("1 due today").Should().Be(schedule != HabitSchedule.General);
+        after.Contains("DueDate:").Should().Be(schedule != HabitSchedule.General);
+    }
+
     [Fact]
     public void ShouldInclude_AlwaysReturnsTrue()
     {
