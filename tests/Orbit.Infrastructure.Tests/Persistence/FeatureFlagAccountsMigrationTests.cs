@@ -135,7 +135,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261023092738_AddAppleSignInCredentials",
             "20261023092801_PreserveProviderPaidCoverage",
             "20261023103527_DropRetiredFeatureTables");
-        context.Database.GetMigrations().Last().Should().EndWith("_DropRetiredFeatureTables");
+        context.Database.GetMigrations().Last().Should().EndWith("_DropSentProactiveCheckins");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

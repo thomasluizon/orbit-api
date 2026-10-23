@@ -21,16 +21,17 @@ public class DropRetiredFeatureTablesMigrationTests
     ];
 
     [Fact]
-    public void TargetModel_MatchesMergedRuntimeModel()
+    public void TargetModel_DiffersFromRuntimeOnlyByRetiredLedger()
     {
         using var context = CreateContext();
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
 
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
-            .Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().ContainSingle();
+        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
     }
 
     [Fact]
@@ -60,7 +61,9 @@ public class DropRetiredFeatureTablesMigrationTests
             .GetDifferences(previous.GetRelationalModel(), model.GetRelationalModel());
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
-        generator.Generate(differences, model).Select(command => command.CommandText)
+        var retiredFeatureChanges = differences
+            .Where(operation => operation is not DropTableOperation { Name: "SentProactiveCheckins" }).ToArray();
+        generator.Generate(retiredFeatureChanges, model).Select(command => command.CommandText)
             .Should().Equal(generator.Generate(new DropRetiredFeatureTables().UpOperations, model)
                 .Select(command => command.CommandText));
         model.GetEntityTypes().Select(entity => entity.GetTableName())

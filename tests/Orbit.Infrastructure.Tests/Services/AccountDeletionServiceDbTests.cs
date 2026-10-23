@@ -55,33 +55,41 @@ public class AccountDeletionServiceDbTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteAllUserDataAsync_RemovesProactiveItems()
+    public async Task DeleteAllUserDataAsync_RemovesOnlyTargetUsersProactiveDataWithoutRetiredLedger()
     {
         var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
         SeedUser(userId, "proactive@example.com");
-        _dbContext.ProactiveItems.Add(
-            ProactiveItem.Create(userId, Orbit.Domain.Enums.ProactiveTrigger.MorningPlan, DateOnly.FromDateTime(DateTime.UtcNow), "{}", "Text.", "Action", "Prompt", DateTime.UtcNow));
-        _dbContext.ProactiveCalendarDays.Add(ProactiveCalendarDay.Claim(userId, new(2030, 10, 14)));
+        SeedUser(otherUserId, "other-proactive@example.com");
+        SeedProactiveData(userId);
+        SeedProactiveData(otherUserId);
         await _dbContext.SaveChangesAsync();
+        await AssertRetiredLedgerAbsent();
 
         await new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()).DeleteAllUserDataAsync(userId);
 
         (await _dbContext.ProactiveItems.AnyAsync(p => p.UserId == userId))
             .Should().BeFalse();
         (await _dbContext.ProactiveCalendarDays.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
+        (await _dbContext.Users.AnyAsync(u => u.Id == userId)).Should().BeTrue();
+        (await _dbContext.ProactiveItems.CountAsync(p => p.UserId == otherUserId)).Should().Be(1);
+        (await _dbContext.ProactiveCalendarDays.CountAsync(p => p.UserId == otherUserId)).Should().Be(1);
     }
 
     [Fact]
     public async Task RunAsync_DeletesPastDueUserWithOwnedDataAndIdempotencyLedger()
     {
         var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
         SeedDeactivatedUser(userId, "owned@example.com", DateTime.UtcNow.AddDays(-1));
+        SeedUser(otherUserId, "other-owned@example.com");
         _dbContext.Tags.Add(Tag.Create(userId, "Fitness", "#ff0000").Value);
         _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand", 0));
-        _dbContext.ProactiveItems.Add(
-            ProactiveItem.Create(userId, Orbit.Domain.Enums.ProactiveTrigger.MorningPlan, DateOnly.FromDateTime(DateTime.UtcNow), "{}", "Text.", "Action", "Prompt", DateTime.UtcNow));
+        SeedProactiveData(userId);
+        SeedProactiveData(otherUserId);
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
+        await AssertRetiredLedgerAbsent();
 
         await _service.RunAsync(CancellationToken.None);
 
@@ -89,6 +97,10 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();
         (await _dbContext.ProcessedRequests.AnyAsync(r => r.UserId == userId)).Should().BeFalse();
         (await _dbContext.ProactiveItems.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
+        (await _dbContext.ProactiveCalendarDays.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
+        (await _dbContext.Users.AnyAsync(u => u.Id == otherUserId)).Should().BeTrue();
+        (await _dbContext.ProactiveItems.CountAsync(p => p.UserId == otherUserId)).Should().Be(1);
+        (await _dbContext.ProactiveCalendarDays.CountAsync(p => p.UserId == otherUserId)).Should().Be(1);
     }
 
     [Fact]
@@ -239,6 +251,21 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         _legacyObjects.Keys.Should().BeEmpty();
         (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    private async Task AssertRetiredLedgerAbsent()
+    {
+        (await _dbContext.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'table' AND name = 'SentProactiveCheckins'")
+            .SingleAsync()).Should().Be(0);
+    }
+
+    private void SeedProactiveData(Guid userId)
+    {
+        var date = new DateOnly(2030, 10, 14);
+        _dbContext.ProactiveItems.Add(ProactiveItem.Create(userId,
+            Orbit.Domain.Enums.ProactiveTrigger.MorningPlan, date, "{}", "Text.", "Action", "Prompt", DateTime.UtcNow));
+        _dbContext.ProactiveCalendarDays.Add(ProactiveCalendarDay.Claim(userId, date));
     }
 
     private void SeedUser(Guid userId, string email)
