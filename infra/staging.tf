@@ -35,6 +35,8 @@ resource "render_static_site" "staging_landing" {
     PUBLIC_APP_URL             = { value = "https://app-staging.useorbit.org" }
     PUBLIC_ANDROID_INSTALL_URL = { value = "https://play.google.com/store/apps/details?id=org.useorbit.app.staging" }
     PUBLIC_API_URL             = { value = "https://api-staging.useorbit.org" }
+    # orbit-landing-staging.onrender.com is outside the managed widget's hostnames; test keys work on any domain: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+    PUBLIC_TURNSTILE_SITE_KEY = { value = "1x00000000000000000000AA" }
   }
 
   lifecycle {
