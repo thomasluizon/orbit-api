@@ -6,6 +6,8 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Common;
 using Orbit.Application.Proactive.Commands;
 using Orbit.Application.Proactive.Queries;
+using Orbit.Domain.Models;
+using System.Text.Json;
 
 namespace Orbit.Api.Controllers;
 
@@ -16,13 +18,31 @@ namespace Orbit.Api.Controllers;
 [Route("api/ai/proactive")]
 public sealed class ProactiveAstraController(ISender sender) : ControllerBase
 {
+    private static readonly JsonSerializerOptions ClientContextOptions = new() { PropertyNameCaseInsensitive = true };
+
     [HttpGet("current")]
     [ProducesResponseType(typeof(ProactiveItemResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Current(CancellationToken cancellationToken)
+    public async Task<IActionResult> Current(CancellationToken cancellationToken, [FromQuery] string? clientContext = null)
     {
-        var result = await sender.Send(new GetCurrentProactiveQuery(HttpContext.GetUserId()), cancellationToken);
+        AgentClientContext? parsed = null;
+        if (!string.IsNullOrWhiteSpace(clientContext))
+        {
+            try
+            {
+                parsed = JsonSerializer.Deserialize<AgentClientContext>(clientContext, ClientContextOptions);
+                if (parsed is null) return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
+            }
+            catch (JsonException)
+            {
+                return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
+            }
+        }
+        var result = await sender.Send(new GetCurrentProactiveQuery(HttpContext.GetUserId(), parsed,
+            HttpContext.User.GetAgentAuthMethod(), HttpContext.User.GetGrantedAgentScopes(),
+            HttpContext.User.IsReadOnlyCredential()), cancellationToken);
         return result.ToPayGateAwareResult(value => value is null ? NoContent() : Ok(value));
     }
 

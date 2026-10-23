@@ -74,7 +74,7 @@ public partial class ProcessUserChatCommandHandler
         }
     }
 
-    private static QueryReadBlock ForClient(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) => read.Block switch
+    internal static QueryReadBlock ForClient(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) => read.Block switch
     {
         DaySummaryCard card when client?.SupportsHabitListDoneStatus != true => read with { Block = AdaptDay(card, client?.SupportsHabitListDoneStatus) ?? card },
         HabitListCard card when client?.SupportsHabitListDoneStatus != true => read with

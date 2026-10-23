@@ -12,6 +12,7 @@ using Orbit.Application.Proactive.Commands;
 using Orbit.Application.Proactive.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Tests.Services;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
@@ -101,6 +102,44 @@ public sealed class ProactiveAstraControllerTests
             .Returns(Result.Success<ProactiveItemResponse?>(null));
         (await _controller.Current(default)).Should().BeOfType<NoContentResult>();
         await _sender.Received(1).Send(Arg.Is<GetCurrentProactiveQuery>(q => q.UserId == _userId), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Current_ForwardsNegotiatedContextAndCredentialRestrictions(string locale)
+    {
+        _controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, _userId.ToString()), new Claim("auth_method", "api_key"),
+                new Claim("scope", "habits:read"), new Claim("api_key_read_only", "true")], "Test"));
+        _sender.Send(Arg.Any<GetCurrentProactiveQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<ProactiveItemResponse?>(null));
+        var context = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            locale,
+            supportsParts = true,
+            partKinds = new[] { "habitList" },
+            supportsHabitListCard = true
+        });
+
+        (await _controller.Current(default, context)).Should().BeOfType<NoContentResult>();
+
+        await _sender.Received(1).Send(Arg.Is<GetCurrentProactiveQuery>(q => q.UserId == _userId
+            && q.ClientContext != null && q.ClientContext.Locale == locale && q.ClientContext.SupportsParts == true
+            && q.ClientContext.SupportsHabitListCard == true && q.ClientContext.PartKinds!.SequenceEqual(new[] { "habitList" })
+            && q.AuthMethod == AgentAuthMethod.ApiKey && q.GrantedScopes!.SequenceEqual(new[] { "habits:read" })
+            && q.IsReadOnlyCredential), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("invalid")]
+    [InlineData("[]")]
+    [InlineData("{\"supportsParts\":\"yes\"}")]
+    public async Task Current_InvalidContextIs400WithoutDispatch(string context)
+    {
+        (await _controller.Current(default, context)).Should().BeOfType<BadRequestObjectResult>();
+        _sender.ReceivedCalls().Should().BeEmpty();
     }
 
     [Theory]
