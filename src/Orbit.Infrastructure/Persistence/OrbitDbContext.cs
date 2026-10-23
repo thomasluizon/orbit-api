@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -688,7 +689,10 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.PlayRenewalStoppedByDeletion).HasDefaultValue(false);
             entity.Property(u => u.ProactiveAstraEnabled).HasDefaultValue(true).ValueGeneratedNever();
-            entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
+            // https://github.com/thomasluizon/orbit-tickets/issues/1654 retains the mapping until the separate column-drop release.
+            var handle = entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength).Metadata;
+            handle.SetBeforeSaveBehavior(PropertySaveBehavior.Ignore);
+            handle.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 
             entity.Property(u => u.ColorScheme).HasMaxLength(50);

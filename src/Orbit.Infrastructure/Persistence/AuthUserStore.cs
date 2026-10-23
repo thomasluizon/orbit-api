@@ -23,7 +23,7 @@ public sealed class AuthUserStore(OrbitDbContext context) : IAuthUserStore
                 "TotalXp", "Level", "AdRewardBonusMessages", "AdRewardsClaimedToday",
                 "CurrentStreak", "LongestStreak", "StreakFreezesAccumulated", "LastFreezeAwardStreak",
                 "PublicProfileShowStreak", "PublicProfileShowLevel", "PublicProfileShowAchievements", "PublicProfileShowTopHabits",
-                "Language", "Handle", "TrialEndsAt", "SignupLanguage", "SignupReferralCode")
+                "Language", "TrialEndsAt", "SignupLanguage", "SignupReferralCode")
             VALUES (
                 {candidate.Id}, {candidate.Name}, {candidate.Email}, {candidate.AiMemoryEnabled},
                 {candidate.AiSummaryEnabled}, {candidate.ProactiveAstraEnabled}, {candidate.HasCompletedOnboarding}, {candidate.HasCompletedTour},
@@ -34,7 +34,7 @@ public sealed class AuthUserStore(OrbitDbContext context) : IAuthUserStore
                 {candidate.TotalXp}, {candidate.Level}, {candidate.AdRewardBonusMessages}, {candidate.AdRewardsClaimedToday},
                 {candidate.CurrentStreak}, {candidate.LongestStreak}, {candidate.StreakFreezesAccumulated}, {candidate.LastFreezeAwardStreak},
                 {candidate.PublicProfileShowStreak}, {candidate.PublicProfileShowLevel}, {candidate.PublicProfileShowAchievements}, {candidate.PublicProfileShowTopHabits},
-                {candidate.Language}, {candidate.Handle}, {candidate.TrialEndsAt}, {candidate.SignupLanguage}, {candidate.SignupReferralCode})
+                {candidate.Language}, {candidate.TrialEndsAt}, {candidate.SignupLanguage}, {candidate.SignupReferralCode})
             ON CONFLICT ("Email") DO UPDATE SET "Email" = excluded."Email"
             """, cancellationToken);
 
