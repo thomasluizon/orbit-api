@@ -35,7 +35,6 @@ public class ResetAccountRetryTests
         context.Users.Add(user);
         var habit = Habit.Create(new HabitCreateParams(user.Id, "Habit", FrequencyUnit.Day, 1, today)).Value;
         context.Habits.Add(habit);
-        context.UserFacts.Add(UserFact.Create(user.Id, "likes mornings", "preference").Value);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         failure.Enabled = true;
@@ -59,7 +58,6 @@ public class ResetAccountRetryTests
         events.Received(1).Clear();
         await using var verification = factory.CreateContext();
         (await verification.Habits.IgnoreQueryFilters().CountAsync(h => h.UserId == user.Id)).Should().Be(0);
-        (await verification.UserFacts.IgnoreQueryFilters().CountAsync(f => f.UserId == user.Id)).Should().Be(1);
         var persisted = await verification.Users.SingleAsync(u => u.Id == user.Id);
         using (new FluentAssertions.Execution.AssertionScope())
         {

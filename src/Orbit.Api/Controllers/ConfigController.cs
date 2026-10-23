@@ -22,7 +22,6 @@ public partial class ConfigController(
     public async Task<IActionResult> GetConfig(CancellationToken cancellationToken)
     {
         var limits = (await configService.GetAllAsync(cancellationToken))
-            .Where(config => config.Key != "MaxUserFacts")
             .ToDictionary(config => config.Key, config => config.Value);
 
         var featureFlags = await featureFlagService.ResolveForUserAsync(HttpContext.GetUserId(), cancellationToken);

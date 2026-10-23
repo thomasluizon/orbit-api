@@ -38,7 +38,7 @@ public class RetiredTableCallerTests
     {
         var commands = new CommandCapture();
         using var factory = new SqliteOrbitDbContextFactory(commands);
-        var user = await SeedRetiredRows(factory.Context);
+        var user = await SeedLiveRows(factory.Context);
         commands.Sql.Clear();
 
         await new AccountResetRepository(factory.Context, Substitute.For<IAccountEventCollector>())
@@ -46,8 +46,6 @@ public class RetiredTableCallerTests
 
         AssertNoRetiredCommands(commands);
         (await factory.Context.Users.AnyAsync(u => u.Id == user.Id)).Should().BeTrue();
-        (await factory.Context.UserFacts.IgnoreQueryFilters().CountAsync()).Should().Be(1);
-        (await factory.Context.Friendships.CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -55,7 +53,7 @@ public class RetiredTableCallerTests
     {
         var commands = new CommandCapture();
         using var factory = new SqliteOrbitDbContextFactory(commands);
-        var user = await SeedRetiredRows(factory.Context);
+        var user = await SeedLiveRows(factory.Context);
         var db = factory.Context;
         var repos = new ExportUserDataRepositories(
             new GenericRepository<User>(db), new GenericRepository<Habit>(db),
@@ -86,27 +84,6 @@ public class RetiredTableCallerTests
         result.Value.FriendFeedEvents.Should().BeEmpty();
         result.Value.Habits.Should().ContainSingle();
         result.Value.Account.Email.Should().Be(user.Email);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DeleteUser_CascadesEveryRetiredTable(bool reverseRoles)
-    {
-        using var factory = new SqliteOrbitDbContextFactory();
-        var user = await SeedRetiredRows(factory.Context, reverseRoles);
-        var db = factory.Context;
-        db.ChangeTracker.Clear();
-
-        await db.Users.Where(u => u.Id == user.Id).ExecuteDeleteAsync();
-
-        (await db.Users.CountAsync()).Should().Be(1);
-        foreach (var table in Tables)
-        {
-            var sql = $"SELECT COUNT(*) AS Value FROM \"{table}\"";
-            var count = await db.Database.SqlQueryRaw<int>(sql).SingleAsync();
-            count.Should().Be(0, "{0} must cascade from its live parent", table);
-        }
     }
 
     [Fact]
@@ -144,12 +121,12 @@ public class RetiredTableCallerTests
     }
 
     [Fact]
-    public async Task PermanentDeletion_RemovesEveryRetiredTableRowThroughTheScheduledService()
+    public async Task PermanentDeletion_DoesNotIssueCommandsAgainstRetiredTables()
     {
         var commands = new CommandCapture();
         using var factory = new SqliteOrbitDbContextFactory(commands);
         var db = factory.Context;
-        var user = await SeedRetiredRows(db);
+        var user = await SeedLiveRows(db);
         user.Deactivate(DateTime.UtcNow.AddDays(-1));
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -171,11 +148,8 @@ public class RetiredTableCallerTests
         logger.ReceivedCalls().SelectMany(call => call.GetArguments()).OfType<Exception>().Should().BeEmpty();
         AssertNoRetiredCommands(commands);
         (await db.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id)).Should().BeFalse();
-        foreach (var table in Tables)
-        {
-            var sql = $"SELECT COUNT(*) AS Value FROM \"{table}\"";
-            (await db.Database.SqlQueryRaw<int>(sql).SingleAsync()).Should().Be(0, "{0} must cascade during erasure", table);
-        }
+        (await db.Habits.IgnoreQueryFilters().AnyAsync(h => h.UserId == user.Id)).Should().BeFalse();
+        (await db.Users.CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -183,7 +157,7 @@ public class RetiredTableCallerTests
     {
         var commands = new CommandCapture();
         using var factory = new SqliteOrbitDbContextFactory(commands);
-        await SeedRetiredRows(factory.Context);
+        await SeedLiveRows(factory.Context);
         using var provider = new ServiceCollection().AddSingleton(factory.Context).BuildServiceProvider();
         var scopes = provider.GetRequiredService<IServiceScopeFactory>();
         var encryption = Substitute.For<IEncryptionService>();
@@ -207,7 +181,7 @@ public class RetiredTableCallerTests
             commands.Sql.Should().NotContain(sql => sql.Contains($"\"{table}\"", StringComparison.Ordinal));
     }
 
-    private static async Task<User> SeedRetiredRows(OrbitDbContext db, bool reverseRoles = false)
+    private static async Task<User> SeedLiveRows(OrbitDbContext db)
     {
         var user = User.Create("Target", "target@example.com").Value;
         var other = User.Create("Other", "other@example.com").Value;
@@ -215,26 +189,6 @@ public class RetiredTableCallerTests
         var habit = Habit.Create(new HabitCreateParams(user.Id, "Live habit", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 6, 15))).Value;
         db.Habits.Add(habit);
-        var first = reverseRoles ? other.Id : user.Id;
-        var second = reverseRoles ? user.Id : other.Id;
-        db.Friendships.Add(Friendship.Create(first, second).Value);
-        db.Cheers.Add(Cheer.Create(first, second, habit.Id, "Nice").Value);
-        db.BlockedUsers.Add(BlockedUser.Create(first, second).Value);
-        db.Reports.Add(Report.Create(first, second, ReportReason.Spam, "Report", null).Value);
-        db.FriendFeedEvents.Add(FriendFeedEvent.StreakMilestone(user.Id, 7));
-        var pair = AccountabilityPair.Create(first, second, AccountabilityCadence.Daily).Value;
-        db.AccountabilityPairs.Add(pair);
-        db.AccountabilityPairHabits.Add(AccountabilityPairHabit.Create(pair.Id, user.Id, habit.Id));
-        db.AccountabilityCheckIns.Add(AccountabilityCheckIn.Create(pair.Id, user.Id, new DateOnly(2026, 6, 15), null).Value);
-        var challenge = Challenge.Create(new CreateChallengeParams(user.Id, ChallengeType.CoopGoal,
-            "Retired challenge", null, 10, new DateOnly(2026, 6, 15), new DateOnly(2026, 6, 30), "retired")).Value;
-        challenge.AddParticipant(user.Id, [habit.Id]);
-        challenge.SoftDelete();
-        db.Challenges.Add(challenge);
-        var fact = UserFact.Create(user.Id, "Morning person", "preference").Value;
-        fact.SoftDelete();
-        db.UserFacts.Add(fact);
-        db.AiFactExtractionBatches.Add(AiFactExtractionBatch.Create(user.Id, "batch", "input"));
         await db.SaveChangesAsync();
         return user;
     }

@@ -61,7 +61,9 @@ public class AppStoreMigrationTests
         var appleIds = appleMigrations.Select(apple =>
             migrations.Single(pair => pair.Value.AsType() == apple.GetType()).Key).ToArray();
         migrations.Keys.Should().ContainInOrder(new[] { mainId }.Concat(appleIds));
-        migrations.Keys.Last().Should().Be(appleIds.Last());
+        migrations.Keys.Should().ContainInOrder(appleIds.Append(
+            migrations.Single(pair => pair.Value.AsType() == typeof(DropRetiredFeatureTables)).Key));
+        migrations.Keys.Last().Should().EndWith("_DropRetiredFeatureTables");
 
         foreach (var apple in appleMigrations)
         {
@@ -72,8 +74,10 @@ public class AppStoreMigrationTests
 
         var latest = context.GetService<IModelRuntimeInitializer>()
             .Initialize(appleMigrations.Last().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(latest.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
+        var preceding = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+        WithoutAppleAdditions(context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(preceding.GetRelationalModel(), latest.GetRelationalModel())).Should().BeEmpty();
+        context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 }

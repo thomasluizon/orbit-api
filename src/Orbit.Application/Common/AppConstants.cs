@@ -77,7 +77,5 @@ public static class AppConstants
     public const int StreakRepairWindowDays = 2 * 366;
     public const int MaxSyncWindowDays = 30;
     public const int SyncCleanupMarginDays = 1;
-    public const int MaxChallengeTitleLength = 200;
-    public const int MaxChallengeDescriptionLength = 2000;
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

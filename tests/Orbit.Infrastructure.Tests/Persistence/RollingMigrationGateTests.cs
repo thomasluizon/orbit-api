@@ -27,6 +27,17 @@ public class RollingMigrationGateTests
     }
 
     [Fact]
+    public void RetiredFeatureDrop_RequiresRecordedDeploymentBarrier()
+    {
+        const string id = "20261023103527_DropRetiredFeatureTables";
+        var migration = new DropRetiredFeatureTables { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
+
+        RollingMigrationGate.Check(id, migration.UpOperations).Should().NotBeEmpty();
+        RollingMigrationGate.Check(id, migration.UpOperations, ReadBarriers(RepositoryRoot()), (_, _) => true)
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void BaseDeploymentEvidence_OnlyCoversUnchangedMigrationSource()
     {
         var current = Barriers(HistoricalId);
