@@ -53,12 +53,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
         }
         catch (Google.GoogleApiException ex)
         {
-            var rawCode = NormalizeGoogleApiErrorCode(ex);
-            throw new CalendarProviderException(
-                ClassifyGoogleError(ex),
-                rawCode,
-                $"Google Calendar API error: {rawCode}",
-                ex);
+            throw ToProviderException(ex);
         }
     }
 
@@ -82,6 +77,10 @@ internal sealed partial class GoogleCalendarEventFetcher(
         try
         {
             events = await api.ListEventsAsync(accessToken, calendar.Id, updatedMin, ct, window);
+        }
+        catch (Google.GoogleApiException ex) when (ClassifyGoogleError(ex) != CalendarFetchErrorKind.Transient)
+        {
+            throw ToProviderException(ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -197,6 +196,10 @@ internal sealed partial class GoogleCalendarEventFetcher(
             var master = await api.GetEventAsync(accessToken, calendarId, ev.RecurringEventId, ct);
             recurrence = ReadRecurrence(master);
         }
+        catch (Google.GoogleApiException ex) when (ClassifyGoogleError(ex) != CalendarFetchErrorKind.Transient)
+        {
+            throw ToProviderException(ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId);
@@ -263,21 +266,30 @@ internal sealed partial class GoogleCalendarEventFetcher(
         return null;
     }
 
+    private static CalendarProviderException ToProviderException(Google.GoogleApiException ex)
+    {
+        var kind = ClassifyGoogleError(ex);
+        var rawCode = kind == CalendarFetchErrorKind.MissingScope
+            ? "insufficientPermissions"
+            : NormalizeGoogleApiErrorCode(ex);
+        return new CalendarProviderException(kind, rawCode, $"Google Calendar API error: {rawCode}", ex);
+    }
+
     private static CalendarFetchErrorKind ClassifyGoogleError(Google.GoogleApiException ex)
     {
         var errorText = NormalizeGoogleApiErrorCode(ex);
-        var isAuthStatus = ex.HttpStatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+        if (ex.Error?.Errors?.Any(error => string.Equals(
+                error.Reason, "insufficientPermissions", StringComparison.OrdinalIgnoreCase)) == true
+            || errorText.Contains("insufficient authentication scopes", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase))
+            return CalendarFetchErrorKind.MissingScope;
 
-        if (isAuthStatus
+        if (ex.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized
             || errorText.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
             || errorText.Contains("invalid authentication credentials", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("insufficient authentication scopes", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("forbidden", StringComparison.OrdinalIgnoreCase)
             || errorText.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase))
-        {
             return CalendarFetchErrorKind.ReconnectRequired;
-        }
+
         return CalendarFetchErrorKind.Transient;
     }
 

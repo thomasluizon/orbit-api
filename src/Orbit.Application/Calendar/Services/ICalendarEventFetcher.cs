@@ -47,6 +47,7 @@ public enum CalendarFetchErrorKind
 {
     Transient,
     ReconnectRequired,
+    MissingScope,
 }
 
 /// <summary>

@@ -412,10 +412,9 @@ public partial class GetCalendarEventsQueryHandler(
         }
         catch (CalendarProviderException ex)
         {
-            if (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
+            if (ex.Kind is CalendarFetchErrorKind.ReconnectRequired or CalendarFetchErrorKind.MissingScope)
             {
-                if (logger.IsEnabled(LogLevel.Debug))
-                    LogGoogleCalendarReconnectRequired(logger, request.UserId, ex.RawErrorCode);
+                LogGoogleCalendarReconnectRequired(logger, request.UserId, ex.RawErrorCode);
                 if (request.PersistConnectionState)
                 {
                     user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
@@ -485,7 +484,7 @@ public partial class GetCalendarEventsQueryHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]
     private static partial void LogGoogleCalendarApiError(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Google Calendar reconnect required for user {UserId} (code: {ErrorCode})")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Google Calendar reconnect required for user {UserId} (code: {ErrorCode})")]
     private static partial void LogGoogleCalendarReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Omitted the end time of calendar event {EventId} for user {UserId}: the projected end does not follow the projected start on the projected start date")]
