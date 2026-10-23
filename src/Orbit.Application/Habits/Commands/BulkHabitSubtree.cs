@@ -100,7 +100,7 @@ internal static class BulkHabitSubtree
             EndDate: item.EndDate,
             ChecklistItems: item.ChecklistItems,
             ParentHabitId: parent?.Id,
-            IsGeneral: parent?.IsGeneral ?? item.IsGeneral,
+            IsGeneral: parent is null ? item.IsGeneral : parent.Schedule == HabitSchedule.General,
             IsFlexible: item.IsFlexible,
             Position: position,
             GoogleEventId: item.GoogleEventId,

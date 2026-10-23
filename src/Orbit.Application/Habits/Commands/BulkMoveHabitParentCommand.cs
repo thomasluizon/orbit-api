@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -58,7 +59,7 @@ public class BulkMoveHabitParentCommandHandler(
                     errors[id] = ErrorMessages.SelfParent;
                 else if (request.ParentId is not null && parent is null)
                     errors[id] = ErrorMessages.TargetParentNotFound;
-                else if (parent is not null && parent.IsGeneral != habit.IsGeneral)
+                else if (parent is not null && (parent.Schedule == HabitSchedule.General) != (habit.Schedule == HabitSchedule.General))
                     errors[id] = ErrorMessages.GeneralMismatchWithParent;
                 else
                 {

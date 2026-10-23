@@ -189,13 +189,17 @@ public class SkipHabitCommandHandlerTests
         result.Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
-    [Fact]
-    public async Task Handle_NotYetDue_ReturnsFailure()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_NotYetDue_ReturnsFailure(bool divergentLegacyFlag)
     {
         var futureDueDate = Today.AddDays(5);
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Future habit", FrequencyUnit.Day, 1,
             DueDate: futureDueDate)).Value;
+        if (divergentLegacyFlag)
+            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, true);
         SetupHabitFound(habit);
 
         var command = new SkipHabitCommand(UserId, habit.Id, Today);
