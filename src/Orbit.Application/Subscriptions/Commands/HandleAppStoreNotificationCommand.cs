@@ -40,7 +40,8 @@ public sealed class HandleAppStoreNotificationCommandHandler(IAppStoreService ap
                         if (state.Transaction.AppAccountToken != user.Id
                             || await users.AnyIgnoringFiltersAsync(u => u.AppStoreOriginalTransactionId == transaction.OriginalTransactionId && u.Id != user.Id, ct))
                             return Result.Failure(ErrorMessages.PlayPurchaseAccountMismatch);
-                        AppStoreEntitlement.Apply(user, state);
+                        if (user.AppStoreOriginalTransactionId is null || user.AppStoreOriginalTransactionId == transaction.OriginalTransactionId)
+                            AppStoreEntitlement.Apply(user, state);
                     }
                 }
                 await notifications.AddAsync(ProcessedAppStoreNotification.Create(notification.NotificationUuid, notification.Environment), ct);

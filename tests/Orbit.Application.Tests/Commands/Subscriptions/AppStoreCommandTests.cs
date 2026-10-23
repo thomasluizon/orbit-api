@@ -106,6 +106,22 @@ public class AppStoreCommandTests
     }
 
     [Fact]
+    public async Task Notification_RefundForReplacedOriginal_DoesNotRemoveCurrentSubscription()
+    {
+        _user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        var now = DateTime.UtcNow;
+        _user.ApplyAppStoreSubscription("current-original", "Sandbox", now.AddDays(30), SubscriptionInterval.Monthly, now, true, null);
+        var oldTransaction = Transaction with { OriginalTransactionId = "old-original", IsRevoked = true };
+        _apple.VerifyNotification("signed").Returns(new AppStoreNotification(Guid.NewGuid(), "REFUND", "Sandbox", oldTransaction));
+        _apple.GetCurrentStateAsync(Arg.Any<AppStoreTransaction>(), Arg.Any<CancellationToken>()).Returns(
+            new AppStoreSubscriptionState(oldTransaction, false, oldTransaction.ExpiresAtUtc, now.AddMinutes(1), false, false));
+        var result = await new HandleAppStoreNotificationCommandHandler(_apple, _users, _notifications, _work).Handle(new("signed"), default);
+        result.IsSuccess.Should().BeTrue();
+        _user.HasProAccess.Should().BeTrue();
+        _user.AppStoreOriginalTransactionId.Should().Be("current-original");
+    }
+
+    [Fact]
     public void Validators_RejectMissingInput()
     {
         new VerifyAppStorePurchaseCommandValidator().Validate(new VerifyAppStorePurchaseCommand(Guid.Empty, "")).IsValid.Should().BeFalse();
