@@ -44,9 +44,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
+    <PackageReference Include="ModelContextProtocol" Version="2.3.0" />
     <PackageReference Include="PostHog.AspNetCore" Version="2.9.7" />
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.3.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.18.0" />
     <PackageReference Include="Sentry.AspNetCore" Version="6.12.1" />
   </ItemGroup>
