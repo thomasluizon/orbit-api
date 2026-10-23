@@ -45,7 +45,7 @@ public sealed partial class AiRetrospectiveService(
                 return Result.Failure<RetrospectiveNarrative>(ErrorMessages.AiEmptyResponse);
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
-            var narrative = ParseNarrative(trimmed, language);
+            var narrative = ParseNarrative(trimmed, language, habits.Select(h => h.Title));
 
             if (logger.IsEnabled(LogLevel.Debug))
                 LogRetrospectiveGenerated(logger, trimmed.Length);
@@ -74,7 +74,7 @@ public sealed partial class AiRetrospectiveService(
     /// headings are not all found in order, the whole text is returned as <c>Highlights</c> so the
     /// caller always receives the model's output rather than an empty payload.
     /// </summary>
-    private static RetrospectiveNarrative ParseNarrative(string text, string language)
+    private static RetrospectiveNarrative ParseNarrative(string text, string language, IEnumerable<string>? habitNames = null)
     {
         var (highlights, missed, trends, suggestion) = GetHeadings(language);
         var order = new[] { highlights, missed, trends, suggestion };
@@ -103,9 +103,11 @@ public sealed partial class AiRetrospectiveService(
         FlushSection(sections, currentSection, buffer);
 
         if (matchedSections < 4)
-            return new RetrospectiveNarrative(text.Trim(), string.Empty, string.Empty, string.Empty);
+            return new RetrospectiveNarrative(AiPlainText.Normalize(text, habitNames), string.Empty, string.Empty, string.Empty);
 
-        return new RetrospectiveNarrative(sections[0], sections[1], sections[2], sections[3]);
+        return new RetrospectiveNarrative(
+            AiPlainText.Normalize(sections[0], habitNames), AiPlainText.Normalize(sections[1], habitNames),
+            AiPlainText.Normalize(sections[2], habitNames), AiPlainText.Normalize(sections[3], habitNames));
     }
 
     private static void FlushSection(string[] sections, int sectionIndex, StringBuilder buffer)
@@ -172,20 +174,21 @@ public sealed partial class AiRetrospectiveService(
             {habitSection}
 
             Write a retrospective with these sections (use these exact headings):
-            1. **{highlightsHeading}** -- What went well, milestones reached, strong completion rates
-            2. **{missedHeading}** -- What was skipped or neglected, patterns of avoidance
-            3. **{trendsHeading}** -- Improving or declining patterns, consistency observations
-            4. **{suggestionHeading}** -- One specific, actionable tip for the next period
+            {highlightsHeading}: What went well, milestones reached, strong completion rates
+            {missedHeading}: What was skipped or neglected, patterns of avoidance
+            {trendsHeading}: Improving or declining patterns, consistency observations
+            {suggestionHeading}: One specific, actionable tip for the next period
 
             Rules:
             - Be honest but encouraging -- celebrate real wins, acknowledge real gaps
-            - Reference specific habit names and numbers from the data
+            - Reference specific habit names and numbers from the data; preserve habit names exactly as supplied
             - Keep each section to 2-3 sentences max
             - If a habit has 100% completion, call it out as a win
             - If a habit has <50% completion, flag it kindly
             - For bad habits, fewer slips = good progress
             - Do NOT use emojis or JSON
-            - Use markdown bold for section headings only
+            - Plain text only: no Markdown, emphasis, bullets, numbered lists or code fences
+            - Put each exact section heading on its own line, followed by its prose on the next line
             - Write ONLY in {languageName}
             """);
     }
