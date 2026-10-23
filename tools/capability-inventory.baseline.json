@@ -24280,6 +24280,444 @@
           }
         },
         {
+          "name": "AppleRefreshToken",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AppleSubject",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AppleTokenClientId",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AppStoreEnvironment",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AppStoreOriginalTransactionId",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AppStoreStateSignedAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "BonusProExpiresAtUtc",
           "type": "DateTime?",
           "surfaces": {

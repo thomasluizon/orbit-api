@@ -2,7 +2,11 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using FirebaseAdmin;
 using FirebaseAdmin.Messaging;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Http;
+using Microsoft.Extensions.Logging;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Domain.Interfaces;
@@ -70,6 +74,42 @@ public sealed class PushNotificationServiceTests : IDisposable
         _dbContext.PushSubscriptions.Add(sub);
         await _dbContext.SaveChangesAsync();
         return sub;
+    }
+
+    [Fact]
+    public async Task Apns_MissingConfiguration_WarnsAndFcmStillDelivers()
+    {
+        _dbContext.PushSubscriptions.AddRange(
+            PushSubscription.Create(_userId, "fcm-device-token", "fcm", "auth").Value,
+            PushSubscription.Create(_userId, "apns-device-token", "apns", "auth").Value);
+        await _dbContext.SaveChangesAsync();
+        var fcmHandler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"name\":\"projects/test-project/messages/test-message\"}")
+        });
+        var app = FirebaseApp.Create(new AppOptions
+        {
+            Credential = GoogleCredential.FromAccessToken("test-access-token"),
+            ProjectId = "test-project",
+            HttpClientFactory = new FcmHttpClientFactory(fcmHandler)
+        });
+        try
+        {
+            var apnsLogger = Substitute.For<ILogger<ApnsPushSender>>();
+            using var sender = new ApnsPushSender(new HttpClient(), Options.Create(new ApnsSettings()), apnsLogger, TimeProvider.System);
+            var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
+                NullLogger<PushNotificationService>.Instance, new HttpClient(), sender);
+            (await service.TrySendToUserAsync(_userId, "Title", "Body", "/today")).Should().BeTrue();
+            fcmHandler.CallCount.Should().Be(1);
+            apnsLogger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log" && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning);
+            (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(2);
+        }
+        finally { app.Delete(); }
+    }
+
+    private sealed class FcmHttpClientFactory(HttpMessageHandler handler) : Google.Apis.Http.HttpClientFactory
+    {
+        protected override HttpMessageHandler CreateHandler(CreateHttpClientArgs args) => handler;
     }
 
     [Theory]
