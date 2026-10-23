@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Orbit.Api.OAuth;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Tests.Persistence;
@@ -12,7 +13,8 @@ public class OAuthDistributedStateTests
     [Fact]
     public void ConsumedRefreshLineage_RemainsHashedAndReadableAcrossInstances_UntilFamilyExpiry()
     {
-        using var database = new SqliteOrbitDbContextFactory();
+        using var database = new SqliteOrbitDbContextFactory(
+            dependencies => new NpgsqlRetryingExecutionStrategy(dependencies, 3, TimeSpan.Zero, null));
         using var firstDb = database.CreateContext();
         using var secondDb = database.CreateContext();
         var clock = new RefreshClock();
@@ -43,7 +45,8 @@ public class OAuthDistributedStateTests
     [Fact]
     public void CodeCreatedByOneInstance_IsConsumedOnceByAnother()
     {
-        using var database = new SqliteOrbitDbContextFactory();
+        using var database = new SqliteOrbitDbContextFactory(
+            dependencies => new NpgsqlRetryingExecutionStrategy(dependencies, 3, TimeSpan.Zero, null));
         using var firstDb = database.CreateContext();
         using var secondDb = database.CreateContext();
         var first = new OAuthAuthorizationStore(new OAuthStateStore(firstDb, TimeProvider.System), TimeProvider.System);
