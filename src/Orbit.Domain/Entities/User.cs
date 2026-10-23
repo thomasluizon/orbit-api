@@ -313,33 +313,27 @@ public partial class User : Entity
         if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
             return;
 
+        RememberPaidCoverage();
         if (StripeSubscriptionId != subscriptionId)
             StripeRenewalStoppedByDeletion = false;
         StripeSubscriptionId = subscriptionId;
-        SubscriptionExpiresAtUtc = expiresAt;
-        SubscriptionPlan = UserPlan.Pro;
-        SubscriptionSource = Enums.SubscriptionSource.Stripe;
-        SubscriptionLapseReason = null;
-        SubscriptionEndedAtUtc = null;
-        PlayPurchaseToken = null;
-        PlayRenewalStoppedByDeletion = false;
-        if (interval.HasValue)
-            SubscriptionInterval = interval.Value;
+        StorePaidCoverage(Enums.SubscriptionSource.Stripe, expiresAt, interval ?? StripeCoverageInterval, null);
+        SelectPaidCoverage(Enums.SubscriptionSource.Stripe);
+        if (PlayCoverageExpiresAtUtc <= _timeProvider.GetUtcNow().UtcDateTime)
+        {
+            PlayPurchaseToken = null;
+            PlayRenewalStoppedByDeletion = false;
+        }
     }
 
     public void SetPlaySubscription(string purchaseToken, DateTime expiresAt,
         SubscriptionInterval? interval = null, bool isInGracePeriod = false)
     {
-        if (PlayPurchaseToken != purchaseToken)
-            PlayRenewalStoppedByDeletion = false;
-        PlayPurchaseToken = purchaseToken;
-        SubscriptionExpiresAtUtc = expiresAt;
-        SubscriptionPlan = UserPlan.Pro;
-        SubscriptionSource = Enums.SubscriptionSource.GooglePlay;
-        SubscriptionLapseReason = isInGracePeriod ? Enums.SubscriptionLapseReason.PaymentFailed : null;
-        SubscriptionEndedAtUtc = null;
-        if (interval.HasValue)
-            SubscriptionInterval = interval.Value;
+        RememberPaidCoverage();
+        LinkPlayPurchaseToken(purchaseToken);
+        var reason = isInGracePeriod ? Enums.SubscriptionLapseReason.PaymentFailed : (SubscriptionLapseReason?)null;
+        StorePaidCoverage(Enums.SubscriptionSource.GooglePlay, expiresAt, interval ?? PlayCoverageInterval, reason);
+        SelectPaidCoverage(Enums.SubscriptionSource.GooglePlay);
     }
 
     public void LinkPlayPurchaseToken(string purchaseToken)
@@ -391,19 +385,23 @@ public partial class User : Entity
         if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
             return;
 
+        RememberPaidCoverage();
         StripeSubscriptionId = null;
         StripeRenewalStoppedByDeletion = false;
+        StorePaidCoverage(Enums.SubscriptionSource.Stripe, null, null, null);
         if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
-            ClearSubscriptionEntitlement(reason);
+            SelectPaidCoverage(Enums.SubscriptionSource.Stripe, reason);
     }
 
     public void CancelPlaySubscription(SubscriptionLapseReason reason)
     {
         EnsureValidLapseReason(reason);
+        RememberPaidCoverage();
         PlayPurchaseToken = null;
         PlayRenewalStoppedByDeletion = false;
+        StorePaidCoverage(Enums.SubscriptionSource.GooglePlay, null, null, null);
         if (SubscriptionSource == Enums.SubscriptionSource.GooglePlay)
-            ClearSubscriptionEntitlement(reason);
+            SelectPaidCoverage(Enums.SubscriptionSource.GooglePlay, reason);
     }
 
     public void RecordSubscriptionLapseReason(
@@ -422,6 +420,7 @@ public partial class User : Entity
             return;
 
         SubscriptionLapseReason = reason;
+        StorePaidCoverage(source, SubscriptionExpiresAtUtc, SubscriptionInterval, reason);
     }
 
     private void ClearSubscriptionEntitlement(SubscriptionLapseReason reason)

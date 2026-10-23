@@ -13,7 +13,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Commands.Subscriptions;
 
-public class AppStoreCommandTests
+public partial class AppStoreCommandTests
 {
     private readonly IAppStoreService _apple = Substitute.For<IAppStoreService>();
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
@@ -119,6 +119,39 @@ public class AppStoreCommandTests
         result.IsSuccess.Should().BeTrue();
         _user.HasProAccess.Should().BeTrue();
         _user.AppStoreOriginalTransactionId.Should().Be("current-original");
+    }
+
+    [Fact]
+    public async Task Notification_RefundThenReversal_RestoresAccessAndDeduplicates()
+    {
+        _user.StartTrial(DateTime.UtcNow.AddDays(-30));
+        var transaction = Transaction;
+        _user.ApplyAppStoreSubscription(transaction.OriginalTransactionId, transaction.Environment, transaction.ExpiresAtUtc,
+            transaction.Interval, transaction.SignedAtUtc.AddSeconds(-1), true, null);
+        var refunded = transaction with { IsRevoked = true };
+        var reversed = transaction with { SignedAtUtc = transaction.SignedAtUtc.AddMinutes(1) };
+        _apple.VerifyNotification("refund").Returns(new AppStoreNotification(Guid.NewGuid(), "REFUND", "Sandbox", refunded));
+        _apple.VerifyNotification("reversal").Returns(new AppStoreNotification(Guid.NewGuid(), "REFUND_REVERSED", "Sandbox", reversed));
+        _apple.GetCurrentStateAsync(refunded, Arg.Any<CancellationToken>()).Returns(
+            new AppStoreSubscriptionState(refunded, false, refunded.ExpiresAtUtc, refunded.SignedAtUtc, false, false));
+        _apple.GetCurrentStateAsync(reversed, Arg.Any<CancellationToken>()).Returns(
+            new AppStoreSubscriptionState(reversed, true, reversed.ExpiresAtUtc, reversed.SignedAtUtc, false, true));
+        var ledger = new List<ProcessedAppStoreNotification>();
+        _notifications.AnyAsync(Arg.Any<Expression<Func<ProcessedAppStoreNotification, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => ledger.Any(call.Arg<Expression<Func<ProcessedAppStoreNotification, bool>>>().Compile()));
+        _notifications.AddAsync(Arg.Any<ProcessedAppStoreNotification>(), Arg.Any<CancellationToken>())
+            .Returns(call => { ledger.Add(call.Arg<ProcessedAppStoreNotification>()); return Task.CompletedTask; });
+        var handler = new HandleAppStoreNotificationCommandHandler(_apple, _users, _notifications, _work);
+
+        (await handler.Handle(new("refund"), default)).IsSuccess.Should().BeTrue();
+        _user.HasProAccess.Should().BeFalse();
+        (await handler.Handle(new("reversal"), default)).IsSuccess.Should().BeTrue();
+        _user.HasProAccess.Should().BeTrue();
+        _user.SubscriptionExpiresAtUtc.Should().Be(reversed.ExpiresAtUtc);
+        (await handler.Handle(new("reversal"), default)).IsSuccess.Should().BeTrue();
+        await _apple.Received(1).GetCurrentStateAsync(reversed, Arg.Any<CancellationToken>());
+        await _work.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        ledger.Should().HaveCount(2);
     }
 
     [Fact]

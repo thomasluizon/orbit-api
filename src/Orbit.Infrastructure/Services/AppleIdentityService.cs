@@ -41,7 +41,7 @@ public sealed class AppleIdentityService(HttpClient http, IOptions<AppleSignInSe
             var fields = new Dictionary<string, string> { ["client_id"] = clientId, ["client_secret"] = ClientSecret(clientId), ["code"] = code, ["grant_type"] = "authorization_code" };
             if (redirectUri is not null)
                 fields["redirect_uri"] = redirectUri;
-            using var response = await http.PostAsync("https://appleid.apple.com/auth/token", new FormUrlEncodedContent(fields), cancellationToken);
+            using var response = await http.PostAsync(_settings.TokenUrl, new FormUrlEncodedContent(fields), cancellationToken);
             if (response.StatusCode != HttpStatusCode.OK)
                 throw new AppleVerificationException();
             using var payload = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
@@ -81,19 +81,24 @@ public sealed class AppleIdentityService(HttpClient http, IOptions<AppleSignInSe
                 || json.GetProperty("iat").GetInt64() > time.GetUtcNow().AddMinutes(1).ToUnixTimeSeconds()
                 || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(json.GetProperty("nonce").GetString()!), Encoding.UTF8.GetBytes(expectedNonce)))
                 throw new AppleVerificationException();
-            var subject = json.GetProperty("sub").GetString();
-            if (string.IsNullOrWhiteSpace(subject) || subject.Length > 255)
-                throw new AppleVerificationException();
-            var email = json.TryGetProperty("email", out var emailClaim) && emailClaim.ValueKind == JsonValueKind.String ? emailClaim.GetString() : null;
-            var verified = json.TryGetProperty("email_verified", out var verifiedClaim)
-                && (verifiedClaim.ValueKind == JsonValueKind.True || verifiedClaim.ValueKind == JsonValueKind.String && verifiedClaim.GetString() == "true");
-            return new(subject, email, verified, "", audience);
+            return ReadIdentity(json, audience);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested && exception is HttpRequestException or TaskCanceledException
             or JsonException or CryptographicException or FormatException or KeyNotFoundException or InvalidOperationException or ArgumentException)
         {
             throw new AppleVerificationException();
         }
+    }
+
+    private static AppleIdentity ReadIdentity(JsonElement json, string audience)
+    {
+        var subject = json.GetProperty("sub").GetString();
+        if (string.IsNullOrWhiteSpace(subject) || subject.Length > 255)
+            throw new AppleVerificationException();
+        var email = json.TryGetProperty("email", out var emailClaim) && emailClaim.ValueKind == JsonValueKind.String ? emailClaim.GetString() : null;
+        var verified = json.TryGetProperty("email_verified", out var verifiedClaim)
+            && (verifiedClaim.ValueKind == JsonValueKind.True || verifiedClaim.ValueKind == JsonValueKind.String && verifiedClaim.GetString() == "true");
+        return new(subject, email, verified, "", audience);
     }
 
     private async Task<RSAParameters> KeyAsync(string keyId, CancellationToken cancellationToken)
@@ -104,7 +109,7 @@ public sealed class AppleIdentityService(HttpClient http, IOptions<AppleSignInSe
             var age = time.GetUtcNow() - _keysFetchedAtUtc;
             if (age >= TimeSpan.FromHours(6) || !_keys.ContainsKey(keyId) && age >= TimeSpan.FromMinutes(1))
             {
-                using var response = await http.GetAsync("https://appleid.apple.com/auth/keys", cancellationToken);
+                using var response = await http.GetAsync(_settings.KeysUrl, cancellationToken);
                 response.EnsureSuccessStatusCode();
                 using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
                 var keys = new Dictionary<string, RSAParameters>(StringComparer.Ordinal);
@@ -134,7 +139,7 @@ public sealed class AppleIdentityService(HttpClient http, IOptions<AppleSignInSe
             ["token"] = refreshToken,
             ["token_type_hint"] = "refresh_token"
         });
-        using var response = await http.PostAsync("https://appleid.apple.com/auth/revoke", body, cancellationToken);
+        using var response = await http.PostAsync(_settings.RevokeUrl, body, cancellationToken);
         if (response.StatusCode != HttpStatusCode.OK)
             throw new AppleVerificationException();
     }

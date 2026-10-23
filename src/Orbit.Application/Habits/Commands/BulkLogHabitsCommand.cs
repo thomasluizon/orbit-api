@@ -6,6 +6,7 @@ using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -152,13 +153,13 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
-        if (!habit.IsFlexible && habit.Logs.Any(l => l.Date == targetDate))
+        if (habit.Schedule != HabitSchedule.Flexible && habit.Logs.Any(l => l.Date == targetDate))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
-        if (habit.FrequencyUnit is not null
+        if (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate, weekStartDay))
         {
-            var isOverdue = !habit.IsFlexible
+            var isOverdue = habit.Schedule != HabitSchedule.Flexible
                 && targetDate == today
                 && HabitScheduleService.HasMissedPastOccurrence(
                     habit,

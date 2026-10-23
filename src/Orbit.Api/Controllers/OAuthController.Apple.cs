@@ -6,9 +6,10 @@ using Orbit.Application.Auth.Services;
 
 namespace Orbit.Api.Controllers;
 
+[Route("oauth/apple")]
 public partial class OAuthController
 {
-    [HttpGet("/oauth/apple/start")]
+    [HttpGet("start")]
     [DistributedRateLimit("auth")]
     public IActionResult AppleStart([FromServices] AppleAuthorizationFlow flow,
         [FromQuery] string client_id, [FromQuery] string redirect_uri, [FromQuery] string state,
@@ -28,7 +29,7 @@ public partial class OAuthController
         return url is null ? StatusCode(StatusCodes.Status503ServiceUnavailable) : Redirect(url);
     }
 
-    [HttpPost("/oauth/apple/callback")]
+    [HttpPost("callback")]
     [DistributedRateLimit("auth")]
     [Consumes("application/x-www-form-urlencoded")]
     public async Task<IActionResult> AppleCallback([FromServices] AppleAuthorizationFlow flow,

@@ -175,8 +175,11 @@ public partial class SubscriptionController(
     public async Task<IActionResult> HandleAppStoreNotification([FromBody] AppStoreNotificationRequest request, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new HandleAppStoreNotificationCommand(request.SignedPayload), cancellationToken);
-        return result.IsSuccess ? Ok() : result.ToErrorResult(result.ErrorCode == ErrorCodes.PaymentServiceUnavailable
-            ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status401Unauthorized);
+        if (result.IsSuccess)
+            return Ok();
+        var status = result.ErrorCode == ErrorCodes.PaymentServiceUnavailable
+            ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status401Unauthorized;
+        return result.ToErrorResult(status);
     }
 
     public record VerifyAppStorePurchaseRequest(string SignedTransaction);

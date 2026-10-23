@@ -25,7 +25,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class AuthControllerTests
+public partial class AuthControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();

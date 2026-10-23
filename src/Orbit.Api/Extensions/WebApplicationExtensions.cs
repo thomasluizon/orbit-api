@@ -148,6 +148,19 @@ public static partial class WebApplicationExtensions
         using var document = TryParseMcpBody(body);
         var root = document?.RootElement;
 
+        if (root is { ValueKind: JsonValueKind.Object } message &&
+            message.TryGetProperty("id", out var id) && !IsValidMcpRequestId(id))
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                jsonrpc = "2.0",
+                id = (object?)null,
+                error = new { code = (int)McpErrorCode.InvalidRequest, message = "Invalid request ID" }
+            }, context.RequestAborted);
+            return;
+        }
+
         if (IsMcpUnauthenticatedMethod(root))
         {
             await next();
@@ -198,6 +211,18 @@ public static partial class WebApplicationExtensions
             next,
             body,
             new McpToolCallRequest(toolName!, requestId, operationId, operationFingerprint));
+    }
+
+    private static bool IsValidMcpRequestId(JsonElement id)
+    {
+        try
+        {
+            return id.Deserialize<RequestId>(McpJsonUtilities.DefaultOptions).Id is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     internal static async Task<bool> TryApplyMcpRateLimitsAsync(

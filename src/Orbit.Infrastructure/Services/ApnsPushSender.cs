@@ -66,7 +66,7 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested && ex is HttpRequestException or TaskCanceledException or JsonException or CryptographicException or ArgumentException)
         {
-            _logger.LogWarning("APNs delivery could not complete ({FailureType})", ex.GetType().Name);
+            _logger.LogWarning(ex, "APNs delivery could not complete ({FailureType})", ex.GetType().Name);
             return ApnsDeliveryOutcome.Retained;
         }
         finally

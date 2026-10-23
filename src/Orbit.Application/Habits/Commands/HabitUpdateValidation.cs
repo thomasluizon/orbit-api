@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -47,11 +48,11 @@ internal static class HabitUpdateValidation
         if (finalParentId is not null)
         {
             var parent = related.FirstOrDefault(h => h.Id == finalParentId);
-            if (parent is not null && parent.IsGeneral != isGeneral)
+            if (parent is not null && (parent.Schedule == HabitSchedule.General) != isGeneral)
                 return Result.Failure(ErrorMessages.GeneralMismatchWithParent);
         }
-        return related.Any(c => c.ParentHabitId == habit.Id && c.IsGeneral != isGeneral
-                && !(c.IsCompleted && c.FrequencyUnit is null))
+        return related.Any(c => c.ParentHabitId == habit.Id && (c.Schedule == HabitSchedule.General) != isGeneral
+                && !(c.IsCompleted && c.Schedule is HabitSchedule.OneTime or HabitSchedule.General))
             ? Result.Failure(ErrorMessages.GeneralMismatchWithChildren)
             : Result.Success();
     }

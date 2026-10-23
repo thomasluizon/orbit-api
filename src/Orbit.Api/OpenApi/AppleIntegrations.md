@@ -48,6 +48,35 @@ turn it off. The other Apple capabilities, Stripe, Play, FCM and Web Push keep t
 independent configuration. App Store subscriptions are managed by the customer;
 account deletion does not submit App Store cancellation requests.
 
+## Provider coverage and refund reversals
+
+Each provider retains its verified paid-through instant, interval and pending lapse
+reason. The shared entitlement projects the longest currently valid paid term.
+A shorter provider update cannot replace it, and a refund or cancellation falls
+back to another provider's still-valid coverage. Provider bindings remain linked
+while that coverage is active. The `PreserveProviderPaidCoverage` migration adds
+nullable columns and backfills the currently selected provider from the existing
+subscription projection. Other linked providers acquire coverage on their next
+verified update; the migration does not infer terms from identifiers.
+
+`REFUND_REVERSED` reconciles the verified current subscription state before its
+UUID is recorded, using the same account binding checks as renewals. Apple's
+[notification type documentation](https://developer.apple.com/documentation/appstoreservernotifications/notificationtype)
+identifies the reversal and requires reinstatement after a refund. Its refund
+event table has an empty subtype cell for `REFUND_REVERSED`; no subtype is required.
+The complete table and possible values can be rederived from
+[Apple's documentation JSON](https://developer.apple.com/tutorials/data/documentation/appstoreservernotifications/notificationtype.json).
+
+The sign-in service reads `AppleSignIn__TokenUrl`, `AppleSignIn__KeysUrl` and
+`AppleSignIn__RevokeUrl` from configuration, with Apple's endpoints as defaults.
+No environment override is required. A real response from
+[Apple's discovery endpoint](https://appleid.apple.com/.well-known/openid-configuration)
+confirms `token_endpoint`, `jwks_uri` and `revocation_endpoint` as
+`https://appleid.apple.com/auth/token`, `https://appleid.apple.com/auth/keys` and
+`https://appleid.apple.com/auth/revoke`, respectively. The service continues to
+validate the fixed Apple issuer and audience. Endpoint configuration does not
+change the trusted identity provider.
+
 ## Sign-in transport
 
 `POST /api/auth/apple/native` accepts `identityToken`, `authorizationCode`,

@@ -3,6 +3,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Tests.Entities;
 
@@ -22,12 +23,14 @@ public class HabitScheduleCharacterizationTests
         log.IsSuccess.Should().BeTrue();
         habit.DueDate.Should().Be(Start.AddDays(dueOffset));
         habit.IsCompleted.Should().Be(completed);
+        habit.StartDate.Should().Be(Start);
         log.Value.Date.Should().Be(Start);
         log.Value.Value.Should().Be(1);
 
         habit.Unlog(Start).IsSuccess.Should().BeTrue();
         habit.IsCompleted.Should().BeFalse();
         habit.DueDate.Should().Be(Start);
+        habit.StartDate.Should().Be(Start);
         habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeTrue();
     }
 
@@ -126,6 +129,40 @@ public class HabitScheduleCharacterizationTests
         habit.DueDate.Should().Be(Start.AddDays(4));
         habit.IsCompleted.Should().BeFalse();
         habit.Logs.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    public void Log_KeepsTypeSpecificChecklistReset(int type, bool remainsChecked)
+    {
+        var habit = Create(type);
+        habit.UpdateChecklist([new ChecklistItem("Read", true)]);
+
+        habit.Log(Start).IsSuccess.Should().BeTrue();
+
+        habit.ChecklistItems.Should().Equal(new ChecklistItem("Read", remainsChecked));
+        habit.StartDate.Should().Be(Start);
+    }
+
+    [Fact]
+    public void FlexibleLogAndUndo_KeepCompletionOrdinalsAndWindowTarget()
+    {
+        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Habit",
+            FrequencyUnit.Week, 2, Start, IsFlexible: true)).Value;
+
+        habit.Log(Start).IsSuccess.Should().BeTrue();
+        habit.Log(Start).IsSuccess.Should().BeTrue();
+        habit.CheckLog(Start, 1).ErrorCode.Should().Be(DomainErrors.AllInstancesDone.Code);
+        habit.Unlog(Start).IsSuccess.Should().BeTrue();
+        habit.Log(Start).IsSuccess.Should().BeTrue();
+
+        habit.Logs.Select(log => log.CompletionOrdinal).Should().Equal(0, 1, 2);
+        habit.Logs.Count(log => !log.IsDeleted).Should().Be(2);
+        habit.DueDate.Should().Be(Start);
+        habit.StartDate.Should().Be(Start);
     }
 
     private static Habit Create(int type) => Habit.Create(new HabitCreateParams(

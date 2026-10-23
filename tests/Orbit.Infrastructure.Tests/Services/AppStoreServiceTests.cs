@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class AppStoreServiceTests : IDisposable
+public sealed partial class AppStoreServiceTests : IDisposable
 {
     private readonly AppleSigningFixture _signer = new();
     private readonly ECDsa _apiKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);

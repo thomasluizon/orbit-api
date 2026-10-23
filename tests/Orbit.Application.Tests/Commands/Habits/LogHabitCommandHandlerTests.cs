@@ -812,6 +812,26 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_FlexibleScheduleWithDivergentFlags_LogsSecondCompletion()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flexible", FrequencyUnit.Week, 2, Today, IsFlexible: true)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, false);
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Logs.Count(log => !log.IsDeleted && log.Value > 0).Should().Be(2);
+        habit.Logs.Select(log => log.CompletionOrdinal).Should().Equal(0, 1);
+        habit.StartDate.Should().Be(Today);
+        habit.DueDate.Should().Be(Today);
+        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_BadHabit_DoesNotToggleOnDuplicateDate()
     {
         var habit = Habit.Create(new HabitCreateParams(

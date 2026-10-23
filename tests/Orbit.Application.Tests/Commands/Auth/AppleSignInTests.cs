@@ -17,7 +17,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
-public class AppleSignInTests
+public partial class AppleSignInTests
 {
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly IAuthUserStore _userStore = Substitute.For<IAuthUserStore>();
@@ -133,12 +133,12 @@ public class AppleSignInTests
         new TakeAppleHandoffCommandValidator().Validate(new TakeAppleHandoffCommand("", "")).IsValid.Should().BeFalse();
     }
 
-    private AppleAuthorizationFlow AuthorizationFlow()
+    private AppleAuthorizationFlow AuthorizationFlow(bool refuseStorage = false, bool mcpConfigured = false)
     {
         var states = Substitute.For<IOAuthStateStore>();
         var entries = new Dictionary<(string, string), (string Payload, DateTime Expiry)>();
         states.Put(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>(), Arg.Any<int?>()).Returns(call =>
-        { entries[(call.ArgAt<string>(0), call.ArgAt<string>(1))] = (call.ArgAt<string>(2), call.ArgAt<DateTime>(3)); return true; });
+        { if (refuseStorage) return false; entries[(call.ArgAt<string>(0), call.ArgAt<string>(1))] = (call.ArgAt<string>(2), call.ArgAt<DateTime>(3)); return true; });
         states.Take(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTime>()).Returns(call =>
         {
             var key = (call.ArgAt<string>(0), call.ArgAt<string>(1));
@@ -146,7 +146,7 @@ public class AppleSignInTests
             return entry.Payload;
         });
         return new(states, _apple, _signIn, Options.Create(new AppleSignInSettings
-        { WebClientId = "web", RedirectUri = "https://api.example.com/callback", WebOrigin = "https://app.example.com" }), _clock);
+        { KeyId = "key", TeamId = "team", PrivateKey = "test-key", NativeClientId = "native", McpRedirectUri = mcpConfigured ? "https://api.example.com/oauth/apple/callback" : "", WebClientId = "web", RedirectUri = "https://api.example.com/callback", WebOrigin = "https://app.example.com" }), _clock);
     }
 
     private sealed class Clock(DateTimeOffset now) : TimeProvider

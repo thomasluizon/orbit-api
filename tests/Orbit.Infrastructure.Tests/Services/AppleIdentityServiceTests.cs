@@ -9,7 +9,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class AppleIdentityServiceTests : IDisposable
+public sealed partial class AppleIdentityServiceTests : IDisposable
 {
     private readonly RSA _appleKey = RSA.Create(2048);
     private readonly ECDsa _clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -42,17 +42,17 @@ public sealed class AppleIdentityServiceTests : IDisposable
         return $"{content}.{AppleJwt.Encode((key ?? _appleKey).SignData(Encoding.ASCII.GetBytes(content), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))}";
     }
 
-    private AppleIdentityService Service(string exchangedToken, out RecordingHandler handler)
+    private AppleIdentityService Service(string exchangedToken, out RecordingHandler handler, AppleSignInSettings? settings = null, Func<HttpRequestMessage, HttpResponseMessage>? respond = null)
     {
         var parameters = _appleKey.ExportParameters(false);
-        handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch
+        handler = new RecordingHandler(request => respond?.Invoke(request) ?? (request.RequestUri!.AbsolutePath switch
         {
             "/auth/keys" => new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { keys = new[] { new { kid = "APPLE", kty = "RSA", use = "sig", alg = "RS256", n = AppleJwt.Encode(parameters.Modulus!), e = AppleJwt.Encode(parameters.Exponent!) } } })) },
             "/auth/token" => new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { access_token = "access", token_type = "Bearer", expires_in = 3600, refresh_token = "refresh", id_token = exchangedToken })) },
             "/auth/revoke" => new(HttpStatusCode.OK),
             _ => throw new InvalidOperationException("Unexpected Apple endpoint")
-        });
-        return new(new HttpClient(handler), Options.Create(Settings), TimeProvider.System);
+        }));
+        return new(new HttpClient(handler), Options.Create(settings ?? Settings), TimeProvider.System);
     }
 
     [Theory]

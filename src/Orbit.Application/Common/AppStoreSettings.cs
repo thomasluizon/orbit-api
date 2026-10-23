@@ -17,6 +17,12 @@ public sealed class AppStoreSettings
         && !string.IsNullOrWhiteSpace(MonthlyProductId) && !string.IsNullOrWhiteSpace(YearlyProductId)
         && MonthlyProductId != YearlyProductId;
 
-    public SubscriptionInterval? IntervalFor(string productId) => productId == MonthlyProductId && MonthlyProductId.Length > 0
-        ? SubscriptionInterval.Monthly : productId == YearlyProductId && YearlyProductId.Length > 0 ? SubscriptionInterval.Yearly : null;
+    public SubscriptionInterval? IntervalFor(string productId)
+    {
+        if (productId == MonthlyProductId && MonthlyProductId.Length > 0)
+            return SubscriptionInterval.Monthly;
+        if (productId == YearlyProductId && YearlyProductId.Length > 0)
+            return SubscriptionInterval.Yearly;
+        return null;
+    }
 }

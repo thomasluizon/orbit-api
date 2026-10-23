@@ -298,4 +298,23 @@ public class BulkSkipHabitsCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habits);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_DivergentLegacyFlags_UsesScheduleForSkip(bool flexible)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day,
+            flexible ? 2 : 1, Today, IsFlexible: flexible)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !flexible);
+        SetupHabitsForUser([habit]);
+
+        var result = await _handler.Handle(new BulkSkipHabitsCommand(UserId, [new(habit.Id)]), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
+        habit.DueDate.Should().Be(flexible ? Today : Today.AddDays(1));
+        habit.StartDate.Should().Be(Today);
+        habit.Logs.Count(log => log.Value == 0).Should().Be(flexible ? 1 : 0);
+    }
 }

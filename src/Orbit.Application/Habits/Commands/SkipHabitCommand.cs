@@ -82,7 +82,7 @@ public class SkipHabitCommandHandler(
             return receipt.PropagateError<SkipHabitResponse>();
         var previousLogIds = habit.Logs.Select(log => log.Id).ToHashSet();
 
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             habit.PostponeTo(today.AddDays(1));
             await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
@@ -150,7 +150,7 @@ public class SkipHabitCommandHandler(
             return Result.Failure(ErrorMessages.HabitNotFound);
         if (habit.IsCompleted)
             return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return Result.Success();
 
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
@@ -163,7 +163,7 @@ public class SkipHabitCommandHandler(
 
     private async Task<Result?> ApplySkip(Habit habit, DateOnly targetDate, int weekStartDay, CancellationToken cancellationToken)
     {
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
         {
             var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
             if (remaining <= 0)

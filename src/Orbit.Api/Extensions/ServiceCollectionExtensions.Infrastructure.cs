@@ -312,7 +312,7 @@ public static partial class ServiceCollectionExtensions
                     new Icon { Source = "https://api.useorbit.org/favicon.svg", MimeType = "image/svg+xml", Sizes = ["any"] }
                 ]
         })
-            .WithHttpTransport()
+            .WithHttpTransport(options => options.Stateless = false)
             .WithTools<AgentTools>()
             .WithTools<HabitTools>()
             .WithTools<TagTools>()

@@ -15,7 +15,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class SubscriptionControllerTests
+public partial class SubscriptionControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IPlayPushTokenValidator _pushTokenValidator = Substitute.For<IPlayPushTokenValidator>();

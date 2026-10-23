@@ -45,7 +45,7 @@ public class McpSessionReplayTests
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(auth).AddSingleton(moderation).AddSingleton(limiter).AddHttpContextAccessor();
         var applications = 0;
-        builder.Services.AddMcpServer().WithHttpTransport().WithCallToolHandler(async (_, token) =>
+        builder.Services.AddMcpServer().WithHttpTransport(options => options.Stateless = false).WithCallToolHandler(async (_, token) =>
         {
             var context = new HttpContextAccessor();
             var work = new UnitOfWork(database.Context, new DatabaseConnectionSettings());

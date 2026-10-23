@@ -17,6 +17,7 @@ public sealed record AppleHandoff(string State, LoginResponse Login);
 public sealed class AppleAuthorizationFlow(IOAuthStateStore states, IAppleIdentityService apple, AppleSignInFlow signIn,
     IOptions<AppleSignInSettings> settings, TimeProvider time)
 {
+    private static readonly string[] NameKeys = ["firstName", "lastName"];
     private readonly AppleSignInSettings _settings = settings.Value;
 
     public string? Start(string state, string language, string? referralCode, string? mcpContext = null)
@@ -92,7 +93,7 @@ public sealed class AppleAuthorizationFlow(IOAuthStateStore states, IAppleIdenti
             using var payload = JsonDocument.Parse(userJson);
             if (!payload.RootElement.TryGetProperty("name", out var name))
                 return null;
-            var parts = new[] { "firstName", "lastName" }.Select(key => name.TryGetProperty(key, out var part) && part.ValueKind == JsonValueKind.String ? part.GetString() : null);
+            var parts = NameKeys.Select(key => name.TryGetProperty(key, out var part) && part.ValueKind == JsonValueKind.String ? part.GetString() : null);
             var value = string.Join(' ', parts.Where(part => !string.IsNullOrWhiteSpace(part)));
             return value.Length <= 200 && !value.Any(char.IsControl) ? value : null;
         }

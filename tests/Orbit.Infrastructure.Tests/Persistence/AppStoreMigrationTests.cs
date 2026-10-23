@@ -27,8 +27,14 @@ public class AppStoreMigrationTests
         indexes.Select(index => index.Name).Should().BeEquivalentTo(indexNames);
         indexes.Should().OnlyContain(index => index.IsUnique);
         indexes.Where(index => index.Table == "Users").Should().HaveCount(2).And.OnlyContain(index => index.Filter != null);
-        var additions = columns.Cast<MigrationOperation>().Append(table).Concat(indexes).ToHashSet();
-        additions.Should().HaveCount(10);
+        var coverageColumns = operations.OfType<AddColumnOperation>()
+            .Where(column => column.Table == "Users" && column.Name.Contains("Coverage", StringComparison.Ordinal)).ToArray();
+        coverageColumns.Select(column => column.Name).Should().BeEquivalentTo(
+            new[] { "Stripe", "Play", "AppStore" }.SelectMany(provider =>
+                new[] { $"{provider}CoverageExpiresAtUtc", $"{provider}CoverageInterval", $"{provider}CoverageLapseReason" }));
+        coverageColumns.Should().OnlyContain(column => column.IsNullable && !column.IsDestructiveChange);
+        var additions = columns.Cast<MigrationOperation>().Concat(coverageColumns).Append(table).Concat(indexes).ToHashSet();
+        additions.Should().HaveCount(19);
         return operations.Where(operation => !additions.Contains(operation)).ToArray();
     }
 

@@ -2601,6 +2601,16 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiSummaryEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("AppStoreCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("AppStoreCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppStoreCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("AppStoreEnvironment")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -2744,6 +2754,16 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PlayCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PlayCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlayCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
@@ -2817,6 +2837,16 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<int>("StreakFreezesAccumulated")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StripeCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StripeCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StripeCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");

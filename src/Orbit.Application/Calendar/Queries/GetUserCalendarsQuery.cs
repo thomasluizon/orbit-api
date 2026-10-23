@@ -53,13 +53,14 @@ public partial class GetUserCalendarsQueryHandler(
         }
         catch (CalendarProviderException ex)
         {
-            LogGoogleCalendarApiError(logger, ex, request.UserId);
-            if (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
+            if (ex.Kind is CalendarFetchErrorKind.ReconnectRequired or CalendarFetchErrorKind.MissingScope)
             {
+                LogGoogleCalendarReconnectRequired(logger, request.UserId, ex.RawErrorCode);
                 if (request.PersistConnectionState) user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
                 if (request.PersistConnectionState) await unitOfWork.SaveChangesAsync(cancellationToken);
                 return Result.Failure<List<UserCalendarItem>>(ErrorMessages.CalendarReconnectRequired);
             }
+            LogGoogleCalendarApiError(logger, ex, request.UserId);
             return Result.Failure<List<UserCalendarItem>>(ErrorMessages.CalendarFetchFailed);
         }
     }
@@ -81,6 +82,9 @@ public partial class GetUserCalendarsQueryHandler(
                 selected is null ? c.IsDefaultOwned : selected.Contains(c.Id)))
             .ToList();
     }
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Google Calendar reconnect required for user {UserId} (code: {ErrorCode})")]
+    private static partial void LogGoogleCalendarReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Google Calendar list error for user {UserId}")]
     private static partial void LogGoogleCalendarApiError(ILogger logger, Exception ex, Guid userId);

@@ -8,6 +8,7 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed class AppStoreService(HttpClient http, IOptions<AppStoreSettings> settings, AppStoreJwsVerifier verifier) : IAppStoreService
 {
+    private const string EnvironmentClaim = "environment";
     private readonly AppStoreSettings _settings = settings.Value;
     public bool IsConfigured => _settings.IsConfigured;
 
@@ -20,7 +21,7 @@ public sealed class AppStoreService(HttpClient http, IOptions<AppStoreSettings> 
             var json = payload.RootElement;
             var productId = json.GetProperty("productId").GetString() ?? "";
             var interval = _settings.IntervalFor(productId);
-            var environment = json.GetProperty("environment").GetString() ?? "";
+            var environment = json.GetProperty(EnvironmentClaim).GetString() ?? "";
             var originalId = json.GetProperty("originalTransactionId").GetString() ?? "";
             var transactionId = json.GetProperty("transactionId").GetString() ?? "";
             if (json.GetProperty("bundleId").GetString() != _settings.BundleId || interval is null
@@ -49,7 +50,7 @@ public sealed class AppStoreService(HttpClient http, IOptions<AppStoreSettings> 
             if (uuid == Guid.Empty || json.GetProperty("version").GetString() != "2.0")
                 throw new AppleVerificationException();
             var data = json.GetProperty("data");
-            var environment = data.GetProperty("environment").GetString() ?? "";
+            var environment = data.GetProperty(EnvironmentClaim).GetString() ?? "";
             if (environment is not ("Sandbox" or "Production") || data.GetProperty("bundleId").GetString() != _settings.BundleId
                 || environment == "Production" && data.GetProperty("appAppleId").GetInt64() != _settings.AppAppleId)
                 throw new AppleVerificationException();
@@ -80,31 +81,15 @@ public sealed class AppStoreService(HttpClient http, IOptions<AppStoreSettings> 
                 throw new BillingProviderException("App Store subscription lookup failed.");
             using var payload = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var json = payload.RootElement;
-            if (json.GetProperty("bundleId").GetString() != _settings.BundleId || json.GetProperty("environment").GetString() != transaction.Environment)
+            if (json.GetProperty("bundleId").GetString() != _settings.BundleId || json.GetProperty(EnvironmentClaim).GetString() != transaction.Environment)
                 throw new AppleVerificationException();
-            foreach (var group in json.GetProperty("data").EnumerateArray())
-                foreach (var item in group.GetProperty("lastTransactions").EnumerateArray())
-                {
-                    if (item.GetProperty("originalTransactionId").GetString() != transaction.OriginalTransactionId)
-                        continue;
-                    var current = VerifyTransaction(item.GetProperty("signedTransactionInfo").GetString()!);
-                    if (current.OriginalTransactionId != transaction.OriginalTransactionId || current.Environment != transaction.Environment
-                        || current.AppAccountToken != transaction.AppAccountToken)
-                        throw new AppleVerificationException();
-                    using var renewal = verifier.Verify(item.GetProperty("signedRenewalInfo").GetString()!);
-                    var info = renewal.RootElement;
-                    if (info.GetProperty("originalTransactionId").GetString() != current.OriginalTransactionId
-                        || info.GetProperty("environment").GetString() != current.Environment
-                        || _settings.IntervalFor(info.GetProperty("productId").GetString() ?? "") is null)
-                        throw new AppleVerificationException();
-                    var status = item.GetProperty("status").GetInt32();
-                    var grace = status == 4;
-                    var expiresAtUtc = grace ? Instant(info, "gracePeriodExpiresDate") : current.ExpiresAtUtc;
-                    var grantsPro = status is 1 or 4 && !current.IsRevoked && expiresAtUtc > now.UtcDateTime;
-                    var signedAtUtc = Instant(info, "signedDate");
-                    return new(current, grantsPro, expiresAtUtc, signedAtUtc > current.SignedAtUtc ? signedAtUtc : current.SignedAtUtc,
-                        grace, info.GetProperty("autoRenewStatus").GetInt32() == 1);
-                }
+            var items = json.GetProperty("data").EnumerateArray()
+                .SelectMany(group => group.GetProperty("lastTransactions").EnumerateArray());
+            foreach (var item in items)
+            {
+                if (item.GetProperty("originalTransactionId").GetString() == transaction.OriginalTransactionId)
+                    return ReadCurrentState(item, transaction, now);
+            }
             return null;
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested
@@ -112,6 +97,27 @@ public sealed class AppStoreService(HttpClient http, IOptions<AppStoreSettings> 
         {
             throw new BillingProviderException("App Store subscription lookup could not complete.");
         }
+    }
+
+    private AppStoreSubscriptionState ReadCurrentState(JsonElement item, AppStoreTransaction transaction, DateTimeOffset now)
+    {
+        var current = VerifyTransaction(item.GetProperty("signedTransactionInfo").GetString()!);
+        if (current.OriginalTransactionId != transaction.OriginalTransactionId || current.Environment != transaction.Environment
+            || current.AppAccountToken != transaction.AppAccountToken)
+            throw new AppleVerificationException();
+        using var renewal = verifier.Verify(item.GetProperty("signedRenewalInfo").GetString()!);
+        var info = renewal.RootElement;
+        if (info.GetProperty("originalTransactionId").GetString() != current.OriginalTransactionId
+            || info.GetProperty(EnvironmentClaim).GetString() != current.Environment
+            || _settings.IntervalFor(info.GetProperty("productId").GetString() ?? "") is null)
+            throw new AppleVerificationException();
+        var status = item.GetProperty("status").GetInt32();
+        var grace = status == 4;
+        var expiresAtUtc = grace ? Instant(info, "gracePeriodExpiresDate") : current.ExpiresAtUtc;
+        var grantsPro = status is 1 or 4 && !current.IsRevoked && expiresAtUtc > now.UtcDateTime;
+        var signedAtUtc = Instant(info, "signedDate");
+        return new(current, grantsPro, expiresAtUtc, signedAtUtc > current.SignedAtUtc ? signedAtUtc : current.SignedAtUtc,
+            grace, info.GetProperty("autoRenewStatus").GetInt32() == 1);
     }
 
     private void EnsureConfigured()

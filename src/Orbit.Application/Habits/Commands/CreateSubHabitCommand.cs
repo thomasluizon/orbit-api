@@ -142,7 +142,7 @@ public class CreateSubHabitCommandHandler(
             ReminderTimes: opts.ReminderTimes,
             SlipAlertEnabled: opts.SlipAlertEnabled,
             ChecklistItems: opts.ChecklistItems,
-            IsGeneral: parent.IsGeneral,
+            IsGeneral: parent.Schedule == HabitSchedule.General,
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,

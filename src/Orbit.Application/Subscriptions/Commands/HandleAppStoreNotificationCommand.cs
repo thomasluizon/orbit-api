@@ -13,7 +13,7 @@ public sealed class HandleAppStoreNotificationCommandHandler(IAppStoreService ap
     : IRequestHandler<HandleAppStoreNotificationCommand, Result>
 {
     private static readonly HashSet<string> SupportedTypes = ["SUBSCRIBED", "DID_RENEW", "DID_CHANGE_RENEWAL_STATUS",
-        "DID_FAIL_TO_RENEW", "GRACE_PERIOD_EXPIRED", "EXPIRED", "REFUND", "REVOKE"];
+        "DID_FAIL_TO_RENEW", "GRACE_PERIOD_EXPIRED", "EXPIRED", "REFUND", "REFUND_REVERSED", "REVOKE"];
 
     public async Task<Result> Handle(HandleAppStoreNotificationCommand request, CancellationToken cancellationToken)
     {
@@ -22,32 +22,7 @@ public sealed class HandleAppStoreNotificationCommandHandler(IAppStoreService ap
         try
         {
             var notification = appStore.VerifyNotification(request.SignedPayload);
-            return await unitOfWork.ExecuteInTransactionAsync(async ct =>
-            {
-                await unitOfWork.AcquireAdvisoryLockAsync($"app-store-notification:{notification.NotificationUuid}", ct);
-                if (await notifications.AnyAsync(n => n.NotificationUuid == notification.NotificationUuid, ct))
-                    return Result.Success();
-                if (SupportedTypes.Contains(notification.NotificationType) && notification.Transaction is { } transaction)
-                {
-                    await unitOfWork.AcquireAdvisoryLockAsync($"app-store:{transaction.OriginalTransactionId}", ct);
-                    var state = await appStore.GetCurrentStateAsync(transaction, ct);
-                    if (state is null)
-                        return Result.Failure(ErrorMessages.PaymentServiceUnavailable);
-                    await unitOfWork.AcquireUserRowLockAsync(transaction.AppAccountToken, ct);
-                    var user = await users.FindOneTrackedIgnoringFiltersAsync(u => u.Id == transaction.AppAccountToken, ct);
-                    if (user is not null)
-                    {
-                        if (state.Transaction.AppAccountToken != user.Id
-                            || await users.AnyIgnoringFiltersAsync(u => u.AppStoreOriginalTransactionId == transaction.OriginalTransactionId && u.Id != user.Id, ct))
-                            return Result.Failure(ErrorMessages.AppStorePurchaseAccountMismatch);
-                        if (user.AppStoreOriginalTransactionId is null || user.AppStoreOriginalTransactionId == transaction.OriginalTransactionId)
-                            AppStoreEntitlement.Apply(user, state);
-                    }
-                }
-                await notifications.AddAsync(ProcessedAppStoreNotification.Create(notification.NotificationUuid, notification.Environment), ct);
-                await unitOfWork.SaveChangesAsync(ct);
-                return Result.Success();
-            }, cancellationToken);
+            return await unitOfWork.ExecuteInTransactionAsync(ct => ProcessAsync(notification, ct), cancellationToken);
         }
         catch (AppleVerificationException)
         {
@@ -57,5 +32,39 @@ public sealed class HandleAppStoreNotificationCommandHandler(IAppStoreService ap
         {
             return Result.Failure(ErrorMessages.PaymentServiceUnavailable);
         }
+    }
+
+    private async Task<Result> ProcessAsync(AppStoreNotification notification, CancellationToken cancellationToken)
+    {
+        await unitOfWork.AcquireAdvisoryLockAsync($"app-store-notification:{notification.NotificationUuid}", cancellationToken);
+        if (await notifications.AnyAsync(n => n.NotificationUuid == notification.NotificationUuid, cancellationToken))
+            return Result.Success();
+        if (SupportedTypes.Contains(notification.NotificationType) && notification.Transaction is { } transaction)
+        {
+            var result = await ReconcileAsync(transaction, cancellationToken);
+            if (result.IsFailure)
+                return result;
+        }
+        await notifications.AddAsync(ProcessedAppStoreNotification.Create(notification.NotificationUuid, notification.Environment), cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
+    private async Task<Result> ReconcileAsync(AppStoreTransaction transaction, CancellationToken cancellationToken)
+    {
+        await unitOfWork.AcquireAdvisoryLockAsync($"app-store:{transaction.OriginalTransactionId}", cancellationToken);
+        var state = await appStore.GetCurrentStateAsync(transaction, cancellationToken);
+        if (state is null)
+            return Result.Failure(ErrorMessages.PaymentServiceUnavailable);
+        await unitOfWork.AcquireUserRowLockAsync(transaction.AppAccountToken, cancellationToken);
+        var user = await users.FindOneTrackedIgnoringFiltersAsync(u => u.Id == transaction.AppAccountToken, cancellationToken);
+        if (user is null)
+            return Result.Success();
+        if (state.Transaction.AppAccountToken != user.Id || state.Transaction.OriginalTransactionId != transaction.OriginalTransactionId
+            || await users.AnyIgnoringFiltersAsync(u => u.AppStoreOriginalTransactionId == transaction.OriginalTransactionId && u.Id != user.Id, cancellationToken))
+            return Result.Failure(ErrorMessages.AppStorePurchaseAccountMismatch);
+        if (user.AppStoreOriginalTransactionId is null || user.AppStoreOriginalTransactionId == transaction.OriginalTransactionId)
+            AppStoreEntitlement.Apply(user, state);
+        return Result.Success();
     }
 }

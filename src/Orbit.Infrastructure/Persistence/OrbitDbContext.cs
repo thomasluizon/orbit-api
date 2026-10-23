@@ -876,6 +876,16 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
+            entity.Property(u => u.StripeCoverageExpiresAtUtc);
+            entity.Property(u => u.StripeCoverageInterval);
+            entity.Property(u => u.StripeCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(u => u.PlayCoverageExpiresAtUtc);
+            entity.Property(u => u.PlayCoverageInterval);
+            entity.Property(u => u.PlayCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(u => u.AppStoreCoverageExpiresAtUtc);
+            entity.Property(u => u.AppStoreCoverageInterval);
+            entity.Property(u => u.AppStoreCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
+
             entity.Property(u => u.SubscriptionPlan).HasColumnName("Plan");
             entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
             entity.Property(u => u.StripeRenewalStoppedByDeletion).HasDefaultValue(false);

@@ -29,19 +29,9 @@ public partial class User
         if (AppStoreStateSignedAtUtc > signedAtUtc)
             return;
         AppStoreStateSignedAtUtc = signedAtUtc;
-        if (SubscriptionSource == Enums.SubscriptionSource.Stripe && HasActivePaidSubscription && SubscriptionExpiresAtUtc > expiresAtUtc)
-            return;
-        if (!grantsPro)
-        {
-            if (SubscriptionSource == Enums.SubscriptionSource.AppStore)
-                ClearSubscriptionEntitlement(lapseReason ?? Enums.SubscriptionLapseReason.Expired);
-            return;
-        }
-        SubscriptionSource = Enums.SubscriptionSource.AppStore;
-        SubscriptionPlan = UserPlan.Pro;
-        SubscriptionExpiresAtUtc = expiresAtUtc;
-        SubscriptionInterval = interval;
-        SubscriptionLapseReason = lapseReason;
-        SubscriptionEndedAtUtc = null;
+        RememberPaidCoverage();
+        StorePaidCoverage(Enums.SubscriptionSource.AppStore, grantsPro ? expiresAtUtc : null, interval, lapseReason);
+        if (grantsPro || SubscriptionSource == Enums.SubscriptionSource.AppStore)
+            SelectPaidCoverage(Enums.SubscriptionSource.AppStore, grantsPro ? null : lapseReason ?? Enums.SubscriptionLapseReason.Expired);
     }
 }

@@ -59,9 +59,17 @@ internal static class AppStoreEntitlement
     internal static void Apply(User user, AppStoreSubscriptionState state)
     {
         var transaction = state.Transaction;
-        var reason = state.IsInGracePeriod ? SubscriptionLapseReason.PaymentFailed
-            : !state.GrantsPro ? SubscriptionLapseReason.Expired : !state.AutoRenews ? SubscriptionLapseReason.Canceled : (SubscriptionLapseReason?)null;
+        var reason = LapseReason(state);
         user.ApplyAppStoreSubscription(transaction.OriginalTransactionId, transaction.Environment, state.ExpiresAtUtc,
             transaction.Interval, state.SignedAtUtc, state.GrantsPro, reason);
+    }
+
+    private static SubscriptionLapseReason? LapseReason(AppStoreSubscriptionState state)
+    {
+        if (state.IsInGracePeriod)
+            return SubscriptionLapseReason.PaymentFailed;
+        if (!state.GrantsPro)
+            return SubscriptionLapseReason.Expired;
+        return state.AutoRenews ? null : SubscriptionLapseReason.Canceled;
     }
 }

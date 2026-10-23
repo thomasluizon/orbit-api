@@ -3,6 +3,9 @@ namespace Orbit.Application.Common;
 public sealed class AppleSignInSettings
 {
     public const string SectionName = "AppleSignIn";
+    public string TokenUrl { get; set; } = "https://appleid.apple.com/auth/token";
+    public string KeysUrl { get; set; } = "https://appleid.apple.com/auth/keys";
+    public string RevokeUrl { get; set; } = "https://appleid.apple.com/auth/revoke";
     public string KeyId { get; set; } = "";
     public string TeamId { get; set; } = "";
     public string PrivateKey { get; set; } = "";
