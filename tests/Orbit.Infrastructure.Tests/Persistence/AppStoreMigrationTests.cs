@@ -61,7 +61,7 @@ public class AppStoreMigrationTests
         var appleIds = appleMigrations.Select(apple =>
             migrations.Single(pair => pair.Value.AsType() == apple.GetType()).Key).ToArray();
         migrations.Keys.Should().ContainInOrder(new[] { mainId }.Concat(appleIds));
-        migrations.Keys.Last().Should().Be(appleIds.Last());
+        migrations.Keys.Last().Should().EndWith("_DropSentProactiveCheckins");
 
         foreach (var apple in appleMigrations)
         {
@@ -73,7 +73,9 @@ public class AppStoreMigrationTests
         var latest = context.GetService<IModelRuntimeInitializer>()
             .Initialize(appleMigrations.Last().TargetModel, designTime: true);
         var current = context.GetService<IDesignTimeModel>().Model;
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(latest.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
+        var differences = context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(latest.GetRelationalModel(), current.GetRelationalModel());
+        differences.Should().ContainSingle();
+        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
     }
 }

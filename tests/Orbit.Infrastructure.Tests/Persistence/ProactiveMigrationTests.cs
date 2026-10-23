@@ -32,24 +32,15 @@ public sealed class ProactiveMigrationTests
     }
 
     [Fact]
-    public void Models_RetainTheLegacyLedgerUntilTheContractMigration()
+    public void ExpandModel_RetainsTheLegacyLedgerUntilTheContractMigration()
     {
-        using var factory = new SqliteOrbitDbContextFactory();
-        var models = new[]
-        {
-            factory.Context.Model,
-            new ReplaceProactiveCheckinsWithItems().TargetModel,
-            new OrbitDbContextModelSnapshot().Model
-        };
-        foreach (var model in models)
-        {
-            var ledger = model.GetEntityTypes().Should().ContainSingle(e => e.GetTableName() == "SentProactiveCheckins").Subject;
-            ledger.GetProperties().Select(p => p.Name).Should().BeEquivalentTo("Id", "UserId", "Date", "SentAtUtc");
-            ledger.GetIndexes().Should().ContainSingle(i => i.IsUnique
-                && i.Properties.Select(p => p.Name).SequenceEqual(new[] { "UserId", "Date" }));
-            ledger.GetForeignKeys().Should().ContainSingle(f => f.DeleteBehavior == DeleteBehavior.Cascade
-                && f.PrincipalEntityType.GetTableName() == "Users");
-        }
+        var model = new ReplaceProactiveCheckinsWithItems().TargetModel;
+        var ledger = model.GetEntityTypes().Should().ContainSingle(e => e.GetTableName() == "SentProactiveCheckins").Subject;
+        ledger.GetProperties().Select(p => p.Name).Should().BeEquivalentTo("Id", "UserId", "Date", "SentAtUtc");
+        ledger.GetIndexes().Should().ContainSingle(i => i.IsUnique
+            && i.Properties.Select(p => p.Name).SequenceEqual(new[] { "UserId", "Date" }));
+        ledger.GetForeignKeys().Should().ContainSingle(f => f.DeleteBehavior == DeleteBehavior.Cascade
+            && f.PrincipalEntityType.GetTableName() == "Users");
     }
 
     [Fact]

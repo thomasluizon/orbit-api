@@ -26,8 +26,9 @@ public class FeatureFlagAccountsMigrationTests
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
+        DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
 
-        differences.Should().HaveCount(52 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
+        differences.Should().HaveCount(53 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
@@ -134,7 +135,7 @@ public class FeatureFlagAccountsMigrationTests
             "20261023092713_AddAppStoreSubscriptions",
             "20261023092738_AddAppleSignInCredentials",
             "20261023092801_PreserveProviderPaidCoverage");
-        context.Database.GetMigrations().Last().Should().EndWith("_PreserveProviderPaidCoverage");
+        context.Database.GetMigrations().Last().Should().EndWith("_DropSentProactiveCheckins");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();
