@@ -39,9 +39,14 @@ public class OAuthConsentPageTests
         var labels = Regex.Matches(groups.Groups[1].Value, "<li>(.*?)</li>")
             .Select(match => WebUtility.HtmlDecode(match.Groups[1].Value)).ToArray();
         labels.Should().HaveCount(8).And.OnlyHaveUniqueItems();
-        OAuthPageStyles.Css.Should().Contain(".action-row {").And.Contain("gap: var(--s-3);")
-            .And.Contain("justify-content: flex-end;").And.Contain(".action-row .btn { width: auto; }")
-            .And.Contain(".action-row .btn { width: 100%; }");
+        var rowStyles = Regex.Match(page, @"\.action-row \{([^}]+)\}").Groups[1].Value;
+        rowStyles.Should().Contain("flex-wrap: nowrap;").And.Contain("flex-direction: column;")
+            .And.Contain("gap: var(--s-3);").And.Contain("justify-content: flex-end;");
+        page.Should().NotContain("flex-wrap: wrap;")
+            .And.Contain(".action-row .btn { width: 100%; }")
+            .And.Contain(".action-row[data-layout=\"row\"] .btn { width: auto; flex: 0 0 auto; }")
+            .And.Contain("new ResizeObserver(layoutActions)")
+            .And.Contain("document.fonts.ready.then(layoutActions)");
     }
 
     [Theory]

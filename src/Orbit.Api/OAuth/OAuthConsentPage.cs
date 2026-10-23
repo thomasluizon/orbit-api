@@ -6,6 +6,24 @@ namespace Orbit.Api.OAuth;
 
 public static class OAuthConsentPage
 {
+    public const string ActionLayoutScript = """
+(() => {
+  const form = document.getElementById('consent-form');
+  const row = form.querySelector('.action-row');
+  const buttons = Array.from(row.querySelectorAll('button'));
+  const layoutActions = () => {
+    row.setAttribute('data-layout', 'row');
+    const gap = parseFloat(getComputedStyle(row).columnGap);
+    const required = buttons.reduce((width, button) => width + button.getBoundingClientRect().width, 0)
+      + gap * (buttons.length - 1);
+    row.setAttribute('data-layout', required <= row.getBoundingClientRect().width ? 'row' : 'stack');
+  };
+  new ResizeObserver(layoutActions).observe(form);
+  document.fonts.ready.then(layoutActions);
+  layoutActions();
+})();
+""";
+
     public const string SubmitScript = """
 const form = document.getElementById('consent-form');
 let pending = false;
@@ -56,6 +74,7 @@ form.addEventListener('submit', (event) => {
 </div>
 </form></main>
 <script>
+{{ActionLayoutScript}}
 {{SubmitScript}}
 </script>
 </body></html>
