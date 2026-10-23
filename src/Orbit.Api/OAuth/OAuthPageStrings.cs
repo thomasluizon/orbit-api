@@ -37,7 +37,8 @@ public sealed record OAuthPageStrings(
     string InvalidRequestTitle,
     string InvalidRequestBody,
     string ConsentCompletedTitle,
-    string ConsentCompletedBody)
+    string ConsentCompletedBody,
+    OAuthConsentStrings Consent)
 {
     /// <summary>The locale tag the page keeps when the request asks for neither supported language.</summary>
     public const string DefaultLocale = "en";
@@ -78,7 +79,31 @@ public sealed record OAuthPageStrings(
         InvalidRequestTitle: "This authorization request is invalid or expired.",
         InvalidRequestBody: "Return to your MCP client and try again.",
         ConsentCompletedTitle: "Access allowed",
-        ConsentCompletedBody: "Return to Claude or your MCP client to continue.");
+        ConsentCompletedBody: "Return to Claude or your MCP client to continue.",
+        Consent: new(
+            Title: "Allow access to Orbit",
+            Body: "Choose read-only access or allow the permissions below.",
+            ReadOnly: "Allow reading",
+            Requested: "Allow all",
+            Cancel: "Cancel",
+            Disclosure: "Technical permissions",
+            ReadRoutine: "View your routine and progress",
+            EditRoutine: "Create and edit your routine",
+            DeleteRoutine: "Delete habits, goals and tags",
+            Chat: "Talk to Astra",
+            ReadAccount: "View your account details",
+            Preferences: "Adjust settings and notifications",
+            Calendar: "View and sync calendars",
+            Referrals: "View and manage invites",
+            ReadNotion: "View your Notion data",
+            ManageNotion: "Manage your Notion connection",
+            ReadKeys: "View your access keys",
+            ManageKeys: "Manage your access keys",
+            Subscription: "Manage your subscription",
+            Account: "Manage your account and sign-in",
+            Media: "Upload files",
+            Support: "Contact support",
+            Administration: "Administer Orbit"));
 
     private static readonly OAuthPageStrings Portuguese = new(
         Locale: PortugueseLocale,
@@ -113,9 +138,58 @@ public sealed record OAuthPageStrings(
         InvalidRequestTitle: "Esta solicitação de autorização é inválida ou expirou.",
         InvalidRequestBody: "Volte ao seu cliente MCP e tente novamente.",
         ConsentCompletedTitle: "Acesso permitido",
-        ConsentCompletedBody: "Volte para o Claude ou seu cliente MCP para continuar.");
+        ConsentCompletedBody: "Volte para o Claude ou seu cliente MCP para continuar.",
+        Consent: new(
+            Title: "Permitir acesso ao Orbit",
+            Body: "Permita só a leitura ou todas as permissões abaixo.",
+            ReadOnly: "Permitir leitura",
+            Requested: "Permitir tudo",
+            Cancel: "Cancelar",
+            Disclosure: "Permissões técnicas",
+            ReadRoutine: "Ver sua rotina e progresso",
+            EditRoutine: "Criar e editar sua rotina",
+            DeleteRoutine: "Excluir hábitos, metas e tags",
+            Chat: "Conversar com a Astra",
+            ReadAccount: "Ver dados da sua conta",
+            Preferences: "Ajustar preferências e avisos",
+            Calendar: "Ver e sincronizar calendários",
+            Referrals: "Ver e gerenciar convites",
+            ReadNotion: "Ver seus dados do Notion",
+            ManageNotion: "Gerenciar conexão com o Notion",
+            ReadKeys: "Ver suas chaves de acesso",
+            ManageKeys: "Gerenciar chaves de acesso",
+            Subscription: "Gerenciar sua assinatura",
+            Account: "Gerenciar sua conta e acesso",
+            Media: "Enviar arquivos",
+            Support: "Falar com o suporte",
+            Administration: "Administrar o Orbit"));
 
     /// <summary>Picks the copy for a resolved language tag, falling back to English.</summary>
     public static OAuthPageStrings For(string language) =>
         language.StartsWith("pt", StringComparison.OrdinalIgnoreCase) ? Portuguese : English;
 }
+
+public sealed record OAuthConsentStrings(
+    string Title,
+    string Body,
+    string ReadOnly,
+    string Requested,
+    string Cancel,
+    string Disclosure,
+    string ReadRoutine,
+    string EditRoutine,
+    string DeleteRoutine,
+    string Chat,
+    string ReadAccount,
+    string Preferences,
+    string Calendar,
+    string Referrals,
+    string ReadNotion,
+    string ManageNotion,
+    string ReadKeys,
+    string ManageKeys,
+    string Subscription,
+    string Account,
+    string Media,
+    string Support,
+    string Administration);

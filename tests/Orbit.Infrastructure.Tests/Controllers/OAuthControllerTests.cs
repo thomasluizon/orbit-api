@@ -133,6 +133,8 @@ public class OAuthControllerTests : IDisposable
         var ticket = _authStore.CreatePendingConsent(new ConsentEntry(UserId, challenge, "https://claude.ai/callback", "client", "state", null, "en", [AgentScopes.ReadHabits, AgentScopes.WriteHabits]));
         var page = (ContentResult)_controller.Consent(ticket);
         page.Content.Should().Contain(AgentScopes.ReadHabits).And.Contain(AgentScopes.WriteHabits).And.Contain("read_only");
+        page.Content.Should().Contain("<details>").And.Contain("View your routine and progress")
+            .And.Contain("Create and edit your routine");
         var grant = (RedirectResult)_controller.GrantConsent(ticket, "read_only");
         var code = ExtractQueryParam(grant.Url, "code");
         var entry = _authStore.ExchangeCode(code, verifier, "https://claude.ai/callback");

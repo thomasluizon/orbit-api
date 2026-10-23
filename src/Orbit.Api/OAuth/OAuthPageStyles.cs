@@ -235,6 +235,17 @@ h1 {
   height: var(--touch-min);
   transform: translateY(-50%);
 }
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--s-3);
+}
+.action-row .btn { width: auto; }
+@media (max-width: 479px) {
+  .action-row .btn { width: 100%; }
+}
 @media (hover: hover) and (pointer: fine) {
   .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--primary-hover); }
   .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-card); }
@@ -281,6 +292,9 @@ h1 {
 .scopes p { font-size: var(--fs-sm); color: var(--fg-2); }
 .scopes ul { display: flex; flex-direction: column; gap: var(--s-1); padding-left: var(--s-5); }
 .scopes li { font-size: var(--fs-sm); color: var(--fg-3); text-wrap: pretty; }
+.scopes details { font-size: var(--fs-sm); color: var(--fg-3); }
+.scopes summary { cursor: pointer; padding-block: var(--s-3); }
+.scopes code { font-family: var(--font-mono); overflow-wrap: anywhere; }
 .alert { font-size: var(--fs-sm); color: var(--status-bad-text); text-wrap: pretty; }
 .hidden { display: none; }
 @media (prefers-reduced-motion: reduce) {
