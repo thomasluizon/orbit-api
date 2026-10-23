@@ -3,6 +3,12 @@
 Tracks thomasluizon/orbit-tickets#1559. Deploy this API before its iOS consumers.
 All capabilities default to disabled. No Apple credentials are included in the repository.
 
+The Apple migrations follow `ExpandHabitNextDueDate` in migration ID order. Their
+generated target models retain its cursor and legacy write compatibility mapping.
+The migration bodies preserve the Apple schema additions and provider coverage
+backfills. Applied migrations on `main` remain unchanged. Normal API startup applies
+the three Apple migrations; no manual migration or backfill is required.
+
 ## Configuration
 
 Set environment variables in the Render API service's Environment screen. Apply them

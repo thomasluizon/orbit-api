@@ -130,11 +130,11 @@ public class FeatureFlagAccountsMigrationTests
             "20261020134743_AllowExplicitHabitStartDate");
         context.Database.GetMigrations().Should().ContainInOrder(
             "20261022201949_PersistComposedChatResponses",
-            "20261023054928_AddAppStoreSubscriptions",
-            "20261023060103_AddAppleSignInCredentials",
-            "20261023075813_PreserveProviderPaidCoverage",
-            "20261023081706_ExpandHabitNextDueDate");
-        context.Database.GetMigrations().Last().Should().EndWith("_ExpandHabitNextDueDate");
+            "20261023081706_ExpandHabitNextDueDate",
+            "20261023092713_AddAppStoreSubscriptions",
+            "20261023092738_AddAppleSignInCredentials",
+            "20261023092801_PreserveProviderPaidCoverage");
+        context.Database.GetMigrations().Last().Should().EndWith("_PreserveProviderPaidCoverage");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

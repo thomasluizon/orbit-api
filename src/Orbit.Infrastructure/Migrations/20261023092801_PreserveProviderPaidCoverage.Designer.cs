@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261023054928_AddAppStoreSubscriptions")]
-    partial class AddAppStoreSubscriptions
+    [Migration("20261023092801_PreserveProviderPaidCoverage")]
+    partial class PreserveProviderPaidCoverage
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1372,6 +1372,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<DateOnly>("DueDate")
+                        .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("date");
 
                     b.Property<TimeOnly?>("DueEndTime")
@@ -1413,6 +1414,11 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<bool>("IsGeneral")
                         .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("NextDueDate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasDefaultValueSql("'0001-01-01'");
 
                     b.Property<int?>("OriginalDayOfMonth")
                         .HasColumnType("integer");
@@ -2604,6 +2610,16 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiSummaryEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("AppStoreCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("AppStoreCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppStoreCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("AppStoreEnvironment")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -2614,6 +2630,17 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<DateTime?>("AppStoreStateSignedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AppleRefreshToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AppleSubject")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("AppleTokenClientId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<DateTime?>("BonusProExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2736,6 +2763,16 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PlayCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PlayCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlayCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
@@ -2810,6 +2847,16 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int>("StreakFreezesAccumulated")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StripeCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StripeCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StripeCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
 
@@ -2876,6 +2923,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("AppStoreOriginalTransactionId")
                         .IsUnique()
                         .HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
+
+                    b.HasIndex("AppleSubject")
+                        .IsUnique()
+                        .HasFilter("\"AppleSubject\" IS NOT NULL");
 
                     b.HasIndex("Email")
                         .IsUnique();
@@ -3175,13 +3226,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("BlockedId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("BlockerId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3190,7 +3241,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("CreatorId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3205,7 +3256,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3238,18 +3289,18 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
                         .WithMany()
                         .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("RecipientId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("SenderId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3276,7 +3327,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("ActorUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3285,13 +3336,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("AddresseeId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("RequesterId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3436,13 +3487,13 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("ReportedUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("ReporterId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3465,6 +3516,15 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Tag", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.UserFact", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()

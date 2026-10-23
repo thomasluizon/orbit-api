@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Migrations;
@@ -49,5 +52,28 @@ public class AppStoreMigrationTests
         var user = snapshot.FindEntityType(typeof(User).FullName!)!;
         user.FindProperty(nameof(User.AppStoreOriginalTransactionId))!.IsNullable.Should().BeTrue();
         snapshot.FindEntityType(typeof(ProcessedAppStoreNotification).FullName!)!.GetIndexes().Should().Contain(index => index.IsUnique);
+
+        using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=unused").Options);
+        var migrations = context.GetService<IMigrationsAssembly>().Migrations;
+        Migration[] appleMigrations = [migration, new AddAppleSignInCredentials(), new PreserveProviderPaidCoverage()];
+        var mainId = migrations.Single(pair => pair.Value.AsType() == typeof(ExpandHabitNextDueDate)).Key;
+        var appleIds = appleMigrations.Select(apple =>
+            migrations.Single(pair => pair.Value.AsType() == apple.GetType()).Key).ToArray();
+        migrations.Keys.Should().ContainInOrder(new[] { mainId }.Concat(appleIds));
+        migrations.Keys.Last().Should().Be(appleIds.Last());
+
+        foreach (var apple in appleMigrations)
+        {
+            var habit = apple.TargetModel.FindEntityType(typeof(Habit).FullName!)!;
+            habit.FindProperty(nameof(Habit.NextDueDate)).Should().NotBeNull();
+            habit.FindProperty("DueDate")!.ValueGenerated.Should().Be(ValueGenerated.OnAddOrUpdate);
+        }
+
+        var latest = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(appleMigrations.Last().TargetModel, designTime: true);
+        var current = context.GetService<IDesignTimeModel>().Model;
+        context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(latest.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
     }
 }
