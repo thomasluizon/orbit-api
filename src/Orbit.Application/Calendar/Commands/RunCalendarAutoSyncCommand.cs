@@ -63,6 +63,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CalendarAutoSyncResult>();
 
+        await deps.UnitOfWork.AcquireUserRowLockAsync(request.UserId, cancellationToken);
         var user = await deps.UserRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);

@@ -89,6 +89,7 @@ public class ApplyOnboardingCommandHandler(
         if (user is null)
             return Result.Failure<ApplyOnboardingResponse>(ErrorMessages.UserNotFound);
 
+        await repos.Users.ReloadAsync(user, ct);
         if (user.HasCompletedOnboarding)
             return Result.Success(new ApplyOnboardingResponse(false, 0, false, false));
 
