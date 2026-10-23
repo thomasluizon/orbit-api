@@ -112,7 +112,8 @@ public class NotificationVoiceTests
     [MemberData(nameof(EveryGeneratedUserPrompt))]
     public void EveryUserPromptCarriesTheSharedVoiceContract(string label, string prompt)
     {
-        prompt.Should().Contain(NotificationVoice.Rules, $"the {label} prompt must pin the register in the prompt");
+        var rules = IsSlipAlert(label) ? NotificationVoice.SlipAlertRules : NotificationVoice.Rules;
+        prompt.Should().Contain(rules, $"the {label} prompt must pin the register in the prompt");
     }
 
     [Theory]
@@ -136,12 +137,13 @@ public class NotificationVoiceTests
     {
         foreach (var ban in new[]
                  {
-                     "no exclamation mark", "no em dash", "no en dash",
+                     "no em dash", "no en dash",
                      "no doubled hyphen", "no emoji", "no markdown",
                  })
         {
             prompt.Should().Contain(ban, $"the {label} prompt must ban {ban}");
         }
+        prompt.Should().Contain(IsSlipAlert(label) ? "At most one exclamation mark" : "no exclamation mark");
     }
 
     /// <inheritdoc cref="EveryPromptTellsTheModelWhichCharactersAreBanned"/>
@@ -151,13 +153,31 @@ public class NotificationVoiceTests
     {
         foreach (var ban in new[]
                  {
-                     "Never sell", "never perform enthusiasm", "Never shame, blame, scold or warn",
+                     "Never sell", "Never shame, blame, scold or warn",
                      "Never call them the user", "Never frame anything as a journey",
                  })
         {
             prompt.Should().Contain(ban, $"the {label} prompt must carry: {ban}");
         }
+        prompt.Should().Contain(IsSlipAlert(label)
+            ? "encourage the person's positive choice directly"
+            : "never perform enthusiasm");
     }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void SlipAlertEncouragement_DoesNotChangeOtherNotificationVoices(string language)
+    {
+        var slip = AiSlipAlertMessageService.BuildPrompt("Cheat diet", DayOfWeek.Friday, 14, language);
+        var checkin = AiProactiveCheckinMessageService.BuildPrompt(new(ProactiveTrigger.EveningCheckin, ["Run"], 1, 4), language);
+
+        slip.Should().Contain("At most one exclamation mark").And.NotContain("never perform enthusiasm");
+        checkin.Should().Contain("no exclamation mark").And.Contain("never perform enthusiasm");
+        DailySummaryPrompt(language).Should().Contain("no exclamation mark").And.Contain("never perform enthusiasm");
+    }
+
+    private static bool IsSlipAlert(string label) => label.StartsWith("slip alert", StringComparison.Ordinal);
 
     /// <inheritdoc cref="EveryPromptTellsTheModelWhichCharactersAreBanned"/>
     [Theory]
