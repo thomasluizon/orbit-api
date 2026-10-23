@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services.Prompts;
@@ -255,7 +256,7 @@ public sealed partial class AiSummaryService(
         if (habit.IsBadHabit)
             return string.Create(CultureInfo.InvariantCulture,
                 $"[{AppConstants.DailySummaryHistoryDays}-day history: slips={logs.Count(log => log.Value > 0)}, skipped={skipDates.Count}]");
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
             return string.Create(CultureInfo.InvariantCulture,
                 $"[{AppConstants.DailySummaryHistoryDays}-day history: done={logs.Count(log => log.Value > 0)}, skipped={logs.Count(log => log.Value == 0)}, missed=unknown, habit streak=unknown (flexible quota)]");
 
@@ -320,7 +321,7 @@ public sealed partial class AiSummaryService(
         || HasSkipLogInRange(habit, dateFrom, dateTo)
         || (!habit.IsCompleted
             && (HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay)
-                .Any(date => !habit.IsFlexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay))
+                .Any(date => habit.Schedule != HabitSchedule.Flexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay))
                 || HabitScheduleService.IsOverdueOnDate(
                     habit,
                     userToday,

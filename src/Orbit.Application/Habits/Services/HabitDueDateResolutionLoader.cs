@@ -1,4 +1,5 @@
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Services;
@@ -17,8 +18,7 @@ internal static class HabitDueDateResolutionLoader
             .Select(habit => habit.Id)
             .ToHashSet();
         var missingDueDates = habitList
-            .Where(habit => habit.FrequencyUnit is not null
-                && !habit.IsFlexible
+            .Where(habit => habit.Schedule == HabitSchedule.Recurring
                 && !habit.IsBadHabit
                 && habit.DueDate < loadedLogFrom
                 && !resolvedHabitIds.Contains(habit.Id))

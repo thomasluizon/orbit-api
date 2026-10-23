@@ -1,6 +1,7 @@
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Habits.Services;
 
@@ -42,7 +43,7 @@ public static class RetrospectiveMetricsCalculator
             weekStartDay,
             (habit, from, to) => HabitScheduleService.GetScheduledDates(
                 habit, from, to, weekStartDay,
-                habit.FrequencyUnit is not null && !habit.IsFlexible
+                habit.Schedule == HabitSchedule.Recurring
                     ? habit.ScheduledStartDate ?? habit.DueDate
                     : null));
     }
@@ -113,7 +114,7 @@ public static class RetrospectiveMetricsCalculator
                 continue;
             }
 
-            if (habit.FrequencyUnit is not null && !habit.IsFlexible)
+            if (habit.Schedule == HabitSchedule.Recurring)
             {
                 var recurrenceStart = habit.ScheduledStartDate ?? habit.DueDate;
                 var occurrenceDates = ResolveOccurrences(
@@ -264,7 +265,7 @@ public static class RetrospectiveMetricsCalculator
             Percent(metCount, scheduledCount),
             completedCount,
             scheduledCount,
-            habit.FrequencyUnit is null,
+            habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General,
             habit.Id);
 
     private static int[] BuildWeeklyConsistency(int[] weekdayScheduled, int[] weekdayCompleted)

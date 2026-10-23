@@ -171,7 +171,7 @@ public class GetHabitScheduleQueryHandler(
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
 
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsGeneral,
+            h => h.UserId == request.UserId && h.Schedule == HabitSchedule.General,
             q => q.Include(h => h.Tags)
                   .Include(h => h.Logs.Where(l => l.Date == completionDate))
                   .Include(h => h.Goals),
@@ -247,8 +247,7 @@ public class GetHabitScheduleQueryHandler(
         if (request.IncludeOverdue)
         {
             var oldDueDateIds = allHabits
-                .Where(habit => habit.FrequencyUnit is not null
-                    && !habit.IsFlexible
+                .Where(habit => habit.Schedule == HabitSchedule.Recurring
                     && !habit.IsBadHabit
                     && habit.DueDate < logFrom)
                 .Select(habit => habit.Id)
@@ -366,7 +365,7 @@ public class GetHabitScheduleQueryHandler(
         CancellationToken cancellationToken)
     {
         var candidates = await habitRepository.ProjectAsync(
-            h => h.UserId == userId && !h.IsGeneral,
+            h => h.UserId == userId && h.Schedule != HabitSchedule.General,
             q => q.Select(h => new HabitScheduleCandidate(
                 new HabitScheduleSnapshot(
                     h.Id,
@@ -383,8 +382,8 @@ public class GetHabitScheduleQueryHandler(
                     h.IsDeleted,
                     h.IsBadHabit,
                     h.IsCompleted,
-                    h.IsGeneral,
-                    h.IsFlexible,
+                    h.Schedule == HabitSchedule.General,
+                    h.Schedule == HabitSchedule.Flexible,
                     h.Days.ToList(),
                     h.Schedule,
                     h.StartDate),
@@ -488,7 +487,7 @@ public class GetHabitScheduleQueryHandler(
         CancellationToken cancellationToken)
     {
         var generalHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsGeneral,
+            h => h.UserId == request.UserId && h.Schedule == HabitSchedule.General,
             q => q.Include(h => h.Tags)
                   .Include(h => h.Logs.Where(l => l.Date == completionDate))
                   .Include(h => h.Goals),
@@ -528,7 +527,7 @@ public class GetHabitScheduleQueryHandler(
         foreach (var habit in pageHabits)
             HabitScheduleFilters.AddSubtreeIds(habit.Id, lookup, ids);
 
-        foreach (var habit in lookup.SelectMany(group => group).Where(habit => ids.Contains(habit.Id) && habit.IsFlexible))
+        foreach (var habit in lookup.SelectMany(group => group).Where(habit => ids.Contains(habit.Id) && habit.Schedule == HabitSchedule.Flexible))
         {
             var windowStart = HabitScheduleService.GetWindowStart(habit, referenceDate, weekStartDay);
             if (windowStart < from)

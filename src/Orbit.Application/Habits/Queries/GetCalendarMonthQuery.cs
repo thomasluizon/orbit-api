@@ -65,7 +65,7 @@ public class GetCalendarMonthQueryHandler(
         GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
         var logFrom = request.DateFrom.AddDays(-31); return await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && !h.IsGeneral,
+            h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
             q => q.Include(h => h.Tags)
                   .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= request.DateTo))
                   .Include(h => h.Goals),
@@ -111,7 +111,7 @@ public class GetCalendarMonthQueryHandler(
     private static List<DateOnly> GetProjectedDates(Habit habit, DateOnly dateFrom, DateOnly dateTo, int weekStartDay)
     {
         var dates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo, weekStartDay);
-        return habit.IsFlexible
+        return habit.Schedule == HabitSchedule.Flexible
             ? dates.Where(date => HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay)).ToList()
             : dates;
     }
@@ -125,10 +125,10 @@ public class GetCalendarMonthQueryHandler(
         List<DateOnly> scheduledDates,
         int weekStartDay)
     {
-        if (habit.IsFlexible || habit.IsBadHabit)
+        if (habit.Schedule == HabitSchedule.Flexible || habit.IsBadHabit)
             return false;
 
-        if (habit.FrequencyUnit == null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             return !habit.IsCompleted
                 && habit.DueDate < dateFrom
@@ -201,7 +201,7 @@ public class GetCalendarMonthQueryHandler(
         return new HabitScheduleItem(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
-            habit.IsBadHabit, habit.IsCompleted, habit.IsGeneral, habit.IsFlexible,
+            habit.IsBadHabit, habit.IsCompleted, habit.Schedule == HabitSchedule.General, habit.Schedule == HabitSchedule.Flexible,
             habit.Days.ToList(), habit.Position, habit.CreatedAtUtc,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             scheduledDates, isOverdue,
@@ -221,7 +221,7 @@ public class GetCalendarMonthQueryHandler(
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
         Habit habit, DateOnly? referenceDate, int weekStartDay)
     {
-        if (!habit.IsFlexible || !referenceDate.HasValue)
+        if (habit.Schedule != HabitSchedule.Flexible || !referenceDate.HasValue)
             return (null, null);
 
         if (!HabitScheduleService.IsActiveIntervalWeek(habit, referenceDate.Value, weekStartDay))
@@ -255,7 +255,7 @@ public class GetCalendarMonthQueryHandler(
 
         int? flexTarget = null;
         int? flexCompleted = null;
-        if (child.IsFlexible && ctx.DateFrom.HasValue)
+        if (child.Schedule == HabitSchedule.Flexible && ctx.DateFrom.HasValue)
         {
             flexTarget = child.FrequencyQuantity;
             flexCompleted = HabitScheduleService.GetCompletedInWindow(child, ctx.DateFrom.Value, child.Logs, ctx.WeekStartDay);
@@ -273,7 +273,7 @@ public class GetCalendarMonthQueryHandler(
         return new HabitScheduleChildItem(
             child.Id, child.Title, child.Description,
             child.FrequencyUnit, child.FrequencyQuantity,
-            child.IsBadHabit, child.IsCompleted, child.IsGeneral, child.IsFlexible,
+            child.IsBadHabit, child.IsCompleted, child.Schedule == HabitSchedule.General, child.Schedule == HabitSchedule.Flexible,
             child.Days.ToList(), child.DueDate, child.DueTime, child.DueEndTime, child.EndDate, scheduledDates, isOverdue,
             child.Position, child.ChecklistItems,
             child.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
