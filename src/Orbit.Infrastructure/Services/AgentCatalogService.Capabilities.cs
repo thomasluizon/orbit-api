@@ -875,7 +875,9 @@ public partial class AgentCatalogService
                     "SubscriptionController.ClaimAdReward",
                     "SubscriptionController.HandleWebhook",
                     "SubscriptionController.VerifyPlayPurchase",
-                    "SubscriptionController.HandlePlayNotification"
+                    "SubscriptionController.HandlePlayNotification",
+                    "SubscriptionController.VerifyAppStorePurchase",
+                    "SubscriptionController.HandleAppStoreNotification"
                 ])
         ];
     }
@@ -1016,6 +1018,10 @@ public partial class AgentCatalogService
                     "AuthController.VerifyCodeOperation",
                     "AuthController.GoogleCodeAuth",
                     "AuthController.GoogleCodeAuthOperation",
+                    "AuthController.AppleNative",
+                    "AuthController.AppleStart",
+                    "AuthController.AppleCallback",
+                    "AuthController.AppleHandoff",
                     "AuthController.Refresh",
                     "AuthController.RefreshOperation",
                     "AuthController.Logout",
@@ -1030,6 +1036,8 @@ public partial class AgentCatalogService
                     "OAuthController.VerifyCode",
                     "OAuthController.GoogleStart",
                     "OAuthController.GoogleCallback",
+                    "OAuthController.AppleStart",
+                    "OAuthController.AppleCallback",
                     "OAuthController.Token",
                     "OAuthController.Consent",
                     "OAuthController.GrantConsent",

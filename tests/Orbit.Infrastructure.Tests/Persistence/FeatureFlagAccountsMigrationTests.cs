@@ -25,6 +25,7 @@ public class FeatureFlagAccountsMigrationTests
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
 
         differences.Should().HaveCount(51);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
@@ -127,7 +128,11 @@ public class FeatureFlagAccountsMigrationTests
             "20261020033359_RestoreRequiredProactiveAstraPreference",
             "20261020041243_SeparateBonusProEntitlement",
             "20261020134743_AllowExplicitHabitStartDate");
-        context.Database.GetMigrations().Last().Should().EndWith("_PersistComposedChatResponses");
+        context.Database.GetMigrations().Should().ContainInOrder(
+            "20261022201949_PersistComposedChatResponses",
+            "20261023054928_AddAppStoreSubscriptions",
+            "20261023060103_AddAppleSignInCredentials");
+        context.Database.GetMigrations().Last().Should().EndWith("_AddAppleSignInCredentials");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

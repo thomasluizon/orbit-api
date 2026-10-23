@@ -9,6 +9,29 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class AppStoreMigrationTests
 {
+    internal static IReadOnlyList<MigrationOperation> WithoutAppleAdditions(IReadOnlyList<MigrationOperation> operations)
+    {
+        var userColumns = new[] { "AppStoreOriginalTransactionId", "AppStoreEnvironment", "AppStoreStateSignedAtUtc",
+            "AppleSubject", "AppleRefreshToken", "AppleTokenClientId" };
+        var columns = operations.OfType<AddColumnOperation>().Where(column => column.Table == "Users" && userColumns.Contains(column.Name)).ToArray();
+        columns.Select(column => column.Name).Should().BeEquivalentTo(userColumns);
+        columns.Should().OnlyContain(column => column.IsNullable && !column.IsDestructiveChange);
+        columns.Should().ContainSingle(column => column.Name == "AppStoreStateSignedAtUtc" && column.ClrType == typeof(DateTime));
+        columns.Where(column => column.Name != "AppStoreStateSignedAtUtc").Should().OnlyContain(column => column.ClrType == typeof(string));
+        var table = operations.OfType<CreateTableOperation>().Should().ContainSingle(operation => operation.Name == "ProcessedAppStoreNotifications").Subject;
+        table.Columns.Select(column => column.Name).Should().BeEquivalentTo("Id", "NotificationUuid", "Environment", "ProcessedAtUtc");
+        table.PrimaryKey!.Columns.Should().Equal("Id");
+        table.ForeignKeys.Should().BeEmpty();
+        var indexNames = new[] { "IX_Users_AppStoreOriginalTransactionId", "IX_Users_AppleSubject", "IX_ProcessedAppStoreNotifications_NotificationUuid" };
+        var indexes = operations.OfType<CreateIndexOperation>().Where(index => indexNames.Contains(index.Name)).ToArray();
+        indexes.Select(index => index.Name).Should().BeEquivalentTo(indexNames);
+        indexes.Should().OnlyContain(index => index.IsUnique);
+        indexes.Where(index => index.Table == "Users").Should().HaveCount(2).And.OnlyContain(index => index.Filter != null);
+        var additions = columns.Cast<MigrationOperation>().Append(table).Concat(indexes).ToHashSet();
+        additions.Should().HaveCount(10);
+        return operations.Where(operation => !additions.Contains(operation)).ToArray();
+    }
+
     [Fact]
     public void MigrationAndSnapshot_AddNullableBindingsAndUniqueNotificationLedger()
     {

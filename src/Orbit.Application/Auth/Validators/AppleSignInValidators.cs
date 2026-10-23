@@ -10,7 +10,7 @@ public sealed class AppleNativeSignInCommandValidator : AbstractValidator<AppleN
     {
         RuleFor(command => command.IdentityToken).NotEmpty().MaximumLength(16_384);
         RuleFor(command => command.AuthorizationCode).NotEmpty().MaximumLength(4096);
-        RuleFor(command => command.RawNonce).NotEmpty().MinimumLength(16).MaximumLength(256);
+        RuleFor(command => command.RawNonce).NotEmpty().Length(16, 256);
         RuleFor(command => command.GivenName).MaximumLength(100).Must(name => name is null || !name.Any(char.IsControl));
         RuleFor(command => command.FamilyName).MaximumLength(100).Must(name => name is null || !name.Any(char.IsControl));
         RuleFor(command => command.Language).NotEmpty().Must(language => AppConstants.SupportedLanguages.Contains(language));
@@ -22,7 +22,7 @@ public sealed class StartAppleSignInCommandValidator : AbstractValidator<StartAp
 {
     public StartAppleSignInCommandValidator()
     {
-        RuleFor(command => command.State).NotEmpty().MinimumLength(16).MaximumLength(256);
+        RuleFor(command => command.State).NotEmpty().Length(16, 256);
         RuleFor(command => command.Language).NotEmpty().Must(language => AppConstants.SupportedLanguages.Contains(language));
         RuleFor(command => command.ReferralCode).MaximumLength(50);
     }

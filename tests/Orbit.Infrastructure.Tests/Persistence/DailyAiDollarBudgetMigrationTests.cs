@@ -41,6 +41,7 @@ public class DailyAiDollarBudgetMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Table == "PendingAgentOperations");
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");

@@ -51,6 +51,14 @@ public sealed class AppStoreServiceTests : IDisposable
         Options.Create(Settings), _signer.Verifier);
 
     [Fact]
+    public void ProductionVerifier_UsesEmbeddedAppleRootAndRejectsTestChain()
+    {
+        var verifier = new AppStoreJwsVerifier();
+        var act = () => verifier.Verify(SignedTransaction());
+        act.Should().Throw<AppleVerificationException>();
+    }
+
+    [Fact]
     public void VerifyTransaction_TrustedChain_ReadsDocumentedClaims()
     {
         var result = Service().VerifyTransaction(SignedTransaction());
