@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
@@ -463,9 +464,24 @@ public partial class OAuthController(
             scopes = scopes.Where(scope => scope.StartsWith("read_", StringComparison.Ordinal) || scope == AgentScopes.CatalogRead).ToArray();
         var code = authStore.CreateCode(entry.UserId, entry.CodeChallenge, entry.RedirectUri,
             entry.ClientId, entry.Nonce, scopes, readOnly);
-        var separator = entry.RedirectUri.Contains('?') ? "&" : "?";
-        return Redirect($"{entry.RedirectUri}{separator}code={Uri.EscapeDataString(code)}&state={Uri.EscapeDataString(entry.State)}");
+        return RedirectConsent(entry, "code", code);
     }
+
+    [HttpPost("/oauth/consent/cancel")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public IActionResult CancelConsent([FromForm] string ticket)
+    {
+        var consent = authStore.ConsumePendingConsent(ticket);
+        if (consent is null || !IsRedirectUriAllowed(consent.Entry.RedirectUri))
+            return InvalidGoogleState();
+        if (consent.IsConsumed)
+            return CompletedConsent(consent.Entry.Language);
+        LogOAuthConsentDenied(logger, consent.Entry.ClientId);
+        return RedirectConsent(consent.Entry, "error", "access_denied");
+    }
+
+    private RedirectResult RedirectConsent(ConsentEntry entry, string key, string value) =>
+        Redirect(QueryHelpers.AddQueryString(QueryHelpers.AddQueryString(entry.RedirectUri, key, value), "state", entry.State));
 
     private static ContentResult CompletedConsent(string language) => new()
     {
@@ -551,4 +567,7 @@ public partial class OAuthController(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "OAuth API key created for user {UserId} via {ClientId}")]
     private static partial void LogOAuthApiKeyCreated(ILogger logger, Guid userId, string? clientId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "OAuth consent denied for client {ClientId}")]
+    private static partial void LogOAuthConsentDenied(ILogger logger, string clientId);
 }

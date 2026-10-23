@@ -37,7 +37,8 @@ public sealed record OAuthPageStrings(
     string InvalidRequestTitle,
     string InvalidRequestBody,
     string ConsentCompletedTitle,
-    string ConsentCompletedBody)
+    string ConsentCompletedBody,
+    OAuthConsentStrings Consent)
 {
     /// <summary>The locale tag the page keeps when the request asks for neither supported language.</summary>
     public const string DefaultLocale = "en";
@@ -78,7 +79,8 @@ public sealed record OAuthPageStrings(
         InvalidRequestTitle: "This authorization request is invalid or expired.",
         InvalidRequestBody: "Return to your MCP client and try again.",
         ConsentCompletedTitle: "Access allowed",
-        ConsentCompletedBody: "Return to Claude or your MCP client to continue.");
+        ConsentCompletedBody: "Return to Claude or your MCP client to continue.",
+        Consent: ConsentCopy(portuguese: false));
 
     private static readonly OAuthPageStrings Portuguese = new(
         Locale: PortugueseLocale,
@@ -113,9 +115,60 @@ public sealed record OAuthPageStrings(
         InvalidRequestTitle: "Esta solicitação de autorização é inválida ou expirou.",
         InvalidRequestBody: "Volte ao seu cliente MCP e tente novamente.",
         ConsentCompletedTitle: "Acesso permitido",
-        ConsentCompletedBody: "Volte para o Claude ou seu cliente MCP para continuar.");
+        ConsentCompletedBody: "Volte para o Claude ou seu cliente MCP para continuar.",
+        Consent: ConsentCopy(portuguese: true));
+
+    private static OAuthConsentStrings ConsentCopy(bool portuguese) => new(
+        Title: portuguese ? "Permitir acesso ao Orbit" : "Allow access to Orbit",
+        Body: portuguese ? "Permita só a leitura ou todas as permissões abaixo." : "Choose read-only access or allow the permissions below.",
+        ReadOnly: portuguese ? "Permitir leitura" : "Allow reading",
+        Requested: portuguese ? "Permitir tudo" : "Allow all",
+        Cancel: portuguese ? "Cancelar" : "Cancel",
+        Disclosure: portuguese ? "Permissões técnicas" : "Technical permissions",
+        ReadRoutine: portuguese ? "Ver sua rotina e progresso" : "View your routine and progress",
+        EditRoutine: portuguese ? "Criar e editar sua rotina" : "Create and edit your routine",
+        DeleteRoutine: portuguese ? "Excluir hábitos, metas e tags" : "Delete habits, goals and tags",
+        Chat: portuguese ? "Conversar com a Astra" : "Talk to Astra",
+        ReadAccount: portuguese ? "Ver dados da sua conta" : "View your account details",
+        Preferences: portuguese ? "Ajustar preferências e avisos" : "Adjust settings and notifications",
+        Calendar: portuguese ? "Ver e sincronizar calendários" : "View and sync calendars",
+        Referrals: portuguese ? "Ver e gerenciar convites" : "View and manage invites",
+        ReadNotion: portuguese ? "Ver seus dados do Notion" : "View your Notion data",
+        ManageNotion: portuguese ? "Gerenciar conexão com o Notion" : "Manage your Notion connection",
+        ReadKeys: portuguese ? "Ver suas chaves de acesso" : "View your access keys",
+        ManageKeys: portuguese ? "Gerenciar chaves de acesso" : "Manage your access keys",
+        Subscription: portuguese ? "Gerenciar sua assinatura" : "Manage your subscription",
+        Account: portuguese ? "Gerenciar sua conta e acesso" : "Manage your account and sign-in",
+        Media: portuguese ? "Enviar arquivos" : "Upload files",
+        Support: portuguese ? "Falar com o suporte" : "Contact support",
+        Administration: portuguese ? "Administrar o Orbit" : "Administer Orbit");
 
     /// <summary>Picks the copy for a resolved language tag, falling back to English.</summary>
     public static OAuthPageStrings For(string language) =>
         language.StartsWith("pt", StringComparison.OrdinalIgnoreCase) ? Portuguese : English;
 }
+
+public sealed record OAuthConsentStrings(
+    string Title,
+    string Body,
+    string ReadOnly,
+    string Requested,
+    string Cancel,
+    string Disclosure,
+    string ReadRoutine,
+    string EditRoutine,
+    string DeleteRoutine,
+    string Chat,
+    string ReadAccount,
+    string Preferences,
+    string Calendar,
+    string Referrals,
+    string ReadNotion,
+    string ManageNotion,
+    string ReadKeys,
+    string ManageKeys,
+    string Subscription,
+    string Account,
+    string Media,
+    string Support,
+    string Administration);
