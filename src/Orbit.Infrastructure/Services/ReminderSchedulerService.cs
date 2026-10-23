@@ -100,13 +100,13 @@ public partial class ReminderSchedulerService(
         var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(MaxRelativeLookaheadDays + 1));
         var relativeHabits = await dbContext.Habits
             .AsNoTracking()
-            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null
+            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.DueTime != null
                 && h.DueDate <= maxLocalDate
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
         var scheduledHabits = await dbContext.Habits
             .AsNoTracking()
-            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null
+            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.DueTime == null
                 && h.DueDate <= DateOnly.FromDateTime(nowUtc.AddDays(2))
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);

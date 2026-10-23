@@ -13,7 +13,7 @@ internal static class HabitScheduleFilters
             return habits;
 
         if (frequencyUnitFilter.Equals("none", StringComparison.OrdinalIgnoreCase))
-            return habits.Where(h => h.FrequencyUnit == null);
+            return habits.Where(h => h.Schedule is HabitSchedule.OneTime or HabitSchedule.General);
 
         if (Enum.TryParse<FrequencyUnit>(frequencyUnitFilter, true, out var unit))
             return habits.Where(h => h.FrequencyUnit == unit);
@@ -65,7 +65,7 @@ internal static class HabitScheduleFilters
                 dueDateResolution,
                 logFacts);
 
-            if (habit.IsFlexible
+            if (habit.Schedule == HabitSchedule.Flexible
                 && !hasCompletedLogInRange
                 && !hasDescendantDue
                 && !scheduledDates.Any(date =>
@@ -84,7 +84,7 @@ internal static class HabitScheduleFilters
         Habit habit, DateOnly from, DateOnly to, int weekStartDay, HabitScheduleLogFacts? logFacts)
     {
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to, weekStartDay);
-        if (habit.IsFlexible)
+        if (habit.Schedule == HabitSchedule.Flexible)
             dates.RemoveAll(date => logFacts is not null
                 ? logFacts.HasSkipped(habit.Id, date) && !logFacts.HasCompleted(habit.Id, date, date)
                 : habit.Logs.Any(log => !log.IsDeleted && log.Date == date && log.Value == 0)
@@ -94,7 +94,7 @@ internal static class HabitScheduleFilters
 
     private static bool HasVisibleLogInRange(
         Habit habit, DateOnly from, DateOnly to, HabitScheduleLogFacts? logFacts) =>
-        habit.IsFlexible
+        habit.Schedule == HabitSchedule.Flexible
             ? (logFacts?.HasCompleted(habit.Id, from, to)
                 ?? habit.Logs.Any(log => !log.IsDeleted && log.Date >= from && log.Date <= to && log.Value > 0))
             : (logFacts?.HasLog(habit.Id, from, to)
@@ -308,7 +308,7 @@ internal static class HabitScheduleFilters
 
         return new HabitScheduleItem(
             h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
-            h.IsBadHabit, GetResponseCompletion(h, ctx.UserToday), h.IsGeneral, h.IsFlexible,
+            h.IsBadHabit, GetResponseCompletion(h, ctx.UserToday), h.Schedule == HabitSchedule.General, h.Schedule == HabitSchedule.Flexible,
             h.Days.ToList(), h.Position, h.CreatedAtUtc,
             h.DueDate, h.DueTime, h.DueEndTime, h.EndDate,
             scheduledDates, isOverdue,
@@ -329,7 +329,7 @@ internal static class HabitScheduleFilters
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
         Habit h, DateOnly? referenceDate, int weekStartDay)
     {
-        if (!h.IsFlexible || !referenceDate.HasValue)
+        if (h.Schedule != HabitSchedule.Flexible || !referenceDate.HasValue)
             return (null, null);
 
         if (!HabitScheduleService.IsActiveIntervalWeek(h, referenceDate.Value, weekStartDay))
@@ -505,7 +505,7 @@ internal static class HabitScheduleFilters
         return new HabitScheduleChildItem(
             c.Id, c.Title, c.Description,
             c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit,
-            GetResponseCompletion(c, ctx.UserToday), c.IsGeneral, c.IsFlexible,
+            GetResponseCompletion(c, ctx.UserToday), c.Schedule == HabitSchedule.General, c.Schedule == HabitSchedule.Flexible,
             c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
             scheduledDates, isOverdue,
             c.Position, c.ChecklistItems, MapTags(c),
@@ -527,7 +527,7 @@ internal static class HabitScheduleFilters
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)
     {
-        if (!habit.IsGeneral || !userToday.HasValue)
+        if (habit.Schedule != HabitSchedule.General || !userToday.HasValue)
             return habit.IsCompleted;
 
         return HabitScheduleService.HasCompletedLogInRange(
@@ -543,7 +543,7 @@ internal static class HabitScheduleFilters
     /// "go to sub habits" affordance hides once every child has been finished.
     /// </summary>
     private static bool HasSubHabits(Guid parentId, ILookup<Guid?, Habit> childLookup) =>
-        childLookup[parentId].Any(c => !(c.IsCompleted && c.FrequencyUnit is null));
+        childLookup[parentId].Any(c => !(c.IsCompleted && (c.Schedule is HabitSchedule.OneTime or HabitSchedule.General)));
 
     private static List<HabitTagItem> MapTags(Habit h) =>
         h.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList();

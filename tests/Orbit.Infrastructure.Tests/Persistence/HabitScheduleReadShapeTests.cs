@@ -112,8 +112,11 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         result.Value.Items[0].ChecklistItems.Should().ContainSingle(item => item.Text == "First step");
         var candidateSql = counter.Commands.First(command =>
             command.Sql.Contains("FROM \"Habits\" AS \"h\"")
-            && command.Sql.Contains("NOT (\"h\".\"IsGeneral\")"));
+            && !command.Sql.Contains("\"ChecklistItems\""));
         output.WriteLine($"Candidate SQL: {candidateSql.Sql}");
+        candidateSql.Sql.Should().Contain("\"h\".\"Schedule\"");
+        candidateSql.Sql.Should().NotContain("\"h\".\"IsGeneral\"");
+        candidateSql.Sql.Should().NotContain("\"h\".\"IsFlexible\"");
         candidateSql.Sql.Should().NotContain("\"Description\"");
         candidateSql.Sql.Should().NotContain("\"ChecklistItems\"");
         candidateSql.Rows.Should().Be(2);

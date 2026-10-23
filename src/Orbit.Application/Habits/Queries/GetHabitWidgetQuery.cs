@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
@@ -98,7 +99,7 @@ public class GetHabitWidgetQueryHandler(
         var logTo = today.AddDays(1);
 
         return await habitRepository.FindAsync(
-            h => h.UserId == userId && !h.IsGeneral,
+            h => h.UserId == userId && h.Schedule != HabitSchedule.General,
             q => q.Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo)),
             cancellationToken);
     }

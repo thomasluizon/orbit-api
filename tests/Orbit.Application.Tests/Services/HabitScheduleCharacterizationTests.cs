@@ -55,4 +55,30 @@ public class HabitScheduleCharacterizationTests
         HabitMetricsCalculator.Calculate(habit, Today.AddDays(3), 1, TimeZoneInfo.Utc)
             .Should().Be(new HabitMetrics(currentStreak, longestStreak, rate, rate, completions, Today.AddDays(lastOffset)));
     }
+
+    [Theory]
+    [InlineData(0, 0, true, false)]
+    [InlineData(1, 1, false, true)]
+    [InlineData(2, 0, true, true)]
+    [InlineData(3, 0, true, false)]
+    public void ScheduleAfterLog_KeepsSelectedStartSeparateFromCursor(
+        int type, int cursorOffset, bool dueToday, bool dueTomorrow)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            Guid.NewGuid(), "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
+            type is 1 or 2 ? 1 : null, Today,
+            IsFlexible: type == 2, IsGeneral: type == 3,
+            CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
+
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        habit.StartDate.Should().Be(Today);
+        habit.DueDate.Should().Be(Today.AddDays(cursorOffset));
+        HabitScheduleService.IsHabitDueOnDate(habit, Today).Should().Be(dueToday);
+        HabitScheduleService.IsHabitDueOnDate(habit, Today.AddDays(1)).Should().Be(dueTomorrow);
+        HabitScheduleService.GetHistoricalScheduledDates(habit, Today, Today, TimeZoneInfo.Utc)
+            .Should().Equal(Today);
+        HabitMetricsCalculator.Calculate(habit, Today, 1, TimeZoneInfo.Utc)
+            .Should().Be(new HabitMetrics(1, 1, 100m, 100m, 1, Today));
+    }
 }

@@ -1,5 +1,6 @@
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
@@ -25,7 +26,7 @@ internal sealed class HabitScheduleLogFacts(IEnumerable<HabitScheduleLogDay> day
 
     internal bool IsFlexibleDue(Habit habit, DateOnly date, int weekStartDay)
     {
-        if (!habit.IsFlexible || habit.FrequencyUnit is null || date < habit.DueDate
+        if (habit.Schedule != HabitSchedule.Flexible || habit.FrequencyUnit is null || date < habit.DueDate
             || !HabitScheduleService.IsActiveIntervalWeek(habit, date, weekStartDay))
             return false;
 

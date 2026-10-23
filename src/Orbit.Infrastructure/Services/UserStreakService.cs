@@ -1,6 +1,7 @@
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -158,7 +159,7 @@ public class UserStreakService(
         IReadOnlyCollection<Habit> eligibleHabits)
     {
         var contributingHabits = GetContributingHabits(eligibleHabits);
-        if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+        if (!contributingHabits.Any(habit => habit.Schedule == HabitSchedule.Recurring))
             return null;
 
         var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
@@ -249,7 +250,7 @@ public class UserStreakService(
         }
 
         var contributingHabits = GetContributingHabits(eligibleHabits);
-        if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+        if (!contributingHabits.Any(habit => habit.Schedule == HabitSchedule.Recurring))
             return StreakRepairEvaluation.Unavailable(missedDate);
 
         var lookbackStart = userToday.AddDays(-AppConstants.StreakRepairWindowDays);
@@ -335,7 +336,7 @@ public class UserStreakService(
         freezeDateSet.RemoveWhere(date => date > userToday);
         var contributingHabits = GetContributingHabits(eligibleHabits);
 
-        if (!contributingHabits.Any(habit => habit.FrequencyUnit is not null))
+        if (!contributingHabits.Any(habit => habit.Schedule == HabitSchedule.Recurring))
             return CalendarFallback(completionDateSet, freezeDateSet);
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
@@ -360,8 +361,8 @@ public class UserStreakService(
 
     private static List<Habit> GetContributingHabits(IReadOnlyCollection<Habit> eligibleHabits) =>
         eligibleHabits
-            .Where(habit => !habit.IsGeneral && !habit.IsFlexible)
-            .Where(habit => !(habit.FrequencyUnit is null && habit.IsCompleted))
+            .Where(habit => habit.Schedule is HabitSchedule.OneTime or HabitSchedule.Recurring)
+            .Where(habit => !(habit.Schedule == HabitSchedule.OneTime && habit.IsCompleted))
             .ToList();
 
     private static int ComputeLongestStreak(

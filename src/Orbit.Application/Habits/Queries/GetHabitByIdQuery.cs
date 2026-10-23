@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 using System.Text.Json.Serialization;
@@ -114,7 +115,7 @@ public class GetHabitByIdQueryHandler(
             cancellationToken);
         var children = HabitDetailChildMapper.MapChildren(habit, userToday, weekStartDay, descendantLogsByHabitId);
         var isCompleted = habit.IsCompleted;
-        if (habit.IsGeneral)
+        if (habit.Schedule == HabitSchedule.General)
         {
             var currentDateLogs = await habitLogRepository.FindAsync(
                 l => l.HabitId == habit.Id
@@ -133,8 +134,8 @@ public class GetHabitByIdQueryHandler(
             habit.FrequencyQuantity,
             habit.IsBadHabit,
             isCompleted,
-            habit.IsGeneral,
-            habit.IsFlexible,
+            habit.Schedule == HabitSchedule.General,
+            habit.Schedule == HabitSchedule.Flexible,
             habit.DueDate,
             habit.DueTime,
             habit.DueEndTime,
@@ -222,8 +223,8 @@ internal static class HabitDetailChildMapper
         child.FrequencyQuantity,
         child.IsBadHabit,
         GetResponseCompletion(child, userToday, weekStartDay, descendantLogsByHabitId),
-        child.IsGeneral,
-        child.IsFlexible,
+        child.Schedule == HabitSchedule.General,
+        child.Schedule == HabitSchedule.Flexible,
         child.Days.ToList(),
         child.DueDate,
         child.DueTime,
@@ -251,7 +252,7 @@ internal static class HabitDetailChildMapper
         int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
-        if (!habit.IsGeneral)
+        if (habit.Schedule != HabitSchedule.General)
             return habit.IsCompleted;
 
         return HabitScheduleService.HasCompletedLogInRange(
@@ -266,10 +267,10 @@ internal static class HabitDetailChildMapper
         int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
-        if (habit.IsCompleted || habit.IsFlexible || habit.IsBadHabit)
+        if (habit.IsCompleted || habit.Schedule == HabitSchedule.Flexible || habit.IsBadHabit)
             return false;
 
-        if (habit.FrequencyUnit == null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             return habit.DueDate < userToday
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= userToday);

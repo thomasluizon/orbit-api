@@ -189,7 +189,7 @@ public sealed partial class ProactiveEngineService(
     internal List<ProactiveFacts> BuildFacts(Batch batch, User user, DateOnly today, ProactiveCalendarDay? calendarDay)
     {
         var result = new List<ProactiveFacts>();
-        var allHabits = batch.Habits.Where(h => h.UserId == user.Id && !h.IsGeneral).ToList();
+        var allHabits = batch.Habits.Where(h => h.UserId == user.Id && h.Schedule != HabitSchedule.General).ToList();
         var habits = allHabits.Where(h => !h.IsBadHabit && !h.IsDeleted && !h.IsCompleted).ToList();
         var due = habits.Where(h => IsDueForAction(h, today, user.WeekStartDay)).ToList();
         var open = habits.Where(h => (due.Contains(h) || HabitScheduleService.IsOverdueOnDate(h, today, user.WeekStartDay))
@@ -230,7 +230,7 @@ public sealed partial class ProactiveEngineService(
 
     private static bool IsDueForAction(Habit habit, DateOnly date, int weekStartDay) =>
         HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay)
-        && (!habit.IsFlexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay));
+        && (habit.Schedule != HabitSchedule.Flexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay));
 
     private static ProactiveFacts? WeeklyFacts(List<Habit> allHabits, User user, DateOnly today, TimeZoneInfo timeZone)
     {

@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
@@ -14,7 +15,7 @@ public class GetHabitCountQueryHandler(
     public async Task<HabitCountResponse> Handle(GetHabitCountQuery request, CancellationToken cancellationToken)
     {
         var count = await habitRepository.CountAsync(
-            h => h.UserId == request.UserId && !h.IsGeneral,
+            h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
             cancellationToken);
 
         return new HabitCountResponse(count);

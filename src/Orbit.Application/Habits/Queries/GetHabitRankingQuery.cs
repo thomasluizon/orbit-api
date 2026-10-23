@@ -8,6 +8,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -150,12 +151,13 @@ public sealed class GetHabitRankingQueryHandler(
     private async Task<List<Habit>> LoadEligibleAsync(HabitRankingDefinition query, CancellationToken ct)
     {
         var loaded = await habits.FindAsync(
-            h => h.UserId == query.UserId && !h.IsDeleted && h.FrequencyUnit != null && !h.IsBadHabit
+            h => h.UserId == query.UserId && !h.IsDeleted
+                && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible) && !h.IsBadHabit
                 && (query.HabitIds.Count == 0 || query.HabitIds.Contains(h.Id)),
             q => q.Include(h => h.Logs.Where(l => !l.IsDeleted && !l.IsSlip && l.Value > 0
                 && l.Date >= query.DateFrom && l.Date < query.DateToExclusive)), ct);
         var eligible = loaded.Where(h => h.UserId == query.UserId && !h.IsDeleted
-            && h.FrequencyUnit is not null && !h.IsBadHabit
+            && (h.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible) && !h.IsBadHabit
             && (query.HabitIds.Count == 0 || query.HabitIds.Contains(h.Id))).ToList();
         return eligible;
     }
