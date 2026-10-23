@@ -17,7 +17,7 @@ public record UserCalendarItem(
     string? BackgroundColor,
     bool IsSynced);
 
-public record GetUserCalendarsQuery(Guid UserId) : IRequest<Result<List<UserCalendarItem>>>, IConcurrencyRetryable;
+public record GetUserCalendarsQuery(Guid UserId, bool PersistConnectionState = true) : IRequest<Result<List<UserCalendarItem>>>, IConcurrencyRetryable;
 
 public partial class GetUserCalendarsQueryHandler(
     IGenericRepository<User> userRepository,
@@ -33,7 +33,9 @@ public partial class GetUserCalendarsQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<List<UserCalendarItem>>();
 
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var user = request.PersistConnectionState
+            ? await userRepository.GetByIdAsync(request.UserId, cancellationToken)
+            : (await userRepository.FindAsync(u => u.Id == request.UserId, cancellationToken)).SingleOrDefault();
         if (user is null)
             return Result.Failure<List<UserCalendarItem>>(ErrorMessages.UserNotFound);
 
@@ -41,7 +43,7 @@ public partial class GetUserCalendarsQueryHandler(
         if (accessToken is null)
             return Result.Failure<List<UserCalendarItem>>(ErrorMessages.CalendarNotConnected);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (request.PersistConnectionState) await unitOfWork.SaveChangesAsync(cancellationToken);
 
         try
         {
@@ -54,8 +56,8 @@ public partial class GetUserCalendarsQueryHandler(
             LogGoogleCalendarApiError(logger, ex, request.UserId);
             if (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
             {
-                user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                if (request.PersistConnectionState) user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
+                if (request.PersistConnectionState) await unitOfWork.SaveChangesAsync(cancellationToken);
                 return Result.Failure<List<UserCalendarItem>>(ErrorMessages.CalendarReconnectRequired);
             }
             return Result.Failure<List<UserCalendarItem>>(ErrorMessages.CalendarFetchFailed);

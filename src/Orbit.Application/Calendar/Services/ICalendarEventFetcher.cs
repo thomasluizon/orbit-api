@@ -2,13 +2,26 @@ using Orbit.Application.Calendar.Queries;
 
 namespace Orbit.Application.Calendar.Services;
 
+public sealed record CalendarReadWindow
+{
+    public DateTime FromAtUtc { get; }
+    public DateTime ToAtUtc { get; }
+    public CalendarReadWindow(DateTime fromAtUtc, DateTime toAtUtc)
+    {
+        if (toAtUtc <= fromAtUtc || toAtUtc - fromAtUtc > TimeSpan.FromDays(3660))
+            throw new ArgumentException("A calendar read requires an ordered, bounded window.");
+        FromAtUtc = fromAtUtc;
+        ToAtUtc = toAtUtc;
+    }
+}
+
 public interface ICalendarEventFetcher
 {
     Task<List<CalendarEventItem>> FetchAsync(
         string accessToken,
         IReadOnlyCollection<string>? selectedCalendarIds,
         DateTime? updatedMin,
-        CancellationToken ct);
+        CancellationToken ct, CalendarReadWindow? window = null);
 
     Task<List<CalendarListItem>> ListCalendarsAsync(string accessToken, CancellationToken ct);
 }

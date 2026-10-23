@@ -9,7 +9,7 @@ namespace Orbit.Application.Chat;
 internal sealed record HabitTodaySnapshot(
     IReadOnlySet<Guid> TodayIds,
     IReadOnlySet<Guid> OverdueIds,
-    IReadOnlySet<Guid> DoneTodayIds)
+    IReadOnlySet<Guid> DoneTodayIds, string? SourceRevision = null)
 {
     internal static async Task<HabitTodaySnapshot> ReadAsync(
         IReadOnlyList<Habit> habits,
@@ -42,7 +42,8 @@ internal sealed record HabitTodaySnapshot(
             var olderResolutions = await reader.ReadResolvedDueDateIdsAsync(oldDueDateIds, cancellationToken);
             dueDateResolution.UnionWith(olderResolutions);
         }
-        return Build(habits, date, weekStartDay, logDays, dueDateResolution);
+        return Build(habits, date, weekStartDay, logDays, dueDateResolution) with
+        { SourceRevision = ReadRevision.Hash(logDays.OrderBy(l => l.HabitId).ThenBy(l => l.Date)) };
     }
 
     internal static HabitTodaySnapshot Build(

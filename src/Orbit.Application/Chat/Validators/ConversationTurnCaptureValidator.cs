@@ -13,9 +13,24 @@ public sealed class ConversationTurnCaptureValidator : AbstractValidator<Convers
         RuleFor(turn => turn.CreatedAtUtc).Must(value => value != default && value.Kind == DateTimeKind.Utc);
         RuleFor(turn => turn.UserContent).NotEmpty();
         RuleFor(turn => turn.ToolCallsJson).NotEmpty().Must(IsArray);
+        RuleFor(turn => turn.ResponseJson).Must(IsResponseObject);
         RuleFor(turn => turn).Must(turn => (long)(turn.UserContent?.Length ?? 0)
-            + (turn.AssistantContent?.Length ?? 0) + (turn.ToolCallsJson?.Length ?? 0)
+            + (turn.AssistantContent?.Length ?? 0) + (turn.ToolCallsJson?.Length ?? 0) + (turn.ResponseJson?.Length ?? 0)
             <= ConversationTurn.MaxTextLength).WithMessage("Conversation exceeds the recording limit.");
+    }
+
+    private static bool IsResponseObject(string? json)
+    {
+        if (json is null) return true;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool IsArray(string? json)

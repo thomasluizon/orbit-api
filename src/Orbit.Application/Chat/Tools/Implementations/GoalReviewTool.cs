@@ -24,7 +24,7 @@ public class GoalReviewTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var userToday = JsonArgumentParser.ParseDateOnly(args, "as_of") ?? await userDateService.GetUserTodayAsync(userId, ct);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
         var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
@@ -55,6 +55,20 @@ public class GoalReviewTool(
         }
 
         return new ToolResult(true, EntityName: sb.ToString(),
-            Payload: GoalListCardBuilder.Build(goals.ToList(), userToday, weekStartDay));
+            Payload: GoalListCardBuilder.Build(goals.ToList(), userToday, weekStartDay) with
+            {
+                SourceRevision = ReadRevision.Hash(goals.OrderBy(g => g.Id).Select(g => new
+                {
+                    g.Id,
+                    g.UpdatedAtUtc,
+                    Logs = g.ProgressLogs.OrderBy(l => l.Id).Select(l => new { l.Id, l.CreatedAtUtc }),
+                    Habits = g.Habits.OrderBy(h => h.Id).Select(h => new
+                    {
+                        h.Id,
+                        h.UpdatedAtUtc,
+                        Logs = h.Logs.Where(l => !l.IsDeleted).OrderBy(l => l.Id).Select(l => new { l.Id, l.Date, l.Value, l.UpdatedAtUtc })
+                    })
+                }))
+            });
     }
 }

@@ -191,7 +191,7 @@ public class GlobalRulesSectionTests
     public void Build_ContainsExhaustiveListingRules()
     {
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
-        var result = new GlobalRulesSection().Build(ctx);
+        var result = new GlobalRulesSection().Build(ctx) + GlobalRulesSection.BuildFormat(ctx);
 
         result.Should().Contain("list EVERY matching entry");
         result.Should().Contain("The tool's counts are authoritative; your list must match them");

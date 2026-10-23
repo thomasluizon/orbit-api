@@ -34,6 +34,21 @@ public class GoogleAuthFirstLoginRaceTests
     public Task ConcurrentFirstSignIns_SaveSessionsForSameUserAndQueueOneSignup() => RunSignInsAsync(true);
 
     [Fact]
+    public async Task ConcurrentFirstSignIns_WithOneSchedulingSlot_SaveSessionsForSameUserAndQueueOneSignup()
+    {
+        var scheduler = new ConcurrentExclusiveSchedulerPair(TaskScheduler.Default, 1);
+        try
+        {
+            await RunSignInsAsync(true, scheduler.ConcurrentScheduler);
+        }
+        finally
+        {
+            scheduler.Complete();
+            await scheduler.Completion;
+        }
+    }
+
+    [Fact]
     public Task FirstAndConflictingCandidates_SaveSessionsForSameUserAndQueueOneSignup() => RunSignInsAsync(false);
 
     [Theory]
@@ -79,7 +94,7 @@ public class GoogleAuthFirstLoginRaceTests
         queued.Should().ContainSingle().Which.Args[1].Should().Be(false);
     }
 
-    private async Task RunSignInsAsync(bool concurrently)
+    private async Task RunSignInsAsync(bool concurrently, TaskScheduler? scheduler = null)
     {
         using var database = concurrently
             ? new SqliteOrbitDbContextFactory(Path.Combine(Path.GetTempPath(), $"orbit-auth-{Guid.NewGuid():N}.db"))
@@ -94,7 +109,8 @@ public class GoogleAuthFirstLoginRaceTests
         var tokenService = Substitute.For<ITokenService>();
         tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>()).Returns("session-token");
 
-        using var ready = new Barrier(2);
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var arrivals = 0;
         async Task<Guid> SignInAsync()
         {
             await using var context = database.CreateContext();
@@ -105,7 +121,11 @@ public class GoogleAuthFirstLoginRaceTests
                 Options.Create(new JwtSettings { SecretKey = "unused-test-secret", Issuer = "test", Audience = "test", RefreshExpiryDays = 90 }));
             var flow = new GoogleSignInFlow(new AuthUserStore(context), work, sessions, new SignupJobDispatcher(jobs, new HttpContextAccessor(), NullLogger<SignupJobDispatcher>.Instance), jobs, new AccountReactivation(Substitute.For<IGenericRepository<OwedSubscriptionCancellation>>()));
             if (concurrently)
-                ready.SignalAndWait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            {
+                if (Interlocked.Increment(ref arrivals) == 2)
+                    ready.SetResult();
+                await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }
             var result = await flow.CompleteAsync("Google@Example.com", "Google User", "pt-BR", "friend",
                 "google-access", "google-refresh", CancellationToken.None);
             result.IsSuccess.Should().BeTrue();
@@ -113,7 +133,9 @@ public class GoogleAuthFirstLoginRaceTests
         }
 
         var results = concurrently
-            ? await Task.WhenAll(Task.Run(SignInAsync), Task.Run(SignInAsync))
+            ? await Task.WhenAll(
+                Task.Factory.StartNew(SignInAsync, CancellationToken.None, TaskCreationOptions.DenyChildAttach, scheduler ?? TaskScheduler.Default).Unwrap(),
+                Task.Factory.StartNew(SignInAsync, CancellationToken.None, TaskCreationOptions.DenyChildAttach, scheduler ?? TaskScheduler.Default).Unwrap())
             : [await SignInAsync(), await SignInAsync()];
         var winner = results[0];
         var conflicting = results[1];

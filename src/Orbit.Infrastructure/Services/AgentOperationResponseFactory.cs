@@ -129,6 +129,7 @@ internal static class AgentOperationResponseFactory
                 TargetId: result.EntityId,
                 TargetName: result.EntityName,
                 PolicyReason: result.Success ? null : result.Error,
+                ErrorCode: result.ErrorCode,
                 Payload: result.Payload),
             PolicyDenial: isPayGateDenial
                 ? new AgentPolicyDenial(

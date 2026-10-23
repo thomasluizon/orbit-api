@@ -14,6 +14,20 @@ public class ConversationTurnCaptureValidatorTests
     [Fact]
     public void Validate_ValidTurn_IsAccepted() => _validator.Validate(Valid()).IsValid.Should().BeTrue();
 
+    [Theory]
+    [InlineData("{}", true)]
+    [InlineData("{\"parts\":[]}", true)]
+    [InlineData("[]", false)]
+    [InlineData("null", false)]
+    [InlineData("42", false)]
+    [InlineData("not json", false)]
+    public void Validate_ResponseMustBeAJsonObject(string json, bool valid)
+    {
+        var result = _validator.Validate(Valid() with { ResponseJson = json });
+        result.IsValid.Should().Be(valid);
+        if (!valid) result.Errors.Should().Contain(error => error.PropertyName == nameof(ConversationTurnCapture.ResponseJson));
+    }
+
     [Fact]
     public void Validate_InvalidTurns_AreRejected()
     {

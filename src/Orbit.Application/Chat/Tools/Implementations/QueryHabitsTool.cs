@@ -38,6 +38,7 @@ public class QueryHabitsTool(
             tag = new { type = JsonSchemaTypes.String, description = "Filter by tag name (case-insensitive)" },
             include_sub_habits = new { type = JsonSchemaTypes.Boolean, description = "Include children. Default: true." },
             include_metrics = new { type = JsonSchemaTypes.Boolean, description = "Include streak/completion metrics for progress questions. Default: false." },
+            offset = new { type = JsonSchemaTypes.Integer, description = "Typed row offset. Default: 0." },
             limit = new { type = JsonSchemaTypes.Integer, description = "Maximum results to return. Default: 50" }
         },
         required = Array.Empty<string>()
@@ -83,11 +84,40 @@ public class QueryHabitsTool(
             .Take(limit)
             .ToList();
 
-        if (results.Count == 0 && query.Schedule is null)
-            return new ToolResult(true, EntityName: "No habits found matching the given filters.");
+        var output = results.Count == 0 && query.Schedule is null
+            ? "No habits found matching the given filters."
+            : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule);
+        var rows = new List<HabitListCardItem>();
+        foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
+            .OrderBy(h => h.Position).ThenBy(h => h.Id))
+            AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs);
+        return new ToolResult(true, EntityName: output,
+            Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
+                rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList(),
+                query.Schedule?.Date, TotalCount: rows.Count,
+                SourceRevision: ReadRevision.Hash(new
+                {
+                    Rows = rows,
+                    Sources = allHabits.OrderBy(h => h.Id).Select(h => new { h.Id, h.UpdatedAtUtc }),
+                    ScheduleRevision = query.Schedule?.Facts.SourceRevision
+                })));
+    }
 
-        var output = BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule);
-        return new ToolResult(true, EntityName: output);
+    private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,
+        IReadOnlyList<Habit> habits, ScheduleContext? schedule, DateOnly today, bool includeSubs)
+    {
+        var status = schedule is not null
+            ? schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
+                : schedule.Facts.OverdueIds.Contains(habit.Id) ? HabitListCardBuilder.StatusOverdue
+                : HabitListCardBuilder.StatusToday
+            : habit.IsGeneral ? HabitListCardBuilder.StatusGeneral
+                : GetResponseCompletion(habit, today) ? HabitListCardBuilder.StatusDone
+                : habit.DueDate < today ? HabitListCardBuilder.StatusOverdue
+                : habit.DueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
+        rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status));
+        if (includeSubs)
+            foreach (var child in habits.Where(item => item.ParentHabitId == habit.Id).OrderBy(item => item.Position))
+                AppendReadRows(child, depth + 1, rows, habits, schedule, today, true);
     }
 
     private static HabitFilters ParseFilters(JsonElement args, DateOnly today)

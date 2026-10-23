@@ -15,6 +15,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
         private readonly HashSet<(string Domain, string Access)> _seenToolSteps = [];
         private readonly HashSet<Guid> _supersededPendingIds = [];
+        private readonly HashSet<(Guid Id, AgentOperationStatus Status)> _reportedPendingOutcomes = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public ConversationRecordingState? Recording { get; init; }
@@ -45,9 +46,11 @@ public partial class ProcessUserChatCommandHandler
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
+        public Dictionary<string, QueryReadBlock> QueryReads { get; } = new(StringComparer.Ordinal);
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
         public List<AiToolCallResult> ToolResults { get; } = [];
+        public List<IReadOnlyList<AiToolCall>> CompositionRounds { get; } = [];
 
         /// <summary>
         /// Distinct names of every tool invoked this turn, used to decide whether the turn is safe to
@@ -75,12 +78,16 @@ public partial class ProcessUserChatCommandHandler
         /// </summary>
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
+        public void AddRelatedSurface(string? surface)
+        {
+            if (surface is not null && _seenRelatedSurfaces.Add(surface))
+                _relatedSurfaces.Add(surface);
+        }
+
         public T? LastSuccessfulPayload<T>(string toolName, Func<T, bool>? predicate = null) where T : class =>
-            OperationResults
-                .LastOrDefault(operation => operation.OperationId == toolName
-                    && operation.Status == AgentOperationStatus.Succeeded
-                    && operation.Payload is T payload
-                    && (predicate is null || predicate(payload)))?.Payload as T;
+            OperationResults.LastOrDefault(operation => operation.OperationId == toolName
+                && operation.Status == AgentOperationStatus.Succeeded && operation.Payload is T payload
+                && (predicate is null || predicate(payload)))?.Payload as T;
 
         public AgentOperationResult? LastSuccessfulOperation(string toolName) =>
             OperationResults.LastOrDefault(operation => operation.OperationId == toolName
@@ -108,6 +115,9 @@ public partial class ProcessUserChatCommandHandler
             PendingAgentOperation? pendingOperation)
         {
             _calledToolNames.Add(toolName);
+            if ((pendingOperation?.Id ?? operationResult?.PendingOperationId) is { } pendingId
+                && operationResult is not null && !_reportedPendingOutcomes.Add((pendingId, operationResult.Status)))
+                return;
 
             if (actionResult is not null)
                 ActionResults.Add(actionResult);

@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Orbit.Api.Mcp;
+using ModelContextProtocol.Protocol;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json.Nodes;
@@ -267,9 +268,21 @@ public static partial class ServiceCollectionExtensions
         });
     }
 
-    private static void AddMcpToolServer(WebApplicationBuilder builder)
+    internal static void AddMcpToolServer(WebApplicationBuilder builder)
     {
-        builder.Services.AddMcpServer()
+        builder.Services.AddMcpServer(options => options.ServerInfo = new Implementation
+        {
+            Name = "Orbit.Api",
+            Version = typeof(ServiceCollectionExtensions).Assembly.GetName().Version?.ToString() ?? "1.0.0",
+            Title = "Orbit",
+            Description = "Manage your Orbit habits, goals and progress.",
+            WebsiteUrl = "https://useorbit.org",
+            Icons =
+                [
+                    new Icon { Source = "https://api.useorbit.org/orbit-icon-512.png", MimeType = "image/png", Sizes = ["512x512"] },
+                    new Icon { Source = "https://api.useorbit.org/favicon.svg", MimeType = "image/svg+xml", Sizes = ["any"] }
+                ]
+        })
             .WithHttpTransport()
             .WithTools<AgentTools>()
             .WithTools<HabitTools>()
@@ -362,6 +375,8 @@ public static partial class ServiceCollectionExtensions
         Microsoft.AspNetCore.OpenApi.OpenApiSchemaTransformerContext context, bool legacyRevision)
     {
         var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
+        if (type == typeof(Orbit.Application.Chat.ReadBlockCard))
+            schema.Discriminator = null;
         if (type == typeof(HabitSchedule))
         {
             schema.Type = JsonSchemaType.String;

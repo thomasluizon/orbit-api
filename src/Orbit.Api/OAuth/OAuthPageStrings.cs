@@ -33,7 +33,9 @@ public sealed record OAuthPageStrings(
     string ScopeTitle,
     string ScopeHabits,
     string ScopeProfile,
-    string ScopeProgress)
+    string ScopeProgress,
+    string InvalidRequestTitle,
+    string InvalidRequestBody)
 {
     /// <summary>The locale tag the page keeps when the request asks for neither supported language.</summary>
     public const string DefaultLocale = "en";
@@ -70,7 +72,9 @@ public sealed record OAuthPageStrings(
         ScopeTitle: "In your account, Claude can:",
         ScopeHabits: "Manage your habits, goals and tags",
         ScopeProfile: "See your profile and your stats",
-        ScopeProgress: "Log what you finish and follow your progress");
+        ScopeProgress: "Log what you finish and follow your progress",
+        InvalidRequestTitle: "This authorization request is invalid or expired.",
+        InvalidRequestBody: "Return to your MCP client and try again.");
 
     private static readonly OAuthPageStrings Portuguese = new(
         Locale: PortugueseLocale,
@@ -101,7 +105,9 @@ public sealed record OAuthPageStrings(
         ScopeTitle: "Na sua conta, o Claude pode:",
         ScopeHabits: "Gerenciar seus hábitos, metas e tags",
         ScopeProfile: "Ver seu perfil e suas estatísticas",
-        ScopeProgress: "Registrar o que você concluir e acompanhar seu progresso");
+        ScopeProgress: "Registrar o que você concluir e acompanhar seu progresso",
+        InvalidRequestTitle: "Esta solicitação de autorização é inválida ou expirou.",
+        InvalidRequestBody: "Volte ao seu cliente MCP e tente novamente.");
 
     /// <summary>Picks the copy for a resolved language tag, falling back to English.</summary>
     public static OAuthPageStrings For(string language) =>

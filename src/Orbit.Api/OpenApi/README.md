@@ -106,3 +106,14 @@ rebaseline workflows and consumer instruction changes after API acceptance and
 deployment. The producer commit and this catalog/evidence are its handoff inputs.
 UI PR #1913 retains its routine generated-pair scope. The model work in #227 is
 separate; #1558 remains closed and #1513's completed consumers remain intact.
+
+The append-only habit ranking query, paging, refresh and `habitRanking` block
+contract for thomasluizon/orbit-tickets#1618 is documented in
+[HabitRanking.md](HabitRanking.md). It preserves retrospective semantics and
+requires API deployment before client capability advertisement.
+
+The append-only negotiated `gamification` read block for profile-only,
+achievement-only and other partial gamification selections is documented in
+[GamificationReadBlocks.md](GamificationReadBlocks.md). Combined reads preserve
+the existing `streak` contract. Deploy this producer before the carrying consumer
+advertises the new kind. Tracks thomasluizon/orbit-tickets#1631.

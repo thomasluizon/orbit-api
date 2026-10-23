@@ -19,7 +19,10 @@ public record NotificationItemDto(
 public record GetNotificationsResponse(
     IReadOnlyList<NotificationItemDto> Items,
     int UnreadCount,
-    int? TotalCount = null);
+    int? TotalCount = null,
+    string? SourceRevision = null);
+
+public record NotificationRevision(Guid Id, DateTime UpdatedAtUtc);
 
 public record GetNotificationsQuery(Guid UserId, int Offset = 0, int Limit = AppConstants.MaxNotificationsReturned) : IRequest<Result<GetNotificationsResponse>>;
 
@@ -46,7 +49,10 @@ public class GetNotificationsQueryHandler(
             VisibleForUser(request.UserId),
             cancellationToken);
 
-        return Result.Success(new GetNotificationsResponse(items, unreadCount, totalCount));
+        var sources = await notificationRepository.ProjectAsync(VisibleForUser(request.UserId),
+            q => q.OrderBy(n => n.Id).Select(n => new NotificationRevision(n.Id, n.UpdatedAtUtc)), cancellationToken);
+        return Result.Success(new GetNotificationsResponse(items, unreadCount, totalCount,
+            Orbit.Application.Chat.ReadRevision.Hash(sources)));
     }
 
     // Mirrors RETIRED_NOTIFICATION_URL_PREFIXES so counts match both inboxes: https://github.com/thomasluizon/orbit-ui-mobile/blob/main/packages/shared/src/utils/notification-actions.ts

@@ -224,7 +224,9 @@ public record AgentOperationResult(
     string? TargetName = null,
     string? PolicyReason = null,
     Guid? PendingOperationId = null,
-    object? Payload = null);
+    object? Payload = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] QueryReadBlock? ReadBlock = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ErrorCode = null);
 
 public record AgentExecuteOperationResponse(
     AgentOperationResult Operation,
@@ -267,7 +269,10 @@ public record AgentClientContext(
     bool? SupportsAccountRowsCard = null,
     bool? SupportsHabitListDoneStatus = null,
     bool? SupportsParts = null,
-    IReadOnlyList<string>? PartKinds = null);
+    IReadOnlyList<string>? PartKinds = null,
+    bool? SupportsDatedHabitListCard = null,
+    bool? SupportsHabitHistoryCard = null,
+    bool? SupportsFollowUpContext = null);
 
 public record AgentContextSnapshot(
     string Plan,
@@ -323,6 +328,7 @@ public static class AgentCapabilityIds
     public const string HabitMetricsRead = "habits.metrics.read";
     public const string DailySummaryRead = "habits.daily-summary.read";
     public const string RetrospectiveRead = "habits.retrospective.read";
+    public const string HabitRankingRead = "habits.ranking.read";
     public const string GoalsRead = "goals.read";
     public const string GoalsWrite = "goals.write";
     public const string GoalsDelete = "goals.delete";

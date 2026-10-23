@@ -63,6 +63,37 @@ public class InterpretDateCommandHandlerTests
         _work.ReceivedCalls().Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task AmbiguousDatesUnderContention_ReturnUnresolvedWithoutReservation()
+    {
+        (string Phrase, string Language)[] phrases =
+        [
+            ("26 de outubro de 2026 ou 27", "pt-BR"),
+            ("October 26, 2026 or 27", "en"),
+            ("26 ou 27 ou 26 de outubro", "pt-BR"),
+            ("October 26 or 27 or 26", "en")
+        ];
+        const int workers = 256;
+        using var start = new Barrier(workers);
+        var handler = Handler;
+        var tasks = Enumerable.Range(0, workers).Select(worker => Task.Factory.StartNew(async () =>
+        {
+            start.SignalAndWait();
+            for (var iteration = 0; iteration < 128; iteration++)
+            {
+                var (phrase, language) = phrases[(worker + iteration) % phrases.Length];
+                var result = await handler.Handle(new(_user, phrase, language), CancellationToken.None);
+                result.Value.Should().Be(new DateInterpretation(null, Reference));
+            }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap()).ToArray();
+
+        await Task.WhenAll(tasks);
+
+        _gate.ReceivedCalls().Should().BeEmpty();
+        _service.ReceivedCalls().Should().BeEmpty();
+        _work.ReceivedCalls().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("October 26 or 26", "en")]
     [InlineData("26 or 26 October", "en")]

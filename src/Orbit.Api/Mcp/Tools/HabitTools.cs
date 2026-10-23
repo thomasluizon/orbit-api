@@ -737,4 +737,16 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             new[] { n.Highlights, n.Missed, n.Trends, n.Suggestion }.Where(s => !string.IsNullOrWhiteSpace(s)));
         return $"Retrospective ({period}){(r.FromCache ? " (cached)" : "")}:\n{narrativeText}";
     }
+
+    [McpServerTool(Name = "get_habit_ranking"), Description("Rank positive recurring habits by completion log count. Uses resolved local dates, includes independent children and supports bound paging and refresh without narrative generation.")]
+    public async Task<string> GetHabitRanking(ClaimsPrincipal user,
+        [Description("Absolute dateFrom/dateToExclusive or window/months, optional metric/habitIds/pageSize; later requests use queryToken and cursor or refresh only.")]
+        HabitRankingReadRequest query,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await mediator.Send(new GetHabitRankingQuery(McpToolHelpers.GetUserId(user), query.DateFrom,
+            query.DateToExclusive, query.Window, query.Months, query.Metric, query.HabitIds, query.PageSize,
+            query.QueryToken, query.Cursor, query.Refresh), cancellationToken);
+        return result.IsSuccess ? JsonSerializer.Serialize(result.Value, PayloadOptions) : $"Error [{result.ErrorCode}]: {result.Error}";
+    }
 }

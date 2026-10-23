@@ -338,7 +338,8 @@ public record CalendarEventItem(
             : [sourceTimeZone.GetUtcOffset(sourceLocal)];
 }
 
-public record GetCalendarEventsQuery(Guid UserId, bool IncludeImported = false) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
+public record GetCalendarEventsQuery(Guid UserId, bool IncludeImported = false, CalendarReadWindow? Window = null,
+    IReadOnlyList<string>? CalendarIds = null, bool PersistConnectionState = true, bool UseCurrentSelection = true) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
 /// <summary>Groups the repositories the calendar events query touches to keep the handler constructor small.</summary>
 public record GetCalendarEventsRepositories(
@@ -360,18 +361,20 @@ public partial class GetCalendarEventsQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<List<CalendarEventItem>>();
 
-        var user = await repos.Users.GetByIdAsync(request.UserId, cancellationToken);
+        var user = request.PersistConnectionState
+            ? await repos.Users.GetByIdAsync(request.UserId, cancellationToken)
+            : (await repos.Users.FindAsync(u => u.Id == request.UserId, cancellationToken)).SingleOrDefault();
         if (user is null)
             return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound);
 
-        var accessToken = await ResolveAccessTokenAsync(user, cancellationToken);
+        var accessToken = await ResolveAccessTokenAsync(user, cancellationToken, request.PersistConnectionState);
         if (accessToken is null)
             return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarNotConnected);
 
         try
         {
             var fetched = await eventFetcher.FetchAsync(
-                accessToken, user.GetSelectedCalendarIds(), updatedMin: null, cancellationToken);
+                accessToken, request.UseCurrentSelection ? user.GetSelectedCalendarIds() : request.CalendarIds, updatedMin: null, cancellationToken, request.Window);
 
             var importedEventIds = request.IncludeImported
                 ? null
@@ -413,8 +416,11 @@ public partial class GetCalendarEventsQueryHandler(
             {
                 if (logger.IsEnabled(LogLevel.Debug))
                     LogGoogleCalendarReconnectRequired(logger, request.UserId, ex.RawErrorCode);
-                user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                if (request.PersistConnectionState)
+                {
+                    user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
+                    await unitOfWork.SaveChangesAsync(cancellationToken);
+                }
                 return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarReconnectRequired);
             }
             LogGoogleCalendarApiError(logger, ex, request.UserId);
@@ -422,14 +428,14 @@ public partial class GetCalendarEventsQueryHandler(
         }
     }
 
-    private async Task<string?> ResolveAccessTokenAsync(User user, CancellationToken cancellationToken)
+    private async Task<string?> ResolveAccessTokenAsync(User user, CancellationToken cancellationToken, bool persist)
     {
         if (user.GoogleRefreshToken is null)
         {
             var existingAccessToken = await googleTokenService.GetValidAccessTokenAsync(user, cancellationToken);
             if (existingAccessToken is not null)
             {
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                if (persist) await unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
             return existingAccessToken;
@@ -439,8 +445,8 @@ public partial class GetCalendarEventsQueryHandler(
 
         if (refresh.Result == GoogleTokenRefreshResult.RefreshTokenInvalid)
         {
-            user.MarkCalendarSyncReconnectRequired(refresh.ErrorCode ?? "invalid_grant");
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            if (persist) user.MarkCalendarSyncReconnectRequired(refresh.ErrorCode ?? "invalid_grant");
+            if (persist) await unitOfWork.SaveChangesAsync(cancellationToken);
             return null;
         }
 
@@ -448,7 +454,7 @@ public partial class GetCalendarEventsQueryHandler(
         if (accessToken is null)
             return null;
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (persist) await unitOfWork.SaveChangesAsync(cancellationToken);
         return accessToken;
     }
 

@@ -17,7 +17,7 @@ public static class OAuthConsentPage
         return $$"""
 <!DOCTYPE html>
 <html lang="{{(portuguese ? "pt-BR" : "en")}}">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>{{title}}</title><style>{{OAuthPageStyles.Css}}</style></head>
+{{OAuthPageHead.Render(title)}}
 <body><main class="card"><h1>{{title}}</h1><p>{{description}}</p><ul>{{items}}</ul>
 <form method="post" action="/oauth/consent"><input type="hidden" name="ticket" value="{{WebUtility.HtmlEncode(ticket)}}">
 <button class="btn btn-primary" name="access" value="read_only">{{readOnly}}</button>

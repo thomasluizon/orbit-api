@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Grounding;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -358,6 +359,10 @@ public class QueryHabitsToolTests
         var schedule = await Execute(JsonSerializer.Serialize(new { date = dateValue }));
 
         schedule.Success.Should().BeTrue();
+        var card = schedule.Payload.Should().BeOfType<HabitListCard>().Which;
+        card.Date.Should().Be(Today);
+        card.Items.Should().Contain(item => item.Id == done.Id.ToString() && item.Status == HabitListCardBuilder.StatusDone);
+        card.Items.Should().NotContain(item => item.Id == otherUser.Id.ToString());
         schedule.EntityName.Should().Contain(done.Title);
         schedule.EntityName.Should().Contain("Found 2 habit(s)");
         schedule.EntityName.Should().Contain("1 done, 1 remaining");
@@ -436,6 +441,8 @@ public class QueryHabitsToolTests
         var result = await Execute("""{"date": "today"}""");
 
         result.EntityName.Should().Contain(child.Title).And.NotContain(parent.Title);
+        result.Payload.Should().BeOfType<HabitListCard>().Which.Items.Should().ContainSingle()
+            .Which.Should().Match<HabitListCardItem>(item => item.Id == child.Id.ToString() && item.Status == HabitListCardBuilder.StatusDone);
         result.EntityName.Should().Contain("Found 1 habit(s)").And.Contain("1 done, 0 remaining");
     }
 

@@ -9,6 +9,12 @@ public sealed record DateInterpretation(DateOnly? Date, DateOnly ReferenceDate);
 
 public sealed partial record DateInterpretationInput
 {
+    private static readonly IReadOnlyDictionary<string, Regex[]> MonthPatterns = new Dictionary<string, Regex[]>
+    {
+        ["en"] = BuildMonthPatterns("en"),
+        ["pt-BR"] = BuildMonthPatterns("pt-BR")
+    };
+
     public const int MaxPhraseLength = 200;
     public string Phrase { get; }
     public string Language { get; }
@@ -40,30 +46,27 @@ public sealed partial record DateInterpretationInput
         }
 
         var normalized = RemoveAccents(Phrase.ToLowerInvariant());
-        var culture = CultureInfo.GetCultureInfo(Language);
+        var patterns = MonthPatterns[Language];
         for (var month = 1; month <= 12; month++)
         {
-            var name = RemoveAccents(culture.DateTimeFormat.GetMonthName(month).ToLowerInvariant());
-            var abbreviation = RemoveAccents(culture.DateTimeFormat.GetAbbreviatedMonthName(month).ToLowerInvariant()).TrimEnd('.');
-            var monthPattern = $"(?:{Regex.Escape(name)}|{Regex.Escape(abbreviation)}\\.?)";
-            const string dayPattern = @"(?<day>\d{1,2})(?:st|nd|rd|th|º|°)?(?!\w)";
-            var alternativeDays = $@"(?:\s+(?:or|ou)\s+{dayPattern})*";
-            var daysPattern = $"{dayPattern}{alternativeDays}";
-            var pattern = $@"(?:\b{daysPattern}\s+(?:(?:de|of)\s+)?{monthPattern}\b{alternativeDays}|\b{monthPattern}\s+(?:the\s+)?{daysPattern})(?:\s*(?:,|de)?\s*(?<year>[+-]?\d+)\b)?{alternativeDays}";
-            foreach (Match match in Regex.Matches(normalized, pattern, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50)))
+            foreach (Match match in patterns[month - 1].Matches(normalized))
             {
                 var year = 2000;
-                if (match.Groups["year"].Success
-                    && !int.TryParse(match.Groups["year"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out year))
+                var yearGroup = match.Groups["year"];
+                if (yearGroup.Success
+                    && !int.TryParse(yearGroup.Value, NumberStyles.None, CultureInfo.InvariantCulture, out year))
                     return true;
                 if (year is < 1 or > 9999)
                     return true;
-                foreach (Capture capture in match.Groups["day"].Captures)
+                var days = yearGroup.Success
+                    ? match.Value.Remove(yearGroup.Index - match.Index, yearGroup.Length)
+                    : match.Value;
+                foreach (Match dayMatch in DayNumbers().Matches(days))
                 {
-                    var day = int.Parse(capture.Value, CultureInfo.InvariantCulture);
+                    var day = int.Parse(dayMatch.Value, CultureInfo.InvariantCulture);
                     if (day < 1 || day > DateTime.DaysInMonth(year, month))
                         return true;
-                    explicitDates.Add((match.Groups["year"].Success ? year : 0, month, day));
+                    explicitDates.Add((yearGroup.Success ? year : 0, month, day));
                 }
             }
         }
@@ -77,6 +80,25 @@ public sealed partial record DateInterpretationInput
 
     private static string RemoveAccents(string value) => string.Concat(value.Normalize(NormalizationForm.FormD)
         .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark));
+
+    private static Regex[] BuildMonthPatterns(string language)
+    {
+        var culture = CultureInfo.GetCultureInfo(language);
+        return Enumerable.Range(1, 12).Select(month =>
+        {
+            var name = RemoveAccents(culture.DateTimeFormat.GetMonthName(month).ToLowerInvariant());
+            var abbreviation = RemoveAccents(culture.DateTimeFormat.GetAbbreviatedMonthName(month).ToLowerInvariant()).TrimEnd('.');
+            var monthPattern = $"(?:{Regex.Escape(name)}|{Regex.Escape(abbreviation)}\\.?)";
+            const string dayPattern = @"\d{1,2}(?:(?:st|nd|rd|th|º)\b|°\B|\b)";
+            var alternativeDays = $@"(?:\s+(?:or|ou)\s+{dayPattern})*";
+            var daysPattern = $"{dayPattern}{alternativeDays}";
+            var pattern = $@"(?:\b{daysPattern}\s+(?:(?:de|of)\s+)?{monthPattern}\b{alternativeDays}|\b{monthPattern}\s+(?:the\s+)?{daysPattern})(?:\s*(?:,|de)?\s*(?<year>[+-]?\d+)\b)?{alternativeDays}";
+            return new Regex(pattern, RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, Regex.InfiniteMatchTimeout);
+        }).ToArray();
+    }
+
+    [GeneratedRegex(@"\d{1,2}", RegexOptions.CultureInvariant)]
+    private static partial Regex DayNumbers();
 
     [GeneratedRegex(@"\b\d{1,4}\s*[/.-]\s*\d{1,2}(?:\s*[/.-]\s*\d{1,4})?\b(?<!\d{4}-\d{2}-\d{2})", RegexOptions.CultureInvariant)]
     private static partial Regex NumericDate();

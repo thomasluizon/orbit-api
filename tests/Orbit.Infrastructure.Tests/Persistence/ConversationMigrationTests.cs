@@ -40,19 +40,23 @@ public class ConversationMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        remaining.Should().HaveCount(9);
-        remaining.OfType<AddColumnOperation>().Should().HaveCount(6);
+        remaining.Should().HaveCount(10);
+        remaining.OfType<AddColumnOperation>().Should().HaveCount(7);
+        remaining.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "ConversationTurns"
+            && column.Name == "ResponseJson" && column.IsNullable && column.ClrType == typeof(string));
         ReferralRewardMigrationTests.AssertRewardColumns(remaining);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(remaining);
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(remaining);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(remaining);
     }
 
-    internal static void AssertConversationExpansion(IReadOnlyList<MigrationOperation> operations)
+    internal static void AssertConversationExpansion(IReadOnlyList<MigrationOperation> operations, bool composedResponse = false)
     {
         var table = operations.OfType<CreateTableOperation>().Should().ContainSingle(operation => operation.Name == "ConversationTurns").Subject;
-        table.Columns.Select(column => column.Name).Should().BeEquivalentTo(
-            "Id", "UserId", "TurnId", "Role", "CreatedAtUtc", "Model", "Content", "ToolCallsJson");
+        var columns = new[] { "Id", "UserId", "TurnId", "Role", "CreatedAtUtc", "Model", "Content", "ToolCallsJson" };
+        table.Columns.Select(column => column.Name).Should().BeEquivalentTo(composedResponse ? columns.Append("ResponseJson") : columns);
+        if (composedResponse)
+            table.Columns.Should().ContainSingle(column => column.Name == "ResponseJson" && column.ColumnType == "text" && column.IsNullable);
         table.Columns.Should().ContainSingle(column => column.Name == "Content" && column.ColumnType == "text" && column.IsNullable);
         table.Columns.Should().ContainSingle(column => column.Name == "ToolCallsJson" && column.ColumnType == "text" && !column.IsNullable);
         table.PrimaryKey!.Columns.Should().Equal("Id");

@@ -69,7 +69,7 @@ public class ConversationTurnRecorderTests
     public async Task Consumer_DrainsOnShutdown_EncryptsContentAndArguments_AndReadsThemBack()
     {
         using var fixture = new Fixture();
-        var capture = Capture(fixture.User.Id);
+        var capture = Capture(fixture.User.Id) with { ResponseJson = "{\"parts\":[{\"type\":\"text\",\"text\":\"Private composition\"}]}" };
         fixture.Recorder.TryRecord(capture).Should().BeTrue();
         await fixture.Recorder.StartAsync(CancellationToken.None);
         await fixture.Recorder.StopAsync(CancellationToken.None);
@@ -79,15 +79,17 @@ public class ConversationTurnRecorderTests
         rows.Should().HaveCount(2);
         rows.Single(turn => turn.Role == "assistant").Content.Should().Be(capture.AssistantContent);
         rows.Single(turn => turn.Role == "assistant").ToolCallsJson.Should().Be(capture.ToolCallsJson);
+        rows.Single(turn => turn.Role == "assistant").ResponseJson.Should().Be(capture.ResponseJson);
         rows.Single(turn => turn.Role == "assistant").Model.Should().Be("recording-model");
         await using var command = read.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "SELECT \"Content\", \"ToolCallsJson\" FROM \"ConversationTurns\" WHERE \"Role\" = 'assistant'";
+        command.CommandText = "SELECT \"Content\", \"ToolCallsJson\", \"ResponseJson\" FROM \"ConversationTurns\" WHERE \"Role\" = 'assistant'";
         await using var reader = await command.ExecuteReaderAsync();
         (await reader.ReadAsync()).Should().BeTrue();
         var content = reader.GetString(0);
         var tools = reader.GetString(1);
         content.Should().StartWith("enc:").And.NotContain("Assistant private reply");
         tools.Should().StartWith("enc:").And.NotContain("Days can only be set");
+        reader.GetString(2).Should().StartWith("enc:").And.NotContain("Private composition");
         var wrongKey = new EncryptionService(Options.Create(new EncryptionSettings { Key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) }),
             NullLogger<EncryptionService>.Instance);
         Action decrypt = () => wrongKey.Decrypt(content);

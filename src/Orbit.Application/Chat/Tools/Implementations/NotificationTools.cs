@@ -16,12 +16,12 @@ public class GetNotificationsTool(IMediator mediator) : IAiTool
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
-        properties = new { }
+        properties = new { offset = new { type = JsonSchemaTypes.Integer }, limit = new { type = JsonSchemaTypes.Integer } }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var result = await mediator.Send(new GetNotificationsQuery(userId), ct);
+        var result = await mediator.Send(new GetNotificationsQuery(userId, Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0), Math.Clamp(JsonArgumentParser.GetOptionalInt(args, "limit") ?? 10, 1, 200)), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
             : ToolResult.FromFailure(result);

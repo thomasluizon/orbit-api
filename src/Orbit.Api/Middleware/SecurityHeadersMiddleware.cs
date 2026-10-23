@@ -1,3 +1,5 @@
+using Orbit.Api.Branding;
+
 namespace Orbit.Api.Middleware;
 
 public class SecurityHeadersMiddleware(RequestDelegate next)
@@ -17,9 +19,19 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
         headers[StrictTransportSecurityHeader] = "max-age=31536000; includeSubDomains";
         headers[PermissionsPolicyHeader] = "camera=(), microphone=(), geolocation=(), payment=()";
 
-        if (context.Request.Path.StartsWithSegments("/oauth"))
+        if (context.Request.Path == "/favicon.svg")
+        {
+            headers[ContentSecurityPolicyHeader] = $"default-src 'none'; style-src 'sha256-{BrandAssets.SvgStyleHash}'; frame-ancestors 'none'";
+        }
+        else if (context.Request.Path.StartsWithSegments("/oauth"))
         {
             headers[ContentSecurityPolicyHeader] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'";
+        }
+        else if (HttpMethods.IsGet(context.Request.Method) &&
+                 (context.Request.Path == "/api/marketing/unsubscribe" ||
+                  context.Request.Path == "/api/marketing/unsubscribe/"))
+        {
+            headers[ContentSecurityPolicyHeader] = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; frame-ancestors 'none'";
         }
         else if (!context.Request.Path.StartsWithSegments("/scalar") &&
                  !context.Request.Path.StartsWithSegments("/openapi"))

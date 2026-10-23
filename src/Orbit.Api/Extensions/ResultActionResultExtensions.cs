@@ -10,6 +10,10 @@ public static class ResultActionResultExtensions
 {
     private static readonly Dictionary<string, int> StatusByErrorCode = new()
     {
+        ["READ_QUERY_EXPIRED"] = StatusCodes.Status410Gone,
+        ["READ_QUERY_STALE"] = StatusCodes.Status409Conflict,
+        ["READ_QUERY_REFRESH_FAILED"] = StatusCodes.Status503ServiceUnavailable,
+        ["HABIT_RANKING_STALE"] = StatusCodes.Status409Conflict,
         [ErrorCodes.AstraBlockNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.AstraBlockInvalidated] = StatusCodes.Status410Gone,
         [ErrorCodes.AstraBlockExpired] = StatusCodes.Status410Gone,

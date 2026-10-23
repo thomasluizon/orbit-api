@@ -6,21 +6,21 @@ namespace Orbit.Application.Tests.Chat;
 public sealed class FollowUpDirectiveTests
 {
     [Fact]
-    public void Extract_FourValidLines_KeepsThree()
+    public void Extract_FourValidLines_KeepsTwo()
     {
         var (text, items) = FollowUpDirective.Extract(
             "Ready.\n[[orbit:followups]]\nWhat changed?\nShow my habits?\nWhat is next?\nAnything else?");
 
         text.Should().Be("Ready.");
-        items.Should().Equal("What changed?", "Show my habits?", "What is next?");
+        items.Should().Equal("What changed?", "Show my habits?");
     }
 
     [Fact]
-    public void Extract_OneValidLine_ReturnsNoItems()
+    public void Extract_OneValidLine_ReturnsOneItem()
     {
         var (_, items) = FollowUpDirective.Extract("Ready.\n[[orbit:followups]]\nWhat changed?");
 
-        items.Should().BeNull();
+        items.Should().Equal("What changed?");
     }
 
     [Fact]

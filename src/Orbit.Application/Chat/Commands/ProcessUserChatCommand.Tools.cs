@@ -169,6 +169,8 @@ public partial class ProcessUserChatCommandHandler
             LogContinueWithToolResultsFailed(logger, continueResult.Error);
             if (correction is not null)
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
+            if (RecoverBudgetDeniedContinuation(continueResult.ErrorCode, request, executionResults, language, cancellationToken) is { } recovery)
+                return new ToolRoundResult(recovery);
             return new ToolRoundResult(aiResponse, ProviderError: new AppError(
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
@@ -177,11 +179,48 @@ public partial class ProcessUserChatCommandHandler
             Correction: correction);
     }
 
+    private AiResponse? RecoverBudgetDeniedContinuation(string? errorCode, ProcessUserChatCommand request,
+        ToolExecutionAccumulator results, string? language, CancellationToken cancellationToken)
+    {
+        if (errorCode != "AI_DAILY_BUDGET_EXCEEDED" || request.BlockAnswer is not null)
+            return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var hasSavedActions = results.ActionResults.Any(action => action.Status == ActionStatus.Success
+            && action.Params is not { Count: <= 0 } and not { Partial: true, Count: null }
+            && results.OperationResults.Any(operation => operation.Status == AgentOperationStatus.Succeeded
+                && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false }
+                && ToolNameToPascalCase(operation.OperationId) == action.Type
+                && operation.TargetId == action.EntityId?.ToString()));
+        var invalidPending = results.PendingOperations.Where(pending =>
+            !IsCurrentPendingOutcome(request.UserId, pending, results)).ToArray();
+        if (!hasSavedActions && invalidPending.Length == results.PendingOperations.Count)
+            return null;
+        foreach (var pending in invalidPending)
+            results.SupersedePendingOperation(pending.Id);
+        return new AiResponse { TextMessage = CommittedWriteMessage(language, hasSavedActions) };
+    }
+
+    private bool IsCurrentPendingOutcome(Guid userId, PendingAgentOperation pending, ToolExecutionAccumulator results)
+    {
+        if (pending.Items is not { Count: > 0 } || pending.ChangeTargetCount is not > 0
+            || string.IsNullOrWhiteSpace(pending.PreviewFingerprint)
+            || !results.PendingWriteCalls.TryGetValue(pending.Id, out var bound)
+            || !execution.PendingOperationStore.IsAwaitingConfirmation(userId, pending.Id))
+            return false;
+        var stored = execution.PendingOperationStore.GetExecution(userId, pending.Id);
+        return stored is { RequiresReproposal: false, Surface: AgentExecutionSurface.Chat }
+            && stored.OperationId == bound.ToolName
+            && stored.CapabilityId == pending.CapabilityId
+            && stored.ConfirmationRequirement == pending.ConfirmationRequirement
+            && stored.PreviewFingerprint == pending.PreviewFingerprint;
+    }
+
     private List<AiToolCallResult> RecordToolRound(AiResponse response, IReadOnlyList<AiToolCall> orderedCalls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomesByCallId, ToolExecutionAccumulator executionResults,
         bool isCorrection)
     {
         var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
+        executionResults.CompositionRounds.Add(orderedCalls.Where(call => outcomesByCallId.ContainsKey(call.Id)).ToArray());
         if (executionResults.EvalTrace is { } evalTrace)
         {
             foreach (var call in response.ToolCalls!)
@@ -200,6 +239,8 @@ public partial class ProcessUserChatCommandHandler
             if (executionResults.Recording is { Enabled: true } recording)
                 recording.ToolCalls.Add(new ConversationToolCall(call.Id, call.Name, call.Args.Clone(),
                     outcome.ToolResult.Success, outcome.ToolResult.Error));
+            if (outcome.OperationResult?.ReadBlock is { } queryRead)
+                executionResults.QueryReads[call.Id] = queryRead;
             toolResults.Add(outcome.ToolResult);
             executionResults.ToolResults.Add(outcome.ToolResult);
             executionResults.Add(
@@ -269,6 +310,7 @@ public partial class ProcessUserChatCommandHandler
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
+        PrepareHabitProposals(resolvedWrites, request, executionResults, language);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -423,7 +465,7 @@ public partial class ProcessUserChatCommandHandler
         var executionResponse = correctionRequest is null
             ? await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken)
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
-        var operationResult = executionResponse.Operation;
+        var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation, request.ClientContext);
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
 
@@ -602,7 +644,7 @@ public partial class ProcessUserChatCommandHandler
         }
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
         {
-            LogToolFailed(logger, call.Name, operationResult.PolicyReason);
+            LogToolFailed(logger, call.Name, operationResult.ErrorCode ?? operationResult.Status.ToString());
             if (isClarification)
                 LogClarificationDroppedOnFailedTool(logger, call.Name, operationResult.PolicyReason);
         }

@@ -15,7 +15,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
         string accessToken,
         IReadOnlyCollection<string>? selectedCalendarIds,
         DateTime? updatedMin,
-        CancellationToken ct)
+        CancellationToken ct, CalendarReadWindow? window = null)
     {
         var calendars = await ListCalendarEntries(accessToken, ct);
         var targets = SelectTargetCalendars(calendars, selectedCalendarIds);
@@ -24,7 +24,7 @@ internal sealed partial class GoogleCalendarEventFetcher(
         foreach (var calendar in targets)
         {
             ct.ThrowIfCancellationRequested();
-            items.AddRange(await FetchCalendarEvents(accessToken, calendar, updatedMin, ct));
+            items.AddRange(await FetchCalendarEvents(accessToken, calendar, updatedMin, ct, window));
         }
 
         return items;
@@ -75,16 +75,19 @@ internal sealed partial class GoogleCalendarEventFetcher(
     }
 
     private async Task<List<CalendarEventItem>> FetchCalendarEvents(
-        string accessToken, CalendarListEntry calendar, DateTime? updatedMin, CancellationToken ct)
+        string accessToken, CalendarListEntry calendar, DateTime? updatedMin, CancellationToken ct, CalendarReadWindow? window)
     {
         var calendarName = ResolveCalendarName(calendar);
         IReadOnlyList<Event> events;
         try
         {
-            events = await api.ListEventsAsync(accessToken, calendar.Id, updatedMin, ct);
+            events = await api.ListEventsAsync(accessToken, calendar.Id, updatedMin, ct, window);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (window is not null)
+                throw new CalendarProviderException(CalendarFetchErrorKind.Transient, null,
+                    "The exact calendar window could not be read completely.", ex);
             LogCalendarFetchSkipped(logger, ex, calendar.Id);
             return [];
         }

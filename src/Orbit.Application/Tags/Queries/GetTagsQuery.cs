@@ -12,7 +12,7 @@ public record TagResponse(
     string Name,
     string Color);
 
-public record GetTagsQuery(Guid UserId) : IRequest<Result<IReadOnlyList<TagResponse>>>;
+public record GetTagsQuery(Guid UserId, bool BypassCache = false) : IRequest<Result<IReadOnlyList<TagResponse>>>;
 
 public class GetTagsQueryHandler(
     IGenericRepository<Tag> tagRepository,
@@ -21,7 +21,7 @@ public class GetTagsQueryHandler(
     public async Task<Result<IReadOnlyList<TagResponse>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
     {
         var cacheKey = ReferenceCacheKeys.Tags(request.UserId);
-        if (cache.TryGetValue(cacheKey, out IReadOnlyList<TagResponse>? cached) && cached is not null)
+        if (!request.BypassCache && cache.TryGetValue(cacheKey, out IReadOnlyList<TagResponse>? cached) && cached is not null)
             return Result.Success(cached);
 
         var tags = await tagRepository.FindAsync(
@@ -29,7 +29,7 @@ public class GetTagsQueryHandler(
             cancellationToken);
 
         var result = tags
-            .OrderBy(t => t.Name)
+            .OrderBy(t => t.Name).ThenBy(t => t.Id)
             .Select(t => new TagResponse(t.Id, t.Name, t.Color))
             .ToList();
 

@@ -19,6 +19,12 @@ This subagent detects drift between them. The Zod side lives in the sibling
 
 ## Inputs
 
+For Astra composition, use `src/Orbit.Api/OpenApi/AnswerComposition.md` as the producer
+contract. Consumer changes belong to thomasluizon/orbit-tickets#1620; real-call bilingual
+assertions belong to thomasluizon/orbit-tickets#26 in `evals/astra/`. Check append-only
+`supportsFollowUpContext` and `followUpContext` alongside the retained `followUps` strings.
+Do not create another eval harness or treat missing capabilities as supported kinds.
+
 A list of files staged or recently edited (in either repo).
 
 ## Behavior

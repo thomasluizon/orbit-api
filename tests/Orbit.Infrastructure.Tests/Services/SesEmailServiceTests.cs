@@ -105,7 +105,7 @@ public sealed class SesEmailServiceTests
 
         var message = _requests.Should().ContainSingle().Which.Content.Simple;
 
-        message.Subject.Data.Should().Contain("Seu código de acesso do Orbit");
+        message.Subject.Data.Should().Be("123456 é seu código de acesso ao Orbit");
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class SesEmailServiceTests
 
         var message = _requests.Should().ContainSingle().Which.Content.Simple;
 
-        message.Subject.Data.Should().Contain("Your Orbit sign-in code");
+        message.Subject.Data.Should().Be("123456 is your Orbit sign-in code");
     }
 
     [Fact]

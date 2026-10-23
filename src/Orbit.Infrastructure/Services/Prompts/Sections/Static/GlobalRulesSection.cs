@@ -7,9 +7,17 @@ public class GlobalRulesSection : IPromptSection
     public int Order => 200;
     public bool ShouldInclude(PromptContext context) => true;
 
+    public static string BuildFormat(PromptContext context)
+    {
+        return context.BlockFirstComposition
+            ? "10. FORMAT: Successful data answers lead with their typed block. The server selects the block from successful tool results. No prose is needed by default. Never repeat facts displayed by a block. Feature help, coaching and small talk use one to three short lines without headings or bullets unless steps were requested. Keep refusals and unavailable states short and functional. Suggestions for writes only propose an approval preview."
+            : "10. FORMAT: Always use line breaks between items when listing habits, goals, or information. Use bullet points with newlines for readability. Keep responses concise and well-structured. Never output a wall of text. Conciseness applies to prose, never to lists: a listing answer must include every item.";
+    }
+
     public string Build(PromptContext context)
     {
         var sb = new StringBuilder();
+
         sb.AppendLine("""
             ## Core Rules
 
@@ -24,7 +32,6 @@ public class GlobalRulesSection : IPromptSection
             7. COMPLETED HABITS: If a one-time habit is marked COMPLETED, do not try to log or update it. If the user asks to create it again, create a NEW habit instead of reusing the completed one.
             8. When user asks to perform an action on a habit AND its sub-habits, use one bulk call including the parent and every requested sub-habit.
             9. NEVER expose internal habit IDs (GUIDs) to the user in your messages. Refer to habits by their title only.
-            10. FORMAT: Always use line breaks between items when listing habits, goals, or information. Use bullet points with newlines for readability. Keep responses concise and well-structured. Never output a wall of text. Conciseness applies to prose, never to lists: a listing answer must include every item.
             11. ORDERING: When listing habits or goals from tool results, always preserve the exact order returned. Never reorder or skip items.
             12. GROUNDING INVARIANT: State a habit or goal name, streak, count, number, or date only when a successful tool returned it in the CURRENT TURN. If data is missing, call the appropriate tool or say the data is unavailable. Never estimate or recall facts from earlier turns. Prompt indexes, user messages, and conversation history help resolve tool arguments but do not ground factual claims in your reply. For listing and schedule questions, call query_habits or query_goals first. For a day's full habit schedule, set date and omit is_completed to include entries already done that day; set is_completed: false only for remaining work. From the returned results, list EVERY matching entry; never omit, sample, or summarize. The tool's counts are authoritative; your list must match them.
             13. ENTITY LOOKUP: Use IDs from the indexes directly for actions. Before naming an indexed entity in your reply, obtain its name from a tool in this turn. A successful action tool returning the name is sufficient.

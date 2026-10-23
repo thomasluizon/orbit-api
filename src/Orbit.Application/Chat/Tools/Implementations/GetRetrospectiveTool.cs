@@ -18,12 +18,15 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Generate optional narrative. Exact refresh sets false." },
             period = new
             {
                 type = JsonSchemaTypes.String,
                 description = "Time span to look back over. Default: 'week'.",
                 @enum = new[] { "week", "month", "quarter", "semester", "year" }
             },
+            date_from = new { type = JsonSchemaTypes.String },
+            date_to = new { type = JsonSchemaTypes.String },
             language = new { type = JsonSchemaTypes.String, @enum = Orbit.Application.Common.AppConstants.SupportedLanguages, description = "Language code for the retrospective text. Default: 'en'." }
         },
         required = Array.Empty<string>()
@@ -38,8 +41,10 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
         var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
 
+        dateFrom = JsonArgumentParser.ParseDateOnly(args, "date_from") ?? dateFrom;
+        dateTo = JsonArgumentParser.ParseDateOnly(args, "date_to") ?? dateTo;
         var result = await mediator.Send(
-            new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language), ct);
+            new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language, JsonArgumentParser.GetOptionalBool(args, "generate_narrative") ?? true), ct);
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)

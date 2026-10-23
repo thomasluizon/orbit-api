@@ -15,7 +15,8 @@ public record PromptBuildRequest(
     bool IsHabitIndexPartial = false,
     IReadOnlySet<Guid>? TodayHabitIds = null,
     IReadOnlySet<Guid>? OverdueHabitIds = null,
-    IReadOnlySet<Guid>? DoneTodayHabitIds = null);
+    IReadOnlySet<Guid>? DoneTodayHabitIds = null,
+    bool BlockFirstComposition = false);
 
 public interface ISystemPromptBuilder
 {

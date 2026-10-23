@@ -35,7 +35,7 @@ public static class FollowUpDirective
 public sealed class ResponseDirectiveParser
 {
     private const string DirectivePrefix = "[[orbit:";
-    private static readonly Regex DirectiveRegex = new(@"\[\[orbit:[a-z:]+\]\]",
+    private static readonly Regex DirectiveRegex = new(@"\[\[orbit:(?:read:[A-Za-z0-9_-]+|[a-z:]+)\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     private readonly StringBuilder _visible = new();
@@ -125,7 +125,7 @@ public sealed class ResponseDirectiveParser
         if (!_inFollowUps)
             return new(visibleText, cardText, null, segments);
 
-        var items = new List<string>(3);
+        var items = new List<string>(2);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in tail.Split('\n'))
         {
@@ -138,11 +138,11 @@ public sealed class ResponseDirectiveParser
                 continue;
 
             items.Add(item);
-            if (items.Count == 3)
+            if (items.Count == 2)
                 break;
         }
 
-        return new(visibleText, cardText, items.Count >= 2 ? items : null, segments);
+        return new(visibleText, cardText, items.Count > 0 ? items : null, segments);
     }
 
     private void AppendVisible(string text, StringBuilder emitted)

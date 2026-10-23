@@ -19,7 +19,7 @@ public record ApiKeyResponse(
     DateTime? LastUsedAtUtc,
     bool IsRevoked);
 
-public record GetApiKeysQuery(Guid UserId) : IRequest<Result<IReadOnlyList<ApiKeyResponse>>>;
+public record GetApiKeysQuery(Guid UserId, bool BypassCache = false) : IRequest<Result<IReadOnlyList<ApiKeyResponse>>>;
 
 public class GetApiKeysQueryHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
@@ -38,7 +38,7 @@ public class GetApiKeysQueryHandler(
             return Result.Failure<IReadOnlyList<ApiKeyResponse>>(ErrorMessages.ApiKeyCreationChallengeRequired);
 
         var cacheKey = ReferenceCacheKeys.ApiKeys(request.UserId);
-        if (cache.TryGetValue(cacheKey, out IReadOnlyList<ApiKeyResponse>? cached) && cached is not null)
+        if (!request.BypassCache && cache.TryGetValue(cacheKey, out IReadOnlyList<ApiKeyResponse>? cached) && cached is not null)
             return Result.Success(cached);
 
         var keys = await apiKeyRepository.FindAsync(
@@ -46,7 +46,7 @@ public class GetApiKeysQueryHandler(
             cancellationToken);
 
         var result = keys
-            .OrderByDescending(k => k.CreatedAtUtc)
+            .OrderByDescending(k => k.CreatedAtUtc).ThenBy(k => k.Id)
             .Select(k => new ApiKeyResponse(
                 k.Id,
                 k.Name,

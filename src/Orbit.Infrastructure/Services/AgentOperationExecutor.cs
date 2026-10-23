@@ -1,4 +1,6 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Nodes;
+using Orbit.Application.Habits.Commands;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat;
@@ -19,7 +21,7 @@ public partial class AgentOperationExecutor(
     IPendingOperationChangePreviewer changePreviewer,
     IPendingAgentOperationStore pendingOperationStore,
     IUnitOfWork unitOfWork,
-    ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
+    ILogger<AgentOperationExecutor> logger, ReadBlockFactory? readBlocks = null) : IAgentOperationExecutor, Orbit.Application.Chat.Commands.IAgentMutationRunner
 {
     private const int MaxToolConcurrencyAttempts = 3;
     private const string UnknownOperationCapabilityId = "unknown";
@@ -400,6 +402,12 @@ public partial class AgentOperationExecutor(
             }
         }
 
+        if (readBlocks is not null && tool.IsReadOnly && ReadBlockFactory.Supports(tool.Name))
+            execution = execution with
+            {
+                Arguments = await readBlocks.ResolveAsync(tool.Name,
+                execution.Arguments, execution.Request.UserId, executionCancellationToken)
+            };
         var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, executionCancellationToken);
         if (tool is ITransactionalAiTool && !result.Success)
             throw new ToolOutcomeRollbackException(policyDecision, result);
@@ -489,6 +497,12 @@ public partial class AgentOperationExecutor(
         else
             outcomeStatus = isPayGateDenial ? AgentOperationStatus.Denied : AgentOperationStatus.Failed;
 
+        if (!result.Success)
+            LogToolOutcomeFailed(logger, execution.Operation.Id, result.ErrorCode ?? "tool_rejected", execution.Request.CorrelationId);
+        if (result.Payload is BulkCreateResult bulk)
+            foreach (var item in bulk.Results.Where(item => item.Status == BulkItemStatus.Failed))
+                LogBulkItemFailed(logger, execution.Operation.Id, item.Index, item.ErrorCode ?? "item_rejected", execution.Request.CorrelationId);
+
         await TryAuditAsync(
             new AuditContext(
                 execution.Request,
@@ -505,7 +519,7 @@ public partial class AgentOperationExecutor(
                 policyDecision.ShadowReason),
             cancellationToken);
 
-        return AgentOperationResponseFactory.ToolOutcome(
+        var response = AgentOperationResponseFactory.ToolOutcome(
             execution.Operation.Id,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
@@ -513,6 +527,34 @@ public partial class AgentOperationExecutor(
             result,
             outcomeStatus,
             isPayGateDenial);
+        if (execution.Request.Surface == AgentExecutionSurface.Chat && result.Payload is BulkCreateResult { Partial: true } partial)
+            response = response with { PendingOperation = await CreateBulkRetryAsync(execution, partial, cancellationToken) };
+        if (result.Success && !execution.Operation.IsMutation && readBlocks is not null
+            && ReadBlockFactory.Supports(execution.Operation.Id))
+        {
+            var block = readBlocks.Capture(execution.Operation.Id, execution.Arguments, execution.Request.UserId, result.Payload);
+            response = response with { Operation = response.Operation with { ReadBlock = block } };
+        }
+        return response;
+    }
+
+    private async Task<PendingAgentOperation?> CreateBulkRetryAsync(
+        OperationExecutionContext execution, BulkCreateResult result, CancellationToken cancellationToken)
+    {
+        if (execution.Operation.Id != "bulk_create_habits"
+            || !execution.Arguments.TryGetProperty("habits", out var habits))
+            return null;
+        var root = JsonNode.Parse(execution.Arguments.GetRawText())!.AsObject();
+        root["habits"] = new JsonArray(result.Results.Where(item => item.Status == BulkItemStatus.Failed)
+            .Select(item => JsonNode.Parse(habits[item.Index].GetRawText())).ToArray());
+        var arguments = JsonSerializer.SerializeToElement(root);
+        var pending = pendingOperationStore.Create(execution.Request.UserId, execution.Capability,
+            execution.Operation.Id, arguments.GetRawText(), execution.Summary,
+            AgentOperationFingerprint.Compute(execution.Operation.Id, arguments.GetRawText()), execution.Request.Surface);
+        var retry = await RequireConfirmationAsync(execution with { Arguments = arguments },
+            new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, execution.Capability,
+                PendingOperation: pending), cancellationToken);
+        return retry.PendingOperation;
     }
 
     private static AgentExecuteOperationResponse DeniedResponse(
@@ -580,8 +622,14 @@ public partial class AgentOperationExecutor(
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to record agent audit entry for operation {OperationId} (user {UserId}, correlation {CorrelationId})")]
     private static partial void LogAuditWriteFailed(ILogger logger, Exception ex, string operationId, Guid userId, string? correlationId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Agent operation {OperationId} failed (correlation {CorrelationId})")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Agent operation {OperationId} failed with unexpected_error (correlation {CorrelationId})")]
     private static partial void LogOperationFailed(ILogger logger, Exception ex, string operationId, string? correlationId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Agent operation {OperationId} rejected with {ReasonCode} (correlation {CorrelationId})")]
+    private static partial void LogToolOutcomeFailed(ILogger logger, string operationId, string reasonCode, string? correlationId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Agent operation {OperationId} item {ItemIndex} failed with {ReasonCode} (correlation {CorrelationId})")]
+    private static partial void LogBulkItemFailed(ILogger logger, string operationId, int itemIndex, string reasonCode, string? correlationId);
 
     private sealed class OperationPolicyState
     {

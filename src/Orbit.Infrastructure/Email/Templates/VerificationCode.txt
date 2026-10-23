@@ -4,7 +4,7 @@ Orbit
 
 {{intro}}
 
-{{code}}
+{{heading}}: {{code}}
 
 {{cta}}: {{signInUrl}}
 

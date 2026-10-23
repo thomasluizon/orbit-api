@@ -18,6 +18,7 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
             RuleFor(x => x.Title),
             requiredCode: ValidationErrorCodes.SubHabitTitleRequired,
             maximumLengthCode: ValidationErrorCodes.SubHabitTitleLength);
+        SharedHabitRules.AddPolarityRules(this, x => x.Title, x => x.IsBadHabit);
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description), isChild: true);
 

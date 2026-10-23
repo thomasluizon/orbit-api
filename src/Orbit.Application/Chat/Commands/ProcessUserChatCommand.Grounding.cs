@@ -27,14 +27,14 @@ public partial class ProcessUserChatCommandHandler
         GetUserLanguage(context.User));
 
     private static async Task<string?> GetGroundedCachedFaqAnswerAsync(
-        (string Key, string Locale)? match, GroundingTurn turn, ProcessUserChatCommand request)
+        (string Key, string Locale)? match, GroundingTurn turn, ProcessUserChatCommand request, bool suppressDeltas = false)
     {
         if (request.BlockAnswer is not null)
             return null;
         var cached = TryGetCachedFaqAnswer(match);
         if (cached is null || GroundednessChecker.Check(cached, TurnFactSet.Empty, turn.KnownNames, turn.Language).Count > 0)
             return null;
-        if (turn.Enforce && request.StreamSink is not null)
+        if (turn.Enforce && request.StreamSink is not null && !suppressDeltas)
             await request.StreamSink(ChatStreamEvent.Delta(cached));
         return cached;
     }

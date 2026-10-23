@@ -43,7 +43,7 @@ public class GetRetrospectiveQueryHandlerTests
             _cache);
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-        _streakService.RecalculateAsync(UserId, false, Arg.Any<CancellationToken>())
+        _streakService.CalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(4, 9, DateTo));
     }
 
@@ -395,4 +395,18 @@ public class GetRetrospectiveQueryHandlerTests
         metrics.NeedsAttention.Should().ContainSingle()
             .Which.Name.Should().Be("Recurring");
     }
+    [Fact]
+    public async Task CachedRetrospectiveCannotCrossTheOriginalEndDate()
+    {
+        StubHabits(CreateLoggedHabit());
+        StubNarrative(SampleNarrative);
+        await HandleWeek();
+        _retroService.GenerateRetrospectiveAsync(Arg.Any<List<Habit>>(), DateFrom, DateTo.AddDays(1), "week", "en", Arg.Any<CancellationToken>())
+            .Returns(Result.Success(SampleNarrative));
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo.AddDays(1), "week", "en"), default);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.FromCache.Should().BeFalse();
+        result.Value.DateTo.Should().Be(DateTo.AddDays(1));
+    }
+
 }

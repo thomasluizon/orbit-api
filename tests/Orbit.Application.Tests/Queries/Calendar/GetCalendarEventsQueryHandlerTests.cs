@@ -1418,4 +1418,20 @@ public class GetCalendarEventsQueryHandlerTests
         q1.UserId.Should().Be(id);
     }
 
+    [Fact]
+    public async Task ExactReadDoesNotPersistConnectionState()
+    {
+        var user = CreateTestUser();
+        _userRepo.FindAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns([user]);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>()).Returns("token");
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        var window = new CalendarReadWindow(DateTime.UnixEpoch, DateTime.UnixEpoch.AddDays(1));
+        _eventFetcher.FetchAsync("token", null, null, Arg.Any<CancellationToken>(), window).Returns([]);
+        var result = await _handler.Handle(new(UserId, Window: window, PersistConnectionState: false, UseCurrentSelection: false), default);
+        result.IsSuccess.Should().BeTrue();
+        await _eventFetcher.Received(1).FetchAsync("token", null, null, Arg.Any<CancellationToken>(), window);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
 }

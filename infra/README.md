@@ -1,5 +1,28 @@
 # Orbit infrastructure
 
+## Astra answer composition activation
+
+Deploy the query-bound read and ranking producers before this composition producer. Startup
+applies `PersistComposedChatResponses`, which adds encrypted recording storage and seeds
+`astra_block_first` off. It needs no model setting, secret, quota change or backfill.
+
+In the existing admin feature flag screen, add evaluation accounts to `astra_block_first`.
+The backing API is `POST /api/admin/feature-flags`; use `list` and `enable_for_accounts` with the exact key and account emails.
+Verify `GET /api/config` reports that account's flag enabled and a parts-capable chat response
+leads with the requested supported kind. Confirm legacy and missing-kind fallbacks separately.
+Keep global activation off until #26 records passing English and Portuguese real-pipeline
+composition cases and #1620 supports the consumer contract.
+
+Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
+build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and
+existing model-call telemetry. Do not attach prompt/completion text or arguments.
+
+Rollback in the same screen: use `disable_for_everyone` for `astra_block_first` and `disable_for_accounts` for its account overrides.
+Read the account's resolved config back and verify negotiated directive assembly returns.
+Feature resolution caches for 30 seconds. Contracts and approval gates stay deployed;
+model selection and quotas are independent. See the complete
+[composition contract](../src/Orbit.Api/OpenApi/AnswerComposition.md).
+
 The main Terraform state owns the Render production resources and the staging services, Cloudflare DNS and Turnstile, and AWS SSM parameters. `production.tf` imports the existing API and declares the production database, web service, and landing site. `staging.tf` declares the staging API, web service, and landing site. `configuration.tf` owns the service environment groups and their AWS SSM inputs. `cloudflare.tf` owns the zone, existing DNS records, widget, and its secret parameters. `ses.tf` owns SES identities, new DNS records, event routing, and send credentials. `variables.tf` contains the configuration inputs and image digests. `versions.tf` pins the providers and configures the encrypted S3 state with native locking. `staging-database/` is a separate Terraform root that owns only the staging Postgres, its connection environment group, and the link to the staging API.
 
 `uploads.tf` creates a private, encrypted S3 uploads bucket and a scoped IAM user in each environment. S3 is the only upload, read, and erasure provider. Terraform stores each user's access key in SecureString parameters at `/orbit/<environment>/api/Storage__S3__AccessKeyId` and `/orbit/<environment>/api/Storage__S3__SecretAccessKey`, then passes them to the API environment group. The S3 upload URL expires after 10 minutes. The stable API read URL redirects to a private S3 read URL that expires after 10 minutes. The API checks that the owner still exists before issuing a read redirect and sends `Cache-Control: no-store`. The API allows 600 read redirects per object per minute, so image pages and viewers sharing an IP have separate budgets for each object. Account erasure drains the user's `{userId}/` prefix in the S3 uploads bucket before removing the user row. Startup requires `Storage__S3__Bucket`, `Storage__S3__Region`, `Storage__S3__PublicBaseUrl`, `Storage__S3__AccessKeyId`, and `Storage__S3__SecretAccessKey`. Storage failures leave the account scheduled for another deletion run.
@@ -240,6 +263,11 @@ Staging reads Stripe test-mode product and price IDs from SSM and uses staging r
 
 ## Production web design routing
 
+The [redesign flag reader inventory](redesign-flag-audit.md) records the remaining
+cookie route, disabled Android update channels, compatibility constraints, and
+coordinated retirement checks for thomasluizon/orbit-tickets#1626. Keep the flag
+while those readers and older-client requirements remain.
+
 `web-routing.tf` attaches `orbit-web-routing` to `app.useorbit.org/*`. Only the `app_cname` record is proxied. Its DNS target and the current service's `app.useorbit.org` custom domain remain the fallback: removing the Worker route sends every request to the current build, including requests carrying the design cookie. Keep `dns_app_target = "orbit-web-3qmv.onrender.com"` and `web_custom_domains = ["app.useorbit.org"]` in the existing ignored `local.tfvars`.
 
 An exact `orbit_design=redesign` cookie selects `orbit-web-redesign`; every other value selects the current service. The current route forwards the original request to the DNS origin without changing its public Host. The redesign route uses the redesign Render hostname for its URL and Host, sets `X-Forwarded-Host: app.useorbit.org` and `X-Forwarded-Proto: https`, and preserves the path, query, method, streaming body, and other headers. Responses pass through with their status, body, cookies, and redirect headers. Each origin has its own fetch URL and cache key; the Worker adds no shared response cache. The cookie selects a UI build and grants no API permissions.
@@ -264,3 +292,41 @@ The pinned Cloudflare provider's live [Worker script schema](https://github.com/
 A real `terraform providers schema -json` invocation against the installed pinned providers confirmed that `render_web_service.id` and `.url` are computed strings and `runtime_source.image` accepts `image_url`, `digest`, `tag`, and `registry_credential_id`, with no auto-deploy field. Reproduce in a backend-disabled scratch root containing `versions.tf`'s provider declarations without its S3 backend, or against the initialized backend. No Render API response fields are read by this change.
 
 Run `npm ci --prefix infra` and `npm test --prefix infra` for the infrastructure tests. The routing tests execute the deployed module in Miniflare with outbound requests intercepted and Cloudflare metadata fetching disabled. The [Miniflare testing documentation](https://developers.cloudflare.com/workers/testing/miniflare/) confirms the simulator's test API. Installed `miniflare/dist/src/index.d.ts` confirms `outboundService` accepts a Request callback returning a Response, `bindings` supplies environment values, and `dispatchFetch` invokes the Worker. Its implementation in `dist/src/index.js` dispatches outbound requests to that callback. These requests, rather than invented API fixtures, supply the assertions. The locked test dependencies override `undici` and `sharp` to patched versions; no testing dependency is bundled into the Worker uploaded by Terraform.
+
+## Exact chat read recovery
+
+Chat read contracts and failure handling are documented in
+[the read-tool contract](../src/Orbit.Application/Chat/Tools/README.md#exact-read-metadata-and-recovery).
+Deploy the append-only API before the paired client advertises `periodTotal` or
+`periodComparison`. Dated `habitList` output additionally needs
+`supportsDatedHabitListCard: true`; `habitHistory` record lists need
+`supportsHabitHistoryCard: true`. Each advertisement promises compatible parsing,
+display and date-correct interactions; unadvertised subtypes fall back to queried
+text. Refresh rechecks the subtype and may return HTTP 403 after a local-date
+rollover for a client without dated support. The existing `AstraPeriodBlocksDisabled` feature flag disables
+those producers; no fleet-floor change or new secret is required. Read tokens use
+the shared `Jwt:SecretKey`; rotating that key expires outstanding queries and
+requires repeating the original request.
+
+On HTTP 409 `READ_QUERY_STALE`, refresh the original query before asking for another
+page. On HTTP 503 `READ_QUERY_REFRESH_FAILED`, keep the prior answer and retry the
+same token. HTTP 410 requires repeating the original query. A permission denial
+requires restoring the original capability through its existing flow. Never replace
+a historical query with Today, and never generate a recap to recover a read.
+## Habit ranking activation
+
+Release the append-only API through the existing `release.yml` workflow before
+shipping the #1618 consumer. Verify the generated contract at the deployed producer
+commit and an authenticated `POST /api/chat/habit-ranking/query` followed by paging
+and refresh using its returned tokens. An empty ranking is a successful result.
+No database migration, backfill, new secret or version-floor change is required.
+The query signer uses the already configured `Jwt:SecretKey`.
+
+The client enables the block by sending `supportsParts: true` and including
+`habitRanking` in `partKinds`. Remove that kind advertisement to return readable
+text. Existing `astra_period_blocks_disabled` or `astra_parts_disabled` flags
+also disable structured ranking output. Revert the producer if counts are wrong.
+Monitor `habit_ranking_query` outcomes and `habit_ranking_block` build failures;
+HTTP 409 `HABIT_RANKING_STALE` means refresh the existing absolute query rather
+than resolve its relative period again. The exact payload and boundary policy
+are in [HabitRanking.md](../src/Orbit.Api/OpenApi/HabitRanking.md).

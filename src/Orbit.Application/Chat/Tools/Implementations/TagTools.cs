@@ -19,7 +19,7 @@ public class ListTagsTool(IMediator mediator) : IAiTool
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var result = await mediator.Send(new GetTagsQuery(userId), ct);
+        var result = await mediator.Send(new GetTagsQuery(userId, BypassCache: true), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
             : ToolResult.FromFailure(result);

@@ -101,6 +101,25 @@ public class SecurityHeadersMiddlewareTests
         context.Response.Headers.ContainsKey("Content-Security-Policy").Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("GET", "/api/marketing")]
+    [InlineData("GET", "/api/marketing/unsubscribe/other")]
+    [InlineData("GET", "/api/marketing/unsubscribe-other")]
+    [InlineData("POST", "/api/marketing/unsubscribe")]
+    [InlineData("POST", "/api/marketing/unsubscribe/")]
+    public async Task InvokeAsync_OutsideMarketingHtmlRoute_KeepsStrictCSP(string method, string path)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Method = method;
+        context.Request.Path = path;
+        var middleware = new SecurityHeadersMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.Headers[HeaderNames.ContentSecurityPolicy].ToString()
+            .Should().Be("default-src 'none'; frame-ancestors 'none'");
+    }
+
     [Fact]
     public async Task InvokeAsync_OpenApiPath_DoesNotSetCSP()
     {
@@ -123,6 +142,7 @@ public class SecurityHeadersMiddlewareTests
         await middleware.InvokeAsync(context);
 
         var csp = context.Response.Headers[HeaderNames.ContentSecurityPolicy].ToString();
+        csp.Should().Contain("default-src 'self';");
         csp.Should().Contain("font-src 'self'");
         csp.Should().Contain("style-src 'self' 'unsafe-inline'");
         csp.Should().Contain("script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com;");
