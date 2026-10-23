@@ -31,7 +31,7 @@ function mutate(path, transform, verify, accept = false) {
 test("both real registries, all scoped entity views and inherited fields have source evidence", () => {
   assert.ok(inventory.counts.registeredChat > inventory.counts.chat)
   assert.ok(inventory.counts.mcp > inventory.counts.chat)
-  for (const entity of ["Habit", "SubHabit", "HabitLog", "Goal", "Tag", "ChecklistTemplate", "Notification", "PushSubscription", "Profile", "Subscription", "Referral", "ApiKey", "CalendarSync", "UserFact", "Gamification"]) {
+  for (const entity of ["Habit", "SubHabit", "HabitLog", "Goal", "Tag", "ChecklistTemplate", "Notification", "PushSubscription", "Profile", "Subscription", "Referral", "ApiKey", "CalendarSync", "Gamification"]) {
     const row = inventory.entities.find(item => item.entity === entity)
     assert.ok(row.fields.length, entity)
     for (const property of row.fields) {
@@ -101,13 +101,13 @@ test("creation without update and partial readback are gaps", () => {
   assert.match(gapReport(inventory), /### Habit.StartDate/)
 })
 
-test("MCP gateway coverage retains direct differences, known tickets and deliberate memory removal", () => {
+test("MCP gateway coverage retains direct differences and known tickets without retired memory entities", () => {
   const reminder = field(inventory, "Habit", "ReminderEnabled").surfaces.mcp.operations.create
   assert.equal(reminder.direct.length, 0)
   assert.equal(reminder.viaOperations[0].via, "execute_agent_operation_v2")
   assert.equal(field(inventory, "Habit", "Emoji").surfaces.mcp.operations.read.status, "covered")
-  for (const number of [513, 246, 396, 19, 235, 1574, 1575, 1576]) assert.ok(inventory.knownGaps.some(row => row.ticket.endsWith(`#${number}`)))
-  assert.ok(!inventory.gaps.some(row => row.entity === "UserFact"))
+  for (const number of [513, 246, 396, 19, 1574, 1575, 1576]) assert.ok(inventory.knownGaps.some(row => row.ticket.endsWith(`#${number}`)))
+  assert.ok(!inventory.entities.some(row => row.entity === "UserFact"))
   assert.ok(!inventory.gaps.some(row => row.entity === "PushSubscription"))
   assert.ok(!inventory.gaps.some(row => row.problems.includes("direct-update-requires-unchanged-title")))
   mutate("src/Orbit.Api/Mcp/Tools/HabitTools.cs", text => text.replace('string? title = null,', 'string title,'), build => {
