@@ -21,10 +21,11 @@ public class FeatureFlagAccountsMigrationTests
         var initializer = context.GetService<IModelRuntimeInitializer>();
         var target = initializer.Initialize(new AddDurableSignupWork().TargetModel, designTime: true);
         var featureFlags = initializer.Initialize(new AddFeatureFlagAccounts().TargetModel, designTime: true);
-        var current = initializer.Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+        var current = initializer.Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
 
         differences.Should().HaveCount(52 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
@@ -127,6 +128,13 @@ public class FeatureFlagAccountsMigrationTests
             "20261020033359_RestoreRequiredProactiveAstraPreference",
             "20261020041243_SeparateBonusProEntitlement",
             "20261020134743_AllowExplicitHabitStartDate");
+        context.Database.GetMigrations().Should().ContainInOrder(
+            "20261022201949_PersistComposedChatResponses",
+            "20261023081706_ExpandHabitNextDueDate",
+            "20261023092713_AddAppStoreSubscriptions",
+            "20261023092738_AddAppleSignInCredentials",
+            "20261023092801_PreserveProviderPaidCoverage",
+            "20261023103527_DropRetiredFeatureTables");
         context.Database.GetMigrations().Last().Should().EndWith("_DropRetiredFeatureTables");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));

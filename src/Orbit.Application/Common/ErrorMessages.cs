@@ -29,6 +29,8 @@ public static class ErrorMessages
     public static readonly AppError SubscriptionNotFound = From(ErrorCodes.SubscriptionNotFound);
     public static readonly AppError NoActiveSubscription = From(ErrorCodes.NoActiveSubscription);
     public static readonly AppError InvalidBillingInterval = From(ErrorCodes.InvalidBillingInterval);
+    public static readonly AppError AppStorePurchaseNotActive = From(ErrorCodes.AppStorePurchaseNotActive);
+    public static readonly AppError AppStorePurchaseAccountMismatch = From(ErrorCodes.AppStorePurchaseAccountMismatch);
     public static readonly AppError PlayPurchaseNotActive = From(ErrorCodes.PlayPurchaseNotActive);
     public static readonly AppError PlayPurchaseAccountMismatch = From(ErrorCodes.PlayPurchaseAccountMismatch);
     public static readonly AppError ChatHistoryTooLarge = From(ErrorCodes.ChatHistoryTooLarge);

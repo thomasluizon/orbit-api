@@ -90,6 +90,8 @@ public class OrbitDbContextTests
             .Should().BeOfType<NullableEncryptionValueConverter>();
         user.FindProperty(nameof(User.GoogleRefreshToken))!.GetValueConverter()
             .Should().BeOfType<NullableEncryptionValueConverter>();
+        user.FindProperty(nameof(User.AppleRefreshToken))!.GetValueConverter()
+            .Should().BeOfType<NullableEncryptionValueConverter>();
     }
 
     [Fact]

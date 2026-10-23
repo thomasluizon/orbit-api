@@ -24,7 +24,7 @@ public class ConversationMigrationTests
         context.Database.HasPendingModelChanges().Should().BeFalse();
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var model = context.GetService<IModelRuntimeInitializer>()
-            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         generator.Generate(migration.UpOperations, model).Should().NotBeEmpty();
         generator.Generate(migration.DownOperations, model).Should().NotBeEmpty();
         var initializer = context.GetService<IModelRuntimeInitializer>();
@@ -34,7 +34,7 @@ public class ConversationMigrationTests
         var additions = differ.GetDifferences(preceding.GetRelationalModel(), target.GetRelationalModel());
         additions.Should().HaveCount(6);
         AssertConversationExpansion(additions);
-        var remaining = differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel());
+        var remaining = AppStoreMigrationTests.WithoutAppleAdditions(differ.GetDifferences(target.GetRelationalModel(), model.GetRelationalModel()));
         var schemaVersion = remaining.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "PendingAgentOperations").Subject;
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");

@@ -1786,6 +1786,31 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("ProactiveItems");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ProcessedAppStoreNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("NotificationUuid")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NotificationUuid")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedAppStoreNotifications");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.ProcessedPlayNotification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2134,6 +2159,38 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("AiSummaryEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("AppStoreCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("AppStoreCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppStoreCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("AppStoreEnvironment")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("AppStoreOriginalTransactionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("AppStoreStateSignedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AppleRefreshToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AppleSubject")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("AppleTokenClientId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<DateTime?>("BonusProExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2255,6 +2312,16 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PlayCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PlayCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlayCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
@@ -2329,6 +2396,16 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int>("StreakFreezesAccumulated")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StripeCoverageExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StripeCoverageInterval")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StripeCoverageLapseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
 
@@ -2391,6 +2468,14 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AppStoreOriginalTransactionId")
+                        .IsUnique()
+                        .HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
+
+                    b.HasIndex("AppleSubject")
+                        .IsUnique()
+                        .HasFilter("\"AppleSubject\" IS NOT NULL");
 
                     b.HasIndex("Email")
                         .IsUnique();

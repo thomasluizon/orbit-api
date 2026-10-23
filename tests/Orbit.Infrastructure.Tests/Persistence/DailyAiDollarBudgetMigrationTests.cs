@@ -39,9 +39,10 @@ public class DailyAiDollarBudgetMigrationTests
             .UseNpgsql("Host=unused;Database=unused").Options);
         var target = context.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
         var current = context.GetService<IModelRuntimeInitializer>()
-            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
         var schemaVersion = differences.OfType<AddColumnOperation>().Single(column => column.Table == "PendingAgentOperations");
         schemaVersion.Table.Should().Be("PendingAgentOperations");
         schemaVersion.Name.Should().Be("ArgumentSchemaVersion");

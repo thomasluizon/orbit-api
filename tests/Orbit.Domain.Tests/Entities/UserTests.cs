@@ -428,14 +428,14 @@ public class UserTests
     }
 
     [Fact]
-    public void SetStripeSubscription_ClearsStalePlayPurchaseToken()
+    public void SetStripeSubscription_PreservesStillPaidPlayPurchaseToken()
     {
         var user = CreateValidUser();
         user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly);
 
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6), SubscriptionInterval.Monthly);
 
-        user.PlayPurchaseToken.Should().BeNull();
+        user.PlayPurchaseToken.Should().Be("play_token_123");
         user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
     }
 

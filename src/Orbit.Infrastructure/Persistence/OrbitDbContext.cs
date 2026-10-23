@@ -66,6 +66,7 @@ public class OrbitDbContext : DbContext
     public DbSet<NotionConnection> NotionConnections => Set<NotionConnection>();
     public DbSet<NotionTask> NotionTasks => Set<NotionTask>();
     public DbSet<NotionOAuthState> NotionOAuthStates => Set<NotionOAuthState>();
+    public DbSet<ProcessedAppStoreNotification> ProcessedAppStoreNotifications => Set<ProcessedAppStoreNotification>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
@@ -114,6 +115,12 @@ public class OrbitDbContext : DbContext
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureProactiveEntities(modelBuilder);
+        modelBuilder.Entity<ProcessedAppStoreNotification>(entity =>
+        {
+            entity.HasKey(notification => notification.Id);
+            entity.HasIndex(notification => notification.NotificationUuid).IsUnique();
+            entity.Property(notification => notification.Environment).HasMaxLength(20).IsRequired();
+        });
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
@@ -667,8 +674,25 @@ public class OrbitDbContext : DbContext
 
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
+            entity.Property(u => u.AppleSubject).HasMaxLength(255);
+            entity.Property(u => u.AppleTokenClientId).HasMaxLength(255);
+            entity.Property(u => u.AppleRefreshToken).HasColumnType("text");
+            entity.HasIndex(u => u.AppleSubject).IsUnique().HasFilter("\"AppleSubject\" IS NOT NULL");
+            entity.Property(u => u.AppStoreOriginalTransactionId).HasMaxLength(255);
+            entity.Property(u => u.AppStoreEnvironment).HasMaxLength(20);
+            entity.HasIndex(u => u.AppStoreOriginalTransactionId).IsUnique().HasFilter("\"AppStoreOriginalTransactionId\" IS NOT NULL");
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
             entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
+
+            entity.Property(u => u.StripeCoverageExpiresAtUtc);
+            entity.Property(u => u.StripeCoverageInterval);
+            entity.Property(u => u.StripeCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(u => u.PlayCoverageExpiresAtUtc);
+            entity.Property(u => u.PlayCoverageInterval);
+            entity.Property(u => u.PlayCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(u => u.AppStoreCoverageExpiresAtUtc);
+            entity.Property(u => u.AppStoreCoverageInterval);
+            entity.Property(u => u.AppStoreCoverageLapseReason).HasConversion<string>().HasMaxLength(32);
 
             entity.Property(u => u.SubscriptionPlan).HasColumnName("Plan");
             entity.Property(u => u.SubscriptionExpiresAtUtc).HasColumnName("PlanExpiresAt");
@@ -704,6 +728,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
             entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
+            entity.Property(u => u.AppleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
         });
     }
 

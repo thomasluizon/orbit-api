@@ -137,15 +137,7 @@ public partial class HandlePlayNotificationCommandHandler(
         }
 
         var consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, purchaseToken);
-        if (StripeCoversLaterPeriod(user, state))
-        {
-            user.LinkPlayPurchaseToken(purchaseToken);
-            LogStripeCoversLaterPeriod(logger, user.Id);
-        }
-        else
-        {
-            user.SetPlaySubscription(purchaseToken, state.ExpiresAt, state.Interval, state.IsInGracePeriod);
-        }
+        user.SetPlaySubscription(purchaseToken, state.ExpiresAt, state.Interval, state.IsInGracePeriod);
 
         if (notificationType == 3 && !state.IsInGracePeriod)
             user.RecordSubscriptionLapseReason(
@@ -164,11 +156,6 @@ public partial class HandlePlayNotificationCommandHandler(
             13 => existingReason ?? SubscriptionLapseReason.Expired,
             _ => SubscriptionLapseReason.Expired,
         };
-
-    private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>
-        user.SubscriptionSource == SubscriptionSource.Stripe
-        && user.HasActivePaidSubscription
-        && user.SubscriptionExpiresAtUtc > state.ExpiresAt;
 
     private static DecodedPlayNotification? DecodeNotification(string pushBody)
     {
@@ -199,8 +186,6 @@ public partial class HandlePlayNotificationCommandHandler(
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Play RTDN account mismatch for user {UserId}; skipping")]
     private static partial void LogAccountMismatch(ILogger logger, Guid userId);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Active Stripe subscription covers a later period; linking Play token without downgrade for user {UserId}")]
-    private static partial void LogStripeCoversLaterPeriod(ILogger logger, Guid userId);
 
     private sealed class PubSubEnvelope
     {

@@ -38,6 +38,21 @@ public class ConfirmAccountDeletionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_AppleUser_QueuesRevocationWithoutAppStoreCancellation()
+    {
+        var user = User.Create("Apple", TestEmail).Value;
+        user.SetAppleIdentity("subject", "refresh", "native-client");
+        user.ApplyAppStoreSubscription("original", "Sandbox", DateTime.UtcNow.AddDays(30),
+            SubscriptionInterval.Monthly, DateTime.UtcNow, true, null);
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        var result = await _handler.Handle(new(UserId, "123456"), default);
+        result.IsSuccess.Should().BeTrue();
+        _jobs.Received(1).Create(Arg.Is<Job>(job => job.Type == typeof(RevokeAppleTokenOnDeletionJob)), Arg.Any<IState>());
+        _jobs.DidNotReceive().Create(Arg.Is<Job>(job => job.Type == typeof(CancelSubscriptionOnDeletionJob)), Arg.Any<IState>());
+    }
+
+    [Fact]
     public async Task Handle_ValidCode_DeactivatesUserAndReturnsScheduledDate()
     {
         var user = User.Create("Test", TestEmail).Value;

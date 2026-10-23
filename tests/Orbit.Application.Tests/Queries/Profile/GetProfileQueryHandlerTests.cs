@@ -69,6 +69,19 @@ public class GetProfileQueryHandlerTests
             .Returns(new List<StreakFreeze>().AsReadOnly());
     }
 
+    [Fact]
+    public async Task Handle_AppStore_EmitsNullableLegacySourceAndOptionalProvider()
+    {
+        var user = CreateTestUser();
+        user.ApplyAppStoreSubscription("original", "Sandbox", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly, DateTime.UtcNow, true, null);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        StubFreezeRepoEmpty();
+        var result = await _handler.Handle(new(UserId), default);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, JsonSerializerOptions.Web));
+        json.RootElement.GetProperty("subscriptionSource").ValueKind.Should().Be(JsonValueKind.Null);
+        json.RootElement.GetProperty("billingProvider").GetString().Should().Be("app_store");
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(2)]

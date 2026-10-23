@@ -148,6 +148,22 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
     }
 
+    private static void AddAppleIntegrations(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    {
+        builder.Services.Configure<AppleSignInSettings>(builder.Configuration.GetSection(AppleSignInSettings.SectionName));
+        builder.Services.AddHttpClient("AppleIdentity", client => client.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        builder.Services.AddSingleton<IAppleIdentityService>(sp => new AppleIdentityService(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("AppleIdentity"),
+            sp.GetRequiredService<IOptions<AppleSignInSettings>>(), sp.GetRequiredService<TimeProvider>()));
+        builder.Services.AddScoped<Orbit.Application.Auth.Commands.AppleSignInFlow>();
+        builder.Services.AddScoped<Orbit.Application.Auth.Services.AppleAuthorizationFlow>();
+        builder.Services.Configure<AppStoreSettings>(builder.Configuration.GetSection(AppStoreSettings.SectionName));
+        builder.Services.AddSingleton<AppStoreJwsVerifier>();
+        builder.Services.AddHttpClient<IAppStoreService, AppStoreService>(client => client.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+    }
+
     private static void AddGooglePlayBilling(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         builder.Services.Configure<GooglePlaySettings>(
@@ -175,6 +191,19 @@ public static partial class ServiceCollectionExtensions
 
     internal static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
+        builder.Services.Configure<ApnsSettings>(builder.Configuration.GetSection(ApnsSettings.SectionName));
+        builder.Services.AddHttpClient("Apns", client => client.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                EnableMultipleHttp2Connections = false,
+                MaxConnectionsPerServer = 1
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        builder.Services.AddSingleton<IApnsPushSender>(sp => new ApnsPushSender(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("Apns"),
+            sp.GetRequiredService<IOptions<ApnsSettings>>(),
+            sp.GetRequiredService<ILogger<ApnsPushSender>>(), TimeProvider.System));
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()

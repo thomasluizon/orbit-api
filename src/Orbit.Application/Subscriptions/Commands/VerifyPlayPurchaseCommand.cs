@@ -66,18 +66,6 @@ public partial class VerifyPlayPurchaseCommandHandler(
 
         var consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, request.PurchaseToken);
 
-        if (StripeCoversLaterPeriod(user, state))
-        {
-            user.LinkPlayPurchaseToken(request.PurchaseToken);
-            var linkResult = await SavePlayTokenAsync(request, user, cancellationToken);
-            if (linkResult.IsSuccess)
-            {
-                await CancelConsumedCouponAsync(request.UserId, consumedCouponId, cancellationToken);
-                LogStripeCoversLaterPeriod(logger, request.UserId);
-            }
-            return linkResult;
-        }
-
         user.SetPlaySubscription(request.PurchaseToken, state.ExpiresAt, state.Interval, state.IsInGracePeriod);
         var verifyResult = await SavePlayTokenAsync(request, user, cancellationToken);
         if (verifyResult.IsSuccess)
@@ -115,11 +103,6 @@ public partial class VerifyPlayPurchaseCommandHandler(
         }
     }
 
-    private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>
-        user.SubscriptionSource == SubscriptionSource.Stripe
-        && user.HasActivePaidSubscription
-        && user.SubscriptionExpiresAtUtc > state.ExpiresAt;
-
     private static Result<PlayVerifyResponse> BuildResponse(User user) =>
         Result.Success(new PlayVerifyResponse(
             user.HasProAccess,
@@ -133,8 +116,6 @@ public partial class VerifyPlayPurchaseCommandHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Play purchase not active for user {UserId}")]
     private static partial void LogPurchaseNotActive(ILogger logger, Guid userId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Active Stripe subscription covers a later period; skipping Play grant for user {UserId}")]
-    private static partial void LogStripeCoversLaterPeriod(ILogger logger, Guid userId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Failed to acknowledge Play purchase for user {UserId}")]
     private static partial void LogAcknowledgeError(ILogger logger, Exception ex, Guid userId);

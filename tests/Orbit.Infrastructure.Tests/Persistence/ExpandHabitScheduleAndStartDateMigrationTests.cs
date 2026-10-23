@@ -21,10 +21,11 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(Migration.TargetModel, designTime: true);
         var current = context.GetService<IModelRuntimeInitializer>()
-            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
         differences.Should().HaveCount(40 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         var preference = differences.OfType<AlterColumnOperation>().Should().ContainSingle().Subject;
         preference.Table.Should().Be("Users");
@@ -66,9 +67,10 @@ public class ExpandHabitScheduleAndStartDateMigrationTests
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new AddAstraEvalTraceFlag().TargetModel, designTime: true);
         var current = context.GetService<IModelRuntimeInitializer>()
-            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
+        differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
         differences.Should().HaveCount(11 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         differences.OfType<AddColumnOperation>().Should().HaveCount(8);
         ExpandHabitNextDueDateMigrationTests.AssertCursorColumn(differences);

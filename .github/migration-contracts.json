@@ -23,7 +23,7 @@
     "webDrainEvidence": "The coordinator recorded Render API service srv-d6tc2isr85hc739bf75g live on deploy dep-dbdb0uks728c73ba5760 at 3b199d3524e4faf7369b4e64c4290e930916084c, with previous deploy dep-dbdajqcs728c73b8krog deactivated and health Healthy at that commit. The later caller-retirement deploy dep-dbdhim59fdbs73b5l420 failed before activation and rolled back this unapplied migration. Remaining reset and export callers on the live commit still use the retained schema and are compatible with cascading parent deletion. No incompatible web instance needs to drain for this constraint correction; table retirement requires separate evidence after the caller-removal release.",
     "backgroundDrainEvidence": "Hangfire and hosted services run inside the API host, so deactivating the previous deploy stopped its workers. The live commit still has SyncCleanupService and DataEncryptionMigrationService callers of UserFacts; their existing reads and deletes remain compatible with the retained schema and the new constraint. The AI memory extraction writer was removed in API PR 783 before the attested live release. No incompatible background writer needs to drain for this correction. This does not attest the absence of retired-table reads, completion of AI batch file cleanup, or the barrier for the later table drop."
   },
-  "20261023101638_DropRetiredFeatureTables": {
+  "20261023103527_DropRetiredFeatureTables": {
     "expandCommit": "6d52814e2a8ccf5edd34af9e8c90fcc73fa693db",
     "deployedCommit": "bceaa597c7ebf25cd984274332676b48c9ad2a9e",
     "evidenceUrl": "https://github.com/thomasluizon/orbit-tickets/issues/1555",

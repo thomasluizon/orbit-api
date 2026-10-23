@@ -29,7 +29,7 @@ public class RollingMigrationGateTests
     [Fact]
     public void RetiredFeatureDrop_RequiresRecordedDeploymentBarrier()
     {
-        const string id = "20261023101638_DropRetiredFeatureTables";
+        const string id = "20261023103527_DropRetiredFeatureTables";
         var migration = new DropRetiredFeatureTables { ActiveProvider = "Npgsql.EntityFrameworkCore.PostgreSQL" };
 
         RollingMigrationGate.Check(id, migration.UpOperations).Should().NotBeEmpty();

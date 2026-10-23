@@ -111,6 +111,14 @@ public class OAuthLoginPageTests : IDisposable
     }
 
     [Fact]
+    public void Render_AppleConfigured_PreservesMcpAuthorizationParameters()
+    {
+        var html = OAuthLoginPage.Render("client", "https://claude.ai/callback", "client-state", "challenge", "S256", appleSignInEnabled: true);
+        html.Should().Contain("Sign in with Apple").And.Contain("/oauth/apple/start?").And.Contain("code_challenge=challenge");
+        OAuthLoginPage.Render("client", "https://claude.ai/callback", "client-state", "challenge", "S256").Should().NotContain("id=\"apple\"");
+    }
+
+    [Fact]
     public void GoogleButton_UsesTheSharedDecorativeMarkAndBrandSpacing()
     {
         var page = RenderPage();

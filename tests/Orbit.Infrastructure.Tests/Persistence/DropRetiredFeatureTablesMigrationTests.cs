@@ -21,6 +21,19 @@ public class DropRetiredFeatureTablesMigrationTests
     ];
 
     [Fact]
+    public void TargetModel_MatchesMergedRuntimeModel()
+    {
+        using var context = CreateContext();
+        var target = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
+        var current = context.GetService<IDesignTimeModel>().Model;
+
+        context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel())
+            .Should().BeEmpty();
+    }
+
+    [Fact]
     public void Up_DropsExactlyRetiredTablesAndMemoryLimit()
     {
         var operations = new DropRetiredFeatureTables().UpOperations;
@@ -42,7 +55,7 @@ public class DropRetiredFeatureTablesMigrationTests
         using var context = CreateContext();
         var model = context.GetService<IDesignTimeModel>().Model;
         var previous = context.GetService<IModelRuntimeInitializer>()
-            .Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+            .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(previous.GetRelationalModel(), model.GetRelationalModel());
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -67,7 +80,7 @@ public class DropRetiredFeatureTablesMigrationTests
     {
         using var context = CreateContext();
         var initializer = context.GetService<IModelRuntimeInitializer>();
-        var previous = initializer.Initialize(new ExpandHabitNextDueDate().TargetModel, designTime: true);
+        var previous = initializer.Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var current = initializer.Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var expected = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(current.GetRelationalModel(), previous.GetRelationalModel());

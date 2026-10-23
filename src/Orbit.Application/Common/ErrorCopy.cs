@@ -177,6 +177,8 @@ public static partial class ErrorCopy
         (ErrorCodes.SubscriptionNotFound, "We could not find a subscription on this account.", "Não encontramos nenhuma assinatura nesta conta."),
         (ErrorCodes.NoActiveSubscription, "This account has no active subscription.", "Esta conta não tem assinatura ativa."),
         (ErrorCodes.InvalidBillingInterval, "Choose the monthly or the yearly plan.", "Escolha o plano mensal ou o anual."),
+        (ErrorCodes.AppStorePurchaseNotActive, "This App Store purchase is not active. Check your App Store subscriptions.", "Esta compra da App Store não está ativa. Confira suas assinaturas na App Store."),
+        (ErrorCodes.AppStorePurchaseAccountMismatch, "This App Store purchase belongs to another Orbit account. Sign in with that account.", "Esta compra da App Store é de outra conta Orbit. Entre com aquela conta."),
         (ErrorCodes.PlayPurchaseNotActive, "This Google Play purchase is not active. Check your Play subscriptions.", "Esta compra do Google Play não está ativa. Confira suas assinaturas na Play."),
         (ErrorCodes.PlayPurchaseAccountMismatch, "This Google Play purchase belongs to another Orbit account. Sign in with that account.", "Esta compra do Google Play é de outra conta Orbit. Entre com aquela conta."),
         (ErrorCodes.PaymentServiceUnavailable, "Our payment provider is not answering. Try again in a moment.", "Nosso provedor de pagamento não está respondendo. Tente de novo em instantes."),
