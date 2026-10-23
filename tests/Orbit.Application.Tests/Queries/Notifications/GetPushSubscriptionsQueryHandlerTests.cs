@@ -80,6 +80,18 @@ public class GetPushSubscriptionsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ApnsRow_UsesExistingNativeContract()
+    {
+        var userId = Guid.NewGuid();
+        var repository = Substitute.For<IGenericRepository<PushSubscription>>();
+        repository.FindAsync(Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+                Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { PushSubscription.Create(userId, "apns-device-token", "apns", "auth").Value });
+        var result = await new GetPushSubscriptionsQueryHandler(repository).Handle(new(userId), default);
+        result.Value.Items.Single().Transport.Should().Be("native");
+    }
+
+    [Fact]
     public void Validator_RejectsMissingUserId()
     {
         var validator = new GetPushSubscriptionsQueryValidator();

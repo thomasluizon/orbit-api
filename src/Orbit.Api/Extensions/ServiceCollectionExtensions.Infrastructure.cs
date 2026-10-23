@@ -175,6 +175,19 @@ public static partial class ServiceCollectionExtensions
 
     internal static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
+        builder.Services.Configure<ApnsSettings>(builder.Configuration.GetSection(ApnsSettings.SectionName));
+        builder.Services.AddHttpClient("Apns", client => client.Timeout = httpTimeout)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                EnableMultipleHttp2Connections = false,
+                MaxConnectionsPerServer = 1
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        builder.Services.AddSingleton<IApnsPushSender>(sp => new ApnsPushSender(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("Apns"),
+            sp.GetRequiredService<IOptions<ApnsSettings>>(),
+            sp.GetRequiredService<ILogger<ApnsPushSender>>(), TimeProvider.System));
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()

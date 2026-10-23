@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using FirebaseAdmin.Messaging;
 using FluentAssertions;
+using NSubstitute;
+using Orbit.Domain.Interfaces;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -60,7 +62,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     }
 
     private PushNotificationService CreateService(StubHttpMessageHandler handler) =>
-        new(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance, new HttpClient(handler));
+        new(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance, new HttpClient(handler), Substitute.For<IApnsPushSender>());
 
     private async Task<PushSubscription> SeedWebPushSubscription(string endpoint)
     {
@@ -68,6 +70,78 @@ public sealed class PushNotificationServiceTests : IDisposable
         _dbContext.PushSubscriptions.Add(sub);
         await _dbContext.SaveChangesAsync();
         return sub;
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Gone, "Unregistered", 0)]
+    [InlineData(HttpStatusCode.BadRequest, "BadDeviceToken", 0)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "ServiceUnavailable", 1)]
+    [InlineData(HttpStatusCode.TooManyRequests, "TooManyRequests", 1)]
+    public async Task Apns_Response_RemovesOnlyStaleTokens(HttpStatusCode status, string reason, int remaining)
+    {
+        _dbContext.PushSubscriptions.Add(PushSubscription.Create(_userId, "device-token", "apns", "auth").Value);
+        await _dbContext.SaveChangesAsync();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(status)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { reason }))
+        });
+        using var sender = new ApnsPushSender(new HttpClient(handler), Options.Create(new ApnsSettings
+        {
+            KeyId = "KEY",
+            TeamId = "TEAM",
+            Topic = "org.useorbit.app",
+            PrivateKey = key.ExportPkcs8PrivateKeyPem()
+        }), NullLogger<ApnsPushSender>.Instance, TimeProvider.System);
+        var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
+            NullLogger<PushNotificationService>.Instance, new HttpClient(), sender);
+
+        (await service.TrySendToUserAsync(_userId, "Title", "Body", "/today")).Should().BeFalse();
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(remaining);
+    }
+
+    [Fact]
+    public async Task Apns_PayloadAndToken_AreCompatibleAndReused()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var tokens = new List<string>();
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            request.Version.Should().Be(HttpVersion.Version20);
+            request.Headers.GetValues("apns-topic").Single().Should().Be("org.useorbit.app");
+            request.Headers.GetValues("apns-push-type").Single().Should().Be("alert");
+            tokens.Add(request.Headers.Authorization!.Parameter!);
+            using var payload = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            payload.RootElement.GetProperty("aps").GetProperty("alert").GetProperty("title").GetString().Should().Be("Title");
+            payload.RootElement.GetProperty("aps").GetProperty("alert").GetProperty("body").GetString().Should().Be("Body");
+            payload.RootElement.GetProperty("aps").GetProperty("sound").GetString().Should().Be("default");
+            payload.RootElement.GetProperty("body").GetProperty("url").GetString().Should().Be("/today");
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        using var sender = new ApnsPushSender(new HttpClient(handler), Options.Create(new ApnsSettings
+        {
+            KeyId = "KEY",
+            TeamId = "TEAM",
+            Topic = "org.useorbit.app",
+            PrivateKey = key.ExportPkcs8PrivateKeyPem()
+        }), NullLogger<ApnsPushSender>.Instance, TimeProvider.System);
+        for (var i = 0; i < 2; i++)
+            (await sender.SendAsync("device-token", "Title", "Body", "/today", default)).Should().Be(ApnsDeliveryOutcome.Delivered);
+        tokens[0].Should().Be(tokens[1]);
+        var parts = tokens[0].Split('.');
+        byte[] Decode(string value) => Convert.FromBase64String(value.Replace('-', '+').Replace('_', '/').PadRight((value.Length + 3) / 4 * 4, '='));
+        key.VerifyData(Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"), Decode(parts[2]), HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apns_MissingConfiguration_DoesNotUseNetwork()
+    {
+        var handler = new StubHttpMessageHandler(_ => throw new InvalidOperationException("Network must stay unused"));
+        using var sender = new ApnsPushSender(new HttpClient(handler), Options.Create(new ApnsSettings()),
+            NullLogger<ApnsPushSender>.Instance, TimeProvider.System);
+        (await sender.SendAsync("token", "Title", "Body", null, default)).Should().Be(ApnsDeliveryOutcome.Retained);
+        handler.CallCount.Should().Be(0);
     }
 
     [Fact]
