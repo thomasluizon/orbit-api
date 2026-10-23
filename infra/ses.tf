@@ -11,10 +11,17 @@ locals {
       configuration_set = "orbit-marketing"
     }
   }
+
+  ses_identities = merge(local.ses_streams, {
+    workspace = {
+      domain           = "useorbit.org"
+      mail_from_domain = "bounce.useorbit.org"
+    }
+  })
 }
 
 resource "aws_sesv2_email_identity" "orbit" {
-  for_each       = local.ses_streams
+  for_each       = local.ses_identities
   email_identity = each.value.domain
 
   dkim_signing_attributes {
@@ -23,7 +30,7 @@ resource "aws_sesv2_email_identity" "orbit" {
 }
 
 resource "aws_sesv2_email_identity_mail_from_attributes" "orbit" {
-  for_each               = local.ses_streams
+  for_each               = local.ses_identities
   email_identity         = aws_sesv2_email_identity.orbit[each.key].email_identity
   mail_from_domain       = each.value.mail_from_domain
   behavior_on_mx_failure = "REJECT_MESSAGE"
@@ -32,7 +39,7 @@ resource "aws_sesv2_email_identity_mail_from_attributes" "orbit" {
 resource "cloudflare_dns_record" "ses_dkim" {
   for_each = {
     for pair in flatten([
-      for stream in keys(local.ses_streams) : [
+      for stream in keys(local.ses_identities) : [
         for index in range(3) : {
           key    = "${stream}-${index}"
           stream = stream
@@ -43,7 +50,7 @@ resource "cloudflare_dns_record" "ses_dkim" {
   }
 
   zone_id = cloudflare_zone.orbit.id
-  name    = "${aws_sesv2_email_identity.orbit[each.value.stream].dkim_signing_attributes[0].tokens[each.value.index]}._domainkey.${local.ses_streams[each.value.stream].domain}"
+  name    = "${aws_sesv2_email_identity.orbit[each.value.stream].dkim_signing_attributes[0].tokens[each.value.index]}._domainkey.${local.ses_identities[each.value.stream].domain}"
   type    = "CNAME"
   content = "${aws_sesv2_email_identity.orbit[each.value.stream].dkim_signing_attributes[0].tokens[each.value.index]}.dkim.amazonses.com"
   ttl     = 1

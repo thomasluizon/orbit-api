@@ -7,6 +7,7 @@ import { test } from "node:test"
 const root = dirname(fileURLToPath(import.meta.url))
 const ses = readFileSync(join(root, "ses.tf"), "utf8")
 const configuration = readFileSync(join(root, "configuration.tf"), "utf8")
+const cloudflare = readFileSync(join(root, "cloudflare.tf"), "utf8")
 const literal = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 function block(source, header) {
@@ -124,6 +125,86 @@ test("each API environment has credentials scoped to its own configuration sets"
   assert.doesNotMatch(productionPolicy, /aws_sesv2_configuration_set\.staging/)
   assert.match(stagingPolicy, /aws_sesv2_configuration_set\.staging/)
   assert.doesNotMatch(stagingPolicy, /aws_sesv2_configuration_set\.orbit/)
+  for (const policy of [productionPolicy, stagingPolicy]) {
+    assert.match(policy, /\[for identity in aws_sesv2_email_identity\.orbit : identity\.arn\]/)
+    assert.match(policy, /Action\s*=\s*\["ses:SendEmail", "ses:SendRawEmail"\]/)
+    assert.doesNotMatch(policy, /Resource\s*=\s*"\*"/)
+  }
   assert.match(keyParameter, /each\.key == "production" \? aws_iam_access_key\.api_ses\.id : aws_iam_access_key\.api_ses_staging\.id/)
   assert.match(secretParameter, /each\.key == "production" \? aws_iam_access_key\.api_ses\.secret : aws_iam_access_key\.api_ses_staging\.secret/)
+})
+
+test("the Workspace identity shares send permissions without adding configuration sets", () => {
+  const identities = block(ses, "ses_identities = merge(")
+  const workspace = block(identities, "workspace = {")
+  const identity = block(ses, 'resource "aws_sesv2_email_identity" "orbit"')
+  const streams = block(ses, "ses_streams = {")
+
+  assert.match(ses, /ses_identities\s*=\s*merge\(local\.ses_streams,\s*\{/)
+  assert.match(workspace, /domain\s*=\s*"useorbit\.org"/)
+  assert.match(workspace, /mail_from_domain\s*=\s*"bounce\.useorbit\.org"/)
+  assert.match(identity, /for_each\s*=\s*local\.ses_identities/)
+  assert.match(identity, /email_identity\s*=\s*each\.value\.domain/)
+  assert.match(identity, /next_signing_key_length\s*=\s*"RSA_2048_BIT"/)
+  assert.match(streams, /domain\s*=\s*"send\.useorbit\.org"/)
+  assert.match(streams, /domain\s*=\s*"updates\.useorbit\.org"/)
+  assert.doesNotMatch(streams, /domain\s*=\s*"useorbit\.org"/)
+  for (const resource of ["orbit", "staging"]) {
+    const configurationSet = block(ses, `resource "aws_sesv2_configuration_set" "${resource}"`)
+    assert.match(configurationSet, /for_each\s*=\s*local\.ses_streams/)
+  }
+})
+
+test("every SES identity publishes three unproxied Easy DKIM CNAME records", () => {
+  const dkim = block(ses, 'resource "cloudflare_dns_record" "ses_dkim"')
+
+  assert.match(dkim, /for stream in keys\(local\.ses_identities\)/)
+  assert.match(dkim, /for index in range\(3\)/)
+  assert.ok(dkim.includes('name    = "${aws_sesv2_email_identity.orbit[each.value.stream].dkim_signing_attributes[0].tokens[each.value.index]}._domainkey.${local.ses_identities[each.value.stream].domain}"'))
+  assert.ok(dkim.includes('content = "${aws_sesv2_email_identity.orbit[each.value.stream].dkim_signing_attributes[0].tokens[each.value.index]}.dkim.amazonses.com"'))
+  assert.match(dkim, /type\s*=\s*"CNAME"/)
+  assert.match(dkim, /proxied\s*=\s*false/)
+})
+
+test("SES MAIL FROM DNS stays on bounce subdomains and preserves Workspace mail routing", () => {
+  const identities = block(ses, "ses_identities = merge(")
+  const streams = block(ses, "ses_streams = {")
+  const mailFrom = block(ses, 'resource "aws_sesv2_email_identity_mail_from_attributes" "orbit"')
+  const mx = block(ses, 'resource "cloudflare_dns_record" "ses_mail_from_mx"')
+  const spf = block(ses, 'resource "cloudflare_dns_record" "ses_mail_from_spf"')
+
+  assert.match(mailFrom, /for_each\s*=\s*local\.ses_identities/)
+  assert.match(mailFrom, /email_identity\s*=\s*aws_sesv2_email_identity\.orbit\[each\.key\]\.email_identity/)
+  assert.match(mailFrom, /mail_from_domain\s*=\s*each\.value\.mail_from_domain/)
+  assert.match(mailFrom, /behavior_on_mx_failure\s*=\s*"REJECT_MESSAGE"/)
+  const domains = [...`${streams}\n${identities}`.matchAll(/mail_from_domain\s*=\s*"([^"]+)"/g)].map((match) => match[1])
+  assert.deepEqual(domains.sort(), ["bounce.send.useorbit.org", "bounce.updates.useorbit.org", "bounce.useorbit.org"].sort())
+  for (const record of [mx, spf]) {
+    assert.match(record, /for_each\s*=\s*aws_sesv2_email_identity_mail_from_attributes\.orbit/)
+    assert.match(record, /name\s*=\s*each\.value\.mail_from_domain/)
+    assert.match(record, /proxied\s*=\s*false/)
+  }
+  assert.match(mx, /type\s*=\s*"MX"/)
+  assert.match(mx, /content\s*=\s*"feedback-smtp\.us-east-2\.amazonses\.com"/)
+  assert.match(mx, /priority\s*=\s*10/)
+  assert.match(spf, /type\s*=\s*"TXT"/)
+  assert.match(spf, /content\s*=\s*"v=spf1 include:amazonses\.com ~all"/)
+  const workspaceMx = block(cloudflare, "apex_mx = {")
+  assert.match(workspaceMx, /name\s*=\s*"@"/)
+  assert.match(workspaceMx, /type\s*=\s*"MX"/)
+  assert.match(workspaceMx, /content\s*=\s*"smtp\.google\.com"/)
+  assert.match(workspaceMx, /priority\s*=\s*1/)
+  const dmarc = block(cloudflare, "dmarc_txt = {")
+  assert.match(dmarc, /name\s*=\s*"_dmarc\.useorbit\.org"/)
+  assert.match(dmarc, /v=DMARC1; p=reject; rua=mailto:contact@useorbit\.org/)
+})
+
+test("only staging switches its transactional sender to the Workspace primary address", () => {
+  const production = block(configuration, "production_api_values = {")
+  const staging = block(configuration, "staging_api_values = merge(")
+
+  assert.match(production, /Ses__FromEmail\s*=\s*"Orbit <noreply@send\.useorbit\.org>"/)
+  assert.match(staging, /Ses__FromEmail\s*=\s*"Orbit <contact@useorbit\.org>"/)
+  assert.match(production, /Ses__MarketingFromEmail\s*=\s*"Orbit <news@updates\.useorbit\.org>"/)
+  assert.doesNotMatch(staging, /Ses__MarketingFromEmail\s*=/)
 })
