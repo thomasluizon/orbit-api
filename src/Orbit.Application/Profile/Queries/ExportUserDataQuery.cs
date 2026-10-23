@@ -25,11 +25,6 @@ public record ExportUserDataRepositories(
     IGenericRepository<StreakFreeze> StreakFreezes,
     IGenericRepository<Referral> Referrals,
     IGenericRepository<ApiKey> ApiKeys,
-    IGenericRepository<Friendship> Friendships,
-    IGenericRepository<Cheer> Cheers,
-    IGenericRepository<BlockedUser> BlockedUsers,
-    IGenericRepository<Report> Reports,
-    IGenericRepository<FriendFeedEvent> FriendFeedEvents,
     IGenericRepository<ProactiveItem> ProactiveItems,
     IGenericRepository<NotionConnection> NotionConnections,
     IGenericRepository<NotionTask> NotionTasks,
@@ -72,17 +67,6 @@ public class ExportUserDataQueryHandler(
         var streakFreezes = await repos.StreakFreezes.FindAsync(s => s.UserId == request.UserId, cancellationToken);
         var referrals = await repos.Referrals.FindAsync(r => r.ReferrerId == request.UserId, cancellationToken);
         var apiKeys = await repos.ApiKeys.FindAsync(k => k.UserId == request.UserId, cancellationToken);
-        var friendships = await repos.Friendships.FindAsync(
-            f => f.RequesterId == request.UserId || f.AddresseeId == request.UserId, cancellationToken);
-        var cheers = await repos.Cheers.FindAsync(
-            c => c.SenderId == request.UserId || c.RecipientId == request.UserId, cancellationToken);
-        var blockedUsers = await repos.BlockedUsers.FindAsync(
-            b => b.BlockerId == request.UserId, cancellationToken);
-        var reports = await repos.Reports.FindAsync(
-            r => r.ReporterId == request.UserId, cancellationToken);
-        var friendFeedEvents = await repos.FriendFeedEvents.FindAsync(
-            e => e.ActorUserId == request.UserId, cancellationToken);
-
         var proactiveItems = await repos.ProactiveItems.FindAsync(i => i.UserId == request.UserId, cancellationToken);
         var notionConnections = await repos.NotionConnections.FindAsync(c => c.UserId == request.UserId, cancellationToken);
         var notionTasks = await repos.NotionTasks.FindAsync(t => t.UserId == request.UserId, cancellationToken);
@@ -139,26 +123,7 @@ public class ExportUserDataQueryHandler(
                 .OrderBy(k => k.CreatedAtUtc)
                 .Select(MapApiKey)
                 .ToList(),
-            friendships
-                .OrderBy(f => f.CreatedAtUtc)
-                .Select(f => new ExportedFriendship(f.RequesterId, f.AddresseeId, f.Status.ToString(), f.CreatedAtUtc, f.RespondedAtUtc))
-                .ToList(),
-            cheers
-                .OrderBy(c => c.CreatedAtUtc)
-                .Select(c => new ExportedCheer(c.SenderId, c.RecipientId, c.HabitId, c.Note, c.CreatedAtUtc))
-                .ToList(),
-            blockedUsers
-                .OrderBy(b => b.CreatedAtUtc)
-                .Select(b => new ExportedBlockedUser(b.BlockerId, b.BlockedId, b.CreatedAtUtc))
-                .ToList(),
-            reports
-                .OrderBy(r => r.CreatedAtUtc)
-                .Select(r => new ExportedReport(r.ReportedUserId, r.Reason.ToString(), r.Details, r.CheerId, r.Status.ToString(), r.CreatedAtUtc))
-                .ToList(),
-            friendFeedEvents
-                .OrderBy(e => e.CreatedAtUtc)
-                .Select(e => new ExportedFriendFeedEvent(e.Type.ToString(), e.Value, e.AchievementId, e.CreatedAtUtc))
-                .ToList(),
+            [], [], [], [], [],
             proactiveItems.OrderBy(i => i.CreatedAtUtc).Select(i => new ExportedProactiveItem(
                 i.Id, i.Trigger.ToString(), i.LocalDate, i.Text, i.ActionLabel, i.ActionPrompt,
                 i.CreatedAtUtc, i.ShownAtUtc, i.PushedAtUtc, i.OpenedAtUtc, i.ActedAtUtc,

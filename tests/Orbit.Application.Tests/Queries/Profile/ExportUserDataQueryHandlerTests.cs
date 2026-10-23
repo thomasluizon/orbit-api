@@ -27,11 +27,6 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IGenericRepository<Referral> _referralRepo = Substitute.For<IGenericRepository<Referral>>();
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
-    private readonly IGenericRepository<Friendship> _friendshipRepo = Substitute.For<IGenericRepository<Friendship>>();
-    private readonly IGenericRepository<Cheer> _cheerRepo = Substitute.For<IGenericRepository<Cheer>>();
-    private readonly IGenericRepository<BlockedUser> _blockedUserRepo = Substitute.For<IGenericRepository<BlockedUser>>();
-    private readonly IGenericRepository<Report> _reportRepo = Substitute.For<IGenericRepository<Report>>();
-    private readonly IGenericRepository<FriendFeedEvent> _friendFeedEventRepo = Substitute.For<IGenericRepository<FriendFeedEvent>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly IGenericRepository<ProactiveItem> _proactiveRepo = Substitute.For<IGenericRepository<ProactiveItem>>();
@@ -49,7 +44,7 @@ public class ExportUserDataQueryHandlerTests
             new ExportUserDataRepositories(
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo, _proactiveRepo, _notionConnections, _notionTasks, _conversations),
+                _proactiveRepo, _notionConnections, _notionTasks, _conversations),
             _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -71,11 +66,6 @@ public class ExportUserDataQueryHandlerTests
         ReturnsEmpty(_streakFreezeRepo);
         ReturnsEmpty(_referralRepo);
         ReturnsEmpty(_apiKeyRepo);
-        ReturnsEmpty(_friendshipRepo);
-        ReturnsEmpty(_cheerRepo);
-        ReturnsEmpty(_blockedUserRepo);
-        ReturnsEmpty(_reportRepo);
-        ReturnsEmpty(_friendFeedEventRepo);
     }
 
     [Fact]
@@ -206,29 +196,6 @@ public class ExportUserDataQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Settings.Uses24HourClock.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Handle_IncludesSocialData()
-    {
-        var user = CreateTestUser();
-        ArrangeUser(user);
-        var otherId = Guid.NewGuid();
-
-        Returns(_friendshipRepo, Friendship.Create(UserId, otherId).Value);
-        Returns(_cheerRepo, Cheer.Create(UserId, otherId, Guid.NewGuid(), "great work").Value);
-        Returns(_blockedUserRepo, BlockedUser.Create(UserId, otherId).Value);
-        Returns(_reportRepo, Report.Create(UserId, otherId, ReportReason.Spam, "spammy", null).Value);
-        Returns(_friendFeedEventRepo, FriendFeedEvent.StreakMilestone(UserId, 7));
-
-        var result = await _handler.Handle(new ExportUserDataQuery(UserId), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Friendships.Should().ContainSingle(f => f.AddresseeId == otherId);
-        result.Value.Cheers.Should().ContainSingle(c => c.Note == "great work");
-        result.Value.BlockedUsers.Should().ContainSingle(b => b.BlockedId == otherId);
-        result.Value.Reports.Should().ContainSingle(r => r.Reason == "Spam");
-        result.Value.FriendFeedEvents.Should().ContainSingle(e => e.Type == "StreakMilestone" && e.Value == 7);
     }
 
     [Fact]
