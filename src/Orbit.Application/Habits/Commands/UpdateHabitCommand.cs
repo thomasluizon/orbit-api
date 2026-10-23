@@ -159,7 +159,7 @@ public class UpdateHabitCommandHandler(
         if (clearParent == true && requestedParentId.HasValue)
             return Result.Failure<Guid?>(new AppError(ErrorCodes.ValidationError, ErrorCopy.English(ErrorCodes.ValidationError)));
         var finalParentId = clearParent == true ? null : requestedParentId ?? habit.ParentHabitId;
-        var finalIsGeneral = update.IsGeneral ?? habit.IsGeneral;
+        var finalIsGeneral = update.IsGeneral ?? habit.Schedule == HabitSchedule.General;
 
         if (requestedParentId.HasValue)
         {

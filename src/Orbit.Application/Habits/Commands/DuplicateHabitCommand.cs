@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -77,7 +78,7 @@ public class DuplicateHabitCommandHandler(
         CancellationToken cancellationToken)
     {
         var completedOneTimeIds = EnumerateSubtree(original, childLookup)
-            .Where(h => h.FrequencyUnit is null && h.IsCompleted)
+            .Where(h => (h.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && h.IsCompleted)
             .Select(h => h.Id)
             .ToHashSet();
 
@@ -144,8 +145,8 @@ public class DuplicateHabitCommandHandler(
             DueEndTime: source.DueEndTime,
             ParentHabitId: parentHabitId,
             ChecklistItems: source.ChecklistItems,
-            IsGeneral: source.IsGeneral,
-            IsFlexible: source.IsFlexible,
+            IsGeneral: source.Schedule == HabitSchedule.General,
+            IsFlexible: source.Schedule == HabitSchedule.Flexible,
             EndDate: source.EndDate,
             ScheduledReminders: source.ScheduledReminders,
             RelativeReminders: source.RelativeReminders,

@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -89,7 +90,7 @@ public class MoveHabitParentCommandHandler(
         if (request.ParentId == Guid.Empty || parent is null || parent.IsDeleted || parent.UserId != request.UserId)
             return Result.Failure(ErrorMessages.TargetParentNotFound);
 
-        if (parent.IsGeneral != (finalIsGeneral ?? habit.IsGeneral))
+        if ((parent.Schedule == HabitSchedule.General) != (finalIsGeneral ?? habit.Schedule == HabitSchedule.General))
             return Result.Failure(ErrorMessages.GeneralMismatchWithParent);
 
         var allHabits = await repository.FindAsync(h => h.UserId == request.UserId, ct);
