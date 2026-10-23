@@ -28,7 +28,7 @@ public partial class ProcessUserChatCommandHandler
         var todayFacts = await HabitTodaySnapshot.ReadAsync(
             userHabits, userToday, weekStartDay, execution.ScheduleLogReader, cancellationToken);
         var todayHabits = userHabits.Where(habit => !habit.IsCompleted
-            || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id)).ToList();
+            || (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && todayFacts.DoneTodayIds.Contains(habit.Id)).ToList();
         var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday, todayFacts);
         if (promptHabitIndex.IsPartial)
         {
@@ -98,7 +98,7 @@ public partial class ProcessUserChatCommandHandler
         var allIndexedHabitIds = new HashSet<Guid>();
 
         foreach (var habit in userHabits.Where(habit => !habit.IsCompleted
-            || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id)))
+            || (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && todayFacts.DoneTodayIds.Contains(habit.Id)))
         {
             var current = habit;
 
@@ -122,7 +122,7 @@ public partial class ProcessUserChatCommandHandler
         var selectedHabitIds = new HashSet<Guid>();
         var prioritizedActiveHabits = userHabits
             .Where(habit => !habit.IsCompleted
-                || habit.FrequencyUnit is null && todayFacts.DoneTodayIds.Contains(habit.Id))
+                || (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && todayFacts.DoneTodayIds.Contains(habit.Id))
             .OrderBy(habit => GetPromptPriority(habit, todayFacts))
             .ThenBy(habit => habit.Position ?? int.MaxValue)
             .ThenBy(habit => habit.Id)

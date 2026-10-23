@@ -28,6 +28,58 @@ public sealed class PendingOperationChangePreviewerTests
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 9, 25));
 
+    [Theory]
+    [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
+    [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
+    [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
+    [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
+    public async Task Preview_KeepsScheduleFieldsAndFingerprint(HabitSchedule schedule, bool divergentFlags)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",
+            schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
+            schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
+            new DateOnly(2026, 9, 25), IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+        Setup([habit]);
+        var args = JsonSerializer.Serialize(new
+        {
+            habit_id = habit.Id,
+            title = "Renamed",
+            is_general = schedule == HabitSchedule.General,
+            is_flexible = schedule == HabitSchedule.Flexible
+        });
+        var bulkArgs = JsonSerializer.Serialize(new
+        {
+            filter = new { all = true },
+            updates = new
+            {
+                title = "Renamed",
+                is_general = schedule == HabitSchedule.General,
+                is_flexible = schedule == HabitSchedule.Flexible
+            }
+        });
+        var before = await Preview("update_habit", args);
+        var bulkBefore = await Preview("bulk_update_habits", bulkArgs);
+        if (divergentFlags)
+        {
+            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
+            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
+        }
+
+        var preview = await Preview("update_habit", args);
+
+        preview.Should().NotBeNull();
+        preview!.Changes.Should().Contain(field => field.Field == "title" && field.NewValue == "Renamed");
+        var bulkPreview = await Preview("bulk_update_habits", bulkArgs);
+        bulkPreview.Should().NotBeNull();
+        bulkPreview!.Changes.Should().ContainSingle().Which.Field.Should().Be("title");
+        JsonSerializer.Serialize(bulkPreview).Should().Be(JsonSerializer.Serialize(bulkBefore));
+        JsonSerializer.Serialize(preview).Should().Be(JsonSerializer.Serialize(before));
+    }
+
     [Fact]
     public async Task ChildCreation_PreviewsEverySuppliedFieldAndResolvesOwnedDependencies()
     {

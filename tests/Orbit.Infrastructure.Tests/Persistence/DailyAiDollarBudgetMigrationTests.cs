@@ -48,7 +48,7 @@ public class DailyAiDollarBudgetMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        differences.Should().HaveCount(14);
+        differences.Should().HaveCount(14 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         RestoreProactivePreferenceMigrationTests.AssertRequiredPreference(differences);
         ReferralRewardMigrationTests.AssertRewardColumns(differences);
         MakeSubHabitsFreeMigrationTests.AssertFreeFeatureSeed(differences);

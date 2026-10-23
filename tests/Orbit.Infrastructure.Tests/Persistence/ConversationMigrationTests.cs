@@ -40,7 +40,7 @@ public class ConversationMigrationTests
         schemaVersion.ClrType.Should().Be(typeof(int));
         schemaVersion.IsNullable.Should().BeFalse();
         schemaVersion.DefaultValue.Should().Be(0);
-        remaining.Should().HaveCount(10);
+        remaining.Should().HaveCount(10 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(remaining));
         remaining.OfType<AddColumnOperation>().Should().HaveCount(7);
         remaining.OfType<AddColumnOperation>().Should().ContainSingle(column => column.Table == "ConversationTurns"
             && column.Name == "ResponseJson" && column.IsNullable && column.ClrType == typeof(string));

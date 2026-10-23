@@ -27,7 +27,7 @@ public class FeatureFlagAccountsMigrationTests
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
         differences = AppStoreMigrationTests.WithoutAppleAdditions(differences);
 
-        differences.Should().HaveCount(51);
+        differences.Should().HaveCount(51 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         ExpandHabitScheduleAndStartDateMigrationTests.AssertAiSecurityAdditions(differences);
         ExpandHabitScheduleAndStartDateMigrationTests.AssertEvalTraceSeed(differences);
         ConversationMigrationTests.AssertConversationExpansion(differences, composedResponse: true);
@@ -57,7 +57,7 @@ public class FeatureFlagAccountsMigrationTests
         cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "NextAttemptAtUtc" }) && !index.IsUnique);
         cancellationIndexes.Should().ContainSingle(index => index.Columns.SequenceEqual(new[] { "Provider", "ProviderIdentifier" }) && index.IsUnique);
         differences.Where(operation => operation is DropForeignKeyOperation || operation is AddForeignKeyOperation)
-            .Should().HaveCount(4);
+            .Should().HaveCount(4 + RetiredTableCallerTests.AssertCompatibilityForeignKeys(differences));
         differences.OfType<AlterColumnOperation>().Should().ContainSingle(column =>
             column.Table == "HabitLogs" && column.Name == "IsSlip"
             && !column.IsNullable && column.OldColumn.IsNullable);
@@ -76,12 +76,12 @@ public class FeatureFlagAccountsMigrationTests
         referralColumns.Select(column => column.Name).Should().BeEquivalentTo(
             "BonusProExpiresAtUtc", "ReferrerReward", "ReferredReward", "ReferrerRewardDeliveredAtUtc", "ReferredRewardDeliveredAtUtc");
         AssertHabitExpandColumns(differences);
-        differences.OfType<DropForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
+        differences.OfType<DropForeignKeyOperation>().Where(operation => operation.Table == "AccountabilityPairs").Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
-        differences.OfType<AddForeignKeyOperation>().Should().HaveCount(2).And.OnlyContain(operation =>
+        differences.OfType<AddForeignKeyOperation>().Where(operation => operation.Table == "AccountabilityPairs").Should().HaveCount(2).And.OnlyContain(operation =>
             operation.Table == "AccountabilityPairs" && operation.PrincipalTable == "Users"
             && operation.OnDelete == ReferentialAction.Cascade);
-        differences.OfType<AddForeignKeyOperation>().Select(operation => operation.Name).Should().BeEquivalentTo(
+        differences.OfType<AddForeignKeyOperation>().Where(operation => operation.Table == "AccountabilityPairs").Select(operation => operation.Name).Should().BeEquivalentTo(
             "FK_AccountabilityPairs_Users_AddresseeId", "FK_AccountabilityPairs_Users_RequesterId");
         var redesign = initializer.Initialize(new AddHabitSkipUndo().TargetModel, designTime: true);
         var additions = context.GetService<IMigrationsModelDiffer>()

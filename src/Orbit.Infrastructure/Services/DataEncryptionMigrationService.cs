@@ -50,7 +50,6 @@ public sealed partial class DataEncryptionMigrationService(
             var success = true;
             success &= await MigrateEntities<Habit>("Habits", stoppingToken);
             success &= await MigrateEntities<HabitLog>("HabitLogs", stoppingToken);
-            success &= await MigrateUserFacts(stoppingToken);
             success &= await MigrateEntities<Goal>("Goals", stoppingToken);
             success &= await MigrateEntities<GoalProgressLog>("GoalProgressLogs", stoppingToken);
             success &= await MigrateEntities<User>("Users", stoppingToken);
@@ -137,55 +136,6 @@ public sealed partial class DataEncryptionMigrationService(
         return !hadErrors;
     }
 
-    /// <summary>
-    /// UserFact has a global query filter (IsDeleted), so we need IgnoreQueryFilters
-    /// to encrypt soft-deleted facts too.
-    /// </summary>
-    private async Task<bool> MigrateUserFacts(CancellationToken stoppingToken)
-    {
-        var totalProcessed = 0;
-        var hadErrors = false;
-        var offset = 0;
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-
-                var batch = await db.UserFacts
-                    .IgnoreQueryFilters()
-                    .OrderBy(f => f.Id)
-                    .Skip(offset)
-                    .Take(BatchSize)
-                    .ToListAsync(stoppingToken);
-
-                if (batch.Count == 0)
-                    break;
-
-                foreach (var fact in batch)
-                    db.Entry(fact).State = EntityState.Modified;
-
-                await db.SaveChangesAsync(stoppingToken);
-                totalProcessed += batch.Count;
-                offset += batch.Count;
-            }
-            catch (Exception ex)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogUserFactsBatchFailed(logger, ex, offset);
-                hadErrors = true;
-                break;
-            }
-        }
-
-        if (totalProcessed > 0 && logger.IsEnabled(LogLevel.Information))
-            LogUserFactsEncrypted(logger, totalProcessed);
-
-        return !hadErrors;
-    }
-
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Encryption migration already completed -- skipping")]
     private static partial void LogMigrationAlreadyComplete(ILogger logger);
 
@@ -209,11 +159,5 @@ public sealed partial class DataEncryptionMigrationService(
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Encrypted {Count} {Entity}")]
     private static partial void LogEntitiesEncrypted(ILogger logger, int count, string entity);
-
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Batch failed for UserFacts at offset {Offset} -- halting migration, will retry on next startup")]
-    private static partial void LogUserFactsBatchFailed(ILogger logger, Exception ex, int offset);
-
-    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Encrypted {Count} UserFacts")]
-    private static partial void LogUserFactsEncrypted(ILogger logger, int count);
 
 }

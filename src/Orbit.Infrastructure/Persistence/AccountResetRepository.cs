@@ -82,11 +82,6 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
             .Where(k => k.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        await context.UserFacts
-            .IgnoreQueryFilters()
-            .Where(f => f.UserId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
         await context.Tags
             .IgnoreQueryFilters()
             .Where(t => t.UserId == userId)
@@ -131,39 +126,6 @@ public class AccountResetRepository(OrbitDbContext context, IAccountEventCollect
 
         await context.Referrals
             .Where(r => r.ReferrerId == userId || r.ReferredUserId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.FriendFeedEvents
-            .Where(e => e.ActorUserId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.Reports
-            .Where(r => r.ReporterId == userId || r.ReportedUserId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.Cheers
-            .Where(c => c.SenderId == userId || c.RecipientId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.BlockedUsers
-            .Where(b => b.BlockerId == userId || b.BlockedId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.Friendships
-            .Where(f => f.RequesterId == userId || f.AddresseeId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.AccountabilityPairs
-            .Where(p => p.RequesterId == userId || p.AddresseeId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.ChallengeParticipants
-            .Where(p => p.UserId == userId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await context.Challenges
-            .IgnoreQueryFilters()
-            .Where(c => c.CreatorId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await context.Goals

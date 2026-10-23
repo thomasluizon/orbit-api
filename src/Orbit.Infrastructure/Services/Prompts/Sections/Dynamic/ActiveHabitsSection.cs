@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
@@ -65,7 +66,7 @@ public class ActiveHabitsSection : IPromptSection
         IReadOnlyList<Habit> indexedHabits, PromptContext context)
     {
         var activeHabits = indexedHabits.Where(h => !h.IsCompleted).ToList();
-        var general = activeHabits.Count(h => h.IsGeneral);
+        var general = activeHabits.Count(h => h.Schedule == HabitSchedule.General);
         if (!context.UserToday.HasValue)
             return (activeHabits.Count, general, 0, 0);
 
@@ -90,26 +91,26 @@ public class ActiveHabitsSection : IPromptSection
     {
         var labels = new List<string>();
         if (!string.IsNullOrWhiteSpace(habit.Emoji)) labels.Add($"Emoji: {habit.Emoji}");
-        if (habit.IsGeneral) labels.Add("GENERAL");
+        if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL");
         else if (IsOverdue(habit, context)) labels.Add("OVERDUE");
         else if (IsToday(habit, context)) labels.Add("TODAY");
         if (IsDoneToday(habit, context))
             labels.Add("DONE TODAY");
         if (habit.IsBadHabit) labels.Add("BAD");
         if (habit.IsCompleted) labels.Add("COMPLETED");
-        if (!habit.IsGeneral)
+        if (habit.Schedule != HabitSchedule.General)
             labels.Add($"DueDate: {habit.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
         return labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "";
     }
 
     private static bool IsToday(Habit habit, PromptContext context) =>
-        !habit.IsGeneral && context.UserToday.HasValue
-        && (!habit.IsCompleted || habit.FrequencyUnit is null && IsDoneToday(habit, context))
+        habit.Schedule != HabitSchedule.General && context.UserToday.HasValue
+        && (!habit.IsCompleted || habit.Schedule == HabitSchedule.OneTime && IsDoneToday(habit, context))
         && (context.TodayHabitIds?.Contains(habit.Id)
             ?? HabitScheduleService.WasScheduledOnDate(habit, context.UserToday.Value, 1));
 
     private static bool IsOverdue(Habit habit, PromptContext context) =>
-        !habit.IsGeneral && !habit.IsCompleted && context.UserToday.HasValue
+        habit.Schedule != HabitSchedule.General && !habit.IsCompleted && context.UserToday.HasValue
         && (context.OverdueHabitIds?.Contains(habit.Id) ?? habit.DueDate < context.UserToday.Value);
 
     private static bool IsDoneToday(Habit habit, PromptContext context) =>
@@ -121,7 +122,7 @@ public class ActiveHabitsSection : IPromptSection
     private static bool ShouldIncludeInIndex(Habit habit, IReadOnlyList<Habit> allHabits, PromptContext context)
     {
         return !habit.IsCompleted
-            || habit.FrequencyUnit is null && IsDoneToday(habit, context)
+            || (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && IsDoneToday(habit, context)
             || HasRelevantDescendant(allHabits, habit.Id, context);
     }
 

@@ -6,6 +6,7 @@ using Orbit.Application.Habits.Commands;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
@@ -353,8 +354,8 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             ReminderTimes: habit.ReminderTimes,
             SlipAlertEnabled: habit.SlipAlertEnabled,
             ChecklistItems: habit.ChecklistItems,
-            IsGeneral: habit.IsGeneral,
-            IsFlexible: habit.IsFlexible,
+            IsGeneral: habit.Schedule == HabitSchedule.General,
+            IsFlexible: habit.Schedule == HabitSchedule.Flexible,
             EndDate: habit.EndDate,
             ScheduledReminders: habit.ScheduledReminders,
             Emoji: emoji,

@@ -105,7 +105,6 @@ public partial class SyncCleanupService(
         totalPurged += await PurgeAsync(dbContext.Habits, h => h.IsDeleted && h.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Goals, g => g.IsDeleted && g.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Tags, t => t.IsDeleted && t.DeletedAtUtc < cutoff, ct);
-        totalPurged += await PurgeAsync(dbContext.UserFacts, f => f.IsDeleted && f.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.HabitLogs, l => l.IsDeleted && l.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.GoalProgressLogs, l => l.IsDeleted && l.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.Notifications, n => n.IsDeleted && n.DeletedAtUtc < cutoff, ct);

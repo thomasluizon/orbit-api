@@ -456,7 +456,7 @@ public class CreateHabitTool(
             ReminderTimes: JsonArgumentParser.ParseIntArray(sub, "reminder_times"),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(sub, "slip_alert_enabled") ?? false,
             IsFlexible: isFlexible,
-            IsGeneral: parent.IsGeneral,
+            IsGeneral: parent.Schedule == HabitSchedule.General,
             EndDate: JsonArgumentParser.ParseDateOnly(sub, "end_date"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(sub),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(sub),

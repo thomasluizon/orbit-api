@@ -23,6 +23,42 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 /// </summary>
 public class ApplyOnboardingConcurrencyTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Apply_TrackedUserChangedBeforeLock_ReloadsPreferencesAndCompletion(bool alreadyApplied)
+    {
+        await using var database = new UserRowConcurrencyHarness(user =>
+        {
+            user.SetTimeZone("America/Sao_Paulo");
+            if (alreadyApplied) user.CompleteOnboarding();
+        });
+        var user = User.Create("Onboarding user", "onboarding@example.com").Value;
+        await database.SeedAsync(user);
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
+        var handler = new ApplyOnboardingCommandHandler(new ApplyOnboardingRepositories(
+            new GenericRepository<User>(database.Context), new GenericRepository<Habit>(database.Context),
+            new GenericRepository<Goal>(database.Context)), StubToday(new DateOnly(2030, 4, 10)), config,
+            database.Work, new MemoryCache(new MemoryCacheOptions()));
+        var command = new ApplyOnboardingCommand(user.Id,
+            [new ApplyHabitInput("Drink water", null, null, FrequencyUnit.Day, 1)], null, null, null, null);
+        var retry = new ConcurrencyRetryBehavior<ApplyOnboardingCommand, Result<ApplyOnboardingResponse>>(database.Work);
+
+        var result = await retry.Handle(command, ct => handler.Handle(command, ct), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Applied.Should().Be(!alreadyApplied);
+        database.SaveAttempts.Should().Be(alreadyApplied ? 0 : 1);
+        database.ConcurrentWrites.Should().Be(1);
+        await using var verify = database.CreateContext();
+        var saved = await verify.Users.SingleAsync();
+        saved.HasCompletedOnboarding.Should().BeTrue();
+        saved.TimeZone.Should().Be("America/Sao_Paulo");
+        (await verify.Habits.CountAsync()).Should().Be(alreadyApplied ? 0 : 1);
+    }
+
     [Fact]
     public async Task Apply_ConflictOnFirstSave_RetriesAndAppliesExactlyOnce()
     {

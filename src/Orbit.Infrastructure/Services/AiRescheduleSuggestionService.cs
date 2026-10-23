@@ -67,7 +67,7 @@ public sealed partial class AiRescheduleSuggestionService(
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
         var daysOverdue = Math.Max(0, userToday.DayNumber - habit.DueDate.DayNumber);
-        var habitKind = habit.FrequencyUnit is null ? "one-time task" : "recurring habit";
+        var habitKind = habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General ? "one-time task" : "recurring habit";
 
         return string.Create(System.Globalization.CultureInfo.InvariantCulture, $$"""
             You are Astra, helping someone restart a habit they have fallen behind on. Propose ONE
@@ -102,11 +102,11 @@ public sealed partial class AiRescheduleSuggestionService(
 
     private static string DescribeSchedule(Habit habit)
     {
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return "one-time task (no recurrence)";
 
         var quantity = habit.FrequencyQuantity ?? 1;
-        var unit = habit.FrequencyUnit.Value.ToString().ToLowerInvariant();
+        var unit = habit.FrequencyUnit.ToString()!.ToLowerInvariant();
         var description = quantity == 1 ? $"every {unit}" : $"every {quantity} {unit}s";
 
         if (habit.Days.Count > 0)

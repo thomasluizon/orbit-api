@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
@@ -56,7 +57,7 @@ public class LogHabitTool(
             return HabitToolHelpers.HabitNotFoundResult(habitId);
         if (habit.UserId != userId)
             return new ToolResult(false, Error: ErrorMessages.HabitNotOwned.Message);
-        if (!habit.IsFlexible && !habit.IsBadHabit
+        if (habit.Schedule != HabitSchedule.Flexible && !habit.IsBadHabit
             && habit.Logs.Any(log => log.Date == targetDate && !log.IsDeleted))
             return ToolResult.FromFailure(Result.Failure(DomainErrors.AlreadyLoggedForDate));
 

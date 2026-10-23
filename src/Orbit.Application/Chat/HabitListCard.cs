@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Chat;
 
@@ -161,7 +162,7 @@ public static partial class HabitListCardBuilder
         {
             if (habit.IsCompleted && todayFacts.DoneTodayIds.Contains(habit.Id))
                 return StatusNone;
-            if (habit.IsGeneral)
+            if (habit.Schedule == HabitSchedule.General)
                 return StatusGeneral;
             if (habit.DueDate < today)
                 return StatusOverdue;
@@ -170,7 +171,7 @@ public static partial class HabitListCardBuilder
 
         if (todayFacts.DoneTodayIds.Contains(habit.Id))
             return StatusDone;
-        if (habit.IsGeneral)
+        if (habit.Schedule == HabitSchedule.General)
             return StatusGeneral;
         if (todayFacts.OverdueIds.Contains(habit.Id))
             return StatusOverdue;

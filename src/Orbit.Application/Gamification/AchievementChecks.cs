@@ -1,6 +1,7 @@
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Gamification;
 
@@ -105,7 +106,7 @@ public static class AchievementChecks
         if (earned.Contains(AchievementDefinitions.PerfectDay)) return;
 
         var eligibleHabits = allUserHabits
-            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
+            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ParentHabitId == null)
             .ToList();
 
         if (eligibleHabits.Count == 0) return;
@@ -130,7 +131,7 @@ public static class AchievementChecks
         IReadOnlySet<(Guid HabitId, DateOnly Date)>? completedDates = null)
     {
         var eligibleHabits = allUserHabits
-            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
+            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ParentHabitId == null)
             .ToList();
 
         if (eligibleHabits.Count == 0) return;
