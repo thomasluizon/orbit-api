@@ -237,14 +237,16 @@ h1 {
 }
 .action-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-direction: column;
   justify-content: flex-end;
   align-items: center;
   gap: var(--s-3);
 }
 .action-row .btn { width: 100%; }
 @media (min-width: 480px) {
-  .action-row .btn { width: auto; }
+  .action-row[data-layout="row"] { flex-direction: row; }
+  .action-row[data-layout="row"] .btn { width: auto; flex: 0 0 auto; }
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--primary-hover); }
