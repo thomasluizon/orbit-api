@@ -2,6 +2,7 @@ using Orbit.Application.Habits.Queries;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat;
@@ -20,7 +21,7 @@ internal sealed record HabitTodaySnapshot(
     {
         var logFrom = date.AddDays(-AppConstants.MaxRangeDays);
         var candidateIds = habits.Where(habit => !habit.IsCompleted
-            || habit.FrequencyUnit is null && !habit.IsGeneral).Select(habit => habit.Id).ToArray();
+            || habit.Schedule == HabitSchedule.OneTime).Select(habit => habit.Id).ToArray();
         var logDays = await reader.ReadDaysAsync(candidateIds, logFrom, date, cancellationToken);
         var logFacts = new HabitScheduleLogFacts(logDays);
         var active = habits.Where(habit => !habit.IsCompleted).ToList();
@@ -31,8 +32,7 @@ internal sealed record HabitTodaySnapshot(
             .Select(habit => habit.Id)
             .ToHashSet();
         var oldDueDateIds = active
-            .Where(habit => habit.FrequencyUnit is not null
-                && !habit.IsFlexible
+            .Where(habit => habit.Schedule == HabitSchedule.Recurring
                 && !habit.IsBadHabit
                 && habit.DueDate < logFrom)
             .Select(habit => habit.Id)
@@ -56,9 +56,9 @@ internal sealed record HabitTodaySnapshot(
         var logFacts = new HabitScheduleLogFacts(logDays);
         var active = habits.Where(habit => !habit.IsCompleted).ToList();
         var completedToday = habits.Where(habit =>
-            habit.IsCompleted && habit.FrequencyUnit is null && !habit.IsGeneral
+            habit.IsCompleted && habit.Schedule == HabitSchedule.OneTime
             && logFacts.HasCompleted(habit.Id, today, today)).ToList();
-        var candidates = active.Where(habit => !habit.IsGeneral);
+        var candidates = active.Where(habit => habit.Schedule != HabitSchedule.General);
         var emptyLookup = Array.Empty<Habit>().ToLookup(habit => habit.ParentHabitId);
         var scheduled = HabitScheduleFilters.FilterScheduledHabits(
             candidates,

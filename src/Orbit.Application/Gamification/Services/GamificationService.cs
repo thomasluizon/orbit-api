@@ -147,7 +147,7 @@ public partial class GamificationService(
     {
         var perfectStreakCutoff = today.AddDays(-AchievementChecks.PerfectStreakWindowDays);
         var allUserHabits = (await scheduleSnapshots.GetAsync(user.Id, ct))
-            .Where(snapshot => !snapshot.IsCompleted && !snapshot.IsGeneral && snapshot.ParentHabitId == null)
+            .Where(snapshot => !snapshot.IsCompleted && snapshot.Schedule != HabitSchedule.General && snapshot.ParentHabitId == null)
             .Select(snapshot => Habit.FromScheduleSnapshot(snapshot, user.Id))
             .ToList();
         var perfectHabitIds = allUserHabits.Select(h => h.Id).ToList();

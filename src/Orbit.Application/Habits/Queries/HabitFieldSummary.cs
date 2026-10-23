@@ -34,7 +34,7 @@ public sealed record HabitFieldSummary
         ScheduledReminders = habit.ScheduledReminders,
         RelativeReminders = habit.RelativeReminders,
         SlipAlertEnabled = habit.SlipAlertEnabled,
-        IsFlexible = habit.IsFlexible,
+        IsFlexible = habit.Schedule == HabitSchedule.Flexible,
         ChecklistItems = habit.ChecklistItems
     };
 

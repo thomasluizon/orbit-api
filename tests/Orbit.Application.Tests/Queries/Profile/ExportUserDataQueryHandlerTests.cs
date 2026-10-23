@@ -68,6 +68,38 @@ public class ExportUserDataQueryHandlerTests
         ReturnsEmpty(_apiKeyRepo);
     }
 
+    [Theory]
+    [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
+    [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
+    [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
+    [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
+    public async Task Export_KeepsFourSchedulePayloads(HabitSchedule schedule, bool divergentFlags)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",
+            schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
+            schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
+            Today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+        if (divergentFlags)
+        {
+            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
+            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
+        }
+        ArrangeUser(CreateTestUser());
+        Returns(_habitRepo, habit);
+
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var exported = result.Value.Habits.Should().ContainSingle().Subject;
+        exported.IsGeneral.Should().Be(schedule == HabitSchedule.General);
+        exported.DueDate.Should().Be(Today);
+        exported.FrequencyUnit.Should().Be(habit.FrequencyUnit?.ToString());
+    }
+
     [Fact]
     public async Task ExportIncludesNotionWorkspaceAndTasksButNeverTokens()
     {

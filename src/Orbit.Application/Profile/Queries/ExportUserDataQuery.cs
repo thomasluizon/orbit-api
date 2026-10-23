@@ -5,6 +5,7 @@ using Orbit.Application.Goals.Services;
 using Orbit.Application.Profile.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Queries;
@@ -164,7 +165,7 @@ public class ExportUserDataQueryHandler(
             habit.Description,
             habit.Emoji,
             habit.IsBadHabit,
-            habit.IsGeneral,
+            habit.Schedule == HabitSchedule.General,
             habit.DueDate,
             habit.EndDate,
             habit.FrequencyUnit?.ToString(),

@@ -110,7 +110,7 @@ public class QueryHabitsTool(
             ? schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
                 : schedule.Facts.OverdueIds.Contains(habit.Id) ? HabitListCardBuilder.StatusOverdue
                 : HabitListCardBuilder.StatusToday
-            : habit.IsGeneral ? HabitListCardBuilder.StatusGeneral
+            : habit.Schedule == HabitSchedule.General ? HabitListCardBuilder.StatusGeneral
                 : GetResponseCompletion(habit, today) ? HabitListCardBuilder.StatusDone
                 : habit.DueDate < today ? HabitListCardBuilder.StatusOverdue
                 : habit.DueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
@@ -221,11 +221,11 @@ public class QueryHabitsTool(
     {
         return await habitRepository.FindAsync(
             h => h.UserId == userId
-                && (f.IsGeneral == null || h.IsGeneral == f.IsGeneral.Value)
+                && (f.IsGeneral == null || (h.Schedule == HabitSchedule.General) == f.IsGeneral.Value)
                 && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
-                && (!f.FrequencyOneTime || h.FrequencyUnit == null)
+                && (!f.FrequencyOneTime || h.Schedule == HabitSchedule.OneTime || h.Schedule == HabitSchedule.General)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
-                && (!f.Date.HasValue || !h.IsGeneral),
+                && (!f.Date.HasValue || h.Schedule != HabitSchedule.General),
             q => IncludeCandidates(q, today, includeMetrics, deferMetrics),
             ct);
     }
@@ -308,7 +308,7 @@ public class QueryHabitsTool(
     {
         var labels = new List<string>();
         var isCompleted = GetResponseCompletion(habit, today);
-        if (habit.IsGeneral) labels.Add("GENERAL");
+        if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL");
         if (schedule is not null)
         {
             if (schedule.Facts.TodayIds.Contains(habit.Id))
@@ -319,8 +319,8 @@ public class QueryHabitsTool(
         }
         else
         {
-            if (!habit.IsGeneral && !isCompleted && habit.DueDate < today) labels.Add("OVERDUE");
-            if (!habit.IsGeneral && !isCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
+            if (habit.Schedule != HabitSchedule.General && !isCompleted && habit.DueDate < today) labels.Add("OVERDUE");
+            if (habit.Schedule != HabitSchedule.General && !isCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
         }
         AddNotDueLabel(labels, habit, today);
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
@@ -341,13 +341,13 @@ public class QueryHabitsTool(
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly today) =>
-        habit.IsGeneral
+        habit.Schedule == HabitSchedule.General
             ? HabitScheduleService.HasCompletedLogInRange(habit, today, today)
             : habit.IsCompleted;
 
     private static void AddNotDueLabel(List<string> labels, Habit habit, DateOnly today)
     {
-        if (!habit.IsGeneral && !GetResponseCompletion(habit, today) && habit.DueDate > today)
+        if (habit.Schedule != HabitSchedule.General && !GetResponseCompletion(habit, today) && habit.DueDate > today)
             labels.Add(string.Create(CultureInfo.InvariantCulture, $"NOT DUE: {habit.DueDate:yyyy-MM-dd}"));
     }
 
@@ -367,7 +367,7 @@ public class QueryHabitsTool(
 
     private static string FormatFrequencyLabel(Habit habit)
     {
-        if (habit.FrequencyUnit is null)
+        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
             return "One-time";
 
         var unitName = habit.FrequencyUnit.ToString()!.ToLower();

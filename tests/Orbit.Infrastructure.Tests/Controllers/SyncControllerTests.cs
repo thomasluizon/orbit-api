@@ -52,6 +52,42 @@ public class SyncControllerTests : IDisposable
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
     }
 
+    [Theory]
+    [InlineData(HabitSchedule.OneTime, false)]
+    [InlineData(HabitSchedule.OneTime, true)]
+    [InlineData(HabitSchedule.Recurring, false)]
+    [InlineData(HabitSchedule.Recurring, true)]
+    [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
+    [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
+    public async Task Sync_KeepsFourSchedulePayloads(HabitSchedule schedule, bool divergentFlags)
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",
+            schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
+            schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
+            today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+        if (divergentFlags)
+        {
+            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
+            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
+        }
+        _dbContext.Habits.Add(habit);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.GetChangesV2(DateTime.UtcNow.AddMinutes(-1), default);
+
+        var response = result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<SyncController.SyncChangesV2Response>().Subject;
+        var dto = response.Habits.Updated.Should().ContainSingle().Subject;
+        dto.IsGeneral.Should().Be(schedule == HabitSchedule.General);
+        dto.IsFlexible.Should().Be(schedule == HabitSchedule.Flexible);
+        dto.Schedule.Should().Be(schedule);
+        dto.StartDate.Should().Be(today);
+        dto.DueDate.Should().Be(today);
+    }
+
     [Fact]
     public async Task GetChangesV2_SinceIsTooOld_ReturnsGone()
     {
