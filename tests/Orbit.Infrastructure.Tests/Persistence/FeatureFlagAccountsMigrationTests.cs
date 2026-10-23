@@ -131,8 +131,9 @@ public class FeatureFlagAccountsMigrationTests
         context.Database.GetMigrations().Should().ContainInOrder(
             "20261022201949_PersistComposedChatResponses",
             "20261023054928_AddAppStoreSubscriptions",
-            "20261023060103_AddAppleSignInCredentials");
-        context.Database.GetMigrations().Last().Should().EndWith("_AddAppleSignInCredentials");
+            "20261023060103_AddAppleSignInCredentials",
+            "20261023075813_PreserveProviderPaidCoverage");
+        context.Database.GetMigrations().Last().Should().EndWith("_PreserveProviderPaidCoverage");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();

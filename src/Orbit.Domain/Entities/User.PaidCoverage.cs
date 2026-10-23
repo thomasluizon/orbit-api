@@ -56,7 +56,7 @@ public partial class User
         var nowAtUtc = _timeProvider.GetUtcNow().UtcDateTime;
         var selected = candidates.Where(candidate => candidate.ExpiresAtUtc > nowAtUtc)
             .OrderByDescending(candidate => candidate.ExpiresAtUtc)
-            .ThenByDescending(candidate => candidate.Source == SubscriptionSource)
+            .ThenByDescending(candidate => candidate.Source == updatedSource)
             .FirstOrDefault();
         if (selected.ExpiresAtUtc is null)
         {

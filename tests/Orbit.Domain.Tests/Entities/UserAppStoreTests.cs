@@ -124,6 +124,38 @@ public class UserAppStoreTests
     }
 
     [Theory]
+    [InlineData(SubscriptionSource.Stripe)]
+    [InlineData(SubscriptionSource.GooglePlay)]
+    [InlineData(SubscriptionSource.AppStore)]
+    public void EqualPaidTerms_SelectUpdatedProviderAndKeepFallback(SubscriptionSource provider)
+    {
+        var user = User.Create("Apple", "apple@example.com").Value;
+        var now = DateTime.UtcNow;
+        var expiresAtUtc = now.AddDays(30);
+        user.StartTrial(now.AddDays(-30));
+        if (provider == SubscriptionSource.AppStore)
+            user.SetPlaySubscription("play", expiresAtUtc);
+        else
+            user.ApplyAppStoreSubscription("original", "Sandbox", expiresAtUtc, SubscriptionInterval.Monthly, now, true, null);
+        if (provider == SubscriptionSource.Stripe)
+            user.SetStripeSubscription("stripe", expiresAtUtc);
+        else if (provider == SubscriptionSource.GooglePlay)
+            user.SetPlaySubscription("play", expiresAtUtc);
+        else
+            user.ApplyAppStoreSubscription("original", "Sandbox", expiresAtUtc, SubscriptionInterval.Monthly, now, true, null);
+        user.SubscriptionSource.Should().Be(provider);
+        user.SubscriptionExpiresAtUtc.Should().Be(expiresAtUtc);
+        if (provider == SubscriptionSource.Stripe)
+            user.CancelStripeSubscription(SubscriptionLapseReason.Canceled);
+        else if (provider == SubscriptionSource.GooglePlay)
+            user.CancelPlaySubscription(SubscriptionLapseReason.Canceled);
+        else
+            user.ApplyAppStoreSubscription("original", "Sandbox", expiresAtUtc, SubscriptionInterval.Monthly, now.AddSeconds(1), false, null);
+        user.HasProAccess.Should().BeTrue();
+        user.SubscriptionExpiresAtUtc.Should().Be(expiresAtUtc);
+    }
+
+    [Theory]
     [InlineData("", "Sandbox")]
     [InlineData("original", "Xcode")]
     public void Link_InvalidBinding_Rejects(string original, string environment)
