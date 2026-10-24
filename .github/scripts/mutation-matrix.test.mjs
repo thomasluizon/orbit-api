@@ -311,12 +311,12 @@ for (const path of ["tests/Orbit.Domain.Tests/Entities/User.cs", "src/Orbit.Appl
 
 test("diff spans: the full User source with the PR 876 doc-only edit selects nothing", (t) => {
   const source = readFileSync(new URL(`../../${userPath}`, import.meta.url), "utf8");
-  const revised = source.replace(
-    "Social storage retained until https://github.com/thomasluizon/orbit-tickets/issues/1555 contracts the schema.",
-    "Compatibility-only storage with no runtime caller or mapped writes, retained until https://github.com/thomasluizon/orbit-tickets/issues/1654 contracts the schema.",
-  );
-  assert.notEqual(source, revised);
-  assert.deepEqual(select(change(t, userPath, source, revised), "base"), []);
+  const oldSummary = "Social storage retained until https://github.com/thomasluizon/orbit-tickets/issues/1555 contracts the schema.";
+  const newSummary = "Compatibility-only storage with no runtime caller or mapped writes, retained until https://github.com/thomasluizon/orbit-tickets/issues/1654 contracts the schema.";
+  const before = source.replace(newSummary, oldSummary);
+  const after = source.replace(oldSummary, newSummary);
+  assert.notEqual(before, after);
+  assert.deepEqual(select(change(t, userPath, before, after), "base"), []);
 });
 
 for (const [name, expression, replacement] of [
