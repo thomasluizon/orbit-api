@@ -14,7 +14,9 @@ public record CalendarOverviewPayload(
     IReadOnlyList<CalendarEventItem> Events,
     CalendarAutoSyncStateResponse? AutoSyncState,
     IReadOnlyList<CalendarSyncSuggestionItem> Suggestions,
-    IReadOnlyList<UserCalendarItem>? Calendars = null, string? Recovery = null);
+    IReadOnlyList<UserCalendarItem>? Calendars = null, string? Recovery = null,
+    IReadOnlyList<string>? SelectedCalendarIds = null,
+    string? SelectionMode = null);
 
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
@@ -64,7 +66,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         }
 
         CalendarAutoSyncStateResponse? autoSyncState = null;
-        if (includeAutoSyncState)
+        if (includeAutoSyncState || includeCalendars)
         {
             var autoSyncStateResult = await mediator.Send(new GetCalendarAutoSyncStateQuery(userId), ct);
             if (autoSyncStateResult.IsFailure && autoSyncStateResult.ErrorCode != "PAY_GATE")
@@ -84,14 +86,24 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         var calendars = includeCalendars
             ? await mediator.Send(new GetUserCalendarsQuery(userId, PersistConnectionState: false), ct)
             : Result.Success(new List<UserCalendarItem>());
-        if (calendars.IsFailure && calendars.ErrorCode != Result.PayGateErrorCode && recovery is null)
+        if (CannotRecoverCalendars(calendars, recovery))
             return ToolResult.FromFailure(calendars);
 
-        return new ToolResult(true, Payload: new CalendarOverviewPayload(
+        return new ToolResult(true, Payload: AddSelection(new CalendarOverviewPayload(
             events.Value, autoSyncState,
             suggestions.IsSuccess ? suggestions.Value : [],
-            includeCalendars && calendars.IsSuccess ? calendars.Value : null, recovery));
+            includeCalendars && calendars.IsSuccess ? calendars.Value : null, recovery), includeAutoSyncState));
     }
+    private static bool CannotRecoverCalendars(Result<List<UserCalendarItem>> calendars, string? recovery) =>
+        calendars.IsFailure && calendars.ErrorCode != Result.PayGateErrorCode && recovery is null;
+
+    private static CalendarOverviewPayload AddSelection(CalendarOverviewPayload payload, bool includeAutoSyncState) => payload with
+    {
+        SelectedCalendarIds = payload.AutoSyncState?.SelectedCalendarIds,
+        SelectionMode = payload.AutoSyncState?.SelectionMode,
+        AutoSyncState = includeAutoSyncState ? payload.AutoSyncState : null
+    };
+
     private static CalendarReadWindow? ParseWindow(JsonElement args) =>
         DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_from_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var fromAtUtc)
         && DateTime.TryParse(JsonArgumentParser.GetOptionalString(args, "window_to_utc"), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var toAtUtc)

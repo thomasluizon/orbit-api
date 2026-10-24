@@ -32,7 +32,8 @@ public class GetHabitFullDetailQueryHandler(
     {
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Children).ThenInclude(c => c.Children)
+            q => q.Include(h => h.Children).ThenInclude(c => c.Tags)
+                  .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(c => c.Tags)
                   .Include(h => h.Goals).Include(h => h.Tags)
                   .AsSplitQuery(),
             cancellationToken);

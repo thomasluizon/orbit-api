@@ -105,6 +105,9 @@ const checklist = [format("ChecklistItems.Select(FormatChecklistItem)"), step(su
 const relative = [format("RelativeReminders.Select(FormatRelative)"), step(summary, "HabitFieldSummary.FormatRelative", "reminder.MinutesBefore"), step(summary, "HabitFieldSummary.FormatRelative", "FormatClock(reminder.When, reminder.Time)"), ...clock]
 const scheduled = [format("ScheduledReminders.Select(r => FormatClock(r.When, r.Time))"), ...clock]
 const formats = {
+  StartDate: [format("StartDate is { } startDate"), format('fields.Add($"Start date:')],
+  ParentHabitId: [format("ParentHabitId is { } parentId"), format('{parentId}')],
+  Tags: [format('Tags.Select(t => $"{t.Name} ({t.Id})")')],
   Description: [format('fields.Add($"Description: {Description}")')],
   DueTime: [format("DueTime is { } time"), format('fields.Add($"Due time:')],
   DueEndTime: [format("DueEndTime is { } endTime"), format('fields.Add($"Due end time:')],
@@ -124,11 +127,12 @@ const summaryChains = (source, member, receiver, common, fields = Object.keys(fo
   step(source, member, source === summary && field === "IsFlexible"
     ? "IsFlexible = habit.Schedule == HabitSchedule.Flexible"
     : `${field.split(".")[0]} = ${receiver}.${field.split(".")[0]}`),
+  ...(field === "Tags" && source === summary ? [step(summary, "HabitFieldSummary.From", "habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color))")] : []),
   ...formats[field],
   format('return string.Join(" | ", fields)'),
 ] }]))
 const querySummary = summaryChains(summary, "HabitFieldSummary.From", "habit", [
-  step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "HabitFieldSummary.From(habit).Format()"),
+  step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "HabitFieldSummary.From(habit, habit.ParentHabitId is { } parentId ? parentTitles.GetValueOrDefault(parentId) : null).Format()"),
   step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{detailSuffix}"),
 ])
 const detailSummary = summaryChains(habits, "HabitTools.GetHabit", "h", [
@@ -139,14 +143,28 @@ const listSummary = summaryChains(habits, "HabitTools.ListHabits", "h", [
   step(habits, "HabitTools.ListHabits", "}.Format(h.DueDate)"),
   step(helpers, "McpToolHelpers.FormatHabitLine", 'line += $" | {data.Details}"'),
 ])
-const calendarSelection = { status: "partial", steps: [
-  step(chat + "CalendarTools.cs", "GetCalendarOverviewTool.ExecuteAsync", "new CalendarOverviewPayload("),
-  step(chat + "CalendarTools.cs", "GetCalendarOverviewTool.ExecuteAsync", "calendars.Value"),
-  step("src/Orbit.Application/Calendar/Queries/GetUserCalendarsQuery.cs", "GetUserCalendarsQueryHandler.Handle", "user.GetSelectedCalendarIds()"),
-  step("src/Orbit.Application/Calendar/Queries/GetUserCalendarsQuery.cs", "GetUserCalendarsQueryHandler.MapCalendars", "selected.Contains(c.Id)"),
+const calendarSelection = { steps: [
+  step("src/Orbit.Application/Calendar/Queries/GetCalendarAutoSyncStateQuery.cs", "GetCalendarAutoSyncStateQueryHandler.Handle", "SelectedCalendarIds: user.GetSelectedCalendarIds()"),
+  step("src/Orbit.Application/Calendar/Queries/GetCalendarAutoSyncStateQuery.cs", "GetCalendarAutoSyncStateQueryHandler.Handle", 'SelectionMode: user.GetSelectedCalendarIds() is null ? "default" : "explicit"'),
+  step(chat + "CalendarTools.cs", "GetCalendarOverviewTool.ExecuteAsync", "mediator.Send(new GetCalendarAutoSyncStateQuery(userId), ct)"),
+  step(chat + "CalendarTools.cs", "GetCalendarOverviewTool.ExecuteAsync", "Payload: AddSelection(new CalendarOverviewPayload("),
+  step(chat + "CalendarTools.cs", "GetCalendarOverviewTool.AddSelection", "SelectedCalendarIds = payload.AutoSyncState?.SelectedCalendarIds"),
+  step(chat + "CalendarTools.cs", "GetCalendarOverviewTool.AddSelection", "SelectionMode = payload.AutoSyncState?.SelectionMode"),
 ] }
 
 export const readChains = {
+  "chat:query_goals": { Habits: { steps: [
+    step(chat + "QueryGoalsTool.cs", "QueryGoalsTool.BuildOutput", 'goal.Habits.Select(h => $"{h.Title} ({h.Id})")'),
+    step(chat + "QueryGoalsTool.cs", "QueryGoalsTool.BuildOutput", 'Linked habits: {linkedHabits}'),
+  ] } },
+  "mcp:get_goal": { Habits: { steps: [
+    step("src/Orbit.Api/Mcp/Tools/GoalTools.cs", "GoalTools.GetGoal", 'g.LinkedHabits.Select(h => $"{h.Title} ({h.Id})")'),
+    step("src/Orbit.Application/Goals/Queries/GoalDetailLoader.cs", "GoalDetailLoader.BuildGoalDetailAsync", "new LinkedHabitDto(h.Id, h.Title)"),
+  ] } },
+  "mcp:list_goals": { Habits: { steps: [
+    step("src/Orbit.Api/Mcp/Tools/GoalTools.cs", "GoalTools.ListGoals", 'g.LinkedHabits.Select(h => $"{h.Title} ({h.Id})")'),
+    step("src/Orbit.Application/Goals/Queries/GetGoalsQuery.cs", "GetGoalsQueryHandler.MapToDto", "new LinkedHabitDto(h.Id, h.Title)"),
+  ] } },
   "chat:query_habits": { ...querySummary, IsGeneral: { steps: [
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "BuildLabels(habit,"),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{labelStr}"),
@@ -163,7 +181,7 @@ export const readChains = {
   ] } },
   "mcp:list_habits": listSummary,
   "chat:get_calendar_overview": { GoogleCalendarSelectedIds: calendarSelection },
-  "mcp:get_calendar_overview": { GoogleCalendarSelectedIds: { status: "partial", steps: [
+  "mcp:get_calendar_overview": { GoogleCalendarSelectedIds: { steps: [
     ...calendarSelection.steps,
     step("src/Orbit.Api/Mcp/Tools/CalendarTools.cs", "CalendarTools.GetCalendarOverview", "JsonSerializer.Serialize(result.Payload)"),
   ] } },
