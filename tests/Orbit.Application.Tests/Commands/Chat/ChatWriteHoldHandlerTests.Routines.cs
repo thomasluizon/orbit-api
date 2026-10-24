@@ -14,6 +14,30 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public sealed partial class ChatWriteHoldHandlerTests
 {
     [Theory]
+    [InlineData("provider")]
+    [InlineData("truncated")]
+    [InlineData("budget")]
+    public async Task RoutineRecovery_RespectsProviderAndTurnLimits(string reason)
+    {
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>()).Returns(reason == "provider"
+                    ? Result.Failure<AiResponse>(ErrorMessages.AiUnavailable)
+                    : Result.Success(new AiResponse
+                    {
+                        TextMessage = "How often should it repeat?",
+                        IsTruncated = reason == "truncated",
+                        ReportedTokenCount = reason == "budget" ? AppConstants.MaxAiRequestTotalTokens + 1 : 0
+                    }));
+
+        var result = await CreateHandler().Handle(new(_userId, "Every evening: read, stretch",
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true)), default);
+
+        if (reason == "provider") result.IsFailure.Should().BeTrue();
+        _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("en", false, false)]
     [InlineData("pt-BR", false, false)]
     [InlineData("en", true, false)]
@@ -22,8 +46,10 @@ public sealed partial class ChatWriteHoldHandlerTests
     [InlineData("pt-BR", false, true)]
     [InlineData("en", true, true)]
     [InlineData("pt-BR", true, true)]
+    [InlineData("en", false, null)]
+    [InlineData("pt-BR", false, null)]
     public async Task RoutineFirstTurn_ClarificationBecomesHeldParentAndChildren(
-        string language, bool explicitCadence, bool askTool)
+        string language, bool explicitCadence, bool? askTool)
     {
         _user.SetLanguage(language);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -35,9 +61,12 @@ public sealed partial class ChatWriteHoldHandlerTests
                     TextMessage = language == "pt-BR"
                         ? "Você prefere uma única rotina com uma lista de etapas, ou hábitos separados?"
                         : "How often should this evening routine repeat?",
-                    ToolCalls = askTool ? [new("ask", "question", JsonSerializer.SerializeToElement(new
+                    ToolCalls = askTool == true ? [new("ask", "question", JsonSerializer.SerializeToElement(new
                     {
                         question = "Checklist or sub-habits?", options = new[] { "Checklist", "Sub-habits" }
+                    }))] : askTool is null ? [new("create_habit", "routine", JsonSerializer.SerializeToElement(new
+                    {
+                        title = language == "pt-BR" ? "Rotina da noite" : "Evening routine"
                     }))] : null
                 }));
         var message = (language, explicitCadence) switch
@@ -77,5 +106,18 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+
+        var saved = new List<Habit>();
+        await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken), default);
+
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        saved.Should().HaveCount(4);
+        var parent = saved.Should().ContainSingle(habit => habit.ParentHabitId == null).Which;
+        parent.FrequencyUnit.Should().Be(Orbit.Domain.Enums.FrequencyUnit.Day);
+        saved.Where(habit => habit.ParentHabitId == parent.Id).Should().HaveCount(3)
+            .And.Contain(habit => habit.DueTime == new TimeOnly(23, 0));
     }
 }

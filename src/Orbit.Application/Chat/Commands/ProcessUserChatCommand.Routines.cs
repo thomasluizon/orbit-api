@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
@@ -13,8 +14,7 @@ public partial class ProcessUserChatCommandHandler
         if (request.BlockAnswer is not null || request.ConfirmationToken is not null || request.ImageData is not null
             || results is not null && (HasSucceededWrite(results) || results.PendingOperations.Count > 0)
             || response.IsFailure && response.ErrorCode != ErrorCodes.AiEmptyResponse
-            || response.IsSuccess && (response.Value.IsTruncated
-                || response.Value.ToolCalls?.Any(call => call.Name != "ask") == true)
+            || response.IsSuccess && !IsRoutineClarification(response.Value)
             || ai.ToolRegistry.GetTool("create_habit") is null
             || RoutineCreationProposal.Read(request.Message) is not { } arguments)
             return null;
@@ -31,4 +31,11 @@ public partial class ProcessUserChatCommandHandler
             ? Result.Success(PendingParentReply(request, pending))
             : null;
     }
+
+    private static bool IsRoutineClarification(AiResponse response) =>
+        !response.IsTruncated && response.ReportedTokenCount <= AppConstants.MaxAiRequestTotalTokens
+        && (response.ToolCalls is null || response.ToolCalls.All(call => call.Name == "ask")
+            || response.ToolCalls is { Count: 1 } calls && calls[0] is { Name: "create_habit" } call
+                && call.Args.ValueKind == JsonValueKind.Object
+                && (!call.Args.TryGetProperty("frequency_unit", out var frequency) || frequency.ValueKind == JsonValueKind.Null));
 }

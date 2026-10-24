@@ -19,7 +19,7 @@
         "string",
         "null"
       ],
-      "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+      "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely. Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.",
       "enum": [
         "Day",
         "Week",
@@ -195,7 +195,7 @@
     },
     "sub_habits": {
       "type": "array",
-      "description": "Independently trackable child habits under this parent.",
+      "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
       "items": {
         "type": "object",
         "properties": {
@@ -217,7 +217,7 @@
               "string",
               "null"
             ],
-            "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+            "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely. Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.",
             "enum": [
               "Day",
               "Week",
@@ -393,7 +393,7 @@
           },
           "sub_habits": {
             "type": "array",
-            "description": "Independently trackable child habits under this parent.",
+            "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
             "items": {
               "type": "object",
               "properties": {
@@ -415,7 +415,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+                  "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely. Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.",
                   "enum": [
                     "Day",
                     "Week",
@@ -591,7 +591,7 @@
                 },
                 "sub_habits": {
                   "type": "array",
-                  "description": "Independently trackable child habits under this parent.",
+                  "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
                   "items": {
                     "type": "object",
                     "properties": {
@@ -613,7 +613,7 @@
                           "string",
                           "null"
                         ],
-                        "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+                        "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely. Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.",
                         "enum": [
                           "Day",
                           "Week",
@@ -789,7 +789,7 @@
                       },
                       "sub_habits": {
                         "type": "array",
-                        "description": "Independently trackable child habits under this parent.",
+                        "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
                         "items": {
                           "type": "object",
                           "properties": {
@@ -811,7 +811,7 @@
                                 "string",
                                 "null"
                               ],
-                              "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+                              "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely. Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.",
                               "enum": [
                                 "Day",
                                 "Week",
