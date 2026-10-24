@@ -501,16 +501,16 @@ public partial class OAuthController(
         var tracked = await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: ct);
         if (tracked is null)
             return BadRequest(new { error = "invalid_grant" });
-        Guid? attemptedKeyId = null;
+        List<Guid> attemptedKeyIds = [];
         var retry = false;
         try
         {
             return await unitOfWork.ExecuteReplayableInTransactionAsync<IActionResult>(async token =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"oauth-keys:{grant.UserId}", token);
-                var ownSuccessor = attemptedKeyId is { } successorId
-                    ? await apiKeyRepository.FindOneTrackedAsync(key => key.Id == successorId
-                        && key.UserId == grant.UserId && key.OAuthFamilyId == grant.FamilyId, cancellationToken: token)
+                var ownSuccessor = attemptedKeyIds.Count > 0
+                    ? await apiKeyRepository.FindOneTrackedAsync(key => attemptedKeyIds.Contains(key.Id)
+                        && key.UserId == grant.UserId && key.OAuthFamilyId == grant.FamilyId && !key.IsRevoked, cancellationToken: token)
                     : null;
                 var current = retry
                     ? ownSuccessor ?? await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: token)
@@ -538,7 +538,7 @@ public partial class OAuthController(
                     return StatusCode(500, new { error = "server_error" });
                 current.Revoke();
                 var (key, raw) = created.Value;
-                attemptedKeyId = key.Id;
+                attemptedKeyIds.Add(key.Id);
                 await apiKeyRepository.AddAsync(key, token);
                 await unitOfWork.SaveChangesAsync(token);
                 return Ok(new

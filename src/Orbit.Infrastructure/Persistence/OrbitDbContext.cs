@@ -79,6 +79,12 @@ public class OrbitDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<TransactionCommit>(entity =>
+        {
+            entity.ToTable("TransactionCommits");
+            entity.HasKey(commit => commit.Id);
+            entity.HasIndex(commit => commit.CreatedAtUtc);
+        });
         var isPostgres = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
         EncryptionValueConverter? encConverter = null;
