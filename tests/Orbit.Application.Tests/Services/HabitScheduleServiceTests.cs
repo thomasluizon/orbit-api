@@ -53,7 +53,7 @@ public class HabitScheduleServiceTests
         bool isFlexible = false,
         int? intervalWeeks = null)
     {
-        var result = Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : HabitSchedule.Recurring,
+        var result = Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : unit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId,
             "Test Habit",
             unit,

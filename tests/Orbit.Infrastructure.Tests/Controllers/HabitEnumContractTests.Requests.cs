@@ -132,7 +132,7 @@ public partial class HabitEnumContractTests
             [new BulkHabitItem(request.Title, null, unit, quantity, Days: boundDays)])).IsValid.Should().BeTrue();
         new ApplyHabitInputValidator().Validate(new ApplyHabitInput(request.Title, null, null, unit, quantity, Days: boundDays))
             .IsValid.Should().Be(valid);
-        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, request.Title, unit, quantity, new DateOnly(2026, 10, 21), Days: boundDays))
+        Habit.Create(new HabitCreateParams(unit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, user, request.Title, unit, quantity, new DateOnly(2026, 10, 21), Days: boundDays))
             .IsSuccess.Should().Be(valid);
     }
 

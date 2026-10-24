@@ -60,7 +60,7 @@ public class UpdateHabitCommandHandler(
             request.UserId,
             payGate,
             ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds, request.TagIds,
-                (habit, today) => ResolveUpdate(request, habit, today), false, request.ParentId, request.ClearParent, ct),
+                (habit, today) => ResolveUpdate(request, habit, today), false, request.IsGeneral, request.ParentId, request.ClearParent, ct),
             state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update, state.ParentId),
             (state, ct) => ApplyUpdateAsync(request, state, ct),
             cancellationToken);
@@ -72,7 +72,7 @@ public class UpdateHabitCommandHandler(
             request.UserId,
             payGate,
             ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds, request.TagIds,
-                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, request.ParentId, request.ClearParent, ct),
+                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, request.Changes.HasIsGeneral ? request.Changes.IsGeneral : null, request.ParentId, request.ClearParent, ct),
             state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update, state.ParentId),
             async (state, ct) =>
             {
@@ -90,6 +90,7 @@ public class UpdateHabitCommandHandler(
         IReadOnlyList<Guid>? tagIds,
         Func<Habit, DateOnly, Result<HabitUpdateParams>> resolveUpdate,
         bool validateFields,
+        bool? requestedIsGeneral,
         Guid? requestedParentId,
         bool? clearParent,
         CancellationToken cancellationToken)
@@ -115,7 +116,12 @@ public class UpdateHabitCommandHandler(
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var resolvedUpdate = resolveUpdate(habit, today);
         if (resolvedUpdate.IsFailure)
-            return resolvedUpdate.PropagateError<UpdateState>();
+        {
+            var parentValidation = await ValidateParentBeforeScheduleErrorAsync(userId, habit, requestedIsGeneral,
+                requestedParentId, clearParent, validateFields, cancellationToken);
+            return parentValidation.IsFailure ? parentValidation.PropagateError<UpdateState>()
+                : resolvedUpdate.PropagateError<UpdateState>();
+        }
         var update = resolvedUpdate.Value;
         if (habit.RequiresScheduleReanchor(update))
         {
@@ -140,7 +146,7 @@ public class UpdateHabitCommandHandler(
                 return slipAlertGate.PropagateError<UpdateState>();
         }
 
-        var parent = await PrepareParentAsync(userId, habit, update, requestedParentId, clearParent,
+        var parent = await PrepareParentAsync(userId, habit, update.Schedule == HabitSchedule.General, requestedIsGeneral.HasValue, requestedParentId, clearParent,
             validateFields, cancellationToken);
         if (parent.IsFailure)
             return parent.PropagateError<UpdateState>();
@@ -161,13 +167,21 @@ public class UpdateHabitCommandHandler(
         return Result.Success(new UpdateState(habit, update, today, tagLinks.Value, goalLinks, parent.Value));
     }
 
-    private async Task<Result<Guid?>> PrepareParentAsync(Guid userId, Habit habit, HabitUpdateParams update,
+    private async Task<Result> ValidateParentBeforeScheduleErrorAsync(Guid userId, Habit habit,
+        bool? requestedIsGeneral, Guid? requestedParentId, bool? clearParent, bool validateFields, CancellationToken ct)
+    {
+        if (validateFields)
+            return Result.Success();
+        return await PrepareParentAsync(userId, habit, requestedIsGeneral ?? habit.Schedule == HabitSchedule.General,
+            requestedIsGeneral.HasValue, requestedParentId, clearParent, false, ct);
+    }
+
+    private async Task<Result<Guid?>> PrepareParentAsync(Guid userId, Habit habit, bool finalIsGeneral, bool validateGeneral,
         Guid? requestedParentId, bool? clearParent, bool validateFields, CancellationToken cancellationToken)
     {
         if (clearParent == true && requestedParentId.HasValue)
             return Result.Failure<Guid?>(new AppError(ErrorCodes.ValidationError, ErrorCopy.English(ErrorCodes.ValidationError)));
         var finalParentId = clearParent == true ? null : requestedParentId ?? habit.ParentHabitId;
-        var finalIsGeneral = update.Schedule == HabitSchedule.General;
 
         if (requestedParentId.HasValue)
         {
@@ -180,7 +194,7 @@ public class UpdateHabitCommandHandler(
                 return moveValidation.PropagateError<Guid?>();
         }
 
-        if (!validateFields && (update.Schedule != habit.Schedule || update.ResetCompletion || requestedParentId.HasValue || clearParent == true))
+        if (!validateFields && (validateGeneral || requestedParentId.HasValue || clearParent == true))
         {
             var related = await HabitUpdateValidation.LoadRelatedAsync([habit], userId, habitRepository, cancellationToken);
             var generalMismatch = HabitUpdateValidation.ValidateGeneral(habit, finalIsGeneral, related, finalParentId);

@@ -23,7 +23,12 @@ public sealed partial class HabitCorrectionProposalValidator : AbstractValidator
             var current = proposal.Current;
             var resolved = HabitUpdateValidation.ResolveSingleUpdate(current, changes, current.NextDueDate);
             if (resolved.IsFailure)
+            {
+                if (!ScheduleEdit().IsMatch(proposal.Message))
+                    context.AddFailure(new ValidationFailure("frequency_unit", HabitModelInstructions.Correction)
+                    { ErrorCode = "CORRECTION_PRESERVES_SCHEDULE" });
                 return;
+            }
             var update = resolved.Value;
             if (OneTimeEdit().IsMatch(proposal.Message) && !HabitProposalValidator.RequestsRepetition(proposal.Message)
                 && update.FrequencyUnit is not null)
