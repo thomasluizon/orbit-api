@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Domain.Entities;
@@ -24,16 +23,16 @@ public class DesktopHandoffMigrationTests
     }
 
     [Fact]
-    public void TargetModel_PreservesHandleUnmappingAndMatchesCurrentModel()
+    public void TargetModel_PreservesHandleUnmappingThroughChatTurnMigration()
     {
         using var context = CreateContext();
         var initializer = context.GetService<IModelRuntimeInitializer>();
         var target = initializer.Initialize(new AddDesktopHandoffs().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var chatTurns = initializer.Initialize(new PersistChatTurnIdempotency().TargetModel, designTime: true);
 
         target.FindEntityType(typeof(User).FullName!)!.FindProperty("Handle").Should().BeNull();
         ChatTurnMigrationTests.AssertExpansion(context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()));
+            .GetDifferences(target.GetRelationalModel(), chatTurns.GetRelationalModel()));
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 

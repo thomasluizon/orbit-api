@@ -5,14 +5,17 @@ namespace Orbit.Infrastructure.Persistence;
 
 internal static class VerifiedTransaction
 {
-    public static T Execute<T>(OrbitDbContext db, Func<T> operation)
+    public static T Execute<T>(OrbitDbContext db, Func<T> operation, bool transactionRequired = true)
     {
         if (db.Database.CurrentTransaction is not null)
             return operation();
 
+        var strategy = db.Database.CreateExecutionStrategy();
+        if (!transactionRequired && !strategy.RetriesOnFailure)
+            return operation();
+
         var id = Guid.NewGuid();
         var candidate = new ExecutionResult<T>(false, default!);
-        var strategy = db.Database.CreateExecutionStrategy();
         return strategy.Execute(operation, (_, execute) =>
         {
             candidate = new(false, default!);

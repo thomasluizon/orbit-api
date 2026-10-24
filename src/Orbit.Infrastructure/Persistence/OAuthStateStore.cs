@@ -57,7 +57,7 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
                 .ExecuteUpdate(setters => setters.SetProperty(state => state.ConsumedAtUtc, nowAtUtc))
             : query.ExecuteDelete();
         return affected == 1 ? payload : null;
-    });
+    }, transactionRequired: false);
 
     public void RemoveExpired(DateTime nowAtUtc) => db.OAuthStates.Where(state => state.ExpiresAtUtc <= nowAtUtc).ExecuteDelete();
 
