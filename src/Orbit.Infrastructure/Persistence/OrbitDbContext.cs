@@ -71,6 +71,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedAppStoreNotification> ProcessedAppStoreNotifications => Set<ProcessedAppStoreNotification>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
+    public DbSet<ChatTurn> ChatTurns => Set<ChatTurn>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
@@ -126,6 +127,15 @@ public class OrbitDbContext : DbContext
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureProcessedRequestEntity(modelBuilder);
+        modelBuilder.Entity<ChatTurn>(entity =>
+        {
+            entity.HasIndex(turn => new { turn.UserId, turn.KeyHash }).IsUnique();
+            entity.Property(turn => turn.KeyHash).HasMaxLength(64).IsRequired();
+            entity.Property(turn => turn.Fingerprint).HasMaxLength(64).IsRequired();
+            entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
+            if (nullableEncConverter is not null)
+                entity.Property(turn => turn.TerminalEvent).HasConversion(nullableEncConverter);
+        });
         ConfigureAiUsageDailyEntity(modelBuilder);
         modelBuilder.Entity<ConversationTurn>(entity =>
         {

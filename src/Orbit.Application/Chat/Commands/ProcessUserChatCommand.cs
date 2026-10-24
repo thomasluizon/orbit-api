@@ -46,7 +46,8 @@ public record ProcessUserChatCommand(
     string? CorrelationId = null,
     Func<ChatStreamEvent, Task>? StreamSink = null,
     AstraBlockAnswer? BlockAnswer = null,
-    bool EvalTraceRequested = false) : IRequest<Result<ChatResponse>>;
+    bool EvalTraceRequested = false,
+    Guid? TurnId = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,

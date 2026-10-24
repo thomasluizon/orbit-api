@@ -136,7 +136,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null,
         [FromForm] string? blockAnswer = null,
-        [FromHeader(Name = EvalTraceHeaderName)] string? evalTrace = null)
+        [FromHeader(Name = EvalTraceHeaderName)] string? evalTrace = null,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey = null)
     {
         if (!CanAccessChat())
             return Forbid();
@@ -164,6 +165,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             answer is null ? streamEvent => WriteEventAsync(streamEvent, cancellationToken) : null,
             answer,
             EvalTraceRequested: evalTrace == "1");
+
+        if (idempotencyKey is not null || Request.Headers.ContainsKey("Idempotency-Key"))
+            return await HttpContext.RequestServices.GetRequiredService<Orbit.Api.Idempotency.ChatTurnStream>()
+                .RunAsync(command, HttpContext, idempotencyKey ?? Request.Headers["Idempotency-Key"].ToString(), cancellationToken);
 
         if (answer is not null)
         {

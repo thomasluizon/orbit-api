@@ -42,6 +42,20 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task ConversationRecorder_UsesAcceptedTurnIdentity()
+    {
+        SetupUserAndPayGate();
+        EnableRecording();
+        SetupAiResponse(new AiResponse { TextMessage = "Reply" });
+        var turnId = Guid.NewGuid();
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello", TurnId: turnId), default);
+
+        result.IsSuccess.Should().BeTrue();
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.TurnId == turnId));
+    }
+
+    [Fact]
     public async Task ConversationRecorder_FlagOff_DoesNotRecord()
     {
         SetupUserAndPayGate();

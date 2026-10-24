@@ -68,6 +68,22 @@ public partial class ChatControllerTests
     }
 
     [Fact]
+    public async Task ProcessChatStream_CompletedKey_DoesNotDispatchAgain()
+    {
+        using var turns = new ChatTurnStreamTestServices(_mediator, UserId);
+        _controller.HttpContext.RequestServices = turns.Provider;
+        _controller.HttpContext.Request.Headers["Idempotency-Key"] = "lost-final";
+        _controller.Response.Body = new MemoryStream();
+        _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new ChatResponse("Reply", [])));
+
+        await _controller.ProcessChatStream("Hello", null, null, CancellationToken.None);
+        await _controller.ProcessChatStream("Hello", null, null, CancellationToken.None);
+
+        await _mediator.Received(1).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessChat_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())

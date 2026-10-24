@@ -23,7 +23,7 @@ public partial class ProcessUserChatCommandHandler
             return;
         try
         {
-            conversationRecorder.TryRecord(new ConversationTurnCapture(request.UserId, Guid.NewGuid(),
+            conversationRecorder.TryRecord(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
                 recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
                 JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
                 response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null));

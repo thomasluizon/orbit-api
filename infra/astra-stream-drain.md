@@ -2,7 +2,8 @@
 
 The API stops admitting HTTP requests when shutdown starts, returning HTTP 503 before
 the controller can acknowledge or dispatch new chat work. Requests already admitted
-retain their client disconnect token and have up to 240 seconds to finish. The drain
+have up to 240 seconds to finish. Legacy streams retain their client disconnect token;
+keyed streams preserve execution independently of the transport token. The drain
 runs in the host's `StoppingAsync` phase, before Kestrel and other hosted services stop.
 It tracks the entire HTTP pipeline, including the controller's terminal event flush.
 
@@ -54,18 +55,20 @@ inside an older instance during the first rollout.
 ## Bounded completion and retry
 
 A successful drain preserves `started`, intermediate events and the terminal `final`
-or `error` event. A client disconnect still cancels work immediately. If the drain
+or `error` event. A client disconnect cancels legacy work immediately; keyed streams
+continue execution and preserve the terminal event for replay. If the drain
 deadline or an earlier host stop deadline expires, remaining request tokens are
 cancelled. Cancellation is cooperative, and an unresponsive dependency or a process
 kill can still truncate a reply without a terminal event. A host stopped with a
 shorter external deadline has that shorter allowance.
 
-Transport failure still requires the client's explicit manual Retry. The API does
-not queue or replay a request during shutdown and does not promise that an interrupted
-write had no effects. Idempotent replay belongs to its separate ticket.
+Keyed streams support the acknowledgement and replay contract in
+[the turn identity runbook](astra-turn-idempotency.md). A repeated key never executes
+the turn again. Legacy transport failures still require explicit manual recovery.
+An interrupted write can have partial effects in either mode.
 
 The API unit suite sends a real SIGTERM to a generic host while the real chat controller
-has flushed `started`, holds the reply for 31 seconds after the signal, and verifies
+has flushed `started` in both legacy and keyed modes, holds the reply for 31 seconds after the signal, and verifies
 that the host waits until `delta` and `final` are flushed. Separate tests cover late
 request rejection, client disconnect, drain expiry and an earlier host deadline.
 The suite uses in-memory HTTP contexts and mocked command dispatch; it starts no
