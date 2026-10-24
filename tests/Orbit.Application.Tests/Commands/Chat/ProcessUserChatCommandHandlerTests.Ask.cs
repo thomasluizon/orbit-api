@@ -55,7 +55,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(false, false, AgentAuthMethod.Jwt)]
     [InlineData(true, true, AgentAuthMethod.Jwt)]
     [InlineData(true, false, AgentAuthMethod.ApiKey)]
-    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_KeepsDeclarationAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
+    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_OmitsDeclarationAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
     {
         SetupUserAndPayGate();
         if (disabled)
@@ -70,7 +70,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk", AuthMethod: auth,
             ClientContext: new(SupportsParts: true, PartKinds: supports ? ["choice"] : [])), default);
         response.IsSuccess.Should().BeTrue();
-        initial!.ToolDeclarations.Should().Contain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial!.ToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial.AvailableToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
         initial.DynamicContext.Should().Contain("do not call ask");
         results.Should().ContainSingle().Which.Error.Should().Contain("plain text");
         response.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();

@@ -50,7 +50,13 @@ public partial class ProcessUserChatCommandHandler
             ai.PromptBuilder.BuildDynamic(promptRequest),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
 
+        var conversationText = string.Join("\n", (request.History ?? []).Select(message => message.Content)
+            .Append(request.Message));
         var toolNames = ai.ToolRegistry.GetAll().Select(tool => tool.Name).ToArray();
+        var activeToolNames = ChatToolGroups.ResolveActiveToolNames(toolNames, conversationText);
+        var skipTools = request.ImageData is null && request.History is not { Count: > 0 }
+            && request.ConfirmationToken is null
+            && request.Message.Trim().TrimEnd('.', '!').ToLowerInvariant() is "obrigado" or "obrigada" or "thanks" or "thank you";
 
         var askEnabled = request.AuthMethod == AgentAuthMethod.Jwt
             && request.ClientContext?.SupportsParts == true
@@ -58,7 +64,8 @@ public partial class ProcessUserChatCommandHandler
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled);
         if (!askEnabled && toolNames.Contains("ask"))
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
-                "The client cannot display ask blocks on this turn. Ask clarification questions in prose and do not call ask.");
+                "The client cannot display ask blocks on this turn. Ask clarification questions in prose and do not call ask. "
+                + "If a new habit request does not name the activity, ask for its name before calling any create tool. Never invent a placeholder title.");
         if (askEnabled)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Use ask when one short answer decides the next step, or several suggested items can be acted on together. Never use ask for a yes/no question the write preview already asks. At most one ask block per reply. An ask call ends the tool round: put it last and make no further tool calls. Supported ask forms: "
@@ -83,10 +90,13 @@ public partial class ProcessUserChatCommandHandler
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
-        var toolDeclarations = ai.ToolRegistry.GetAll()
+        var availableTools = ai.ToolRegistry.GetAll()
+            .Where(tool => tool.Name != "ask" || askEnabled)
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
-            .Select(tool => (object)new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() })
+            .Select(tool => new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() })
             .ToList();
+        var toolDeclarations = skipTools ? [] : availableTools.Where(tool => activeToolNames.Contains(tool.name))
+            .Cast<object>().ToList();
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
 
@@ -108,7 +118,8 @@ public partial class ProcessUserChatCommandHandler
                 request.History)
             {
                 Telemetry = telemetry,
-                DynamicContext = dynamicContext
+                DynamicContext = dynamicContext,
+                AvailableToolDeclarations = skipTools ? [] : availableTools.Cast<object>().ToList()
             },
             aiStreamSink,
             cancellationToken);
