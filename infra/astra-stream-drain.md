@@ -6,9 +6,11 @@ retain their client disconnect token and have up to 240 seconds to finish. The d
 runs in the host's `StoppingAsync` phase, before Kestrel and other hosted services stop.
 It tracks the entire HTTP pipeline, including the controller's terminal event flush.
 
-The host shutdown allowance is 270 seconds. Both API Render services have
+The host shutdown allowance is 270 seconds. Only the production API Render service has
 `max_shutdown_delay_seconds = 300`, leaving 30 seconds after the request drain for
-hosted service cleanup and another 30 seconds before Render's process kill. The Render
+hosted service cleanup and another 30 seconds before Render's process kill. The free
+staging API service keeps Render's default shutdown delay; it has no configurable
+shutdown delay setting and does not carry the production drain allowance. The Render
 provider [schema](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/schema.go)
 declares the setting, and its
 [update implementation](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/internal/update.go)
@@ -18,24 +20,23 @@ sends it to the service API. Render documents the
 ## Apply before releasing
 
 Use the existing infrastructure credentials and local variable file. Review a plan
-targeting only the two API services, then apply that saved plan:
+targeting only the production API service, then apply that saved plan:
 
 ```sh
 terraform -chdir=infra init
 terraform -chdir=infra plan -var-file=local.tfvars \
   -target=render_web_service.production_api \
-  -target=render_web_service.staging_api \
   -out=local.astra-drain.tfplan
 terraform -chdir=infra show -json local.astra-drain.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.astra-drain.tfplan
 terraform -chdir=infra state show render_web_service.production_api
-terraform -chdir=infra state show render_web_service.staging_api
 ```
 
-In each resource readback, verify `max_shutdown_delay_seconds = 300`. The plan must
-preserve both API identities, domains and runtime configuration, and must not update
-either web service. Follow the infrastructure README's deploy handling instructions
-if the API settings update triggers a release of its tracked branch. Release the
+In the production API resource readback, verify `max_shutdown_delay_seconds = 300`.
+The plan must preserve the production API identity, domains and runtime configuration,
+and must not update the staging API or either web service. Follow the infrastructure
+README's deploy handling instructions if the API settings update triggers a release
+of its tracked branch. Release the
 approved API commit through the existing release workflow. The host behavior protects
 replacement of instances already running this code; it cannot change shutdown logic
 inside an older instance during the first rollout.
