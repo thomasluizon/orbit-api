@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Text.Json;
 using FluentAssertions;
 using Orbit.Application.Chat.Validators;
@@ -12,7 +13,7 @@ public class HabitCorrectionProposalValidatorTests
     [InlineData("Make both positive", "Don't take multivitamins")]
     public void PolarityCorrection_PreservesOneTimeAndRejectsInventedRecurrence(string message, string title)
     {
-        var current = Habit.Create(new HabitCreateParams(Guid.NewGuid(), title, null, null,
+        var current = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), title, null, null,
             new DateOnly(2026, 10, 29), DueTime: new TimeOnly(13, 30))).Value;
         var validator = new HabitCorrectionProposalValidator();
         var patch = JsonSerializer.SerializeToElement(new { title, is_bad_habit = false });
@@ -29,7 +30,7 @@ public class HabitCorrectionProposalValidatorTests
     [InlineData("Now repeat this daily")]
     public void RequestedRecurrenceChange_IsAllowed(string message)
     {
-        var current = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null,
+        var current = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Read", null, null,
             new DateOnly(2026, 10, 29))).Value;
         var changes = JsonSerializer.SerializeToElement(new { frequency_unit = "Day", frequency_quantity = 1 });
         new HabitCorrectionProposalValidator().Validate(new HabitCorrectionProposal(message, changes, current))

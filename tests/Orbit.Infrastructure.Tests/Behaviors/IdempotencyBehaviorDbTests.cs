@@ -210,9 +210,9 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_SharedKey250Habits_AllChunksApplyOnceAndReplay(bool skip)
     {
         var today = new DateOnly(2026, 9, 24);
-        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(skip ? HabitSchedule.Flexible : ((FrequencyUnit?)(skip ? (FrequencyUnit?)FrequencyUnit.Week : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             _userId, $"Habit {index}", skip ? FrequencyUnit.Week : FrequencyUnit.Day,
-            skip ? 3 : 1, DueDate: today, IsFlexible: skip)).Value).ToArray();
+            skip ? 3 : 1, DueDate: today)).Value).ToArray();
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
 
@@ -286,7 +286,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_FirstChunkCommittedThenSelectionShrinks_RetryProcessesRemainingHabits(bool skip)
     {
         var today = new DateOnly(2026, 9, 24);
-        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             _userId, $"Habit {index}", null, null, DueDate: today)).Value).ToArray();
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
@@ -383,7 +383,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_PlanCommittedWithoutChunks_RetryExecutesEveryChunkOnce(bool skip)
     {
         var today = new DateOnly(2026, 9, 24);
-        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(1, 250).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, $"Habit {index}", FrequencyUnit.Day, 1, DueDate: today)).Value).ToArray();
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
@@ -450,7 +450,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     {
         var firstDay = new DateOnly(2026, 9, 24);
         var currentDay = firstDay;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, "Daily habit", FrequencyUnit.Day, 1, DueDate: firstDay)).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
@@ -507,10 +507,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var today = new DateOnly(2026, 9, 24);
         var habits = new[]
         {
-            Habit.Create(new HabitCreateParams(_userId, "First", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Second", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "First", FrequencyUnit.Week, 3,
+                DueDate: today)).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Second", FrequencyUnit.Week, 3,
+                DueDate: today)).Value
         };
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
@@ -590,10 +590,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_ChangedBulkArguments_ReplaysOriginalSelectionAndDate(bool skip, bool changeDate)
     {
         var firstDay = new DateOnly(2026, 9, 24);
-        var original = Enumerable.Range(1, 205).Select(index => Habit.Create(new HabitCreateParams(
-            _userId, $"Original {index}", FrequencyUnit.Week, 3, DueDate: firstDay, IsFlexible: true)).Value).ToArray();
-        var outside = Habit.Create(new HabitCreateParams(
-            _userId, "Outside", FrequencyUnit.Week, 3, DueDate: firstDay, IsFlexible: true)).Value;
+        var original = Enumerable.Range(1, 205).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            _userId, $"Original {index}", FrequencyUnit.Week, 3, DueDate: firstDay)).Value).ToArray();
+        var outside = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            _userId, "Outside", FrequencyUnit.Week, 3, DueDate: firstDay)).Value;
         _dbContext.Habits.AddRange([.. original, outside]);
         await _dbContext.SaveChangesAsync();
 
@@ -697,8 +697,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_IdenticalBulkLogInvocations_ApplyTwiceAndReplayByPosition()
     {
         var today = new DateOnly(2026, 9, 24);
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Repeated", FrequencyUnit.Week, 2,
-            DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Repeated", FrequencyUnit.Week, 2,
+            DueDate: today)).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
         var dateService = CreateUserDateService(today);
@@ -749,8 +749,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_IdenticalBulkSkipInvocations_ApplyTwiceAndReplayByPosition()
     {
         var today = new DateOnly(2026, 9, 24);
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Repeated skip", FrequencyUnit.Week, 2,
-            DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Repeated skip", FrequencyUnit.Week, 2,
+            DueDate: today)).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
         using var cache = new MemoryCache(new MemoryCacheOptions());
@@ -798,10 +798,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var currentDay = afterMidnight ? firstDay.AddDays(1) : firstDay;
         var habits = new[]
         {
-            Habit.Create(new HabitCreateParams(_userId, "Committed", FrequencyUnit.Week, 3,
-                DueDate: firstDay, IsFlexible: true)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Untouched", FrequencyUnit.Week, 3,
-                DueDate: firstDay, IsFlexible: true)).Value
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Committed", FrequencyUnit.Week, 3,
+                DueDate: firstDay)).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Untouched", FrequencyUnit.Week, 3,
+                DueDate: firstDay)).Value
         };
         _dbContext.Habits.AddRange(habits);
         _dbContext.HabitLogs.Add(skip ? habits[0].SkipFlexible(firstDay).Value : habits[0].Log(firstDay).Value);
@@ -888,7 +888,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_ConcurrentHabitLog_StoresWinnerAndReplaysWithoutLosingSideEffects()
     {
         var today = new DateOnly(2026, 9, 24);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, "Race habit", FrequencyUnit.Day, 1, DueDate: today)).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
@@ -970,10 +970,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var today = new DateOnly(2026, 9, 24);
         var habits = new[]
         {
-            Habit.Create(new HabitCreateParams(_userId, "First skip", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Second skip", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "First skip", FrequencyUnit.Week, 3,
+                DueDate: today)).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Second skip", FrequencyUnit.Week, 3,
+                DueDate: today)).Value
         };
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
@@ -1008,8 +1008,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_BulkSkipLegacyRow_ReplaysWithoutAppendingAnotherSkipLog()
     {
         var today = new DateOnly(2026, 9, 24);
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Flexible skip", FrequencyUnit.Week, 3,
-            DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Flexible skip", FrequencyUnit.Week, 3,
+            DueDate: today)).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
 
@@ -1051,10 +1051,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var today = new DateOnly(2026, 9, 24);
         var habits = new[]
         {
-            Habit.Create(new HabitCreateParams(_userId, "First flexible skip", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Second flexible skip", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "First flexible skip", FrequencyUnit.Week, 3,
+                DueDate: today)).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Second flexible skip", FrequencyUnit.Week, 3,
+                DueDate: today)).Value
         };
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
@@ -1095,9 +1095,9 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var today = new DateOnly(2026, 9, 24);
         var habits = new[]
         {
-            Habit.Create(new HabitCreateParams(_userId, "First log", FrequencyUnit.Day, 1,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "First log", FrequencyUnit.Day, 1,
                 DueDate: today)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Second log", FrequencyUnit.Day, 1,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Second log", FrequencyUnit.Day, 1,
                 DueDate: today)).Value
         };
         _dbContext.Habits.AddRange(habits);
@@ -1144,10 +1144,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var today = new DateOnly(2026, 9, 24);
         var habits = new[]
         {
-            Habit.Create(new HabitCreateParams(_userId, "First chunk", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Second chunk", FrequencyUnit.Week, 3,
-                DueDate: today, IsFlexible: true)).Value
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "First chunk", FrequencyUnit.Week, 3,
+                DueDate: today)).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Second chunk", FrequencyUnit.Week, 3,
+                DueDate: today)).Value
         };
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();

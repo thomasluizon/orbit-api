@@ -73,7 +73,7 @@ public partial class BulkCreateHabitsCommandHandlerTests
     public async Task Handle_ResolvedInheritanceAndOverrides_PreservePhaseAndSiblingPositions()
     {
         var (_, saved) = CaptureTagAndHabitAdds();
-        var existing = Habit.Create(new(UserId, "Existing", null, null, Today, Position: 7)).Value;
+        var existing = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Existing", null, null, Today, Position: 7)).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([existing]);
         var root = new BulkHabitItem("Repeated", null, FrequencyUnit.Day, 1, Days: [DayOfWeek.Monday],
             DueDate: Today.AddDays(3), IntervalWeeks: 2, SubHabits:
@@ -149,8 +149,8 @@ public partial class BulkCreateHabitsCommandHandlerTests
         node.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         node.FrequencyQuantity.Should().Be(2);
         node.IsBadHabit.Should().BeTrue();
-        node.IsGeneral.Should().BeFalse();
-        node.IsFlexible.Should().BeTrue();
+        (node.Schedule == HabitSchedule.General).Should().BeFalse();
+        (node.Schedule == HabitSchedule.Flexible).Should().BeTrue();
         node.NextDueDate.Should().Be(Today.AddDays(2));
         node.DueTime.Should().Be(leaf.DueTime);
         node.DueEndTime.Should().Be(leaf.DueEndTime);
@@ -183,7 +183,7 @@ public partial class BulkCreateHabitsCommandHandlerTests
         var result = await _handler.Handle(new(UserId, [root]), CancellationToken.None);
 
         result.Value.Results.Single().Status.Should().Be(BulkItemStatus.Success);
-        saved.Should().HaveCount(4).And.OnlyContain(h => h.IsGeneral && h.NextDueDate == Today.AddDays(3));
+        saved.Should().HaveCount(4).And.OnlyContain(h => (h.Schedule == HabitSchedule.General) && h.NextDueDate == Today.AddDays(3));
         foreach (var child in saved.Skip(1))
         {
             child.Tags.Should().BeEmpty();

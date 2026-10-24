@@ -84,7 +84,7 @@ public class GetHabitWidgetQueryHandlerTests
     [Fact]
     public async Task Handle_ReturnsAllDoneWhenCompletedTodayAndTomorrowIsEmpty()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId,
             "Done today",
             FrequencyUnit: null,
@@ -156,7 +156,7 @@ public class GetHabitWidgetQueryHandlerTests
 
     private static Habit CreateHabit(string title, DateOnly dueDate, int frequencyQuantity = 1)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             title,
             FrequencyUnit.Day,

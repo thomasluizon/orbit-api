@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Text.Json;
 using Orbit.Domain.Entities;
 
@@ -26,8 +27,8 @@ public static partial class OptionalParameterCases
         habit.DueTime,
         habit.DueEndTime,
         habit.IsBadHabit,
-        habit.IsGeneral,
-        habit.IsFlexible,
+        IsGeneral = habit.Schedule == HabitSchedule.General,
+        IsFlexible = habit.Schedule == HabitSchedule.Flexible,
         habit.ReminderEnabled,
         habit.ReminderTimes,
         habit.ChecklistItems,

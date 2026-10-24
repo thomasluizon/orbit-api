@@ -395,7 +395,7 @@ public sealed partial class ChatWriteHoldHandlerTests
 
     private async Task<Habit[]> SetupContinuationIconsAsync()
     {
-        var habits = Enumerable.Range(1, 174).Select(index => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(1, 174).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, $"Habit {index:D3}", FrequencyUnit.Day, 1, Today, Description: "Keep this description")).Value).ToArray();
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();

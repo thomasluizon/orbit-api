@@ -80,7 +80,7 @@ public class HabitToolsTests
     {
         var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var today = new DateOnly(2026, 10, 19);
-        var habit = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1, today,
             DueTime: new TimeOnly(9, 0))).Value;
         var repository = Substitute.For<IGenericRepository<Habit>>();
         repository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -137,7 +137,7 @@ public class HabitToolsTests
     {
         var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var today = new DateOnly(2026, 10, 19);
-        var parent = Habit.Create(new HabitCreateParams(userId, "Parent", FrequencyUnit.Week, 3, today, IntervalWeeks: 2)).Value;
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Parent", FrequencyUnit.Week, 3, today, IntervalWeeks: 2)).Value;
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(parent);
@@ -473,7 +473,7 @@ public class HabitToolsTests
         {
             new(ScheduledReminderWhen.SameDay, new TimeOnly(14, 0))
         };
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             userId, "Read", null, null, today, DueEndTime: new TimeOnly(15, 0),
             ReminderEnabled: true, SlipAlertEnabled: true, ScheduledReminders: scheduledReminders)).Value;
         var repository = Substitute.For<IGenericRepository<Habit>>();
@@ -536,7 +536,7 @@ public class HabitToolsTests
     {
         var userId = Guid.Parse(_user.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Read", FrequencyUnit.Day, 1, today, Emoji: "📚")).Value;
         var repository = Substitute.For<IGenericRepository<Habit>>();
         repository.FindOneTrackedAsync(

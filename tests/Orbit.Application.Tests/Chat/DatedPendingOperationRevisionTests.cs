@@ -22,7 +22,7 @@ public sealed class DatedPendingOperationRevisionTests
         using var context = new HeldWriteTestContext();
         context.Dates.GetUserTodayAsync(context.UserId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 10, 19));
-        var other = Habit.Create(new HabitCreateParams(context.UserId, "Water", FrequencyUnit.Day, 1,
+        var other = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, context.UserId, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2026, 9, 25))).Value;
         context.Records.Add(other);
         var tool = context.Tool("bulk_log_habits");

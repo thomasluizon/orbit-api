@@ -22,8 +22,8 @@ public sealed class ReviewSkipBaselineTests
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Alex", "alex@test.com").Value;
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Week, 3,
-            today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, user.Id, "Read", FrequencyUnit.Week, 3,
+            today)).Value;
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
         await factory.Context.SaveChangesAsync();
@@ -160,7 +160,7 @@ public sealed class ReviewSkipBaselineTests
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var (user, habit, today) = await Seed(factory);
-        var otherHabit = Habit.Create(new HabitCreateParams(user.Id, "Write", null, null, today)).Value;
+        var otherHabit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Write", null, null, today)).Value;
         factory.Context.Habits.Add(otherHabit);
         await factory.Context.SaveChangesAsync();
 
@@ -181,9 +181,9 @@ public sealed class ReviewSkipBaselineTests
     {
         var user = User.Create("Alex", "alex@test.com").Value;
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read",
+        var habit = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : ((FrequencyUnit?)(flexible ? (FrequencyUnit?)FrequencyUnit.Week : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, user.Id, "Read",
             flexible ? FrequencyUnit.Week : FrequencyUnit.Day, flexible ? 3 : 1,
-            today, IsFlexible: flexible)).Value;
+            today)).Value;
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
         await factory.Context.SaveChangesAsync();

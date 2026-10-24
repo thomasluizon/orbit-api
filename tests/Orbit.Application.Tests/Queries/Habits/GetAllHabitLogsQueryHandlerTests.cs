@@ -26,7 +26,7 @@ public class GetAllHabitLogsQueryHandlerTests
     [Fact]
     public async Task Handle_WithHabitsAndLogs_ReturnsGroupedLogs()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: DateFrom)).Value;
 
@@ -72,7 +72,7 @@ public class GetAllHabitLogsQueryHandlerTests
     [Fact]
     public async Task Handle_NoLogs_ReturnsEmptyDictionary()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: DateFrom)).Value;
 

@@ -52,7 +52,7 @@ public class BlockAnswerWriteRetryTests
         tool.GetParameterSchema().Returns(((IAiTool)RuntimeHelpers.GetUninitializedObject(typeof(CreateHabitTool))).GetParameterSchema());
         tool.ExecuteAsync(Arg.Any<JsonElement>(), user.Id, Arg.Any<CancellationToken>()).Returns(async call =>
         {
-            var habit = Habit.Create(new HabitCreateParams(user.Id, "Walk", FrequencyUnit.Day, 1,
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Walk", FrequencyUnit.Day, 1,
                 new DateOnly(2026, 4, 3))).Value;
             db.Habits.Add(habit);
             await work.SaveChangesAsync(call.Arg<CancellationToken>());

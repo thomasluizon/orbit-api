@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -20,7 +21,7 @@ public class OrbitDbContextTests
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", Orbit.Domain.Enums.FrequencyUnit.Day,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Reminder", Orbit.Domain.Enums.FrequencyUnit.Day,
             1, new DateOnly(2027, 9, 26))).Value;
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
@@ -31,11 +32,11 @@ public class OrbitDbContextTests
         var firstHabit = firstDb.Habits.Single(h => h.Id == habit.Id);
         var secondHabit = secondDb.Habits.Single(h => h.Id == habit.Id);
 
-        firstHabit.Update(new HabitUpdateParams("First edit", firstHabit.Description,
+        firstHabit.Update(new HabitUpdateParams(firstHabit.Schedule, "First edit", firstHabit.Description,
             firstHabit.FrequencyUnit, firstHabit.FrequencyQuantity, firstHabit.Days.ToList(),
             firstHabit.IsBadHabit, firstHabit.NextDueDate)).IsSuccess.Should().BeTrue();
         firstDb.SaveChanges();
-        secondHabit.Update(new HabitUpdateParams("Second edit", secondHabit.Description,
+        secondHabit.Update(new HabitUpdateParams(secondHabit.Schedule, "Second edit", secondHabit.Description,
             secondHabit.FrequencyUnit, secondHabit.FrequencyQuantity, secondHabit.Days.ToList(),
             secondHabit.IsBadHabit, secondHabit.NextDueDate)).IsSuccess.Should().BeTrue();
         secondDb.SaveChanges();

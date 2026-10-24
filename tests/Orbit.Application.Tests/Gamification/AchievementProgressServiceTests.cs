@@ -40,7 +40,7 @@ public class AchievementProgressServiceTests
     }
 
     private static Habit CreateHabit() =>
-        Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value;
 
     /// <summary>
     /// Builds a daily habit whose own current streak is exactly <paramref name="streakDays"/>: it backdates
@@ -49,7 +49,7 @@ public class AchievementProgressServiceTests
     private static Habit CreateHabitWithStreak(int streakDays)
     {
         var startDate = Today.AddDays(-Math.Max(1200, streakDays));
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, startDate)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, startDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
         for (var day = 0; day < streakDays; day++)
@@ -69,7 +69,7 @@ public class AchievementProgressServiceTests
     private static Habit CreateBadHabitWithAbstinenceStreak()
     {
         var habit = Habit.Create(
-            new HabitCreateParams(
+            new HabitCreateParams(HabitSchedule.Recurring,
                 UserId, "Bad Habit", FrequencyUnit.Day, 1, Today.AddDays(-400), IsBadHabit: true)).Value;
         return habit;
     }
@@ -208,9 +208,9 @@ public class AchievementProgressServiceTests
     public async Task LoadAsync_RepeatedDeletedAndSkippedLogs_PreservesFlexibleStreak()
     {
         var user = CreateUser();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible", FrequencyUnit.Day, 2,
-            DueDate: Today.AddDays(-2), IsFlexible: true)).Value;
+            DueDate: Today.AddDays(-2))).Value;
         var start = Today.AddDays(-2);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -233,9 +233,9 @@ public class AchievementProgressServiceTests
     public async Task LoadAsync_LegacyFlexibleSkip_PreservesStreakBeforeMovingDueDate()
     {
         var user = CreateUser();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Legacy flexible", FrequencyUnit.Day, 1,
-            DueDate: Today, IsFlexible: true)).Value;
+            DueDate: Today)).Value;
         var start = Today.AddDays(-3);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -368,8 +368,8 @@ public class AchievementProgressServiceTests
         FrequencyUnit unit, bool flexible, int quantity)
     {
         var start = Today.AddDays(-1200);
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Scheduled", unit, quantity, start, IsFlexible: flexible)).Value;
+        var habit = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring,
+            UserId, "Scheduled", unit, quantity, start)).Value;
         if (flexible)
         {
             for (var date = start; date <= Today; date = date.AddDays(1))
@@ -406,7 +406,7 @@ public class AchievementProgressServiceTests
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, Today.AddDays(-299).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         typeof(Habit).GetProperty(nameof(Habit.NextDueDate))!.SetValue(habit, Today.AddDays(1));
-        typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, flexible);
+        typeof(Habit).GetProperty(nameof(Habit.Schedule))!.SetValue(habit, flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring);
         StubHabits(habit);
         StubCounts();
 

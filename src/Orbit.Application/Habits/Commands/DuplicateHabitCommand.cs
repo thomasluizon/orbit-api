@@ -131,7 +131,7 @@ public class DuplicateHabitCommandHandler(
         int position,
         IReadOnlyDictionary<Guid, HabitLog> completionLogsBySourceId)
     {
-        var created = Habit.Create(new HabitCreateParams(
+        var created = Habit.Create(new HabitCreateParams(source.Schedule,
             source.UserId,
             source.Title,
             source.FrequencyUnit,
@@ -145,8 +145,6 @@ public class DuplicateHabitCommandHandler(
             DueEndTime: source.DueEndTime,
             ParentHabitId: parentHabitId,
             ChecklistItems: source.ChecklistItems,
-            IsGeneral: source.Schedule == HabitSchedule.General,
-            IsFlexible: source.Schedule == HabitSchedule.Flexible,
             EndDate: source.EndDate,
             ScheduledReminders: source.ScheduledReminders,
             RelativeReminders: source.RelativeReminders,

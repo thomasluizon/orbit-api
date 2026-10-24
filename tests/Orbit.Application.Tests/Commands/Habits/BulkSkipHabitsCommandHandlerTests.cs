@@ -41,7 +41,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_HabitChangedConcurrently_ReturnsConflictWithoutSaving()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
         _habitRepo.TryRefreshAsync(habit, Arg.Any<CancellationToken>()).Returns(false);
 
@@ -57,8 +57,8 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_RecurringHabitsDue_SkipsAndAdvancesDueDate()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         SetupHabitsForUser(new List<Habit> { habit1, habit2 });
 
@@ -82,7 +82,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OverdueHabit_NotScheduledToday_SkipsAsToday()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkSkipItem> { new(habit.Id) };
@@ -100,11 +100,11 @@ public class BulkSkipHabitsCommandHandlerTests
     {
         var anchor = new DateOnly(2025, 1, 6);
         var catchUpDay = anchor.AddDays(15);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.Days.ToList(), habit.IsBadHabit, DueDate: null,
             UserToday: anchor.AddDays(8), IntervalWeeks: 2));
@@ -123,7 +123,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OneTimeTask_PostponesToTomorrow()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkSkipItem> { new(habit.Id) };
@@ -155,7 +155,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedHabit_ReportsFailedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         habit.Log(Today); SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkSkipItem> { new(habit.Id) };
@@ -171,7 +171,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_FutureDate_ReportsFailedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var futureDate = Today.AddDays(5);
@@ -188,7 +188,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_NotYetDue_ReportsFailedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Future habit", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(5))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
@@ -206,7 +206,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
@@ -223,9 +223,9 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_MixedResults_ReportsPartialSuccess()
     {
-        var validHabit = Habit.Create(new HabitCreateParams(
+        var validHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Valid", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var completedHabit = Habit.Create(new HabitCreateParams(
+        var completedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Done", null, null, DueDate: Today)).Value;
         completedHabit.Log(Today);
         SetupHabitsForUser(new List<Habit> { validHabit, completedHabit });
@@ -248,7 +248,7 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_SaveFailsMidBatch_RunsInsideTransactionAndPropagates()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db failure"));
@@ -266,9 +266,9 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_MixedWindowResults_SkipsInWindowReportsBeyondWindowFailure()
     {
-        var inWindow = Habit.Create(new HabitCreateParams(
+        var inWindow = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "In window", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var stale = Habit.Create(new HabitCreateParams(
+        var stale = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Stale", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 3)))).Value;
         SetupHabitsForUser(new List<Habit> { inWindow, stale });
@@ -302,11 +302,10 @@ public class BulkSkipHabitsCommandHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Handle_DivergentLegacyFlags_UsesScheduleForSkip(bool flexible)
+    public async Task Handle_UsesScheduleForSkip(bool flexible)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day,
-            flexible ? 2 : 1, Today, IsFlexible: flexible)).Value;
-        typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !flexible);
+        var habit = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day,
+            flexible ? 2 : 1, Today)).Value;
         SetupHabitsForUser([habit]);
 
         var result = await _handler.Handle(new BulkSkipHabitsCommand(UserId, [new(habit.Id)]), default);

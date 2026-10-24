@@ -88,8 +88,8 @@ public class LogHabitLinkedGoalTests
     {
         var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;
 
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         habit.AddGoal(goal);
 
         _habitRepo.FindOneTrackedAsync(
@@ -126,10 +126,10 @@ public class LogHabitLinkedGoalTests
     public async Task Handle_UnlogLinkedStandardGoal_RecomputesProgressDownward()
     {
         var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var otherHabit = Habit.Create(new HabitCreateParams(
-            UserId, "Stretch", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var otherHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Stretch", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
         otherHabit.Log(Today, advanceDueDate: false);
         habit.AddGoal(goal);
@@ -166,7 +166,7 @@ public class LogHabitLinkedGoalTests
             "days",
             Type: GoalType.Streak)).Value;
 
-        var completedHabit = Habit.Create(new HabitCreateParams(
+        var completedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Read",
             FrequencyUnit.Day,
@@ -176,7 +176,7 @@ public class LogHabitLinkedGoalTests
         completedHabit.Log(Today.AddDays(-2), advanceDueDate: false);
         completedHabit.Log(Today.AddDays(-1), advanceDueDate: false);
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Doom scrolling",
             FrequencyUnit.Day,
@@ -216,7 +216,7 @@ public class LogHabitLinkedGoalTests
     {
         var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "7-day streak", 7, "days", Type: GoalType.Streak)).Value;
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         habit.AddGoal(goal);
         goal.AddHabit(habit);
@@ -250,7 +250,7 @@ public class LogHabitLinkedGoalTests
         var goal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "3-day streak", 3, "days", Type: GoalType.Streak)).Value;
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-2))).Value;
         SetCreatedAtUtc(habit, Today.AddDays(-2));
         habit.Log(Today.AddDays(-2), advanceDueDate: false);
@@ -287,7 +287,7 @@ public class LogHabitLinkedGoalTests
         goal.SyncStreakProgress(3);
         goal.Status.Should().Be(GoalStatus.Completed);
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-2))).Value;
         SetCreatedAtUtc(habit, Today.AddDays(-2));
         habit.Log(Today.AddDays(-2), advanceDueDate: false);
@@ -316,7 +316,7 @@ public class LogHabitLinkedGoalTests
     [Fact]
     public async Task Handle_NoLinkedGoals_LinkedGoalUpdatesIsNull()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Solo", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -335,7 +335,7 @@ public class LogHabitLinkedGoalTests
     [Fact]
     public async Task Handle_GamificationReturnsXp_IncludesInResponse()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -358,7 +358,7 @@ public class LogHabitLinkedGoalTests
     [Fact]
     public async Task Handle_ReferralCompletionFails_DoesNotBreakLog()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -379,7 +379,7 @@ public class LogHabitLinkedGoalTests
     [Fact]
     public async Task Handle_StreakRecalculateReturnsNull_UsesZeroStreak()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(

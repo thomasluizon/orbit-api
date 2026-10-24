@@ -14,7 +14,7 @@ public sealed class BulkHabitToolArgumentsTests
     [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitsTool), "updates", MemberType = typeof(OptionalParameterCases))]
     public void OptionalNull_BulkUpdatesPreserveDomainLikeAbsent(string field)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Keep", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Keep", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2027, 1, 1), Description: "Keep description", Emoji: "📖",
             Days: [DayOfWeek.Monday], DueTime: new TimeOnly(8, 0), EndDate: new DateOnly(2027, 2, 1))).Value;
         var absent = BulkHabitToolArguments.ParseChanges(Parse("""{"updates":{}}"""));
@@ -25,7 +25,7 @@ public sealed class BulkHabitToolArgumentsTests
         explicitNull.Error.Should().BeNull();
         explicitNull.Changes.Should().BeEquivalentTo(absent.Changes);
         var before = OptionalParameterCases.HabitState(habit);
-        habit.Update(HabitUpdateValidation.ResolveUpdate(habit, explicitNull.Changes!, new DateOnly(2027, 1, 1)))
+        habit.Update(HabitUpdateValidation.ResolveUpdate(habit, explicitNull.Changes!, new DateOnly(2027, 1, 1)).Value)
             .IsSuccess.Should().BeTrue();
         OptionalParameterCases.HabitState(habit).Should().Be(before);
     }
@@ -267,8 +267,8 @@ public sealed class BulkHabitToolArgumentsTests
     public void ParseEmojiFilter_IconState_SelectsPersistedEmoji(bool hasEmoji)
     {
         var userId = Guid.NewGuid();
-        var missing = Orbit.Domain.Entities.Habit.Create(new(userId, "Read", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
-        var present = Orbit.Domain.Entities.Habit.Create(new(userId, "Diet", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3), Emoji: "🍔")).Value;
+        var missing = Orbit.Domain.Entities.Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var present = Orbit.Domain.Entities.Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Diet", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3), Emoji: "🍔")).Value;
         var (filter, error) = BulkHabitToolArguments.ParseEmojiFilter(
             JsonSerializer.SerializeToElement(new { filter = new { has_emoji = hasEmoji } }));
 

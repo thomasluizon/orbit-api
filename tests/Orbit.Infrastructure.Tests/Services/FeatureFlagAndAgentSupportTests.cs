@@ -164,7 +164,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     {
         var owner = User.Create("Owner", "owner@example.com").Value;
         var otherUser = User.Create("Other", "other@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             owner.Id,
             "Exercise",
             FrequencyUnit.Day,

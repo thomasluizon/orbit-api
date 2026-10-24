@@ -39,7 +39,7 @@ public sealed class UpdateHabitTagTests : IDisposable
 
     public UpdateHabitTagTests()
     {
-        _habit = Habit.Create(new HabitCreateParams(_userId, "Original", FrequencyUnit.Day, 1, Today,
+        _habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Original", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15],
             ChecklistItems: [new("Duplicate", false), new("Duplicate", true), new("Other", false)])).Value;
         _oldTag = Tag.Create(_userId, "Old", "#ffffff").Value;

@@ -61,7 +61,7 @@ public class PromptHabitIndexTests
     [Fact]
     public void BuildPromptHabitIndex_BadHabitSlipToday_DoesNotCarryDoneTodayFact()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Smoking", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
         habit.Log(Today).Value.IsSlip.Should().BeTrue();
 
@@ -76,7 +76,7 @@ public class PromptHabitIndexTests
         Guid? parentHabitId = null,
         bool isOneTime = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(isOneTime ? null : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId,
             title,
             isOneTime ? null : FrequencyUnit.Day,

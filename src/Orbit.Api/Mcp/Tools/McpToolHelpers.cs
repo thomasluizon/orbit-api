@@ -73,9 +73,9 @@ internal static class McpToolHelpers
         var line = $"{prefix}[{(data.IsCompleted ? "x" : " ")}] {data.Title} (id: {data.Id})";
         line += $" | Emoji: {data.Emoji ?? "None"}";
         if (data.FreqUnit is not null) line += $" | {data.FreqQty}x/{data.FreqUnit}";
-        else if (!data.IsGeneral) line += " | one-time";
-        if (data.IsGeneral) line += " | general";
-        if (data.IsFlexible) line += " | flexible";
+        else if (data.Schedule != HabitSchedule.General) line += " | one-time";
+        if (data.Schedule == HabitSchedule.General) line += " | general";
+        if (data.Schedule == HabitSchedule.Flexible) line += " | flexible";
         if (data.DueTime is not null) line += $" | at {data.DueTime:HH:mm}";
         if (data.IsOverdue) line += " | OVERDUE";
         if (data.IsBadHabit) line += " | bad habit";
@@ -90,7 +90,7 @@ internal static class McpToolHelpers
         foreach (var c in children)
         {
             lines.Add(FormatHabitLine(new HabitLineData(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
-                c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.IsGeneral, c.IsFlexible,
+                c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.Schedule ?? HabitSchedule.OneTime,
                 c.ChecklistItems, c.Tags, c.Emoji,
                 new HabitFieldSummary
                 {
@@ -109,7 +109,7 @@ internal static class McpToolHelpers
                     ScheduledReminders = c.ScheduledReminders ?? [],
                     RelativeReminders = c.RelativeReminders ?? [],
                     SlipAlertEnabled = c.SlipAlertEnabled == true,
-                    IsFlexible = c.IsFlexible,
+                    Schedule = c.Schedule ?? HabitSchedule.OneTime,
                     ChecklistItems = c.ChecklistItems
                 }.Format(c.DueDate)), indent));
             if (c.Children.Count > 0)
@@ -138,12 +138,12 @@ internal static class McpToolHelpers
                 ScheduledReminders = child.ScheduledReminders ?? [],
                 RelativeReminders = child.RelativeReminders ?? [],
                 SlipAlertEnabled = child.SlipAlertEnabled == true,
-                IsFlexible = child.IsFlexible,
+                Schedule = child.Schedule ?? HabitSchedule.OneTime,
                 ChecklistItems = child.ChecklistItems
             }.Format();
             lines.Add(FormatHabitLine(new HabitLineData(child.Id, child.Title, child.FrequencyUnit,
                 child.FrequencyQuantity, child.DueTime, child.IsCompleted, child.IsOverdue, child.IsBadHabit,
-                child.IsGeneral, child.IsFlexible, child.ChecklistItems, child.Tags ?? [], child.Emoji,
+                child.Schedule ?? HabitSchedule.OneTime, child.ChecklistItems, child.Tags ?? [], child.Emoji,
                 details + string.Create(CultureInfo.InvariantCulture, $" | Due: {child.DueDate:yyyy-MM-dd}")), indent));
             AppendDetailChildren(lines, child.Children, indent + 1);
         }
@@ -169,6 +169,6 @@ internal static class McpToolHelpers
     public sealed record HabitLineData(
         Guid Id, string Title, FrequencyUnit? FreqUnit, int? FreqQty,
         TimeOnly? DueTime, bool IsCompleted, bool IsOverdue, bool IsBadHabit,
-        bool IsGeneral, bool IsFlexible,
+        HabitSchedule Schedule,
         IReadOnlyList<ChecklistItem> Checklist, IReadOnlyList<HabitTagItem> Tags, string? Emoji, string? Details = null);
 }

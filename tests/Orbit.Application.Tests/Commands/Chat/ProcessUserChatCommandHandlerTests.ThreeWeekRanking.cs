@@ -38,8 +38,8 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate(user);
         EnableComposition();
         _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
-        var read = Habit.Create(new(UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-6))).Value;
-        var walk = Habit.Create(new(UserId, "Walk", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-6))).Value;
+        var read = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-6))).Value;
+        var walk = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Walk", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-6))).Value;
         for (var day = -6; day <= 0; day++)
         {
             read.Log(Today.AddDays(day), advanceDueDate: false);

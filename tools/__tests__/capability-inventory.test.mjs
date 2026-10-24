@@ -135,20 +135,20 @@ test("MCP gateway coverage retains direct differences and known tickets without 
 test("nested writable fields and filter predicates have distinct parameter paths", () => {
   const tool = inventory.registries.chat.find(row => row.name === "bulk_update_habits")
   for (const name of ["filter.all", "filter.is_general", "updates.emoji", "updates.checklist_items[].text"]) assert.ok(tool.parameters.some(row => row.name === name), name)
-  const general = field(inventory, "Habit", "IsGeneral").surfaces.chat.operations.filterKeyedBulk
-  assert.ok(general.direct.every(row => row.parameter === "updates.is_general"), "A selector must not be counted as a write")
+  const general = field(inventory, "Habit", "Schedule").surfaces.chat.operations.filterKeyedBulk
+  assert.ok(general.direct.every(row => row.parameter.startsWith("updates.")), "A selector must not be counted as a write")
   mutate("src/Orbit.Application/Chat/Tools/Implementations/BulkUpdateHabitsTool.cs", text => text.replace('is_general = new { type =', 'inventory_probe = new { type ='), build => {
-    assert.equal(field(build(), "Habit", "IsGeneral").surfaces.chat.operations.filterKeyedBulk.direct.length, 0)
+    assert.ok(field(build(), "Habit", "Schedule").surfaces.chat.operations.filterKeyedBulk.direct.every(row => row.parameter !== "updates.is_general"))
   })
   const mcp = inventory.registries.mcp.find(row => row.name === "bulk_update_habits")
   assert.ok(mcp.parameters.some(row => row.name === "updatesJson.emoji"))
   assert.ok(inventory.registries.chat.find(row => row.name === "bulk_create_habits").parameters.some(row => row.name === "habits[].sub_habits[].emoji"))
   assert.equal(inventory.registries.chat.find(row => row.name === "create_habit").parameters.find(row => row.name === "title").required, true)
-  assert.equal(field(inventory, "Habit", "IsGeneral").surfaces.mcp.operations.create.status, "covered")
+  assert.equal(field(inventory, "Habit", "Schedule").surfaces.mcp.operations.create.status, "covered")
   assert.deepEqual(inventory.registries.mcp.flatMap(tool => tool.parameters.filter(parameter => parameter.unsupportedByExecutorSchema).map(parameter => [tool.name, parameter.name])), [])
   mutate("src/Orbit.Application/Chat/Tools/Implementations/BulkCreateHabitsTool.cs", text => text.replace('["is_general"] = new { type =', '["inventory_probe"] = new { type ='), build => {
     const changed = build()
-    assert.equal(field(changed, "Habit", "IsGeneral").surfaces.mcp.operations.create.status, "advertised-only")
+    assert.equal(field(changed, "Habit", "Schedule").surfaces.mcp.operations.create.status, "covered")
     assert.deepEqual(changed.registries.mcp.flatMap(tool => tool.parameters.filter(parameter => parameter.unsupportedByExecutorSchema).map(parameter => [tool.name, parameter.name])), [["create_habit", "isGeneral"]])
   })
 })

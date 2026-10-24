@@ -22,7 +22,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private async Task<HabitRankingResponse> ProduceRankingAsync()
     {
         _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
         var tokens = new HabitRankingTokenService(Options.Create(new JwtSettings
         {

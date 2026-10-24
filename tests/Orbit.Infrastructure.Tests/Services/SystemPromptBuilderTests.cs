@@ -54,7 +54,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void Build_RequiresCurrentTurnToolFactsAcrossStaticAndDynamicSections()
     {
-        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Meditação", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, TestUserId, "Meditação", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 3))).Value;
         var request = new PromptBuildRequest([habit], UserToday: new DateOnly(2026, 4, 3));
         var builder = new SystemPromptBuilder();
@@ -118,7 +118,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void Build_WithHabits_ListsHabitTitle()
     {
-        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var habits = new[] { habit };
 
         var result = BuildPrompt(habits);
@@ -129,7 +129,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void Build_WithMetrics_IncludesStreakInfo()
     {
-        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Meditation", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, TestUserId, "Meditation", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var habits = new[] { habit };
         var metrics = new Dictionary<Guid, HabitMetrics>
         {
@@ -285,7 +285,7 @@ public class SystemPromptBuilderTests
     public void BuildStatic_IsRequestInvariant_AndExcludesDynamicHabitIndex()
     {
         var builder = new SystemPromptBuilder();
-        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var withHabit = new PromptBuildRequest([habit], BlockFirstComposition: true);
         var empty = new PromptBuildRequest(Array.Empty<Habit>());
 
@@ -301,7 +301,7 @@ public class SystemPromptBuilderTests
     public void BuildDynamic_ContainsUserData_AndExcludesStaticRules()
     {
         var builder = new SystemPromptBuilder();
-        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var request = new PromptBuildRequest([habit], UserToday: new DateOnly(2026, 3, 20));
 
         var dynamicPrompt = builder.BuildDynamic(request);

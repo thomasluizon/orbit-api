@@ -44,8 +44,8 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_ValidIds_DeletesAllHabits()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -71,8 +71,8 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_Parent_DeletesChildNotScheduledTodayAndReportsBothIds()
     {
-        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Later task", null, null, Today.AddDays(1), ParentHabitId: parent.Id)).Value;
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -96,15 +96,15 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_ParentWithMoreThan100Descendants_DeletesInOneRequest()
     {
-        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
         var habits = new List<Habit> { parent };
         for (var branch = 0; branch < 10; branch++)
         {
-            var child = Habit.Create(new HabitCreateParams(
+            var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 UserId, $"Child {branch}", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value;
             habits.Add(child);
             for (var leaf = 0; leaf < 10; leaf++)
-                habits.Add(Habit.Create(new HabitCreateParams(
+                habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                     UserId, $"Leaf {branch}-{leaf}", FrequencyUnit.Day, 1, Today, ParentHabitId: child.Id)).Value);
         }
         _habitRepo.FindTrackedAsync(
@@ -125,10 +125,10 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OverlappingRequestedSubtrees_DeletesEachHabitOnce()
     {
-        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value;
-        var grandchild = Habit.Create(new HabitCreateParams(
+        var grandchild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Grandchild", FrequencyUnit.Day, 1, Today, ParentHabitId: child.Id)).Value;
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -152,7 +152,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_SomeNotFound_ReportsPartialFailure()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var missingId = Guid.NewGuid();
 
         _habitRepo.FindTrackedAsync(
@@ -193,7 +193,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
@@ -213,8 +213,8 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_SaveFailsMidBatch_RollsBackWholeBatchAndSkipsRecalcAndCacheInvalidation()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
@@ -241,7 +241,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_PersistenceAndRecalcRunInsideTransaction_NotOutsideIt()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
@@ -284,7 +284,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_LastLinkedHabit_ClearsDerivedGoalInsideBatchTransaction()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Exercise",
             FrequencyUnit.Day,

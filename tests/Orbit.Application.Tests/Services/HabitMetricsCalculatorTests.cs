@@ -18,7 +18,7 @@ public class HabitMetricsCalculatorTests
         DateOnly[] logDates,
         bool isBadHabit = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Test Habit",
             FrequencyUnit.Day,
@@ -36,7 +36,7 @@ public class HabitMetricsCalculatorTests
 
     private static Habit CreateWeeklyHabitWithLogs(DateOnly[] logDates)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Weekly Habit",
             FrequencyUnit.Week,
@@ -53,7 +53,7 @@ public class HabitMetricsCalculatorTests
 
     private static Habit CreateOneTimeHabit()
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId,
             "One-time task",
             FrequencyUnit: null,
@@ -76,7 +76,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_NoLogs_ReturnsZeroes()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
@@ -116,7 +116,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_TodayNotLogged_CurrentStreakIsZero()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
@@ -149,7 +149,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_TodayNotLogged_WeeklyRate0Percent()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
@@ -204,7 +204,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_NoLogs_LastCompletedDateIsNull()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
@@ -227,7 +227,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_NoLogs_StreakIsPositive()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
@@ -239,7 +239,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_LoggedToday_BreaksStreak()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
@@ -252,7 +252,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_NoLogs_CompletionRate100()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Junk Food", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
@@ -264,7 +264,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabitScheduledInFuture_HasNoMetricsYet()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
 
@@ -279,7 +279,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_GoodHabitScheduledInFuture_HasNoMetricsYet()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(5))).Value;
 
@@ -294,7 +294,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_LegacyBadHabitScheduledInFuture_HasNoMetricsYet()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
@@ -310,7 +310,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_LegacyGoodHabitScheduledInFutureWithPreStartLog_HasNoMetricsYet()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(5))).Value;
         habit.Log(Today, advanceDueDate: false);
@@ -330,7 +330,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_LegacyBadHabitScheduledForNextOccurrenceWithPreStartLog_HasNoMetricsYet(
         int frequencyQuantity)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, frequencyQuantity,
             IsBadHabit: true, DueDate: Today.AddDays(1))).Value;
         habit.Log(Today, advanceDueDate: false);
@@ -349,7 +349,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabitScheduledToday_StartsWithOneCleanDay()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
@@ -365,11 +365,11 @@ public class HabitMetricsCalculatorTests
     public void Calculate_FutureBadHabitRescheduledEarlier_StartsOnNewDate()
     {
         var newStart = Today.AddDays(2);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -390,11 +390,11 @@ public class HabitMetricsCalculatorTests
     public void Calculate_FutureBadHabitRescheduledLater_HasNoPreStartMetrics()
     {
         var newStart = Today.AddDays(5);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(2))).Value;
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -417,11 +417,11 @@ public class HabitMetricsCalculatorTests
     public void Calculate_BadHabitStartingTodayRescheduledEarlier_UsesNewStart()
     {
         var newStart = Today.AddDays(-1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -442,11 +442,11 @@ public class HabitMetricsCalculatorTests
     public void Calculate_BadHabitStartingTodayRescheduledLater_HasNoPreStartMetrics()
     {
         var newStart = Today.AddDays(2);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -469,7 +469,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_LegacyBadHabitWithCleanHistory_PreservesHistoricalWindow()
     {
         var startDate = Today.AddDays(-5);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: startDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -489,7 +489,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_LegacyBadHabitFirstScheduledToday_StartsToday()
     {
         var createdDate = Today.AddDays(-5);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -509,7 +509,7 @@ public class HabitMetricsCalculatorTests
     {
         var scheduledStart = Today.AddDays(1);
         var evaluationDate = scheduledStart.AddDays(1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: scheduledStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -527,7 +527,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_LegacyBadHabitLoggedOnDueDate_CapturesStartBeforeAdvance()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -550,7 +550,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_LegacyBadHabitCaughtUpIntoFuture_PreservesHistory(FrequencyUnit unit)
     {
         var scheduledStart = Today.AddDays(-5);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", unit, 1,
             IsBadHabit: true, DueDate: scheduledStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -571,7 +571,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_LegacyGoodHabitWithOnePreStartLog_DoesNotInferProgress()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
         habit.Log(Today.AddDays(-1), advanceDueDate: false);
@@ -591,7 +591,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_HabitStartedYesterday_ExcludesEarlierDates()
     {
         var yesterday = Today.AddDays(-1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
             DueDate: yesterday)).Value;
         habit.Log(yesterday, advanceDueDate: false);
@@ -608,7 +608,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_AdvancedDueDate_PreservesOriginalExpectedWindow()
     {
         var startDate = Today.AddDays(-3);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
             DueDate: startDate)).Value;
 
@@ -631,7 +631,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabitWithPreStartLog_HasNoMetricsYet()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         habit.Log(Today, advanceDueDate: false);
@@ -647,7 +647,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_LoggedToday_CompletionRate0()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Junk Food", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
@@ -715,7 +715,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_MonthlyHabit_LoggedToday_HasStreak()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Monthly Review",
             FrequencyUnit.Month,
@@ -733,7 +733,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_MonthlyHabit_NoLogs_ZeroStreak()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Monthly Review",
             FrequencyUnit.Month,
@@ -748,7 +748,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_YearlyHabit_LoggedToday_HasStreak()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Annual Checkup",
             FrequencyUnit.Year,
@@ -766,7 +766,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_EveryTwoDaysHabit_LoggedToday()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Every Other Day",
             FrequencyUnit.Day,
@@ -784,7 +784,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_DailyWithDaysFilter_OnlyCountsFilteredDays()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Weekday Habit",
             FrequencyUnit.Day,
@@ -802,7 +802,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_LongestStreak_GreaterThanCurrent_WhenBroken()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Test",
             FrequencyUnit.Day,
@@ -819,7 +819,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_OneTimeHabit_Completed_Streak1()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId,
             "One-time task",
             FrequencyUnit: null,
@@ -836,7 +836,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_LongestStreak_MatchesCurrentWhenNoLogs()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
 
@@ -869,7 +869,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_MonthlyRate_ZeroWhenNoExpectedDatesInRange()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Yearly",
             FrequencyUnit.Year,
@@ -884,7 +884,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_MonthlyRate_100WhenLogged()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Yearly",
             FrequencyUnit.Year,
@@ -900,7 +900,7 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_StreakLongerThan365Days_NotCappedAt365()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Long Streak", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-600))).Value;
 
         for (var day = 0; day < 500; day++)
@@ -915,13 +915,12 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_FlexibleHabit_LoggedMultipleTimes_CountsAll()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Flexible Exercise",
             FrequencyUnit.Week,
             3,
-            DueDate: Today,
-            IsFlexible: true)).Value;
+            DueDate: Today)).Value;
 
         habit.Log(Today);
         habit.Log(Today);
@@ -936,13 +935,12 @@ public class HabitMetricsCalculatorTests
     {
         var start = new DateOnly(2026, 3, 7);
         var evaluationDate = new DateOnly(2026, 3, 10);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Daily flexibility",
             FrequencyUnit.Day,
             1,
-            DueDate: start,
-            IsFlexible: true)).Value;
+            DueDate: start)).Value;
         foreach (var date in Enumerable.Range(0, 4).Select(start.AddDays))
             habit.Log(date, advanceDueDate: false);
 
@@ -959,13 +957,12 @@ public class HabitMetricsCalculatorTests
     {
         var start = new DateOnly(2026, 1, 10);
         var evaluationDate = new DateOnly(2026, 4, 20);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Monthly flexibility",
             FrequencyUnit.Month,
             2,
-            DueDate: start,
-            IsFlexible: true)).Value;
+            DueDate: start)).Value;
         foreach (var date in new[]
         {
             new DateOnly(2026, 1, 15),
@@ -993,13 +990,12 @@ public class HabitMetricsCalculatorTests
     {
         var start = new DateOnly(2023, 3, 1);
         var evaluationDate = new DateOnly(2026, 6, 15);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Yearly flexibility",
             FrequencyUnit.Year,
             2,
-            DueDate: start,
-            IsFlexible: true)).Value;
+            DueDate: start)).Value;
         foreach (var date in new[]
         {
             new DateOnly(2023, 4, 1),
@@ -1027,13 +1023,12 @@ public class HabitMetricsCalculatorTests
     {
         var start = new DateOnly(2026, 3, 1);
         var evaluationDate = new DateOnly(2026, 3, 31);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Interval month",
             FrequencyUnit.Month,
             1,
             DueDate: start,
-            IsFlexible: true,
             IntervalWeeks: 2)).Value;
         habit.Log(new DateOnly(2026, 3, 10), advanceDueDate: false);
 

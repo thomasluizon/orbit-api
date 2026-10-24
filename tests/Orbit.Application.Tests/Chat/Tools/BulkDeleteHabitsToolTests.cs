@@ -145,14 +145,14 @@ public class BulkDeleteHabitsToolTests
     public async Task CompletedFilter_DeletesOnlyCompletedHabits()
     {
         var active = CreateHabit("Active");
-        var completed = Habit.Create(new HabitCreateParams(
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId,
             "Completed",
             null,
             null,
             new DateOnly(2026, 9, 11))).Value;
         completed.Log(new DateOnly(2026, 9, 11));
-        var excludedChild = Habit.Create(new HabitCreateParams(
+        var excludedChild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Excluded child",
             FrequencyUnit.Day,
@@ -202,5 +202,5 @@ public class BulkDeleteHabitsToolTests
     }
 
     private static Habit CreateHabit(string title) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 11))).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 11))).Value;
 }

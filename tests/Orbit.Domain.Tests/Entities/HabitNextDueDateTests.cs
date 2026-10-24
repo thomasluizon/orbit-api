@@ -10,7 +10,7 @@ public class HabitNextDueDateTests
     public void LogTenTimes_AdvancesNextDueDateWithoutMovingSelectedStart()
     {
         var start = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, start)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, start)).Value;
 
         for (var offset = 0; offset < 10; offset++)
             habit.Log(start.AddDays(offset)).IsSuccess.Should().BeTrue();

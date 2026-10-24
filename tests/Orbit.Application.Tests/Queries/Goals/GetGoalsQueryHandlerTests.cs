@@ -194,7 +194,7 @@ public class GetGoalsQueryHandlerTests
     {
         var manualGoal = CreateTestGoal("Manual");
         var derivedGoal = CreateTestGoal("Derived");
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         derivedGoal.AddHabit(habit);
         ArrangePage(new List<Goal> { manualGoal, derivedGoal }, 2);

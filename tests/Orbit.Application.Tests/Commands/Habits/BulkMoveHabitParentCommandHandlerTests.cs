@@ -53,8 +53,8 @@ public sealed class BulkMoveHabitParentCommandHandlerTests : IDisposable
     }
 
     private Habit Create(Guid? parent = null, bool general = false, Guid? owner = null) =>
-        Habit.Create(new HabitCreateParams(owner ?? _userId, "Habit", general ? null : FrequencyUnit.Day,
-            general ? null : 1, Today, ParentHabitId: parent, IsGeneral: general)).Value;
+        Habit.Create(new HabitCreateParams(general ? HabitSchedule.General : ((FrequencyUnit?)(general ? null : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, owner ?? _userId, "Habit", general ? null : FrequencyUnit.Day,
+            general ? null : 1, Today, ParentHabitId: parent)).Value;
 
     private void Load(params Habit[] habits) => _repository.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())

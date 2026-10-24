@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using NSubstitute;
 using FluentAssertions;
 using Orbit.Application.Habits.Services;
@@ -15,7 +16,7 @@ public sealed class PeriodAnalyticsTests
     public void CountsKeepRecordsDatesAndScheduleSeparate()
     {
         var day = new DateOnly(2026, 4, 1);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null, day)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Read", null, null, day)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit, day.AddDays(-1).ToDateTime(TimeOnly.MinValue));
         habit.LoadScheduleLogsForRead([
             HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, day, 1, 1, DateTime.UnixEpoch),
@@ -59,7 +60,7 @@ public sealed class PeriodAnalyticsTests
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         var day = new DateOnly(2026, 4, 1);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", null, null, day)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Read", null, null, day)).Value;
         habit.LoadScheduleLogsForRead([
             HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, day, 1, 1, DateTime.UnixEpoch),
             HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, day, 1, 2, DateTime.UnixEpoch),

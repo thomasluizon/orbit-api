@@ -29,7 +29,7 @@ public class ProactiveEngineConcurrencyTests
         user.SetGoogleTokens("access", "refresh");
         await database.SeedAsync(user);
         var today = new DateOnly(2030, 10, 15);
-        database.Context.Habits.Add(Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, today)).Value);
+        database.Context.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, today)).Value);
         await database.Context.SaveChangesAsync();
         database.Context.ChangeTracker.Clear();
         database.ForceUserConflict = persistentConflict;

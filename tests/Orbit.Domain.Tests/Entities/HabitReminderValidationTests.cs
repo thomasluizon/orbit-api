@@ -22,7 +22,7 @@ public class HabitReminderValidationTests
     [MemberData(nameof(InvalidReminderTimes))]
     public void Create_InvalidReminderTimes_ReturnsPreciseDomainError(int[] offsets, string code, string message)
     {
-        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             ReminderTimes: offsets));
 
         result.IsFailure.Should().BeTrue();
@@ -35,10 +35,10 @@ public class HabitReminderValidationTests
     public void Update_InvalidReminderTimes_LeavesHabitUnchanged(int[] offsets, string code, string message)
     {
         var clock = new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(7, 0));
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             Description: "Original", ReminderEnabled: true, ReminderTimes: [30], ScheduledReminders: [clock])).Value;
 
-        var result = habit.Update(new HabitUpdateParams("Changed", "Changed", null, null, null, false, Today.AddDays(1),
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Changed", "Changed", null, null, null, false, Today.AddDays(1),
             DueTime: new TimeOnly(9, 0), ReminderEnabled: false, ReminderTimes: offsets,
             ScheduledReminders: [], RelativeReminders: [new(-1)]));
 
@@ -68,13 +68,13 @@ public class HabitReminderValidationTests
     [MemberData(nameof(ValidReminderTimes))]
     public void ReminderTimes_ValidValues_PreserveCreateAndUpdateSemantics(int[]? offsets)
     {
-        var parameters = new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today, ReminderTimes: offsets);
+        var parameters = new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today, ReminderTimes: offsets);
         var created = Habit.Create(parameters);
         created.IsSuccess.Should().BeTrue();
         created.Value.ReminderTimes.Should().Equal(offsets ?? [15]);
 
         var habit = Habit.Create(parameters with { ReminderTimes = [30] }).Value;
-        habit.Update(new HabitUpdateParams("Reminder", null, null, null, null, false, null,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Reminder", null, null, null, null, false, null,
             ReminderTimes: offsets)).IsSuccess.Should().BeTrue();
         habit.ReminderTimes.Should().Equal(offsets ?? [30]);
     }
@@ -87,7 +87,7 @@ public class HabitReminderValidationTests
     public void RelativeMinutesBefore_ValidRange_RemainsIndependentOfReminderTimes(int offset)
     {
         RelativeReminderTime[] relative = [new(offset)];
-        var parameters = new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var parameters = new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             DueTime: new TimeOnly(9, 0), ReminderTimes: [0, 10080], RelativeReminders: relative);
         var created = Habit.Create(parameters);
         created.IsSuccess.Should().BeTrue();
@@ -95,7 +95,7 @@ public class HabitReminderValidationTests
         created.Value.RelativeReminders.Should().Equal(relative);
 
         var habit = Habit.Create(parameters with { RelativeReminders = [] }).Value;
-        habit.Update(new HabitUpdateParams("Reminder", null, null, null, null, false, null,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Reminder", null, null, null, null, false, null,
             DueTime: new TimeOnly(9, 0), RelativeReminders: relative)).IsSuccess.Should().BeTrue();
         habit.ReminderTimes.Should().Equal(0, 10080);
         habit.RelativeReminders.Should().Equal(relative);
@@ -110,7 +110,7 @@ public class HabitReminderValidationTests
     [InlineData(99, true)]
     public void Create_UndefinedScheduledWhen_FailsBeforeClockReminderFolding(int value, bool timed)
     {
-        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             DueTime: timed ? new TimeOnly(9, 0) : null,
             ScheduledReminders: [new((ScheduledReminderWhen)value, new TimeOnly(8, 0))]));
 
@@ -129,10 +129,10 @@ public class HabitReminderValidationTests
     public void Update_UndefinedScheduledWhen_LeavesHabitUnchanged(int value, bool timed)
     {
         var existing = new ScheduledReminderTime(ScheduledReminderWhen.DayBefore, new TimeOnly(7, 0));
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             ScheduledReminders: [existing])).Value;
 
-        var result = habit.Update(new HabitUpdateParams("Changed", null, null, null, null, false, null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Changed", null, null, null, null, false, null,
             DueTime: timed ? new TimeOnly(9, 0) : null,
             ScheduledReminders: [new((ScheduledReminderWhen)value, new TimeOnly(8, 0))]));
 
@@ -152,7 +152,7 @@ public class HabitReminderValidationTests
     public void UndefinedRelativeWhen_FailsCreateAndUpdate(int value)
     {
         RelativeReminderTime[] reminders = [new(When: (ScheduledReminderWhen)value, Time: new TimeOnly(8, 0))];
-        var parameters = new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var parameters = new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             DueTime: new TimeOnly(9, 0));
 
         var create = Habit.Create(parameters with { RelativeReminders = reminders });
@@ -160,7 +160,7 @@ public class HabitReminderValidationTests
         create.ErrorCode.Should().Be("INVALID_RELATIVE_REMINDERS");
 
         var habit = Habit.Create(parameters).Value;
-        var update = habit.Update(new HabitUpdateParams("Changed", null, null, null, null, false, null,
+        var update = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Changed", null, null, null, null, false, null,
             RelativeReminders: reminders));
         update.IsFailure.Should().BeTrue();
         update.ErrorCode.Should().Be("INVALID_RELATIVE_REMINDERS");
@@ -176,7 +176,7 @@ public class HabitReminderValidationTests
     public void DefinedScheduledWhen_PreservesCreateAndUpdateMeaning(int value, bool timed)
     {
         var reminder = new ScheduledReminderTime((ScheduledReminderWhen)value, new TimeOnly(8, 0));
-        var parameters = new HabitCreateParams(Guid.NewGuid(), "Reminder", null, null, Today,
+        var parameters = new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Reminder", null, null, Today,
             DueTime: timed ? new TimeOnly(9, 0) : null,
             ScheduledReminders: [reminder]);
         var created = Habit.Create(parameters);
@@ -184,13 +184,13 @@ public class HabitReminderValidationTests
         created.Value.GetScheduledRemindersForLegacyClients().Should().Equal(reminder);
 
         var habit = Habit.Create(parameters with { ScheduledReminders = null }).Value;
-        habit.Update(new HabitUpdateParams("Reminder", null, null, null, null, false, null,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Reminder", null, null, null, null, false, null,
                 ScheduledReminders: [reminder])).IsSuccess.Should().BeTrue();
         habit.GetScheduledRemindersForLegacyClients().Should().Equal(reminder);
-        habit.Update(new HabitUpdateParams("Reminder", null, null, null, null, false, null))
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Reminder", null, null, null, null, false, null))
             .IsSuccess.Should().BeTrue();
         habit.GetScheduledRemindersForLegacyClients().Should().Equal(reminder);
-        habit.Update(new HabitUpdateParams("Reminder", null, null, null, null, false, null,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Reminder", null, null, null, null, false, null,
                 ScheduledReminders: [], RelativeReminders: [])).IsSuccess.Should().BeTrue();
         habit.GetScheduledRemindersForLegacyClients().Should().BeEmpty();
     }

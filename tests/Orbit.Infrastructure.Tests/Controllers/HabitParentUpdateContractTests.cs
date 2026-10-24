@@ -47,9 +47,9 @@ public class HabitParentUpdateContractTests
         var db = factory.Context;
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Alex", "parent-contract@example.test").Value;
-        var oldParent = Habit.Create(new(user.Id, "Old parent", FrequencyUnit.Day, 1, today)).Value;
-        var target = Habit.Create(new(user.Id, "Target", FrequencyUnit.Day, 1, today)).Value;
-        var habit = Habit.Create(new(user.Id, "Original", FrequencyUnit.Day, 1, today,
+        var oldParent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Old parent", FrequencyUnit.Day, 1, today)).Value;
+        var target = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Target", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Original", FrequencyUnit.Day, 1, today,
             ParentHabitId: child ? oldParent.Id : null)).Value;
         db.Users.Add(user);
         db.Habits.AddRange(oldParent, target, habit);

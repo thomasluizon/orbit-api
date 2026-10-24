@@ -142,7 +142,7 @@ public class ContractHabitLogSlipMigrationTests
     {
         var user = User.Create("User", "user@example.com").Value;
         context.Users.Add(user);
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Habit", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1), IsBadHabit: badHabit)).Value;
     }
 

@@ -45,9 +45,9 @@ public sealed class ReusedHabitPreviewTests : IDisposable
         var db = _factory.Context;
         var user = User.Create("Alex", "alex@example.com").Value;
         _userId = user.Id;
-        var parent = Habit.Create(new HabitCreateParams(_userId, "Morning", FrequencyUnit.Day, 1, Today)).Value;
-        var destination = Habit.Create(new HabitCreateParams(_userId, "Evening", FrequencyUnit.Day, 1, Today)).Value;
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Run", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value;
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Morning", FrequencyUnit.Day, 1, Today)).Value;
+        var destination = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Evening", FrequencyUnit.Day, 1, Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Run", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value;
         var tag = Tag.Create(_userId, "Old tag", "#123456").Value;
         var newTag = Tag.Create(_userId, "New tag", "#123456").Value;
         var goal = Goal.Create(_userId, "Old goal", 10, "runs").Value;

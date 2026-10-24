@@ -304,7 +304,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var existingHabit = Habit.Create(new HabitCreateParams(
+        var existingHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             GoogleEventId: "evt_a")).Value;
@@ -392,7 +392,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var orphanHabit = Habit.Create(new HabitCreateParams(
+        var orphanHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0))).Value;
@@ -422,7 +422,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var legacyHabit = Habit.Create(new HabitCreateParams(
+        var legacyHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 10, 5),
             DueTime: new TimeOnly(9, 0))).Value;
@@ -455,7 +455,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var manualHabit = Habit.Create(new HabitCreateParams(
+        var manualHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Lisbon stand-up", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2027, 1, 7),
             DueTime: new TimeOnly(habitHour, 30))).Value;
@@ -501,7 +501,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var orphanHabit = Habit.Create(new HabitCreateParams(
+        var orphanHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Imported Review Event", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0))).Value;
@@ -529,11 +529,11 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var firstHabit = Habit.Create(new HabitCreateParams(
+        var firstHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0))).Value;
-        var secondHabit = Habit.Create(new HabitCreateParams(
+        var secondHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0))).Value;
@@ -562,12 +562,12 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var assignedHabit = Habit.Create(new HabitCreateParams(
+        var assignedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0),
             GoogleEventId: "evt_a")).Value;
-        var orphanHabit = Habit.Create(new HabitCreateParams(
+        var orphanHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0))).Value;
@@ -606,11 +606,11 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var firstHabit = Habit.Create(new HabitCreateParams(
+        var firstHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 10),
             DueTime: new TimeOnly(9, 0))).Value;
-        var secondHabit = Habit.Create(new HabitCreateParams(
+        var secondHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Review", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 4, 11),
             DueTime: new TimeOnly(10, 0))).Value;
@@ -869,7 +869,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        var existingHabit = Habit.Create(new HabitCreateParams(
+        var existingHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Standup", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), GoogleEventId: "evt_a")).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { existingHabit }.AsReadOnly());

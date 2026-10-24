@@ -49,7 +49,7 @@ public class UpdateHabitGoalSyncTests
     [Fact]
     public async Task Handle_WithGoalIds_SyncsGoalLinks()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         var goal = Goal.Create(UserId, "Fitness", 10, "sessions").Value;
 
@@ -83,7 +83,7 @@ public class UpdateHabitGoalSyncTests
     [Fact]
     public async Task Handle_WithEmptyGoalIds_ClearsGoalLinks()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -104,7 +104,7 @@ public class UpdateHabitGoalSyncTests
     [Fact]
     public async Task Handle_WithoutGoalIds_DoesNotQueryGoalRepo()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -128,7 +128,7 @@ public class UpdateHabitGoalSyncTests
     [Fact]
     public async Task Handle_NoDueTimeChange_DoesNotClearReminders()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(

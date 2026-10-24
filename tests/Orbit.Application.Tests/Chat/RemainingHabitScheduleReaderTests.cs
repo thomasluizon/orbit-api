@@ -27,11 +27,11 @@ public class RemainingHabitScheduleReaderTests
     [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.General, true)]
-    public void FieldSummary_KeepsFlexibleLabel(HabitSchedule schedule, bool divergentFlags)
+    public void FieldSummary_KeepsFlexibleLabel(HabitSchedule schedule, bool rehydrate)
     {
-        var summary = HabitFieldSummary.From(Create(schedule, divergentFlags));
+        var summary = HabitFieldSummary.From(Create(schedule, rehydrate));
 
-        summary.IsFlexible.Should().Be(schedule == HabitSchedule.Flexible);
+        summary.Schedule.Should().Be(schedule);
         summary.Format().Contains("Flexible: true").Should().Be(schedule == HabitSchedule.Flexible);
     }
 
@@ -44,9 +44,9 @@ public class RemainingHabitScheduleReaderTests
     [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.General, true)]
-    public void CardsAndTodayFacts_KeepCompletionAfterCursorAdvances(HabitSchedule schedule, bool divergentFlags)
+    public void CardsAndTodayFacts_KeepCompletionAfterCursorAdvances(HabitSchedule schedule, bool rehydrate)
     {
-        var habit = Create(schedule, divergentFlags);
+        var habit = Create(schedule, rehydrate);
         var before = HabitListCardBuilder.Build([habit], Today, "all", supportsDoneStatus: true);
         before.Items.Should().ContainSingle().Which.Status.Should().Be(schedule == HabitSchedule.General ? "general" : "today");
         habit.Log(Today).IsSuccess.Should().BeTrue();
@@ -74,9 +74,9 @@ public class RemainingHabitScheduleReaderTests
     [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.General, true)]
-    public void Correction_KeepsScheduleAndRejectsUnrequestedTypeChange(HabitSchedule schedule, bool divergentFlags)
+    public void Correction_KeepsScheduleAndRejectsUnrequestedTypeChange(HabitSchedule schedule, bool rehydrate)
     {
-        var habit = Create(schedule, divergentFlags);
+        var habit = Create(schedule, rehydrate);
         var validator = new HabitCorrectionProposalValidator();
         var same = JsonSerializer.SerializeToElement(new
         {
@@ -99,9 +99,9 @@ public class RemainingHabitScheduleReaderTests
     [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.General, true)]
-    public void PerfectAchievements_KeepGeneralAndCompletedTaskExclusions(HabitSchedule schedule, bool divergentFlags)
+    public void PerfectAchievements_KeepGeneralAndCompletedTaskExclusions(HabitSchedule schedule, bool rehydrate)
     {
-        var habit = Create(schedule, divergentFlags);
+        var habit = Create(schedule, rehydrate);
         var user = User.Create("Person", "person@example.com").Value;
         var earned = new HashSet<string>();
         var awards = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
@@ -124,9 +124,9 @@ public class RemainingHabitScheduleReaderTests
     [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.General, true)]
-    public async Task QueryTool_KeepsGeneralFilterAndTypedStatus(HabitSchedule schedule, bool divergentFlags)
+    public async Task QueryTool_KeepsGeneralFilterAndTypedStatus(HabitSchedule schedule, bool rehydrate)
     {
-        var habit = Create(schedule, divergentFlags);
+        var habit = Create(schedule, rehydrate);
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
@@ -147,17 +147,18 @@ public class RemainingHabitScheduleReaderTests
         }
     }
 
-    private static Habit Create(HabitSchedule schedule, bool divergentFlags)
+    private static Habit Create(HabitSchedule schedule, bool rehydrate)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Habit",
+        var habit = Habit.Create(new HabitCreateParams(schedule, Guid.NewGuid(), "Habit",
             schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
             schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
-            Today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible,
+            Today,
             CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
-        if (divergentFlags)
+        if (rehydrate)
         {
-            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
+            var original = habit;
+            habit = Habit.FromScheduleSnapshot(Orbit.Domain.Models.HabitScheduleSnapshot.FromHabit(original), original.UserId);
+            habit.LoadScheduleCandidateFieldsForRead(original.Title, original.Description, original.Position, original.Tags);
         }
         return habit;
     }

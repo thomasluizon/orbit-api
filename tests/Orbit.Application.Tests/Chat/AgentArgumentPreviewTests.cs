@@ -76,7 +76,7 @@ public sealed class AgentArgumentPreviewTests
     [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
     public async Task NewHabitFields_AppearInCreateAndUpdateApproval(string field, string value)
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", null, null, new DateOnly(2026, 9, 25))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, _userId, "Read", null, null, new DateOnly(2026, 9, 25))).Value;
         SetupHabit(habit);
         foreach (var operation in new[] { "create_habit", "update_habit" })
         {
@@ -111,7 +111,7 @@ public sealed class AgentArgumentPreviewTests
     [Fact]
     public async Task PreviewAsync_HeldUpdate_ShowsTheCurrentValueAndTheProposedValue()
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber agua", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber agua", FrequencyUnit.Day, 1,
             new DateOnly(2026, 9, 25))).Value;
         SetupHabit(habit);
 
@@ -136,7 +136,7 @@ public sealed class AgentArgumentPreviewTests
         string field, string proposed)
     {
         var databaseName = $"AgentArgumentPreviewTests_{Guid.NewGuid()}";
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber agua", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber agua", FrequencyUnit.Day, 1,
             new DateOnly(2026, 9, 25))).Value;
         await using (var seed = CreateContext(databaseName))
         {
@@ -203,7 +203,7 @@ public sealed class AgentArgumentPreviewTests
     [Fact]
     public async Task ReviseAsync_EditOfAFieldThatIsNotOffered_IsRejected()
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber agua", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber agua", FrequencyUnit.Day, 1,
             new DateOnly(2026, 9, 25))).Value;
         SetupHabit(habit);
         var pendingId = Guid.NewGuid();
@@ -302,7 +302,7 @@ public sealed class AgentArgumentPreviewTests
 
     private async Task<(Guid PendingId, PendingOperationChangePreview Preview)> HoldAsync(string operationId)
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber agua", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber agua", FrequencyUnit.Day, 1,
             new DateOnly(2026, 9, 25))).Value;
         SetupHabit(habit);
         var arguments = operationId == "create_habit"

@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -164,7 +165,7 @@ public class UpdateGoalProgressCommandHandlerTests
     public async Task Handle_LinkedStandardGoal_ReturnsDerivedErrorWithoutWritingProgress()
     {
         var goal = Goal.Create(UserId, "Complete sessions", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId, "Exercise", Domain.Enums.FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(habit);
         goal.SyncStandardProgress(3);
@@ -186,7 +187,7 @@ public class UpdateGoalProgressCommandHandlerTests
     public async Task Handle_OnlyLinkedHabitIsSoftDeleted_AcceptsManualProgress()
     {
         var goal = Goal.Create(UserId, "Complete sessions", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId, "Exercise", Domain.Enums.FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(habit);
         habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));

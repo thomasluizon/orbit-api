@@ -14,12 +14,12 @@ public class HabitTagUpdateTests
     public void UpdateWithTags_InvalidAssignmentOrFields_PreservesBoth(string kind)
     {
         var userId = Guid.NewGuid();
-        var habit = Habit.Create(new(userId, "Original", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Original", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
         var original = Tag.Create(userId, "Original", "#ffffff").Value;
         habit.AddTag(original);
         var requested = Tag.Create(kind == "foreign" ? Guid.NewGuid() : userId, "Requested", "#ffffff").Value;
         if (kind == "deleted") requested.SoftDelete();
-        var update = new HabitUpdateParams(kind == "title" ? "" : "Changed", null, FrequencyUnit.Day, 1, null, false, null);
+        var update = new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, kind == "title" ? "" : "Changed", null, FrequencyUnit.Day, 1, null, false, null);
 
         var result = habit.Update(update, [requested], kind == "cap" ? 0 : 5);
 
@@ -32,9 +32,9 @@ public class HabitTagUpdateTests
     public void UpdateWithTags_ReplacesAsSetAndNullPreservesWhileEmptyClears()
     {
         var userId = Guid.NewGuid();
-        var habit = Habit.Create(new(userId, "Original", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Original", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
         var tag = Tag.Create(userId, "Selected", "#ffffff").Value;
-        var update = new HabitUpdateParams("Changed", null, FrequencyUnit.Day, 1, null, false, null);
+        var update = new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Changed", null, FrequencyUnit.Day, 1, null, false, null);
         habit.Update(update, [tag, tag], 5).IsSuccess.Should().BeTrue();
         habit.Tags.Should().Equal(tag);
         habit.Update(update, null, 5).IsSuccess.Should().BeTrue();

@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
@@ -117,7 +118,7 @@ public class GroundednessCheckerTests
     public async Task FromToolResults_RealHabitToolOutput_ProvidesNamesNumbersAndDates()
     {
         var userId = Guid.NewGuid();
-        var habit = Habit.Create(new HabitCreateParams(userId, "Meditação diária", null, null,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, userId, "Meditação diária", null, null,
             DueDate: new DateOnly(2026, 4, 3))).Value;
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),

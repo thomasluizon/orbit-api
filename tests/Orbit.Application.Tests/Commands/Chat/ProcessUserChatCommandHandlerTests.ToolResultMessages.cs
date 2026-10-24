@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         var habits = Enumerable.Range(0, count)
-            .Select(index => Habit.Create(new HabitCreateParams(UserId, $"Habit {index}", FrequencyUnit.Day, 1, DueDate: Today)).Value)
+            .Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, $"Habit {index}", FrequencyUnit.Day, 1, DueDate: Today)).Value)
             .ToList();
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())

@@ -30,21 +30,21 @@ public class GetCalendarMonthQueryHandlerTests
 
     private static Habit CreateDailyHabit(string title = "Daily Habit")
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
 
     private static Habit CreateOneTimeHabit(string title = "One-time Task")
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, title, null, null,
             DueDate: Today)).Value;
     }
 
     private static Habit CreateBadHabit(string title = "Bad Habit")
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
     }
@@ -73,10 +73,10 @@ public class GetCalendarMonthQueryHandlerTests
     public async Task Handle_NestedChildren_UseOwnCreationTimestamps()
     {
         var parent = CreateDailyHabit("Parent");
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-1), ParentHabitId: parent.Id)).Value;
-        var grandchild = Habit.Create(new HabitCreateParams(
+        var grandchild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Grandchild", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-2), ParentHabitId: child.Id)).Value;
         var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -142,7 +142,7 @@ public class GetCalendarMonthQueryHandlerTests
     public async Task Handle_RecurringHabit_ReturnsScheduledDates()
     {
         var loggedDate = new DateOnly(2026, 9, 28);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Caminhar", FrequencyUnit.Week, 3,
             DueDate: loggedDate)).Value;
         habit.Log(loggedDate).IsSuccess.Should().BeTrue();
@@ -169,7 +169,7 @@ public class GetCalendarMonthQueryHandlerTests
     public async Task Handle_DailyHabitLoggedOnLastDay_IncludesDateOnce()
     {
         var loggedDate = new DateOnly(2026, 9, 30);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Daily", FrequencyUnit.Day, 1,
             DueDate: loggedDate)).Value;
         habit.Log(loggedDate).IsSuccess.Should().BeTrue();
@@ -194,7 +194,7 @@ public class GetCalendarMonthQueryHandlerTests
     public async Task Handle_LoggedAndProjectedWeeklyDates_ReturnsSortedUnion()
     {
         var loggedDate = new DateOnly(2026, 9, 7);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Weekly", FrequencyUnit.Week, 1,
             DueDate: loggedDate)).Value;
         habit.Log(loggedDate).IsSuccess.Should().BeTrue();
@@ -222,10 +222,10 @@ public class GetCalendarMonthQueryHandlerTests
     public async Task Handle_LoggedChild_KeepsParentInMonth()
     {
         var loggedDate = new DateOnly(2026, 9, 28);
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Parent", FrequencyUnit.Week, 3,
             DueDate: new DateOnly(2026, 10, 19))).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Week, 3,
             DueDate: loggedDate, ParentHabitId: parent.Id)).Value;
         child.Log(loggedDate).IsSuccess.Should().BeTrue();
@@ -261,14 +261,13 @@ public class GetCalendarMonthQueryHandlerTests
         FrequencyUnit? frequencyUnit, bool isFlexible, bool isGrandchild)
     {
         var loggedDate = MonthEnd.AddDays(-2);
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Parent", null, null, DueDate: MonthEnd.AddDays(1))).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Child", null, null, DueDate: MonthEnd.AddDays(1), ParentHabitId: parent.Id)).Value;
-        var descendant = Habit.Create(new HabitCreateParams(
+        var descendant = Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : frequencyUnit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId, "Logged descendant", frequencyUnit, frequencyUnit.HasValue ? 1 : null,
-            DueDate: loggedDate, ParentHabitId: isGrandchild ? child.Id : parent.Id,
-            IsFlexible: isFlexible, EndDate: frequencyUnit == FrequencyUnit.Day ? MonthEnd : null)).Value;
+            DueDate: loggedDate, ParentHabitId: isGrandchild ? child.Id : parent.Id, EndDate: frequencyUnit == FrequencyUnit.Day ? MonthEnd : null)).Value;
         var firstLog = descendant.Log(loggedDate);
         firstLog.IsSuccess.Should().BeTrue();
         var expectedLogs = new List<HabitLog> { firstLog.Value };
@@ -278,7 +277,7 @@ public class GetCalendarMonthQueryHandlerTests
             lastLog.IsSuccess.Should().BeTrue();
             expectedLogs.Insert(0, lastLog.Value);
             descendant.NextDueDate.Should().Be(MonthEnd.AddDays(1));
-            descendant.Update(new HabitUpdateParams(
+            descendant.Update(new HabitUpdateParams(descendant.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? descendant.Schedule : frequencyUnit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
                 descendant.Title, null, frequencyUnit, 1, null, false, MonthStart))
                 .IsSuccess.Should().BeTrue();
             descendant.NextDueDate.Should().Be(MonthStart);
@@ -314,11 +313,11 @@ public class GetCalendarMonthQueryHandlerTests
     [Fact]
     public async Task Handle_DescendantLogs_PreservesRangeOrderingAndTopLevelLogs()
     {
-        var parent = Habit.Create(new HabitCreateParams(
-            UserId, "Parent", FrequencyUnit.Month, 5, DueDate: MonthStart, IsFlexible: true)).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Parent", FrequencyUnit.Month, 5, DueDate: MonthStart)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Child", FrequencyUnit.Month, 5, DueDate: MonthStart,
-            ParentHabitId: parent.Id, IsFlexible: true)).Value;
+            ParentHabitId: parent.Id)).Value;
         foreach (var habit in new[] { parent, child })
         {
             habit.Log(MonthStart.AddDays(-1)).IsSuccess.Should().BeTrue();
@@ -366,13 +365,12 @@ public class GetCalendarMonthQueryHandlerTests
         var habits = new List<Habit>();
         for (var level = 0; level < depth; level++)
         {
-            habits.Add(Habit.Create(new HabitCreateParams(
+            habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
                 UserId, "Container", null, null, DueDate: windowEnd.AddDays(1),
                 ParentHabitId: habits.LastOrDefault()?.Id)).Value);
         }
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", frequencyUnit, 3, DueDate: windowStart,
-            IsFlexible: true, ParentHabitId: habits.LastOrDefault()?.Id)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", frequencyUnit, 3, DueDate: windowStart, ParentHabitId: habits.LastOrDefault()?.Id)).Value;
         var loggedDates = Enumerable.Range(0, 3).Select(windowStart.AddDays).ToList();
         foreach (var date in loggedDates)
             habit.Log(date, weekStartDay: 1).IsSuccess.Should().BeTrue();
@@ -412,8 +410,8 @@ public class GetCalendarMonthQueryHandlerTests
         var rangeEnd = windowStart.AddDays(13);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(rangeEnd.AddDays(1));
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(weekStartDay);
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: windowStart, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: windowStart)).Value;
         habit.Log(windowStart, weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -438,8 +436,8 @@ public class GetCalendarMonthQueryHandlerTests
         var rangeEnd = windowStart.AddDays(13);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(rangeEnd.AddDays(1));
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(weekStartDay);
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: windowStart, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: windowStart)).Value;
         habit.Log(windowStart, weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
         habit.Log(windowStart.AddDays(1), weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
         habit.SkipFlexible(windowStart.AddDays(2)).IsSuccess.Should().BeTrue();
@@ -465,11 +463,11 @@ public class GetCalendarMonthQueryHandlerTests
         var monthStart = new DateOnly(2026, 9, 1);
         var monthEnd = new DateOnly(2026, 9, 30);
         var loggedDate = new DateOnly(2026, 9, 28);
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible Parent", FrequencyUnit.Year, 1,
-            DueDate: new DateOnly(2026, 1, 1), IsFlexible: true)).Value;
+            DueDate: new DateOnly(2026, 1, 1))).Value;
         parent.Log(new DateOnly(2026, 8, 31)).IsSuccess.Should().BeTrue();
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Week, 3,
             DueDate: loggedDate, ParentHabitId: parent.Id)).Value;
         var childLog = child.Log(loggedDate).Value;
@@ -500,7 +498,7 @@ public class GetCalendarMonthQueryHandlerTests
     [Fact]
     public async Task Handle_HabitWithoutLoggedOrProjectedDates_StaysOutOfMonth()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Future", FrequencyUnit.Week, 3,
             DueDate: new DateOnly(2026, 10, 19))).Value;
         _habitRepo.FindAsync(

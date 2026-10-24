@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using FluentAssertions;
 using FsCheck.Xunit;
 using Orbit.Application.Habits.Services;
@@ -19,9 +20,9 @@ public class HabitSchedulePropertyTests
     {
         any.Title.Should().NotBeNullOrWhiteSpace();
         recurring.Habit.FrequencyUnit.Should().NotBeNull();
-        recurring.Habit.IsFlexible.Should().BeFalse();
+        recurring.Habit.Schedule.Should().NotBe(HabitSchedule.Flexible);
         recurring.Habit.IsBadHabit.Should().BeFalse();
-        flexible.Habit.IsFlexible.Should().BeTrue();
+        flexible.Habit.Schedule.Should().Be(HabitSchedule.Flexible);
         flexible.Habit.FrequencyUnit.Should().NotBeNull();
         bad.Habit.IsBadHabit.Should().BeTrue();
     }

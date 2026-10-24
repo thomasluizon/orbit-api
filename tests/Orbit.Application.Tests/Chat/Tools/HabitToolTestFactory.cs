@@ -9,7 +9,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 internal static class HabitToolTestFactory
 {
     public static Habit CreateHabit(Guid userId, string title) =>
-        Habit.Create(new HabitCreateParams(userId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 8, 6))).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 8, 6))).Value;
 
     public static void SetupHabitFound(IGenericRepository<Habit> repository, Habit habit)
     {

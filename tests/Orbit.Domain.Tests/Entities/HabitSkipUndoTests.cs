@@ -55,8 +55,8 @@ public sealed class HabitSkipUndoTests
     [Fact]
     public void Undo_FlexibleSkip_PreservesExistingLogsAndCreatesSyncTombstone()
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Week, 3,
-            Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, Guid.NewGuid(), "Read", FrequencyUnit.Week, 3,
+            Today)).Value;
         var completion = habit.Log(Today).Value;
         var receipt = HabitSkipUndo.Create(Guid.NewGuid(), habit).Value;
         var skipped = habit.SkipFlexible(Today).Value;
@@ -70,6 +70,6 @@ public sealed class HabitSkipUndoTests
         habit.Logs.Where(log => !log.IsDeleted).Should().ContainSingle().Which.Should().Be(completion);
     }
 
-    private static Habit CreateHabit() => Habit.Create(new HabitCreateParams(
+    private static Habit CreateHabit() => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
         Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
 }

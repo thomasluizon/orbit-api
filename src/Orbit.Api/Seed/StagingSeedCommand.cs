@@ -1,3 +1,4 @@
+using Orbit.Application.Habits.Commands;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -158,10 +159,12 @@ public sealed class StagingSeedService(OrbitDbContext db)
             var parentId = spec.Parent is null ? (Guid?)null : byTitle[spec.Parent].Id;
             var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
             var createdAtUtc = TimeZoneInfo.ConvertTimeToUtc(anchor.ToDateTime(TimeOnly.MinValue), zone);
-            var habit = Require(Habit.Create(new HabitCreateParams(
+            var schedule = Require(LegacyHabitSchedule.Resolve(spec.IsGeneral, spec.IsFlexible,
+                spec.Unit, spec.Quantity, spec.IsBad, spec.Days));
+            var habit = Require(Habit.Create(new HabitCreateParams(schedule,
                 userId, spec.Title, spec.Unit, spec.Quantity, anchor,
                 Days: spec.Days, IsBadHabit: spec.IsBad, ParentHabitId: parentId,
-                ChecklistItems: spec.Checklist, IsGeneral: spec.IsGeneral, IsFlexible: spec.IsFlexible,
+                ChecklistItems: spec.Checklist,
                 CreatedAtUtc: createdAtUtc)));
             if (spec.Title is "Drink water" or "Morning walk" or "Exercise three times") habit.AddTag(tags.Single(t => t.Name == "Health"));
             if (spec.Title is "Read for 20 minutes") habit.AddTag(tags.Single(t => t.Name == "Learning"));

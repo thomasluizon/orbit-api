@@ -36,7 +36,7 @@ public class DeleteHabitCommandHandlerTests
 
     private static Habit CreateTestHabit(Guid? userId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
@@ -98,9 +98,9 @@ public class DeleteHabitCommandHandlerTests
     public async Task Handle_HabitWithSubHabits_CascadeSoftDeletesSubtreeWithSharedTimestamp()
     {
         var parent = CreateTestHabit();
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: parent.Id)).Value;
-        var grandchild = Habit.Create(new HabitCreateParams(
+        var grandchild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Grandchild", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: child.Id)).Value;
 
         _habitRepo.GetByIdAsync(parent.Id, Arg.Any<CancellationToken>()).Returns(parent);

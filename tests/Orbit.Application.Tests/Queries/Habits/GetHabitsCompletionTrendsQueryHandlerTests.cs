@@ -41,7 +41,7 @@ public class GetHabitsCompletionTrendsQueryHandlerTests
 
     private static Habit CreateDailyHabit()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Daily", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-10))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Daily", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-10))).Value;
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, Today.AddDays(-10).ToDateTime(TimeOnly.MinValue));
         return habit;
     }
