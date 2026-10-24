@@ -55,7 +55,9 @@ public record HabitScheduleItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     HabitSchedule? Schedule = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    DateOnly? StartDate = null);
+    DateOnly? StartDate = null,
+    Guid? ParentHabitId = null,
+    string? ParentTitle = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -96,7 +98,9 @@ public record HabitScheduleChildItem(
     IReadOnlyList<int>? ReminderTimes = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
-    bool? SlipAlertEnabled = null);
+    bool? SlipAlertEnabled = null,
+    Guid? ParentHabitId = null,
+    string? ParentTitle = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,

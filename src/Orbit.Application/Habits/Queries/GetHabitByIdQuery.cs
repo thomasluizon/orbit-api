@@ -43,7 +43,9 @@ public record HabitChildResponse(
     IReadOnlyList<int>? ReminderTimes = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
-    bool? SlipAlertEnabled = null);
+    bool? SlipAlertEnabled = null,
+    Guid? ParentHabitId = null,
+    string? ParentTitle = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -81,7 +83,9 @@ public record HabitDetailResponse(
     IReadOnlyList<HabitTagItem>? Tags = null,
     DateOnly? ScheduledStartDate = null,
     int? OriginalDayOfMonth = null,
-    Guid? ParentId = null);
+    Guid? ParentId = null,
+    Guid? ParentHabitId = null,
+    string? ParentTitle = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -126,6 +130,10 @@ public class GetHabitByIdQueryHandler(
             isCompleted = currentDateLogs.Count > 0;
         }
 
+        var parentTitle = habit.ParentHabitId is { } parentId
+            ? (await habitRepository.FindAsync(h => h.Id == parentId && h.UserId == request.UserId, cancellationToken)).FirstOrDefault()?.Title
+            : null;
+
         return Result.Success(new HabitDetailResponse(
             habit.Id,
             habit.Title,
@@ -158,7 +166,9 @@ public class GetHabitByIdQueryHandler(
             Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             ScheduledStartDate: habit.ScheduledStartDate,
             OriginalDayOfMonth: habit.OriginalDayOfMonth,
-            ParentId: habit.ParentHabitId));
+            ParentId: habit.ParentHabitId,
+            ParentHabitId: habit.ParentHabitId,
+            ParentTitle: parentTitle));
     }
 }
 
@@ -208,11 +218,12 @@ internal static class HabitDetailChildMapper
         parent.Children
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
-            .Select(c => MapChild(c, userToday, weekStartDay, descendantLogsByHabitId))
+            .Select(c => MapChild(c, parent.Title, userToday, weekStartDay, descendantLogsByHabitId))
             .ToList();
 
     private static HabitChildResponse MapChild(
         Habit child,
+        string parentTitle,
         DateOnly userToday,
         int weekStartDay,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId) => new(
@@ -244,7 +255,9 @@ internal static class HabitDetailChildMapper
         ReminderTimes: child.ReminderTimes,
         ScheduledReminders: child.GetScheduledRemindersForLegacyClients(),
         RelativeReminders: child.RelativeReminders,
-        SlipAlertEnabled: child.SlipAlertEnabled);
+        SlipAlertEnabled: child.SlipAlertEnabled,
+        ParentHabitId: child.ParentHabitId,
+        ParentTitle: parentTitle);
 
     private static bool GetResponseCompletion(
         Habit habit,

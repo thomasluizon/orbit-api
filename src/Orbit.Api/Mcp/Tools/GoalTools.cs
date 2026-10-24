@@ -36,7 +36,8 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
             string.Create(CultureInfo.InvariantCulture, $"- {g.Title} (id: {g.Id}) | {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F0}%)") +
             $" | Status: {g.Status}" +
             (g.Deadline is not null ? string.Create(CultureInfo.InvariantCulture, $" | Deadline: {g.Deadline}") : "") +
-            (g.TrackingStatus is not null ? $" | Tracking: {g.TrackingStatus}" : ""));
+            (g.TrackingStatus is not null ? $" | Tracking: {g.TrackingStatus}" : "") +
+            $" | Linked habits: {(g.LinkedHabits.Count == 0 ? "none" : string.Join(", ", g.LinkedHabits.Select(h => $"{h.Title} ({h.Id})")))}");
 
         return $"Goals ({goals.TotalCount}):\n{string.Join("\n", lines)}";
     }

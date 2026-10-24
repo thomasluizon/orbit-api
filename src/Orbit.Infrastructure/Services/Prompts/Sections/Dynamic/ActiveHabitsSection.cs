@@ -90,6 +90,11 @@ public class ActiveHabitsSection : IPromptSection
     private static string BuildHabitLabel(Habit habit, PromptContext context)
     {
         var labels = new List<string>();
+        labels.Add($"Start date: {habit.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+        labels.Add(habit.ParentHabitId is { } parentId
+            ? $"Parent: {PromptDataSanitizer.QuoteInline(context.ActiveHabits.FirstOrDefault(parent => parent.Id == parentId)?.Title, 100)} ({parentId})"
+            : "Parent: none");
+        labels.Add($"Tags: {(habit.Tags.Count == 0 ? "none" : string.Join(", ", habit.Tags.Select(t => $"{PromptDataSanitizer.QuoteInline(t.Name, 100)} ({t.Id})")))}");
         if (!string.IsNullOrWhiteSpace(habit.Emoji)) labels.Add($"Emoji: {habit.Emoji}");
         if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL");
         else if (IsOverdue(habit, context)) labels.Add("OVERDUE");

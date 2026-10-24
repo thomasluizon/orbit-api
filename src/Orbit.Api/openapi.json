@@ -18933,6 +18933,15 @@
               "null",
               "string"
             ]
+          },
+          "linkedHabits": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/LinkedHabitDto"
+            }
           }
         }
       },
@@ -19238,6 +19247,19 @@
               "null",
               "boolean"
             ]
+          },
+          "parentHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "parentTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -19474,6 +19496,19 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "parentHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "parentTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -19609,6 +19644,35 @@
           },
           "status": {
             "type": "string"
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "parentHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "parentTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/HabitTagItem"
+            }
           }
         }
       },
@@ -20289,6 +20353,19 @@
               "null",
               "boolean"
             ]
+          },
+          "parentHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "parentTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -20552,6 +20629,19 @@
               "string"
             ],
             "format": "date"
+          },
+          "parentHabitId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "parentTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -20717,6 +20807,22 @@
               "string"
             ],
             "format": "double"
+          }
+        }
+      },
+      "LinkedHabitDto": {
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

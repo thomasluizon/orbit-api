@@ -33,7 +33,7 @@ public class GetHabitFullDetailQueryHandler(
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Children).ThenInclude(c => c.Children)
-                  .Include(h => h.Goals)
+                  .Include(h => h.Goals).Include(h => h.Tags)
                   .AsSplitQuery(),
             cancellationToken);
 
@@ -66,6 +66,9 @@ public class GetHabitFullDetailQueryHandler(
             ? allRootLogs.Any(l => !l.IsDeleted && l.Date == userToday && l.Value > 0)
             : habit.IsCompleted;
 
+        var parentTitle = habit.ParentHabitId is { } parentId
+            ? (await habitRepository.FindAsync(h => h.Id == parentId && h.UserId == request.UserId, cancellationToken)).FirstOrDefault()?.Title
+            : null;
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
@@ -85,7 +88,10 @@ public class GetHabitFullDetailQueryHandler(
             StartDate: habit.StartDate,
             ScheduledStartDate: habit.ScheduledStartDate,
             OriginalDayOfMonth: habit.OriginalDayOfMonth,
-            ParentId: habit.ParentHabitId);
+            ParentId: habit.ParentHabitId,
+            Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
+            ParentHabitId: habit.ParentHabitId,
+            ParentTitle: parentTitle);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,

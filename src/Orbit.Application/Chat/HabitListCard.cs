@@ -17,7 +17,11 @@ public record HabitListCardItem(
     string? Emoji,
     int Depth,
     bool IsBadHabit,
-    string Status);
+    string Status,
+    DateOnly? StartDate = null,
+    Guid? ParentHabitId = null,
+    string? ParentTitle = null,
+    IReadOnlyList<Orbit.Application.Habits.Queries.HabitTagItem>? Tags = null);
 
 public static partial class HabitListCardBuilder
 {
@@ -147,7 +151,9 @@ public static partial class HabitListCardBuilder
                 string.IsNullOrWhiteSpace(habit.Emoji) ? null : habit.Emoji,
                 depth,
                 habit.IsBadHabit,
-                ResolveStatus(habit, today, todayFacts, supportsDoneStatus)));
+                ResolveStatus(habit, today, todayFacts, supportsDoneStatus),
+                habit.StartDate, habit.ParentHabitId, activeHabits.FirstOrDefault(parent => parent.Id == habit.ParentHabitId)?.Title,
+                habit.Tags.Select(t => new Orbit.Application.Habits.Queries.HabitTagItem(t.Id, t.Name, t.Color)).ToList()));
             AppendLevel(activeHabits, habit.Id, depth + 1, today, todayFacts, includedIds, supportsDoneStatus, items);
         }
     }
