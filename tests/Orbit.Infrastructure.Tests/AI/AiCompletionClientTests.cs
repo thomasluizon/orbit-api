@@ -5,9 +5,11 @@ using System.ClientModel.Primitives;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -197,6 +199,83 @@ public class AiCompletionClientTests
         document.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
         document.RootElement.TryGetProperty("user", out _).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("text", false, "gpt-6-luna")]
+    [InlineData("json", false, "gpt-6-luna")]
+    [InlineData("text", true, "gpt-6-luna")]
+    [InlineData("json", true, "gpt-6-luna")]
+    [InlineData("text", false, "gpt-4.1-mini")]
+    [InlineData("json", false, "gpt-4.1-mini")]
+    [InlineData("text", true, "gpt-4.1-mini")]
+    [InlineData("json", true, "gpt-4.1-mini")]
+    public async Task BudgetedBackgroundCalls_UseStableCacheKeyForResolvedUser(string kind, bool background, string model)
+    {
+        var handler = new CapturingHandler();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var inner = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance,
+            usage, primaryModel: model, subTaskModel: model);
+        var http = new HttpContextAccessor();
+        var budget = Substitute.For<IAiDailyBudget>();
+        var estimates = Substitute.For<IAiRequestCostEstimator>();
+        estimates.EstimateMicroDollarsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1000L);
+        var client = new BudgetedAiCompletionClient(inner, budget, http,
+            NullLogger<BudgetedAiCompletionClient>.Instance, estimates);
+        var firstUser = Guid.NewGuid();
+        var secondUser = Guid.NewGuid();
+        var keys = new List<string?>();
+
+        foreach (var userId in new[] { firstUser, firstUser, secondUser })
+        {
+            http.HttpContext = background ? null : new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"))
+            };
+            using (background ? AiCallContext.Begin(userId) : null)
+            {
+                foreach (var tier in new[] { AiModelTier.Primary, AiModelTier.SubTask })
+                {
+                    if (kind == "json")
+                        await client.CompleteJsonAsync<Probe>("system", "user", tier: tier);
+                    else
+                        await client.CompleteTextAsync("system", "user", tier: tier);
+
+                    using var document = JsonDocument.Parse(handler.LastRequestBody!);
+                    var root = document.RootElement;
+                    keys.Add(root.GetProperty("prompt_cache_key").GetString());
+                    keys[^1].Should().Be(userId.ToString("N"));
+                    root.GetProperty("safety_identifier").GetString().Should().Be(keys[^1]);
+                    root.GetProperty("model").GetString().Should().Be(model);
+                    root.TryGetProperty("temperature", out _).Should().Be(model == "gpt-4.1-mini");
+                    usage.ReceivedCalls().Last().GetArguments()[7].Should().Be(userId);
+                    (AiCallContext.Current?.UserId).Should().Be(background ? userId : (Guid?)null);
+                }
+            }
+            AiCallContext.Current.Should().BeNull();
+        }
+
+        keys.Take(4).Should().OnlyContain(key => key == firstUser.ToString("N"));
+        keys.Skip(4).Should().OnlyContain(key => key == secondUser.ToString("N"));
+        await budget.Received(4).ReserveAsync(firstUser, 1000L, Arg.Any<CancellationToken>());
+        await budget.Received(2).ReserveAsync(secondUser, 1000L, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CompleteJsonAsync_ExplicitUserTakesPrecedenceOverAmbientUser()
+    {
+        var handler = new CapturingHandler();
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usage);
+        var explicitUser = Guid.NewGuid();
+        using var context = AiCallContext.Begin(Guid.NewGuid());
+
+        await client.CompleteJsonAsync<Probe>("system", "user", userId: explicitUser);
+
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(explicitUser.ToString("N"));
+        usage.ReceivedCalls().Should().ContainSingle().Which.GetArguments()[7].Should().Be(explicitUser);
     }
 
     [Fact]
