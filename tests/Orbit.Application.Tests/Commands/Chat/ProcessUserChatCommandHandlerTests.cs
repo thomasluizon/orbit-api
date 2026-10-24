@@ -3186,7 +3186,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "ok" });
         var handler = CreateHandler(FakeTool("delete_habit"), FakeTool("assign_tags"), FakeTool("create_habit"));
 
-        await handler.Handle(new ProcessUserChatCommand(UserId, "Hello AI"), CancellationToken.None);
+        await handler.Handle(new ProcessUserChatCommand(UserId, "assign tags"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Is<AiToolRequest>(request =>
@@ -3195,7 +3195,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TrivialGreeting_DeclaresAllTools()
+    public async Task Handle_TrivialThanks_DeclaresNoTools()
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Hi! How can I help?" });
@@ -3204,7 +3204,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await handler.Handle(new ProcessUserChatCommand(UserId, "thanks"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Is<AiToolRequest>(request => ToolNames(request.ToolDeclarations).SequenceEqual(new[] { "create_habit", "delete_habit" })),
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0 && request.AvailableToolDeclarations.Count == 0),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 

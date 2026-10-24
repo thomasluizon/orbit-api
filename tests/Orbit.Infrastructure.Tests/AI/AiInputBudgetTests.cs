@@ -17,6 +17,8 @@ using Orbit.Domain.Common;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -38,6 +40,19 @@ namespace Orbit.Infrastructure.Tests.AI;
 
 public class AiInputBudgetTests(ITestOutputHelper output)
 {
+    [Fact]
+    public async Task KeywordlessTurn_DeclaresFewerThanTwentyTools()
+    {
+        var transport = new SequenceHandler(ResponsesTestData.Text("done"));
+        var user = User.Create("Writer", "writer@example.com").Value;
+        var handler = BuildHandler(BuildService(transport), RegisteredTools(), user, [], new DateOnly(2026, 1, 1));
+
+        (await handler.Handle(new(user.Id, "Hello AI"), default)).IsSuccess.Should().BeTrue();
+
+        using var document = JsonDocument.Parse(transport.Bodies.Single());
+        document.RootElement.GetProperty("tools").GetArrayLength().Should().Be(16);
+    }
+
     private static IReadOnlyList<IAiTool> RegisteredTools() => new AiToolRegistry(typeof(IAiTool).Assembly.GetTypes()
         .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
         .Select(CreateRegisteredTool)).GetAll();
@@ -73,10 +88,10 @@ public class AiInputBudgetTests(ITestOutputHelper output)
             var habit = Habit.Create(new HabitCreateParams(user.Id, $"private-habit-{index}", null, null, DueDate: date)).Value;
             var handler = BuildHandler(service, tools, user, [habit], date);
             var command = new ProcessUserChatCommand(user.Id,
-                index % 2 == 0 ? "Hello AI" : "sincronizar com o Google e duplicar meu hábito",
+                index % 2 == 0 ? "Hello AI" : "Hello again",
                 History: [new("user", $"private-history-{index}")],
                 ClientContext: index % 2 == 0 ? null : new AgentClientContext(
-                    SupportsParts: true, PartKinds: ["choice", "pickList"], SupportsFollowUps: true));
+                    SupportsParts: true, PartKinds: ["recordList"], SupportsFollowUps: true));
 
             (await handler.Handle(command, default)).IsSuccess.Should().BeTrue();
 
@@ -87,7 +102,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf("\"tools\":", StringComparison.Ordinal).Should().BeLessThan(body.IndexOf("\"input\":", StringComparison.Ordinal));
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
-            names.Should().HaveCount(69).And.Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
+            names.Should().HaveCount(22).And.Contain("load_tools").And.Contain("get_profile");
             var currentPrefix = CacheablePrefix(root);
             prefix ??= currentPrefix;
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefix));
@@ -141,7 +156,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task FixedTurns_SerializedRequestSizeAndCacheablePrefixEstimate()
+    public async Task FixedTurns_SerializedRequests_ReduceInputSizeByAtLeastThirtyPercent()
     {
         string[] turns = ["obrigado", "log my run today", "create a habit every wednesday and sunday",
             "criar um hábito toda quarta e domingo", "log my run and show my progress", "bulk log all habits today"];
@@ -149,24 +164,94 @@ public class AiInputBudgetTests(ITestOutputHelper output)
         var user = User.Create("Writer", "writer@example.com").Value;
         var transport = new SequenceHandler(ResponsesTestData.Text("done"));
         var handler = BuildHandler(BuildService(transport), tools, user, [], new DateOnly(2026, 1, 1));
-        string? prefix = null;
+        var convert = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var fullTools = "[" + string.Join(",", tools.OrderBy(tool => tool.Name, StringComparer.Ordinal)
+            .Select(tool => ModelReaderWriter.Write((ResponseTool)convert.Invoke(null, [Declare(tool)])!).ToString())) + "]";
+        long totalBefore = 0;
+        long totalAfter = 0;
         foreach (var turn in turns)
         {
             (await handler.Handle(new(user.Id, turn), default)).IsSuccess.Should().BeTrue();
             var body = transport.Bodies[^1];
             using var document = JsonDocument.Parse(body);
             var currentPrefix = CacheablePrefix(document.RootElement);
-            prefix ??= currentPrefix;
-            currentPrefix.Should().Be(prefix);
             var requestBytes = Encoding.UTF8.GetByteCount(body);
             var prefixBytes = Encoding.UTF8.GetByteCount(currentPrefix);
+            var revised = JsonNode.Parse(body)!;
+            var baseline = revised.DeepClone();
+            baseline["tools"] = JsonNode.Parse(fullTools);
+            var beforeBytes = Encoding.UTF8.GetByteCount(baseline.ToJsonString());
+            var afterBytes = Encoding.UTF8.GetByteCount(revised.ToJsonString());
+            totalBefore += beforeBytes;
+            totalAfter += afterBytes;
             output.WriteLine($"{turn}: request {requestBytes} bytes (~{requestBytes / 4d:F2} tokens); "
                 + $"cacheable prefix {prefixBytes} bytes (~{prefixBytes / 4d:F2} tokens); {tools.Count} tools. Estimate: UTF-8 bytes / 4, not provider token usage.");
         }
+        totalAfter.Should().BeLessThanOrEqualTo((long)(totalBefore * 0.7));
+    }
+
+    private static object Declare(IAiTool tool) => new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() };
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToolMissingFromKeywords_CanBeLoadedAndCalled(bool mixedWithCoreCall)
+    {
+        var first = ResponsesTestData.Response();
+        first.OutputItems.Add(ResponseItem.CreateFunctionCallItem("load_1", "load_tools", BinaryData.FromString("{\"tool_names\":[\"duplicate_habit\"]}")));
+        if (mixedWithCoreCall)
+            first.OutputItems.Add(ResponseItem.CreateFunctionCallItem("query_1", "query_habits", BinaryData.FromString("{}")));
+        var second = ResponsesTestData.Response();
+        second.OutputItems.Add(ResponseItem.CreateFunctionCallItem("duplicate_1", "duplicate_habit", BinaryData.FromString("{}")));
+        var handler = new SequenceHandler(ModelReaderWriter.Write(first).ToString(), ModelReaderWriter.Write(second).ToString());
+        var service = BuildService(handler);
+        var tools = RegisteredTools().Where(tool => tool.Name != "ask").ToList();
+        var result = await service.SendWithToolsAsync(new AiToolRequest("make another one just like it", "static",
+            tools.Where(tool => tool.Name == "query_habits").Select(Declare).ToList())
+        {
+            AvailableToolDeclarations = tools.Select(Declare).ToList()
+        });
+        if (mixedWithCoreCall)
+        {
+            result.Value.ToolCalls!.Should().ContainSingle(call => call.Name == "query_habits");
+            result = await service.ContinueWithToolResultsAsync(result.Value.ConversationContext!,
+                [new("query_habits", "query_1", true, null, null, null)]);
+        }
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ToolCalls!.Should().ContainSingle(call => call.Name == "duplicate_habit");
+        using var initial = JsonDocument.Parse(handler.Bodies[0]);
+        using var loaded = JsonDocument.Parse(handler.Bodies[1]);
+        initial.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().NotContain("duplicate_habit");
+        loaded.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().Contain("duplicate_habit").And.NotContain("ask");
+    }
+
+    [Fact]
+    public async Task ToolLoader_RejectsNamesOutsideServerCatalogAndBoundsLoadingRounds()
+    {
+        var response = ResponsesTestData.Response();
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("load_1", "load_tools",
+            BinaryData.FromString("{\"tool_names\":[\"ask\"]}")));
+        var handler = new SequenceHandler(ModelReaderWriter.Write(response).ToString());
+
+        var result = await BuildService(handler).SendWithToolsAsync(new AiToolRequest("help me", "static", [])
+        {
+            AvailableToolDeclarations = [new { name = "duplicate_habit" }]
+        });
+
+        result.IsFailure.Should().BeTrue();
+        handler.Bodies.Should().HaveCount(3);
+        using var last = JsonDocument.Parse(handler.Bodies[^1]);
+        last.RootElement.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString())
+            .Should().NotContain("ask");
+        last.RootElement.GetProperty("input").EnumerateArray().Where(item =>
+                item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output")
+            .Should().OnlyContain(item => item.GetProperty("output").GetString()!.Contains("false"));
     }
 
     private static string CacheablePrefix(JsonElement request) =>
-        request.GetProperty("tools").GetRawText() + request.GetProperty("input")[0].GetRawText();
+        (request.TryGetProperty("tools", out var tools) ? tools.GetRawText() : "") + request.GetProperty("input")[0].GetRawText();
 
     private static ProcessUserChatCommandHandler BuildHandler(IAiIntentService service,
         IReadOnlyList<IAiTool> tools, User user, IReadOnlyList<Habit> habits, DateOnly date,
