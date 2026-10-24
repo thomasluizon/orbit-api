@@ -14,8 +14,6 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, Result<AiResponse> response,
         ToolExecutionAccumulator? results, CancellationToken ct)
     {
-        if (await RecoverRoutinePreviewAsync(request, context, response, results, ct) is { } routine)
-            return routine;
         if (request.BlockAnswer is not null || request.ConfirmationToken is not null
             || results is not null && HasSucceededWrite(results)
             || response.IsFailure && response.ErrorCode != ErrorCodes.AiEmptyResponse)

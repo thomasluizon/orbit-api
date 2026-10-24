@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
@@ -14,30 +16,6 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public sealed partial class ChatWriteHoldHandlerTests
 {
     [Theory]
-    [InlineData("provider")]
-    [InlineData("truncated")]
-    [InlineData("budget")]
-    public async Task RoutineRecovery_RespectsProviderAndTurnLimits(string reason)
-    {
-        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>()).Returns(reason == "provider"
-                    ? Result.Failure<AiResponse>(ErrorMessages.AiUnavailable)
-                    : Result.Success(new AiResponse
-                    {
-                        TextMessage = "How often should it repeat?",
-                        IsTruncated = reason == "truncated",
-                        ReportedTokenCount = reason == "budget" ? AppConstants.MaxAiRequestTotalTokens + 1 : 0
-                    }));
-
-        var result = await CreateHandler().Handle(new(_userId, "Every evening: read, stretch",
-            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true)), default);
-
-        if (reason == "provider") result.IsFailure.Should().BeTrue();
-        _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
-        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
     [InlineData("en", false, false)]
     [InlineData("pt-BR", false, false)]
     [InlineData("en", true, false)]
@@ -46,29 +24,32 @@ public sealed partial class ChatWriteHoldHandlerTests
     [InlineData("pt-BR", false, true)]
     [InlineData("en", true, true)]
     [InlineData("pt-BR", true, true)]
-    [InlineData("en", false, null)]
-    [InlineData("pt-BR", false, null)]
-    public async Task RoutineFirstTurn_ClarificationBecomesHeldParentAndChildren(
-        string language, bool explicitCadence, bool? askTool)
+    public async Task RoutineFirstTurn_ModelProposalHoldsEditableParentAndChildrenUntilApproval(
+        string language, bool explicitCadence, bool editCadence)
     {
         _user.SetLanguage(language);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
             .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
-        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
-                Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse
-                {
-                    TextMessage = language == "pt-BR"
-                        ? "Você prefere uma única rotina com uma lista de etapas, ou hábitos separados?"
-                        : "How often should this evening routine repeat?",
-                    ToolCalls = askTool == true ? [new("ask", "question", JsonSerializer.SerializeToElement(new
-                    {
-                        question = "Checklist or sub-habits?", options = new[] { "Checklist", "Sub-habits" }
-                    }))] : askTool is null ? [new("create_habit", "routine", JsonSerializer.SerializeToElement(new
-                    {
-                        title = language == "pt-BR" ? "Rotina da noite" : "Evening routine"
-                    }))] : null
-                }));
+        var title = language == "pt-BR" ? "Rotina tranquila da noite" : "Calm evening routine";
+        var read = language == "pt-BR" ? "Ler 20 minutos" : "Read 20 minutes";
+        var stretch = language == "pt-BR" ? "Alongar" : "Stretch";
+        var lightsOut = language == "pt-BR" ? "Apagar as luzes" : "Lights out";
+        var arguments = new JsonObject
+        {
+            ["title"] = title,
+            ["frequency_unit"] = "Day",
+            ["frequency_quantity"] = 1,
+            ["sub_habits"] = new JsonArray(
+                new JsonObject { ["title"] = read },
+                new JsonObject { ["title"] = explicitCadence ? stretch + " 10 min" : stretch },
+                new JsonObject { ["title"] = lightsOut, ["due_time"] = "23:00" })
+        };
+        if (explicitCadence) arguments["due_time"] = "21:30";
+        ScriptToolCall(arguments.ToJsonString());
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse()));
         var message = (language, explicitCadence) switch
         {
             ("pt-BR", true) => "Toda noite às 21h30: ler 20 minutos, alongar por 10 minutos e apagar as luzes às 23h, como uma rotina da noite",
@@ -86,26 +67,41 @@ public sealed partial class ChatWriteHoldHandlerTests
         var routine = RoutineArguments(stored.Arguments);
         routine.GetProperty("frequency_unit").GetString().Should().Be("Day");
         routine.GetProperty("frequency_quantity").GetInt32().Should().Be(1);
-        routine.GetProperty("title").GetString().Should().Be(language == "pt-BR" ? "Rotina da noite" : "Evening routine");
+        routine.GetProperty("title").GetString().Should().Be(title);
         var children = routine.GetProperty("sub_habits");
         children.GetArrayLength().Should().Be(3);
-        children[0].GetProperty("title").GetString().Should().Contain(language == "pt-BR" ? "ler" : "read");
-        children[1].GetProperty("title").GetString().Should().Contain(language == "pt-BR" ? "alongar" : "stretch");
+        children[0].GetProperty("title").GetString().Should().Be(read);
+        children[1].GetProperty("title").GetString().Should().Be(explicitCadence ? stretch + " 10 min" : stretch);
         children[2].GetProperty("due_time").GetString().Should().Be("23:00");
         if (explicitCadence)
             routine.GetProperty("due_time").GetString().Should().Be("21:30");
         else
             routine.TryGetProperty("due_time", out _).Should().BeFalse();
-        pending.Items.Should().ContainSingle().Which.Fields.Should().Contain(field =>
-            field.Field == "sub_habits" && field.ProposedValue!.Value.GetArrayLength() == 3);
+        var fields = pending.Items.Should().ContainSingle().Which.Fields;
+        fields.Should().Contain(field => field.Field == "sub_habits" && field.ProposedValue!.Value.GetArrayLength() == 3);
+        fields.Should().Contain(field => field.Field == "frequency_quantity" && field.IsEditable);
         pending.Items.Should().OnlyContain(item => item.ValidationErrors == null || item.ValidationErrors.Count == 0);
         result.Value.AiMessage.Should().BeNullOrEmpty();
         result.Value.Parts.Should().BeEmpty();
         result.Value.Actions.Should().BeEmpty();
         _pendingOperationStore.GetAwaiting(_userId).Should().ContainSingle();
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
-        await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+
+        if (editCadence)
+        {
+            var revision = await ParentRevisionService().ReviseAsync(_userId, pending.Id,
+                new(pending.PreviewFingerprint!, [new(pending.Items!.Single().ItemId,
+                    JsonSerializer.SerializeToElement(new { frequency_quantity = 2 }))]), default);
+            revision.IsSuccess.Should().BeTrue(revision.Error);
+            revision.PendingOperationId.Should().Be(pending.Id);
+            stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+            var revised = RoutineArguments(stored.Arguments);
+            revised.GetProperty("frequency_quantity").GetInt32().Should().Be(2);
+            revised.GetProperty("title").GetString().Should().Be(title);
+            revised.GetProperty("sub_habits").GetRawText().Should().Be(children.GetRawText());
+            stored.PreviewFingerprint.Should().NotBe(pending.PreviewFingerprint);
+            await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        }
 
         var saved = new List<Habit>();
         await _habitRepo.AddAsync(Arg.Do<Habit>(saved.Add), Arg.Any<CancellationToken>());
@@ -116,8 +112,13 @@ public sealed partial class ChatWriteHoldHandlerTests
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         saved.Should().HaveCount(4);
         var parent = saved.Should().ContainSingle(habit => habit.ParentHabitId == null).Which;
+        parent.Title.Should().Be(title);
         parent.FrequencyUnit.Should().Be(Orbit.Domain.Enums.FrequencyUnit.Day);
+        parent.FrequencyQuantity.Should().Be(editCadence ? 2 : 1);
+        parent.DueTime.Should().Be(explicitCadence ? new TimeOnly(21, 30) : null);
         saved.Where(habit => habit.ParentHabitId == parent.Id).Should().HaveCount(3)
-            .And.Contain(habit => habit.DueTime == new TimeOnly(23, 0));
+            .And.Contain(habit => habit.Title == read)
+            .And.Contain(habit => habit.Title == lightsOut && habit.DueTime == new TimeOnly(23, 0));
+        _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
     }
 }
