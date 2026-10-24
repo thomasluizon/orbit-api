@@ -19,6 +19,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Chat;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 
@@ -406,6 +407,10 @@ public static partial class ServiceCollectionExtensions
         var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
         if (type == typeof(Orbit.Application.Chat.ReadBlockCard))
             schema.Discriminator = null;
+        if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo pendingProperty
+            && pendingProperty.DeclaringType == typeof(PendingOperationItem)
+            && pendingProperty.Name == nameof(PendingOperationItem.FieldOptions))
+            schema.Description = "Only present for a required unresolved parent choice. Options contain exactly the matching parent habits and No parent; resolved or root items omit this field.";
         if (type == typeof(HabitSchedule))
         {
             schema.Type = JsonSchemaType.String;

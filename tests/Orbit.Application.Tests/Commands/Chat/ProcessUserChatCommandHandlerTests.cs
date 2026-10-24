@@ -2533,7 +2533,15 @@ public partial class ProcessUserChatCommandHandlerTests
         _aiIntentService.ContinueWithToolResultsAsync(
             Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Do<Func<AiStreamEvent, Task>?>(sink => bridgedSink = sink), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!" }));
+            .Returns(async _ =>
+            {
+                if (bridgedSink is not null)
+                {
+                    await bridgedSink(AiStreamEvent.Delta("chunk"));
+                    await bridgedSink(AiStreamEvent.Reset());
+                }
+                return Result.Success(new AiResponse { TextMessage = "Created your habit!" });
+            });
 
         var streamEvents = new List<ChatStreamEvent>();
         var command = new ProcessUserChatCommand(UserId, "Create a habit", StreamSink: streamEvent =>
@@ -2548,8 +2556,6 @@ public partial class ProcessUserChatCommandHandlerTests
         streamEvents.Should().ContainSingle(streamEvent => streamEvent.Type == "round" && streamEvent.Iteration == 1);
 
         bridgedSink.Should().NotBeNull();
-        await bridgedSink!(AiStreamEvent.Delta("chunk"));
-        await bridgedSink!(AiStreamEvent.Reset());
         streamEvents.Should().Contain(streamEvent => streamEvent.Type == "delta" && streamEvent.Text == "chunk");
         streamEvents[^1].Type.Should().Be("reset");
     }

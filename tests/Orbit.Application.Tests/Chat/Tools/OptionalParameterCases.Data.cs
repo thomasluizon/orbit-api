@@ -12,7 +12,7 @@ public static partial class OptionalParameterCases
             [
                 "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date",
                 "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items",
-                "sub_habits"
+                "parent_habit_id", "sub_habits"
             ],
             [(typeof(BulkLogHabitsTool), "")] = ["filter", "habit_ids", "date", "dates"],
             [(typeof(BulkUpdateHabitEmojisTool), "")] =

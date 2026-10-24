@@ -39,7 +39,10 @@ public class BulkCreateHabitsTool(
         var schemaArguments = JsonNode.Parse(args.GetRawText());
         if (schemaArguments?["habits"] is JsonArray habits)
             foreach (var habit in habits.OfType<JsonObject>())
+            {
                 habit.Remove("preview_item_id");
+                habit.Remove(HabitHeadingParents.CandidateIdsField);
+            }
         return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
             () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
     }
@@ -70,15 +73,36 @@ public class BulkCreateHabitsTool(
         if (items.Count == 0)
             return new ToolResult(false, Error: "No habits provided.");
 
-        if (args.TryGetProperty("parent_habit_id", out var parentValue))
+        if (args.TryGetProperty("parent_habit_id", out _)
+            || habitsEl.EnumerateArray().Any(habit => habit.TryGetProperty("parent_habit_id", out _)))
         {
-            if (parentValue.ValueKind != JsonValueKind.String || !Guid.TryParse(parentValue.GetString(), out var parentId))
-                return new ToolResult(false, Error: "parent_habit_id must be a valid habit ID.");
             if (items.Any(item => item.SubHabits is { Count: > 0 }))
                 return new ToolResult(false, Error: "Create children directly under the existing parent; nested sub_habits are not supported in this call.");
             var created = new List<BulkCreateItemResult>();
-            foreach (var item in items)
+            for (var index = 0; index < items.Count; index++)
             {
+                var item = items[index];
+                var source = habitsEl[index];
+                var hasParent = source.TryGetProperty("parent_habit_id", out var parentValue)
+                    || args.TryGetProperty("parent_habit_id", out parentValue);
+                if (!hasParent)
+                {
+                    var rootCommand = new BulkCreateHabitsCommand(userId, [item]);
+                    if (checkOnly)
+                    {
+                        var checkedRoot = await ChatToolArgumentCheck.CheckCommandAsync(mediator, rootCommand, ct);
+                        if (!checkedRoot.Success) return checkedRoot;
+                    }
+                    else
+                    {
+                        var rootResult = await mediator.Send(rootCommand, ct);
+                        if (rootResult.IsFailure) return ToolResult.FromFailure(rootResult);
+                        created.AddRange(rootResult.Value.Results.Select(result => result with { Index = index }));
+                    }
+                    continue;
+                }
+                if (parentValue.ValueKind != JsonValueKind.String || !Guid.TryParse(parentValue.GetString(), out var parentId))
+                    return new ToolResult(false, Error: "parent_habit_id must be a valid habit ID.");
                 var childCommand = new CreateSubHabitCommand(userId, parentId, item.Title, item.Description,
                     item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate,
                     new HabitCommandOptions(Days: item.Days, DueTime: item.DueTime, DueEndTime: item.DueEndTime,
@@ -197,6 +221,7 @@ public class BulkCreateHabitsTool(
 
         if (includeSubHabits)
         {
+            properties["parent_habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text." };
             properties["sub_habits"] = new
             {
                 type = JsonSchemaTypes.Array,

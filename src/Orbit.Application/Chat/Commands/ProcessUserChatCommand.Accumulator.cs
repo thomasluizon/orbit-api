@@ -22,6 +22,7 @@ public partial class ProcessUserChatCommandHandler
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; init; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; init; } = [];
         public bool RequiresExistingParent { get; init; }
+        public IReadOnlyList<HabitHeadingParents.Heading> ParentHeadings { get; init; } = [];
         public HashSet<(Guid? ParentId, string Name)> ProposedHabitNames { get; } = [];
         public Dictionary<(Guid? ParentId, string Name), string> PendingHabitNames { get; } = [];
         public bool IsTaggingIntent { get; init; }

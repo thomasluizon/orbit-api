@@ -322,7 +322,13 @@ public partial class ProcessUserChatCommandHandler(
         var userLanguage = GetUserLanguage(context.User);
         var groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
         var composition = UsesComposition(request, context);
-        var aiStreamFilter = BuildAiStreamFilter(groundingTurn.Enforce || composition ? null : request.StreamSink);
+        var bufferedStream = new List<ChatStreamEvent>();
+        Func<ChatStreamEvent, Task>? bufferedSink = request.StreamSink is null ? null : item =>
+        {
+            bufferedStream.Add(item);
+            return Task.CompletedTask;
+        };
+        var aiStreamFilter = BuildAiStreamFilter(groundingTurn.Enforce || composition ? null : bufferedSink);
         Func<AiStreamEvent, Task>? aiStreamSink = aiStreamFilter is null
             ? null
             : aiStreamFilter.HandleAsync;
@@ -331,6 +337,9 @@ public partial class ProcessUserChatCommandHandler(
         var cachedFaqAnswer = await GetGroundedCachedFaqAnswerAsync(faqMatch, groundingTurn, request, composition);
         if (cachedFaqAnswer is not null)
             return Result.Success(ComposeCachedFaq(cachedFaqAnswer, request, composition));
+
+        if (await TryHandlePendingParentTurnAsync(request, context, cancellationToken) is { } pendingReply)
+            return pendingReply;
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, cancellationToken);
@@ -349,7 +358,8 @@ public partial class ProcessUserChatCommandHandler(
             Habits = context.ActiveHabits,
             AllHabits = context.UserHabits,
             IsTaggingIntent = IsTagOnlyIntent(request.Message),
-            RequiresExistingParent = RequestsExistingParent(request.Message, context.ActiveHabits)
+            RequiresExistingParent = RequestsExistingParent(request.Message, context.UserHabits),
+            ParentHeadings = HabitHeadingParents.Read(request.Message, context.UserHabits)
         };
         SeedProposedHabitNames(request, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -376,6 +386,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
+        if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink)
+            foreach (var item in bufferedStream) await streamSink(item);
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
 

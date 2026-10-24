@@ -112,27 +112,18 @@ public class PendingAgentOperationStore(
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
         var proposals = dbContext.PendingAgentOperations.AsNoTracking()
             .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
-                && item.ExpiresAtUtc > checkedAtUtc && item.CreatedAtUtc > checkedAtUtc.AddMinutes(-10)
+                && item.ExpiresAtUtc > checkedAtUtc
                 && (item.OperationId == "create_habit" || item.OperationId == "bulk_create_habits" || item.OperationId == "create_sub_habit"))
-            .Select(item => item.ArgumentsJson).ToList();
+            .ToList();
         var names = new List<PendingHabitCreation>();
-        foreach (var json in proposals)
-        {
-            var arguments = ParseArguments(json);
-            if (arguments.ValueKind != JsonValueKind.Object)
-                continue;
-            Guid? parentId = arguments.TryGetProperty("parent_habit_id", out var parent)
-                && parent.ValueKind == JsonValueKind.String && Guid.TryParse(parent.GetString(), out var parsedParent)
-                    ? parsedParent : null;
-            if (arguments.TryGetProperty("habits", out var habits) && habits.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var habit in habits.EnumerateArray())
-                    if (habit.ValueKind == JsonValueKind.Object && habit.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
-                        names.Add(new PendingHabitCreation(title.GetString()!, parentId));
-            }
-            else if (arguments.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
-                names.Add(new PendingHabitCreation(title.GetString()!, parentId));
-        }
+        foreach (var proposal in proposals)
+            names.AddRange(HabitCreations(ParseArguments(proposal.ArgumentsJson))
+                .Select(item => item with
+                {
+                    PendingOperationId = proposal.Id,
+                    ExpiresAtUtc = proposal.ExpiresAtUtc,
+                    ActionKey = PendingOperationActionKeys.GetRequired(proposal.OperationId, proposal.ArgumentsJson)
+                }));
         return names;
     }
 
@@ -149,23 +140,33 @@ public class PendingAgentOperationStore(
             var args = ParseArguments(item.ArgumentsJson);
             if (args.ValueKind != JsonValueKind.Object)
                 continue;
-            var parent = args.TryGetProperty("parent_habit_id", out var value)
-                && Guid.TryParse(value.ToString(), out var id) ? (Guid?)id : null;
-            if (parent != parentHabitId)
-                continue;
-            var titles = args.TryGetProperty("habits", out var habits) && habits.ValueKind == JsonValueKind.Array
-                ? habits.EnumerateArray().Where(habit => habit.ValueKind == JsonValueKind.Object)
-                    .Select(habit => habit.TryGetProperty("title", out var name) ? name.ToString() : "")
-                : args.TryGetProperty("title", out var name) ? [name.ToString()] : Array.Empty<string>();
-            if (titles.Any(name => HabitNameMatcher.Normalize(name) == HabitNameMatcher.Normalize(title)))
+            if (HabitCreations(args).Any(item => item.ParentHabitId == parentHabitId
+                && HabitNameMatcher.Normalize(item.Title) == HabitNameMatcher.Normalize(title)))
             {
-                if (habits.ValueKind == JsonValueKind.Array && habits.GetArrayLength() > 1)
+                if (HabitCreations(args).Count > 1)
                     return false;
                 matching.Add(item);
             }
         }
         return matching.Count > 0 && matching.All(item => Cancel(userId, item.Id, item.OperationFingerprint));
     }
+
+    private static IReadOnlyList<PendingHabitCreation> HabitCreations(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object)
+            return [];
+        var sharedParent = ReadParent(arguments);
+        var items = arguments.TryGetProperty("habits", out var habits) && habits.ValueKind == JsonValueKind.Array
+            ? habits.EnumerateArray().ToArray() : [arguments];
+        return items.Where(item => item.ValueKind == JsonValueKind.Object
+                && item.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
+            .Select(item => new PendingHabitCreation(item.GetProperty("title").GetString()!,
+                item.TryGetProperty("parent_habit_id", out _) ? ReadParent(item) : sharedParent)).ToArray();
+    }
+
+    private static Guid? ReadParent(JsonElement arguments) =>
+        arguments.TryGetProperty("parent_habit_id", out var parent) && parent.ValueKind == JsonValueKind.String
+            && Guid.TryParse(parent.GetString(), out var id) ? id : null;
 
     public bool IsAwaitingConfirmation(Guid userId, Guid pendingOperationId)
     {

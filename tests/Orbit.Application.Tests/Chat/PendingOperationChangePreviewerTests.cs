@@ -208,7 +208,8 @@ public sealed class PendingOperationChangePreviewerTests
             habits = new[] { new { title = "Aquecimento" }, new { title = "Treino" }, new { title = "Alongamento" } }
         }));
         preview!.Items.Should().HaveCount(3).And.OnlyContain(item => item.Fields.Any(field => field.Field == "parent_habit_id"
-            && field.NewValue == "Academia" && !field.IsEditable));
+            && field.NewValue == "Academia" && field.IsEditable));
+        preview.Items.Should().OnlyContain(item => item.FieldOptions == null);
         preview.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
             field => field.Field == "parent_habit_id" && field.NewValue == "Academia");
     }
@@ -436,7 +437,10 @@ public sealed class PendingOperationChangePreviewerTests
         preview!.Items.Should().HaveCount(2);
         preview.Items!.Select(item => item.ItemId).Should().Equal("0", "1");
         preview.Items.SelectMany(item => item.Fields).Select(field => field.Field)
-            .Should().OnlyContain(field => field == "title");
+            .Should().OnlyContain(field => field == "title" || field == "parent_habit_id");
+        preview.Items.Should().OnlyContain(item => item.Fields.Any(field => field.Field == "parent_habit_id"
+            && field.NewValue == "No parent" && field.ProposedValue.HasValue
+            && field.ProposedValue.Value.ValueKind == JsonValueKind.Null && field.IsEditable));
         preview.Items[0].Fields[0].IsEditable.Should().BeTrue();
         preview.Items[0].Fields[0].ProposedValue!.Value.GetString().Should().Be("One");
         AssertRemovesData(preview, false);
@@ -486,9 +490,10 @@ public sealed class PendingOperationChangePreviewerTests
         var item = preview!.Items.Should().ContainSingle().Subject;
 
         item.ValidationErrors.Should().BeNull();
+        await _habits.DidNotReceive().FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>());
         preview.Changes.Should().BeEmpty();
         preview.ChangeTargetCount.Should().Be(1);
-        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_quantity", "frequency_unit");
+        item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_quantity", "frequency_unit", "parent_habit_id");
         var legacyItemJson = JsonSerializer.SerializeToElement(item);
         legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
             "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");
