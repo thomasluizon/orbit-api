@@ -248,6 +248,21 @@ test("diff spans: wildcard scopes keep each file's ranges separate", (t) => {
   assert.deepEqual(select(repo, "base")[0].mutate, ["**/Auth/Commands/First.cs{13..33}", "**/Auth/Commands/Second.cs{0..35}"]);
 });
 
+for (const [file, shard] of [
+  ["SendCodeCommand.cs", "application-auth-code"],
+  ["VerifyCodeCommand.cs", "application-auth-code"],
+  ["CreateDesktopHandoffCommand.cs", "application-auth-session"],
+  ["ExchangeDesktopHandoffCommand.cs", "application-auth-session"],
+  ["GoogleSignInFlow.cs", "application-auth-session"],
+]) {
+  test(`diff spans: auth file ${file} selects exactly its owning shard`, (t) => {
+    const path = `src/Orbit.Application/Auth/Commands/${file}`;
+    const scopes = select(change(t, path), "base");
+    assert.deepEqual(scopes.map((scope) => scope.shard), [shard]);
+    assertOneOwner(scopes, path, 13, 33);
+  });
+}
+
 const nightly = () => select().filter(({ project }) => project === "domain");
 
 function owns(scope, file, start, end) {
@@ -270,11 +285,16 @@ function assertOneOwner(scopes, file, start, end) {
 test("nightly and manual runs keep the configured file set and thresholds", () => {
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
-  assert.equal(matrix.filter(({ project }) => project === "application").length, 10);
+  assert.equal(matrix.filter(({ project }) => project === "application").length, 11);
   for (const project of ["domain", "application"]) {
     const scopes = matrix.filter((scope) => scope.project === project);
     const config = JSON.parse(readFileSync(new URL(`../../stryker-config.${project}.json`, import.meta.url), "utf8"))["stryker-config"];
-    assert.deepEqual([...new Set(scopes.flatMap(({ mutate }) => mutate.filter((pattern) => !pattern.startsWith("!")).map((pattern) => pattern.split("{")[0])))].sort(), [...config.mutate].sort());
+    const directory = new URL(`../../src/Orbit.${project === "domain" ? "Domain" : "Application"}/`, import.meta.url);
+    const files = readdirSync(directory, { recursive: true }).filter((path) => path.endsWith(".cs"));
+    const configured = { mutate: config.mutate };
+    const path = (relative) => `src/Orbit.${project === "domain" ? "Domain" : "Application"}/${relative}`;
+    assert.deepEqual(files.filter((file) => scopes.some((scope) => owns(scope, path(file), 0, 0))),
+      files.filter((file) => owns(configured, path(file), 0, 0)));
     assert.deepEqual(config.thresholds, { high: 80, low: 60, break: 0 });
   }
   const infrastructure = JSON.parse(readFileSync(new URL("../../stryker-config.infrastructure.json", import.meta.url), "utf8"))["stryker-config"];

@@ -54,7 +54,19 @@ const shards = [
   // https://github.com/thomasluizon/orbit-api/actions/runs/39958472456
   // The report partitions 113 selected invariant mutants into groups of 38, 37 and 38.
   ...spanShards("domain", "domain-user-invariants", "**/Entities/HabitInvariants.cs", [2000, 4000]),
-  { project: "application", shard: "application-auth", mutate: ["**/Auth/Commands/*.cs"] },
+  {
+    project: "application", shard: "application-auth-code", mutate: [
+      "**/Auth/Commands/SendCodeCommand.cs",
+      "**/Auth/Commands/VerifyCodeCommand.cs",
+    ],
+  },
+  {
+    project: "application", shard: "application-auth-session", mutate: [
+      "**/Auth/Commands/*.cs",
+      "!**/Auth/Commands/SendCodeCommand.cs",
+      "!**/Auth/Commands/VerifyCodeCommand.cs",
+    ],
+  },
   {
     project: "application", shard: "application-subscriptions", mutate: [
       "**/Subscriptions/Commands/VerifyPlayPurchaseCommand.cs",

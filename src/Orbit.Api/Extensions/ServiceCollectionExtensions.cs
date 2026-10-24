@@ -343,6 +343,9 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(GoogleSettings.SectionName));
 
         builder.Services.AddScoped<IOAuthStateStore, Orbit.Infrastructure.Persistence.OAuthStateStore>();
+        builder.Services.Configure<Orbit.Application.Auth.Models.DesktopAuthOptions>(
+            builder.Configuration.GetSection(Orbit.Application.Auth.Models.DesktopAuthOptions.SectionName));
+        builder.Services.AddScoped<IDesktopHandoffStore, Orbit.Infrastructure.Persistence.DesktopHandoffStore>();
         builder.Services.AddScoped<OAuthAuthorizationStore>();
         builder.Services.AddScoped<IApiKeyUsageTracker, Orbit.Infrastructure.Persistence.ApiKeyUsageTracker>();
         if (!BuildTimeDocumentGeneration.IsActive)

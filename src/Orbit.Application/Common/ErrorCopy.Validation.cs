@@ -14,6 +14,7 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.ApiKeyExpiryFuture, "API key expiry must be in the future.", "A validade da chave de API deve estar no futuro."),
         (ValidationErrorCodes.LanguageSupported, $"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}", $"O idioma deve ser um destes: {string.Join(", ", AppConstants.SupportedLanguages)}"),
         (ValidationErrorCodes.RefreshTokenFormat, "Refresh token format is invalid.", "O formato do token de atualização é inválido."),
+        (ValidationErrorCodes.DesktopHandoffInvalid, "Invalid or expired desktop handoff.", "Transferência para o desktop inválida ou expirada."),
         (ValidationErrorCodes.CalendarSelectionLimit, $"You can select at most {AppConstants.MaxSelectedCalendars} calendars.", $"Você pode selecionar no máximo {AppConstants.MaxSelectedCalendars} agendas."),
         (ValidationErrorCodes.CalendarIdsRequired, "Calendar ids must be non-empty.", "Os IDs das agendas não podem estar vazios."),
         (ValidationErrorCodes.ChatMessageRequired, "Write a message", "Escreva uma mensagem"),

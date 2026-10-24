@@ -1,9 +1,9 @@
 using System.Reflection;
 using FluentAssertions;
 using FluentValidation;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Application.Common;
-using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -27,15 +27,16 @@ public class ValidationCopyTests
     [Fact]
     public void EveryValidatorRuleHasACatalogCode()
     {
+        using var services = new ServiceCollection()
+            .AddOptions()
+            .AddSingleton(Substitute.For<IGenericRepository<Habit>>())
+            .BuildServiceProvider();
         var validators = typeof(ValidationErrorCodes).Assembly.GetExportedTypes()
             .Where(type => !type.IsAbstract && typeof(IValidator).IsAssignableFrom(type));
 
         foreach (var type in validators)
         {
-            var validator = type == typeof(UpdateHabitCommandValidator)
-                ? new UpdateHabitCommandValidator(Substitute.For<IGenericRepository<Habit>>())
-                : (IValidator)(Activator.CreateInstance(type)
-                    ?? throw new InvalidOperationException($"Cannot create validator: {type.Name}"));
+            var validator = (IValidator)ActivatorUtilities.CreateInstance(services, type);
             foreach (var component in validator.CreateDescriptor().GetMembersWithValidators().SelectMany(g => g))
             {
                 if (component.Item1.Name == "ChildValidatorAdaptor")
