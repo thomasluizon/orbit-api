@@ -61,6 +61,10 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                 {
                     Description = h.Description,
                     DueTime = h.DueTime,
+                    StartDate = h.StartDate,
+                    ParentHabitId = h.ParentHabitId,
+                    ParentTitle = h.ParentTitle,
+                    Tags = h.Tags,
                     DueEndTime = h.DueEndTime,
                     IntervalWeeks = h.IntervalWeeks,
                     Days = h.Days,
@@ -112,6 +116,10 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         {
             Description = null,
             DueTime = null,
+            StartDate = h.StartDate,
+            ParentHabitId = h.ParentHabitId,
+            ParentTitle = h.ParentTitle,
+            Tags = h.Tags ?? [],
             DueEndTime = h.DueEndTime,
             IntervalWeeks = h.IntervalWeeks,
             Days = [],
@@ -125,7 +133,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             ChecklistItems = h.ChecklistItems
         }.Format();
         if (details.Length > 0) habitSummary += details + "\n";
-        if (h.Tags is { Count: > 0 }) habitSummary += $"Tags: {string.Join(", ", h.Tags.Select(t => t.Name))}\n";
+
         if (h.LinkedGoals is { Count: > 0 }) habitSummary += $"Goals: {string.Join(", ", h.LinkedGoals.Select(g => $"{g.Title} ({g.Id})"))}\n";
         var children = new List<string>();
         McpToolHelpers.AppendDetailChildren(children, h.Children, 1);

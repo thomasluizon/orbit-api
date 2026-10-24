@@ -7,6 +7,10 @@ namespace Orbit.Application.Habits.Queries;
 
 public sealed record HabitFieldSummary
 {
+    public DateOnly? StartDate { get; init; }
+    public Guid? ParentHabitId { get; init; }
+    public string? ParentTitle { get; init; }
+    public IReadOnlyList<HabitTagItem> Tags { get; init; } = [];
     public string? Description { get; init; }
     public TimeOnly? DueTime { get; init; }
     public TimeOnly? DueEndTime { get; init; }
@@ -21,8 +25,12 @@ public sealed record HabitFieldSummary
     public HabitSchedule Schedule { get; init; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; init; } = [];
 
-    public static HabitFieldSummary From(Habit habit) => new()
+    public static HabitFieldSummary From(Habit habit, string? parentTitle = null) => new()
     {
+        StartDate = habit.StartDate,
+        ParentHabitId = habit.ParentHabitId,
+        ParentTitle = parentTitle,
+        Tags = habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
         Description = habit.Description,
         DueTime = habit.DueTime,
         DueEndTime = habit.DueEndTime,
@@ -41,6 +49,9 @@ public sealed record HabitFieldSummary
     public string Format(DateOnly? dueDate = null)
     {
         var fields = new List<string>();
+        if (StartDate is { } startDate) fields.Add($"Start date: {startDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+        fields.Add(ParentHabitId is { } parentId ? $"Parent: {ParentTitle ?? "Unknown title"} ({parentId})" : "Parent: none");
+        fields.Add($"Tags: {(Tags.Count == 0 ? "none" : string.Join(", ", Tags.Select(t => $"{t.Name} ({t.Id})")))}");
         if (!string.IsNullOrWhiteSpace(Description)) fields.Add($"Description: {Description}");
         if (DueTime is { } time) fields.Add($"Due time: {time.ToString("HH:mm", CultureInfo.InvariantCulture)}");
         if (DueEndTime is { } endTime) fields.Add($"Due end time: {endTime.ToString("HH:mm", CultureInfo.InvariantCulture)}");

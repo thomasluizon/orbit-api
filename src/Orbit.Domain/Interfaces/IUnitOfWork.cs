@@ -14,6 +14,14 @@ public interface IUnitOfWork : IDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Replays even an ambiguously committed operation. The operation must distinguish
+    /// its own committed attempt from another request and replace its prior result safely.
+    /// </summary>
+    Task<T> ExecuteReplayableInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default) => ExecuteInTransactionAsync(operation, cancellationToken);
+
+    /// <summary>
     /// Retries opening the transaction, then executes the operation and commits once.
     /// Use for operations with side effects that cannot be repeated by an execution strategy.
     /// </summary>

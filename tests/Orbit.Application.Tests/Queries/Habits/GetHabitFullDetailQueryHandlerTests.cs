@@ -87,7 +87,7 @@ public class GetHabitFullDetailQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<HabitLog>().AsReadOnly());
 
-        var query = new GetHabitFullDetailQuery(UserId, HabitId);
+        var query = new GetHabitFullDetailQuery(UserId, habit.Id);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -168,7 +168,7 @@ public class GetHabitFullDetailQueryHandlerTests
 
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var query = new GetHabitFullDetailQuery(UserId, HabitId);
+        var query = new GetHabitFullDetailQuery(UserId, habit.Id);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 

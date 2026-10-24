@@ -21,7 +21,8 @@ public record GoalListCardItem(
     decimal? ProgressPercentage = null,
     string? ProjectedCompletionDate = null,
     int? DaysToDeadline = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Status = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Status = null,
+    IReadOnlyList<Orbit.Application.Goals.Queries.LinkedHabitDto>? LinkedHabits = null);
 
 public static partial class GoalListCardBuilder
 {
@@ -71,7 +72,8 @@ public static partial class GoalListCardBuilder
             metrics?.VelocityPerDay > 0
                 ? metrics.ProjectedCompletionDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
                 : null,
-            metrics?.DaysToDeadline, goal.Status.ToString());
+            metrics?.DaysToDeadline, goal.Status.ToString(),
+            goal.Habits.Select(h => new Orbit.Application.Goals.Queries.LinkedHabitDto(h.Id, h.Title)).ToList());
     }
 
     public static GoalListCard WithoutProjections(GoalListCard card) =>

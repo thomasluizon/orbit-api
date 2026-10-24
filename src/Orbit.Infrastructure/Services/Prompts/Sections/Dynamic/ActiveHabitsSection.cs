@@ -100,7 +100,18 @@ public class ActiveHabitsSection : IPromptSection
         if (habit.IsCompleted) labels.Add("COMPLETED");
         if (habit.Schedule != HabitSchedule.General)
             labels.Add($"DueDate: {habit.NextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
-        return labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "";
+        return (labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "") + BuildHabitRelations(habit, context);
+    }
+
+    private static string BuildHabitRelations(Habit habit, PromptContext context)
+    {
+        var labels = new List<string>();
+        labels.Add($"Start date: {habit.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+        labels.Add(habit.ParentHabitId is { } parentId
+            ? $"Parent: {PromptDataSanitizer.QuoteInline(context.ActiveHabits.FirstOrDefault(parent => parent.Id == parentId)?.Title, 100)} ({parentId})"
+            : "Parent: none");
+        labels.Add($"Tags: {(habit.Tags.Count == 0 ? "none" : string.Join(", ", habit.Tags.Select(t => $"{PromptDataSanitizer.QuoteInline(t.Name, 100)} ({t.Id})")))}");
+        return $" | {string.Join(" | ", labels)}";
     }
 
     private static bool IsToday(Habit habit, PromptContext context) =>

@@ -215,7 +215,9 @@ public class GetCalendarMonthQueryHandler(
             IntervalWeeks: habit.IntervalWeeks,
             RelativeReminders: habit.RelativeReminders,
             Schedule: habit.Schedule,
-            StartDate: habit.StartDate);
+            StartDate: habit.StartDate,
+            ParentHabitId: habit.ParentHabitId,
+            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == habit.ParentHabitId)?.Title);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -283,7 +285,9 @@ public class GetCalendarMonthQueryHandler(
             IntervalWeeks: child.IntervalWeeks,
             CreatedAtUtc: child.CreatedAtUtc,
             Schedule: child.Schedule,
-            StartDate: child.StartDate);
+            StartDate: child.StartDate,
+            ParentHabitId: child.ParentHabitId,
+            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == child.ParentHabitId)?.Title);
     }
 
     private static bool HasAnyDescendantDue(

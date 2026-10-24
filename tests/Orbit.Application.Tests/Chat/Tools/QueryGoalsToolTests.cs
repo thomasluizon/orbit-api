@@ -100,7 +100,7 @@ public class QueryGoalsToolTests
 
             result.EntityName.Should().Contain("Deadline: 2026-12-31");
             result.EntityName.Should().Contain("Description: Race training");
-            result.EntityName.Should().Contain("Linked habits: Morning run");
+            result.EntityName.Should().Contain($"Linked habits: Morning run ({habit.Id})");
         }
         finally
         {

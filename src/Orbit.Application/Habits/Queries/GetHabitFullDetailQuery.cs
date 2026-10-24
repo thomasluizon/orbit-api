@@ -31,13 +31,14 @@ public class GetHabitFullDetailQueryHandler(
     public async Task<Result<HabitFullDetailResponse>> Handle(GetHabitFullDetailQuery request, CancellationToken cancellationToken)
     {
         var habits = await habitRepository.FindAsync(
-            h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Children).ThenInclude(c => c.Children)
+            h => h.UserId == request.UserId
+                && (h.Id == request.HabitId || h.Children.Any(child => child.Id == request.HabitId)),
+            q => q.Include(h => h.Children.Where(child => child.ParentHabitId == request.HabitId)).ThenInclude(c => c.Children)
                   .Include(h => h.Goals)
                   .AsSplitQuery(),
             cancellationToken);
 
-        var habit = habits.Count > 0 ? habits[0] : null;
+        var habit = habits.FirstOrDefault(h => h.Id == request.HabitId);
         if (habit is null)
             return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound);
 
@@ -66,6 +67,7 @@ public class GetHabitFullDetailQueryHandler(
             ? allRootLogs.Any(l => !l.IsDeleted && l.Date == userToday && l.Value > 0)
             : habit.IsCompleted;
 
+        var parentTitle = habits.FirstOrDefault(h => h.Id == habit.ParentHabitId)?.Title;
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
@@ -85,7 +87,9 @@ public class GetHabitFullDetailQueryHandler(
             StartDate: habit.StartDate,
             ScheduledStartDate: habit.ScheduledStartDate,
             OriginalDayOfMonth: habit.OriginalDayOfMonth,
-            ParentId: habit.ParentHabitId);
+            ParentId: habit.ParentHabitId,
+            ParentHabitId: habit.ParentHabitId,
+            ParentTitle: parentTitle);
 
         var metrics = HabitMetricsCalculator.Calculate(
             habit,

@@ -34,9 +34,16 @@ public sealed class UnitOfWork(
         }, cancellationToken);
     }
 
-    public async Task<T> ExecuteInTransactionAsync<T>(
+    public Task<T> ExecuteInTransactionAsync<T>(
         Func<CancellationToken, Task<T>> operation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => ExecuteTransactionAsync(operation, cancellationToken, true);
+
+    public Task<T> ExecuteReplayableInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default) => ExecuteTransactionAsync(operation, cancellationToken, false);
+
+    private async Task<T> ExecuteTransactionAsync<T>(Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken, bool verifyCommit)
     {
         ArgumentNullException.ThrowIfNull(operation);
 
@@ -50,28 +57,14 @@ public sealed class UnitOfWork(
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
         var transactionToken = timeoutCts.Token;
 
-        var strategy = context.Database.CreateExecutionStrategy();
-
         try
         {
-            return await strategy.ExecuteAsync(async () =>
+            return await VerifiedTransaction.ExecuteAsync(context, operation, () =>
             {
-                await using var transaction = await context.Database.BeginTransactionAsync(transactionToken);
-
-                try
-                {
-                    var result = await operation(transactionToken);
-                    await transaction.CommitAsync(transactionToken);
-                    return result;
-                }
-                catch
-                {
-                    context.ChangeTracker.Clear();
-                    scheduleSnapshots?.Invalidate();
-                    eventCollector?.Clear();
-                    throw;
-                }
-            });
+                context.ChangeTracker.Clear();
+                scheduleSnapshots?.Invalidate();
+                eventCollector?.Clear();
+            }, transactionToken, verifyCommit);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {

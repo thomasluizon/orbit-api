@@ -323,7 +323,9 @@ internal static class HabitScheduleFilters
             IntervalWeeks: h.IntervalWeeks,
             RelativeReminders: h.RelativeReminders,
             Schedule: h.Schedule,
-            StartDate: h.StartDate);
+            StartDate: h.StartDate,
+            ParentHabitId: h.ParentHabitId,
+            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == h.ParentHabitId)?.Title);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -522,7 +524,9 @@ internal static class HabitScheduleFilters
             ReminderTimes: c.ReminderTimes,
             ScheduledReminders: c.GetScheduledRemindersForLegacyClients(),
             RelativeReminders: c.RelativeReminders,
-            SlipAlertEnabled: c.SlipAlertEnabled);
+            SlipAlertEnabled: c.SlipAlertEnabled,
+            ParentHabitId: c.ParentHabitId,
+            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == c.ParentHabitId)?.Title);
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)

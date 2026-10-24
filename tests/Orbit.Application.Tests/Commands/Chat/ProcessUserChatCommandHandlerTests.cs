@@ -1872,7 +1872,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.DaySummary.Should().NotBeNull();
-        result.Value.DaySummary!.Rows.Should().Equal(result.Value.HabitList!.Items);
+        result.Value.DaySummary!.Rows.Should().BeEquivalentTo(result.Value.HabitList!.Items, options => options.WithStrictOrdering());
         result.Value.DaySummary.Rows!.Select(row => row.Id).Should().Equal(
             done.Id.ToString(), due.Id.ToString(), overdue.Id.ToString());
         result.Value.DaySummary.Rows.Select(row => row.Status).Should().Equal(doneStatus, "today", "overdue");

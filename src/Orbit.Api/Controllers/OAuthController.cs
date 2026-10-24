@@ -501,12 +501,22 @@ public partial class OAuthController(
         var tracked = await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: ct);
         if (tracked is null)
             return BadRequest(new { error = "invalid_grant" });
+        List<Guid> attemptedKeyIds = [];
+        var retry = false;
         try
         {
-            return await unitOfWork.ExecuteInTransactionAsync<IActionResult>(async token =>
+            return await unitOfWork.ExecuteReplayableInTransactionAsync<IActionResult>(async token =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"oauth-keys:{grant.UserId}", token);
-                if (authStore.ConsumeRefreshToken(refreshToken!) is null)
+                var ownSuccessor = attemptedKeyIds.Count > 0
+                    ? await apiKeyRepository.FindOneTrackedAsync(key => attemptedKeyIds.Contains(key.Id)
+                        && key.UserId == grant.UserId && key.OAuthFamilyId == grant.FamilyId && !key.IsRevoked, cancellationToken: token)
+                    : null;
+                var current = retry
+                    ? ownSuccessor ?? await apiKeyRepository.FindOneTrackedAsync(key => key.Id == previous.Id, cancellationToken: token)
+                    : tracked;
+                retry = true;
+                if (authStore.ConsumeRefreshToken(refreshToken!) is null && ownSuccessor is null)
                 {
                     var family = await apiKeyRepository.FindTrackedAsync(
                         key => key.UserId == grant.UserId && !key.IsRevoked
@@ -517,7 +527,7 @@ public partial class OAuthController(
                     return BadRequest(new { error = "invalid_grant" });
                 }
                 var familyExpiresAtUtc = grant.FamilyExpiresAtUtc ?? previous.CreatedAtUtc.AddDays(30);
-                if (tracked.IsRevoked || familyExpiresAtUtc <= TimeProvider.System.GetUtcNow().UtcDateTime)
+                if (current is null || current.IsRevoked || familyExpiresAtUtc <= TimeProvider.System.GetUtcNow().UtcDateTime)
                     return BadRequest(new { error = "invalid_grant" });
                 var expiresAtUtc = DateTime.UtcNow.AddHours(1);
                 if (familyExpiresAtUtc < expiresAtUtc)
@@ -526,8 +536,9 @@ public partial class OAuthController(
                     expiresAtUtc: expiresAtUtc, oauthFamilyId: grant.FamilyId);
                 if (created.IsFailure)
                     return StatusCode(500, new { error = "server_error" });
-                tracked.Revoke();
+                current.Revoke();
                 var (key, raw) = created.Value;
+                attemptedKeyIds.Add(key.Id);
                 await apiKeyRepository.AddAsync(key, token);
                 await unitOfWork.SaveChangesAsync(token);
                 return Ok(new

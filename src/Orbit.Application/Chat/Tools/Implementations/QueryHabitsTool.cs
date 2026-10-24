@@ -75,22 +75,28 @@ public class QueryHabitsTool(
 
         var query = await QueryHabitsAsync(userId, filters, today, user.WeekStartDay, includeMetrics, ct);
         var allHabits = query.Habits;
+        var parentIds = allHabits.Where(h => h.ParentHabitId.HasValue).Select(h => h.ParentHabitId!.Value).Distinct().ToArray();
+        var parentTitles = allHabits.ToDictionary(h => h.Id, h => h.Title);
+        var missingParentIds = parentIds.Where(id => !parentTitles.ContainsKey(id)).ToArray();
+        if (missingParentIds.Length > 0)
+            foreach (var parent in await habitRepository.FindAsync(h => h.UserId == userId && missingParentIds.Contains(h.Id), ct))
+                parentTitles[parent.Id] = parent.Title;
         var returnedIds = allHabits.Select(habit => habit.Id).ToHashSet();
 
         var results = allHabits
             .Where(h => h.ParentHabitId is null
-                || query.Schedule is not null && !returnedIds.Contains(h.ParentHabitId.Value))
+                || !returnedIds.Contains(h.ParentHabitId.Value))
             .OrderBy(h => h.Position)
             .Take(limit)
             .ToList();
 
         var output = results.Count == 0 && query.Schedule is null
             ? "No habits found matching the given filters."
-            : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule);
+            : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule, parentTitles);
         var rows = new List<HabitListCardItem>();
         foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
             .OrderBy(h => h.Position).ThenBy(h => h.Id))
-            AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs);
+            AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs, parentTitles);
         return new ToolResult(true, EntityName: output,
             Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
                 rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList(),
@@ -104,7 +110,7 @@ public class QueryHabitsTool(
     }
 
     private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,
-        IReadOnlyList<Habit> habits, ScheduleContext? schedule, DateOnly today, bool includeSubs)
+        IReadOnlyList<Habit> habits, ScheduleContext? schedule, DateOnly today, bool includeSubs, IReadOnlyDictionary<Guid, string> parentTitles)
     {
         var status = schedule is not null
             ? schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
@@ -114,10 +120,12 @@ public class QueryHabitsTool(
                 : GetResponseCompletion(habit, today) ? HabitListCardBuilder.StatusDone
                 : habit.NextDueDate < today ? HabitListCardBuilder.StatusOverdue
                 : habit.NextDueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
-        rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status));
+        rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status, habit.StartDate, habit.ParentHabitId,
+            habit.ParentHabitId is { } parentId ? parentTitles.GetValueOrDefault(parentId) : null,
+            habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList()));
         if (includeSubs)
             foreach (var child in habits.Where(item => item.ParentHabitId == habit.Id).OrderBy(item => item.Position))
-                AppendReadRows(child, depth + 1, rows, habits, schedule, today, true);
+                AppendReadRows(child, depth + 1, rows, habits, schedule, today, true, parentTitles);
     }
 
     private static HabitFilters ParseFilters(JsonElement args, DateOnly today)
@@ -256,7 +264,8 @@ public class QueryHabitsTool(
         int weekStartDay,
         bool includeMetrics,
         bool includeSubs,
-        ScheduleContext? schedule)
+        ScheduleContext? schedule,
+        IReadOnlyDictionary<Guid, string> parentTitles)
     {
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture, $"Found {results.Count} habit(s):");
@@ -278,10 +287,10 @@ public class QueryHabitsTool(
                 weekStartDay,
                 includeMetrics,
                 suffixes.GetValueOrDefault(habit.Id, string.Empty),
-                schedule));
+                schedule, parentTitles));
 
             if (includeSubs)
-                AppendChildren(sb, allHabits, habit.Id, new OutputContext(today, weekStartDay, includeMetrics, schedule), 1);
+                AppendChildren(sb, allHabits, habit.Id, new OutputContext(today, weekStartDay, includeMetrics, schedule, parentTitles), 1);
         }
 
         return sb.ToString();
@@ -293,12 +302,13 @@ public class QueryHabitsTool(
         int weekStartDay,
         bool includeMetrics,
         string dupSuffix,
-        ScheduleContext? schedule)
+        ScheduleContext? schedule,
+        IReadOnlyDictionary<Guid, string> parentTitles)
     {
         var freqLabel = FormatFrequencyLabel(habit);
         var labels = BuildLabels(habit, today, weekStartDay, includeMetrics, schedule);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
-        var details = HabitFieldSummary.From(habit).Format();
+        var details = HabitFieldSummary.From(habit, habit.ParentHabitId is { } parentId ? parentTitles.GetValueOrDefault(parentId) : null).Format();
         var detailSuffix = details.Length == 0 ? string.Empty : $" | {details}";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
         return string.Create(CultureInfo.InvariantCulture, $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.NextDueDate:yyyy-MM-dd}{labelStr}{detailSuffix}");
@@ -325,7 +335,7 @@ public class QueryHabitsTool(
         AddNotDueLabel(labels, habit, today);
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
         if (isCompleted) labels.Add("COMPLETED");
-        if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
+
 
         if (habit.Goals.Count > 0) labels.Add($"Goals: {string.Join(", ", habit.Goals.Select(g => $"{g.Title} ({g.Id})"))}");
 
@@ -376,7 +386,7 @@ public class QueryHabitsTool(
             : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
-    private sealed record OutputContext(DateOnly Today, int WeekStartDay, bool IncludeMetrics, ScheduleContext? Schedule);
+    private sealed record OutputContext(DateOnly Today, int WeekStartDay, bool IncludeMetrics, ScheduleContext? Schedule, IReadOnlyDictionary<Guid, string> ParentTitles);
 
     private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, OutputContext context, int depth)
     {
@@ -390,7 +400,7 @@ public class QueryHabitsTool(
         foreach (var child in children)
         {
             sb.AppendLine(indent + BuildHabitLine(child, context.Today, context.WeekStartDay, context.IncludeMetrics,
-                childSuffixes.GetValueOrDefault(child.Id, string.Empty), context.Schedule));
+                childSuffixes.GetValueOrDefault(child.Id, string.Empty), context.Schedule, context.ParentTitles));
             AppendChildren(sb, allHabits, child.Id, context, depth + 1);
         }
     }

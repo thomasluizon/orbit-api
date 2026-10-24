@@ -80,7 +80,7 @@ internal static class McpToolHelpers
         if (data.IsOverdue) line += " | OVERDUE";
         if (data.IsBadHabit) line += " | bad habit";
         if (data.Checklist.Count > 0) line += $" | checklist: {data.Checklist.Count(i => i.IsChecked)}/{data.Checklist.Count}";
-        if (data.Tags.Count > 0) line += $" | tags: {string.Join(", ", data.Tags.Select(t => t.Name))}";
+        if (data.Tags.Count > 0) line += $" | tags: {string.Join(", ", data.Tags.Select(t => $"{t.Name} ({t.Id})"))}";
         if (!string.IsNullOrEmpty(data.Details)) line += $" | {data.Details}";
         return line;
     }
@@ -96,6 +96,10 @@ internal static class McpToolHelpers
                 {
                     Description = c.Description,
                     DueTime = c.DueTime,
+                    StartDate = c.StartDate,
+                    ParentHabitId = c.ParentHabitId,
+                    ParentTitle = c.ParentTitle,
+                    Tags = c.Tags,
                     DueEndTime = c.DueEndTime,
                     IntervalWeeks = c.IntervalWeeks,
                     Days = c.Days,
@@ -121,6 +125,10 @@ internal static class McpToolHelpers
             {
                 Description = child.Description,
                 DueTime = child.DueTime,
+                StartDate = child.StartDate,
+                ParentHabitId = child.ParentHabitId,
+                ParentTitle = child.ParentTitle,
+                Tags = child.Tags ?? [],
                 DueEndTime = child.DueEndTime,
                 IntervalWeeks = child.IntervalWeeks,
                 Days = child.Days,

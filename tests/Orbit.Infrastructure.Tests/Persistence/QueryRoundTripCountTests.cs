@@ -273,6 +273,8 @@ public class QueryRoundTripCountTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Habit.LinkedGoals.Should().HaveCount(2);
+        result.Value.Habit.ParentTitle.Should().Be("Parent");
+        result.Value.Habit.Children.Should().HaveCount(childCount);
         return counter.CommandCount;
     }
 

@@ -84,7 +84,7 @@ test("generated output is deterministic and the accepted baseline passes", () =>
   checkBaseline(inventory, baseline(inventory))
 })
 
-test("creation without update and partial readback are gaps", () => {
+test("creation without update remains a gap while complete readback is covered", () => {
   const template = field(inventory, "ChecklistTemplate", "Items").surfaces.chat
   assert.equal(template.operations.create.status, "covered")
   assert.equal(template.operations.read.status, "covered")
@@ -93,11 +93,19 @@ test("creation without update and partial readback are gaps", () => {
     assert.ok(field(build(), "ChecklistTemplate", "Items").surfaces.chat.problems.includes("create-without-update"))
   })
   const tags = field(inventory, "Habit", "Tags").surfaces.chat
-  assert.equal(tags.operations.read.status, "partial")
-  assert.equal(tags.verdict, "gap")
+  assert.equal(tags.operations.read.status, "covered")
+  assert.equal(tags.verdict, "inventoried")
   assert.equal(field(inventory, "Habit", "Description").surfaces.chat.operations.read.status, "covered")
   assert.equal(field(inventory, "Habit", "StartDate").surfaces.chat.operations.update.status, "covered")
   assert.match(gapReport(inventory), /## Field coverage gaps/)
+  for (const surface of ["chat", "mcp"]) {
+    for (const [entity, names] of [["Habit", ["StartDate", "ParentHabitId", "Tags"]], ["SubHabit", ["StartDate", "ParentHabitId", "Tags"]], ["Goal", ["Habits"]], ["CalendarSync", ["GoogleCalendarSelectedIds"]]])
+      for (const name of names)
+        assert.equal(field(inventory, entity, name).surfaces[surface].operations.read.status, "covered", `${surface}.${entity}.${name}`)
+  }
+  mutate("src/Orbit.Application/Habits/Queries/HabitFieldSummary.cs", text => text.replace('Tags.Select(t => $"{t.Name} ({t.Id})")', 'Tags.Select(t => t.Name)'), build => {
+    assert.throws(build, /Missing readback.*Tags/)
+  })
 })
 
 test("MCP gateway coverage retains direct differences and known tickets without retired memory entities", () => {
