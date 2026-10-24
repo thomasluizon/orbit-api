@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -56,6 +58,10 @@ public class AccountResetRepositoryTests : IDisposable
 
     private void SeedForUser(Guid userId)
     {
+        var replay = ChatTurn.Create(userId, new string('A', 64), new string('B', 64), DateTime.UtcNow.AddMinutes(4));
+        replay.Complete(ChatStreamEvent.Final(new ChatResponse("Private response", [])).ToJson());
+        _dbContext.ChatTurns.AddRange(replay,
+            ChatTurn.Create(userId, new string('C', 64), new string('D', 64), DateTime.UtcNow.AddMinutes(4)));
         _dbContext.ConversationTurns.Add(ConversationTurn.Create(userId, Guid.NewGuid(), "user", DateTime.UtcNow,
             null, "Private message", "[]").Value);
         _dbContext.ChecklistTemplates.Add(
@@ -138,6 +144,8 @@ public class AccountResetRepositoryTests : IDisposable
         saved.ConversationHistoryClearedAtUtc.Should().NotBeNull();
         saved.ConversationHistoryClearedAtUtc.Should().BeOnOrAfter(beforeResetAtUtc);
         _dbContext.Entry(saved).Property<uint>("xmin").CurrentValue.Should().Be(1);
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(2);
         (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
         (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.Users.SingleAsync(u => u.Id == _otherUserId)).ConversationHistoryClearedAtUtc.Should().BeNull();
@@ -178,6 +186,8 @@ public class AccountResetRepositoryTests : IDisposable
 
         await _repository.DeleteAllUserDataAsync(_userId);
 
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(2);
         (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _userId)).Should().Be(0);
         (await _dbContext.ConversationTurns.CountAsync(turn => turn.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.ChecklistTemplates.CountAsync(ct => ct.UserId == _userId)).Should().Be(0);

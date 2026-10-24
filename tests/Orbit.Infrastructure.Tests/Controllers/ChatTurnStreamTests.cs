@@ -18,6 +18,10 @@ using Orbit.Api.Middleware;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Profile.Commands;
+using Orbit.Domain.Events;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -87,6 +91,41 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         output.WriteLine("Joined acknowledgement: " + events[0].GetRawText());
         output.WriteLine("Completed replay acknowledgement: " + Events(replay)[0].GetRawText());
         output.WriteLine("Persisted terminal event: " + events[1].GetRawText());
+    }
+
+    [Fact]
+    public async Task ResetAccount_SameKeyCannotReplayErasedResponse()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var userId = Guid.NewGuid();
+        using var services = new ChatTurnStreamTestServices(mediator, userId);
+        mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new ChatResponse("Private response before reset", [])),
+                Result.Success(new ChatResponse("Response after reset", [])));
+        var original = CreateController(services, userId, "erased-key");
+        await original.ProcessChatStream("Hello", null, null, default);
+        var originalTurnId = Events(original)[0].GetProperty("turnId").GetGuid();
+
+        await using (var scope = services.Provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var dates = Substitute.For<IUserDateService>();
+            dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 1, 1));
+            var reset = new ResetAccountCommandHandler(new GenericRepository<User>(db),
+                new AccountResetRepository(db, Substitute.For<IAccountEventCollector>()),
+                new UnitOfWork(db, new DatabaseConnectionSettings()), dates, cache);
+            (await reset.Handle(new ResetAccountCommand(userId), default)).IsSuccess.Should().BeTrue();
+        }
+
+        var retry = CreateController(services, userId, "erased-key");
+        await retry.ProcessChatStream("Hello", null, null, default);
+
+        Events(retry)[0].GetProperty("turnId").GetGuid().Should().NotBe(originalTurnId);
+        Events(retry)[0].GetProperty("replayed").GetBoolean().Should().BeFalse();
+        Events(retry).Last().GetRawText().Should().NotContain("Private response before reset")
+            .And.Contain("Response after reset");
+        await mediator.Received(2).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

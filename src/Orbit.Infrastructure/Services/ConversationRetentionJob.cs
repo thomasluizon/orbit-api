@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
@@ -19,7 +20,15 @@ public sealed class ConversationRetentionJob(IServiceScopeFactory scopeFactory) 
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         var cutoffAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-ConversationTurn.RetentionDays);
-        await db.ConversationTurns.Where(turn => turn.CreatedAtUtc < cutoffAtUtc).ExecuteDeleteAsync(cancellationToken);
+        await work.ExecuteInTransactionAsync(async token =>
+        {
+            await db.ChatTurns.Where(turn => turn.ExpiresAtUtc < cutoffAtUtc
+                || db.ConversationTurns.Any(conversation => conversation.UserId == turn.UserId
+                    && conversation.TurnId == turn.Id && conversation.CreatedAtUtc < cutoffAtUtc))
+                .ExecuteDeleteAsync(token);
+            await db.ConversationTurns.Where(turn => turn.CreatedAtUtc < cutoffAtUtc).ExecuteDeleteAsync(token);
+        }, cancellationToken);
     }
 }
