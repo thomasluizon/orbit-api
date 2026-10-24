@@ -8,14 +8,18 @@ public sealed record GroundingViolation(string Kind, string Claim);
 public static partial class GroundednessChecker
 {
     public static IReadOnlyList<GroundingViolation> Check(
-        string? text, TurnFactSet facts, IEnumerable<string>? knownEntityNames = null, string? language = null)
+        string? text, TurnFactSet facts, IEnumerable<string>? knownEntityNames = null, string? language = null,
+        string? userMessage = null)
     {
         if (string.IsNullOrWhiteSpace(text))
             return [];
 
+        var portuguese = language?.StartsWith("pt", StringComparison.OrdinalIgnoreCase) == true;
         var allowed = facts.Facts.Select(fact => (fact.Kind, fact.Value)).ToHashSet();
+        if (!string.IsNullOrWhiteSpace(userMessage))
+            allowed.UnionWith(GroundingTokens.Read(userMessage, portuguese).Select(token => (token.Kind, token.Value)));
         var violations = new HashSet<GroundingViolation>();
-        foreach (var token in GroundingTokens.Read(text, language?.StartsWith("pt", StringComparison.OrdinalIgnoreCase) == true))
+        foreach (var token in GroundingTokens.Read(text, portuguese))
         {
             if (!allowed.Contains((token.Kind, token.Value)))
                 violations.Add(new GroundingViolation(token.Kind, token.Text));

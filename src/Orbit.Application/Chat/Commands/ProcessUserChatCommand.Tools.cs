@@ -105,15 +105,17 @@ public partial class ProcessUserChatCommandHandler
         results.OperationResults.Any(operation => operation.Status == AgentOperationStatus.Succeeded
             && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false });
 
-    private ToolLoopResult RecoverExecutedContinuation(ProcessUserChatCommand request,
+    private ToolLoopResult RecoverOutcomeContinuation(ProcessUserChatCommand request,
         ToolExecutionAccumulator results, ToolLoopResult loop)
     {
-        if (request.BlockAnswer is not null || loop.ProviderError?.Code != ErrorCodes.AiEmptyResponse
-            || !HasSucceededWrite(results))
+        if (request.BlockAnswer is not null || loop.ProviderError is null)
             return loop;
         foreach (var pending in results.PendingOperations.ToArray())
             if (!IsCurrentPendingOutcome(request.UserId, pending, results))
                 results.SupersedePendingOperation(pending.Id);
+        if (results.PendingOperations.Count == 0
+            && (loop.ProviderError.Code != ErrorCodes.AiEmptyResponse || !HasSucceededWrite(results)))
+            return loop;
         return loop with { FinalResponse = new AiResponse(), ProviderError = null };
     }
 
@@ -123,8 +125,6 @@ public partial class ProcessUserChatCommandHandler
         ct.ThrowIfCancellationRequested();
         if (request.BlockAnswer is null && loop.ProviderError is { } error)
         {
-            if (RecoverPendingContinuation(request, results) is { } pending)
-                return Result.Success(pending);
             if (await RecoverExplicitHeadingsAsync(request, context, Result.Failure<AiResponse>(error), results, ct) is { } headings)
                 return headings;
         }
@@ -238,19 +238,6 @@ public partial class ProcessUserChatCommandHandler
             results.SupersedePendingOperation(pending.Id);
         results.HasBudgetRecovery = true;
         return new AiResponse { TextMessage = CommittedWriteMessage(language, hasSavedActions) };
-    }
-
-    private ChatResponse? RecoverPendingContinuation(ProcessUserChatCommand request, ToolExecutionAccumulator results)
-    {
-        foreach (var pending in results.PendingOperations.ToArray())
-            if (!IsCurrentPendingOutcome(request.UserId, pending, results))
-                results.SupersedePendingOperation(pending.Id);
-        if (results.PendingOperations.Count == 0)
-            return null;
-        return new ChatResponse(null, results.ActionResults, results.OperationResults, results.PendingOperations,
-            results.PolicyDenials, request.CorrelationId, RelatedSurfaces: results.RelatedSurfaces,
-            Parts: request.ClientContext?.SupportsParts == true ? [] : null)
-        { GroundingFacts = PreviewFacts(results.PendingOperations) };
     }
 
     private bool IsCurrentPendingOutcome(Guid userId, PendingAgentOperation pending, ToolExecutionAccumulator results)
@@ -578,8 +565,16 @@ public partial class ProcessUserChatCommandHandler
     private void RegisterPendingWrite(Guid userId, IAiTool tool,
         AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
     {
-        if (tool.IsReadOnly || response.Operation.Status != AgentOperationStatus.PendingConfirmation
+        if (response.Operation.Status != AgentOperationStatus.PendingConfirmation
             || response.PendingOperation is not { } replacement)
+            return;
+        if (tool.Name == "revise_pending_changes")
+        {
+            if (execution.PendingOperationStore.GetExecution(userId, replacement.Id) is { } stored)
+                results.PendingWriteCalls[replacement.Id] = (stored.OperationId, replacement);
+            return;
+        }
+        if (tool.IsReadOnly)
             return;
         foreach (var (id, previous) in results.PendingWriteCalls.ToArray())
         {

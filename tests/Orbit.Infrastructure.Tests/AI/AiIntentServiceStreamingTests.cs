@@ -25,6 +25,10 @@ public class AiIntentServiceStreamingTests
     [Theory]
     [InlineData("empty", false)]
     [InlineData("empty", true)]
+    [InlineData("empty_text", false)]
+    [InlineData("empty_text", true)]
+    [InlineData("whitespace_text", false)]
+    [InlineData("whitespace_text", true)]
     [InlineData("reasoning", false)]
     [InlineData("reasoning", true)]
     [InlineData("refusal", false)]
@@ -39,13 +43,18 @@ public class AiIntentServiceStreamingTests
     [InlineData("failed", true)]
     public async Task ContinueWithToolResultsAsync_EmptyRoundLogsOnlyProtocolMetadata(string kind, bool stream)
     {
+        var toolName = kind is "empty_text" or "whitespace_text" ? "revise_pending_changes" : "query_habits";
         var firstResponse = ResponsesTestData.Response();
         firstResponse.OutputItems.Add(new ReasoningResponseItem("private reasoning summary") { EncryptedContent = "private encrypted state" });
-        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", "query_habits", BinaryData.FromString("{}")));
+        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", toolName, BinaryData.FromString("{}")));
         firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_2", "private tool name", BinaryData.FromString("{}")));
         var emptyResponse = ResponsesTestData.Response();
         switch (kind)
         {
+            case "empty_text":
+            case "whitespace_text":
+                emptyResponse.OutputItems.Add(ResponseItem.CreateAssistantMessageItem(kind == "empty_text" ? "" : " \n\t"));
+                break;
             case "reasoning":
                 emptyResponse.OutputItems.Add(new ReasoningResponseItem("private reasoning summary"));
                 break;
@@ -75,10 +84,10 @@ public class AiIntentServiceStreamingTests
         var (service, logger) = BuildServiceWithRecordingLogger(handler);
         var sink = new CollectingSink();
         var first = await service.SendWithToolsAsync(new AiToolRequest("private user message", "private system instructions",
-            [new { name = "query_habits" }]), stream ? sink.Handle : null);
+            [new { name = toolName }]), stream ? sink.Handle : null);
         first.IsSuccess.Should().BeTrue();
         var second = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
-            [new("query_habits", "call_1", true, null, "private habit title", null),
+            [new(toolName, "call_1", true, null, "private habit title", null),
                 new("private tool name", "call_2", false, null, null, "private tool failure")], stream ? sink.Handle : null);
 
         second.IsSuccess.Should().Be(kind == "truncated");
@@ -89,7 +98,7 @@ public class AiIntentServiceStreamingTests
         metadata["RoundIndex"].Should().Be(2);
         metadata["ResponseStatus"].Should().Be(emptyResponse.Status.ToString());
         metadata["IncompleteReason"].Should().Be(emptyResponse.IncompleteStatusDetails?.Reason?.ToString() ?? "none");
-        metadata["EarlierToolNames"].Should().Be("query_habits");
+        metadata["EarlierToolNames"].Should().Be(toolName);
         var outputCounts = JsonSerializer.Deserialize<Dictionary<string, int>>((string)metadata["OutputItemKinds"]!)!;
         outputCounts.Should().BeEquivalentTo(emptyResponse.OutputItems.GroupBy(item => item.Kind.ToString()).ToDictionary(group => group.Key, group => group.Count()));
         var contentCounts = JsonSerializer.Deserialize<Dictionary<string, int>>((string)metadata["ContentPartKinds"]!)!;
@@ -101,7 +110,7 @@ public class AiIntentServiceStreamingTests
         options.MaxOutputTokenCount.Should().Be(8192);
         options.ReasoningOptions.ReasoningEffortLevel.Should().Be(ResponseReasoningEffortLevel.Low);
         options.ToolChoice.Should().BeNull();
-        options.Tools.OfType<FunctionTool>().Select(tool => tool.FunctionName).Should().Equal("query_habits");
+        options.Tools.OfType<FunctionTool>().Select(tool => tool.FunctionName).Should().Equal(toolName);
         options.InputItems.OfType<ReasoningResponseItem>().Should().Contain(item => item.EncryptedContent == "private encrypted state");
         options.InputItems.OfType<MessageResponseItem>().Should().Contain(item => item.Role == MessageRole.System
             && item.Content.Any(part => part.Text == "private system instructions"));

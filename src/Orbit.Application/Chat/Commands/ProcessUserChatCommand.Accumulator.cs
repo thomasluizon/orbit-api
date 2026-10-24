@@ -133,10 +133,12 @@ public partial class ProcessUserChatCommandHandler
             if (policyDenial is not null)
                 PolicyDenials.Add(policyDenial);
 
-            if (pendingOperation is not null && !_supersededPendingIds.Contains(pendingOperation.Id)
-                && PendingOperations.All(item => item.Id != pendingOperation.Id)
-                && pendingOperation.ChangeTargetCount != 0 && pendingOperation.Items is not { Count: 0 })
-                PendingOperations.Add(pendingOperation);
+            if (pendingOperation is not null && !_supersededPendingIds.Contains(pendingOperation.Id))
+            {
+                PendingOperations.RemoveAll(item => item.Id == pendingOperation.Id);
+                if (pendingOperation.ChangeTargetCount != 0 && pendingOperation.Items is not { Count: 0 })
+                    PendingOperations.Add(pendingOperation);
+            }
         }
 
         public void SupersedePendingOperation(Guid id)
