@@ -137,7 +137,7 @@ public class QueryGoalsTool(
 
             if (includeLinkedHabits && goal.Habits.Count > 0)
             {
-                var linkedHabits = string.Join(", ", goal.Habits.Select(h => h.Title));
+                var linkedHabits = string.Join(", ", goal.Habits.Select(h => $"{h.Title} ({h.Id})"));
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  Linked habits: {linkedHabits}");
             }
         }

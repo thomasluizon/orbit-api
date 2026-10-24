@@ -13,7 +13,9 @@ public record CalendarAutoSyncStateResponse(
     bool Enabled,
     GoogleCalendarAutoSyncStatus Status,
     DateTime? LastSyncedAt,
-    bool HasGoogleConnection);
+    bool HasGoogleConnection,
+    IReadOnlyList<string>? SelectedCalendarIds = null,
+    string? SelectionMode = null);
 
 public class GetCalendarAutoSyncStateQueryHandler(
     IGenericRepository<User> userRepository,
@@ -34,7 +36,9 @@ public class GetCalendarAutoSyncStateQueryHandler(
             Enabled: user.GoogleCalendarAutoSyncEnabled,
             Status: status,
             LastSyncedAt: user.GoogleCalendarLastSyncedAt,
-            HasGoogleConnection: user.GoogleAccessToken is not null);
+            HasGoogleConnection: user.GoogleAccessToken is not null,
+            SelectedCalendarIds: user.GetSelectedCalendarIds(),
+            SelectionMode: user.GetSelectedCalendarIds() is null ? "default" : "explicit");
 
         return Result.Success(response);
     }

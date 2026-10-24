@@ -68,6 +68,8 @@ public class QueryHabitsToolTests
     [InlineData("Slip alerts: enabled")]
     [InlineData("[x] Fill bottle")]
     [InlineData("Tags: Health")]
+    [InlineData("Start date:")]
+    [InlineData("Parent:")]
     public async Task EditableFields_AppearOnParentAndChild(string expected)
     {
         var parent = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, Today,
@@ -92,6 +94,8 @@ public class QueryHabitsToolTests
         var lines = result.EntityName!.Split('\n');
         lines.Single(line => line.Contains($"ID: {parent.Id}")).Should().Contain(expected);
         lines.Single(line => line.Contains($"ID: {child.Id}")).Should().Contain(expected);
+        result.EntityName.Should().Contain($"Health ({tag.Id})");
+        lines.Single(line => line.Contains($"ID: {child.Id}")).Should().Contain($"Water ({parent.Id})");
     }
 
     [Theory]
@@ -440,7 +444,7 @@ public class QueryHabitsToolTests
 
         var result = await Execute("""{"date": "today"}""");
 
-        result.EntityName.Should().Contain(child.Title).And.NotContain(parent.Title);
+        result.EntityName.Should().Contain(child.Title).And.NotContain($"ID: {parent.Id}");
         result.Payload.Should().BeOfType<HabitListCard>().Which.Items.Should().ContainSingle()
             .Which.Should().Match<HabitListCardItem>(item => item.Id == child.Id.ToString() && item.Status == HabitListCardBuilder.StatusDone);
         result.EntityName.Should().Contain("Found 1 habit(s)").And.Contain("1 done, 0 remaining");

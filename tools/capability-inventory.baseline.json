@@ -10713,20 +10713,18 @@
           "type": "string?",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "absent"
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
                       "tool": "get_calendar_overview",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ]
                 },
@@ -10752,26 +10750,24 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "absent"
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
                       "tool": "get_calendar_overview",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ],
                   "viaOperations": [
                     {
                       "tool": "get_calendar_overview",
-                      "status": "partial",
+                      "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
                   ]
@@ -14447,10 +14443,8 @@
           "type": "IReadOnlyCollection<Habit>",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -14463,11 +14457,11 @@
                   ]
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
                       "tool": "query_goals",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ]
                 },
@@ -14499,10 +14493,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -14516,11 +14508,21 @@
                   ]
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_goal",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_goals",
+                      "status": "covered"
+                    }
+                  ],
                   "viaOperations": [
                     {
                       "tool": "query_goals",
-                      "status": "partial",
+                      "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
                   ]
@@ -20296,10 +20298,8 @@
           "type": "Guid?",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -20312,7 +20312,13 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -20354,10 +20360,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -20371,7 +20375,24 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -22629,10 +22650,8 @@
           "type": "DateOnly",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -22645,7 +22664,13 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -22682,10 +22707,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -22699,7 +22722,24 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -22751,10 +22791,8 @@
           "type": "IReadOnlyCollection<Tag>",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -22767,11 +22805,11 @@
                   ]
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
                       "tool": "query_habits",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ]
                 },
@@ -22815,10 +22853,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -22832,17 +22868,21 @@
                   ]
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "list_habits",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ],
                   "viaOperations": [
                     {
                       "tool": "query_habits",
-                      "status": "partial",
+                      "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
                   ]
@@ -39783,10 +39823,8 @@
           "type": "Guid?",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -39799,7 +39837,13 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -39841,10 +39885,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -39865,7 +39907,24 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -42193,10 +42252,8 @@
           "type": "DateOnly",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -42209,7 +42266,13 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -42246,10 +42309,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -42263,7 +42324,24 @@
                   ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "update": {
                   "status": "covered",
@@ -42315,10 +42393,8 @@
           "type": "IReadOnlyCollection<Tag>",
           "surfaces": {
             "chat": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -42331,11 +42407,11 @@
                   ]
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
                       "tool": "query_habits",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ]
                 },
@@ -42379,10 +42455,8 @@
               }
             },
             "mcp": {
-              "verdict": "gap",
-              "problems": [
-                "write-without-full-readback"
-              ],
+              "verdict": "inventoried",
+              "problems": [],
               "operations": {
                 "create": {
                   "status": "covered",
@@ -42403,17 +42477,21 @@
                   ]
                 },
                 "read": {
-                  "status": "partial",
+                  "status": "covered",
                   "direct": [
                     {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "list_habits",
-                      "status": "partial"
+                      "status": "covered"
                     }
                   ],
                   "viaOperations": [
                     {
                       "tool": "query_habits",
-                      "status": "partial",
+                      "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
                   ]
@@ -46162,15 +46240,15 @@
     },
     {
       "ticket": "thomasluizon/orbit-tickets#1575",
-      "observation": "Habit summaries render extended fields and checklist/reminder values. Update tools accept extended fields, direct MCP title is optional, and create_habit accepts is_general. Remaining relation and start-date readback gaps are listed separately."
+      "observation": "Habit summaries render extended fields and checklist/reminder values. Update tools accept extended fields, direct MCP title is optional, and create_habit accepts is_general. Start dates, parent identities, tag ids and names, and linked habit ids and titles are checked in the per-field readback cells."
     },
     {
       "ticket": "thomasluizon/orbit-tickets#1576",
-      "observation": "Checklist template updates, profile name updates and calendar selection writes are registered. Calendar overview returns effective IsSynced flags for available calendars, not the complete persisted selection; that readback remains partial."
+      "observation": "Checklist template updates, profile name updates and calendar selection writes are registered. Calendar overview returns effective IsSynced flags alongside persisted calendar ids and explicit or default selection mode."
     },
     {
       "ticket": "thomasluizon/orbit-tickets#1585",
-      "observation": "HabitUpdateParams carries StartDate, but chat/MCP update schemas and rendered habit summaries have no explicit start-date field."
+      "observation": "HabitUpdateParams carries StartDate; the write schemas and rendered habit summaries are checked in the StartDate cells."
     },
     {
       "ticket": "thomasluizon/orbit-tickets#19",
@@ -46189,150 +46267,5 @@
       "observation": "Emoji is accepted on MCP create/update and returned by get_habit/list_habits; inspect the Habit.Emoji cells and filter-keyed bulk cells."
     }
   ],
-  "gaps": [
-    {
-      "entity": "CalendarSync",
-      "field": "GoogleCalendarSelectedIds",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1576"
-    },
-    {
-      "entity": "CalendarSync",
-      "field": "GoogleCalendarSelectedIds",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1576"
-    },
-    {
-      "entity": "Goal",
-      "field": "Habits",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "Goal",
-      "field": "Habits",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "Habit",
-      "field": "ParentHabitId",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "Habit",
-      "field": "ParentHabitId",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "Habit",
-      "field": "StartDate",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1585"
-    },
-    {
-      "entity": "Habit",
-      "field": "StartDate",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1585"
-    },
-    {
-      "entity": "Habit",
-      "field": "Tags",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "Habit",
-      "field": "Tags",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "SubHabit",
-      "field": "ParentHabitId",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "SubHabit",
-      "field": "ParentHabitId",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "SubHabit",
-      "field": "StartDate",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1585"
-    },
-    {
-      "entity": "SubHabit",
-      "field": "StartDate",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1585"
-    },
-    {
-      "entity": "SubHabit",
-      "field": "Tags",
-      "surface": "chat",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    },
-    {
-      "entity": "SubHabit",
-      "field": "Tags",
-      "surface": "mcp",
-      "problems": [
-        "write-without-full-readback"
-      ],
-      "ticket": "thomasluizon/orbit-tickets#1575"
-    }
-  ]
+  "gaps": []
 }

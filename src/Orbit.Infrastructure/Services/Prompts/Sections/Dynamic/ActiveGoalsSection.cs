@@ -54,7 +54,7 @@ public class ActiveGoalsSection : IPromptSection
 
         if (goal.Habits.Count > 0)
         {
-            var habitNames = string.Join(", ", goal.Habits.Select(h => PromptDataSanitizer.QuoteInline(h.Title, 100)));
+            var habitNames = string.Join(", ", goal.Habits.Select(h => $"{PromptDataSanitizer.QuoteInline(h.Title, 100)} ({h.Id})"));
             sb.AppendLine(CultureInfo.InvariantCulture, $"  Linked habits: {habitNames}");
         }
     }
