@@ -16,6 +16,7 @@ if (args is ["migrate-staging"])
 }
 builder.Logging.AddFilter("LuckyPennySoftware.MediatR.License", LogLevel.None);
 builder.Logging.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
+builder.Services.AddOrbitShutdownDrain();
 
 builder
     .ValidateOrbitSecuritySettings()

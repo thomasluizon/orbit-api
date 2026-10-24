@@ -341,6 +341,7 @@ public class WebApplicationExtensionsMcpTests
             .Returns(call => AuthenticateResult.Success(new AuthenticationTicket(call.Arg<HttpContext>().User, "ApiKey")));
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
         builder.Configuration["Database:MigrateOnStartup"] = "false";
+        builder.Services.AddOrbitShutdownDrain();
         builder.Services.AddResponseCompression();
         builder.Services.AddExceptionHandler(options => options.ExceptionHandler = _ => Task.CompletedTask);
         builder.Services.AddCors(options => options.AddPolicy("ThirdParty", policy => policy.WithOrigins("https://client.example.com")));

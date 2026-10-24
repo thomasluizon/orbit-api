@@ -4,14 +4,15 @@ import {
 }
 
 resource "render_web_service" "production_api" {
-  environment_id     = render_project.orbit.environments["Production"].id
-  name               = "orbit-api"
-  plan               = "starter"
-  region             = "ohio"
-  health_check_path  = "/health"
-  pre_deploy_command = "./efbundle"
-  env_vars           = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-api" } }
-  custom_domains     = [{ name = "api.useorbit.org" }]
+  environment_id             = render_project.orbit.environments["Production"].id
+  name                       = "orbit-api"
+  plan                       = "starter"
+  region                     = "ohio"
+  health_check_path          = "/health"
+  max_shutdown_delay_seconds = 300
+  pre_deploy_command         = "./efbundle"
+  env_vars                   = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-api" } }
+  custom_domains             = [{ name = "api.useorbit.org" }]
 
   lifecycle {
     # The imported service's own variables stay until the linked group is verified live, so the first apply cannot strip production's configuration.
