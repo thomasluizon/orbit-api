@@ -115,6 +115,7 @@ public partial class ProcessUserChatCommandHandler
                 responseText, request, context, executionResults, cancellationToken);
         if (!composition)
             cards = ApplyResolutionToCards(cards, executionResults, language);
+        cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
@@ -129,7 +130,7 @@ public partial class ProcessUserChatCommandHandler
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
 
-        if (hasPreview)
+        if (SuppressPreviewNarrative(executionResults))
         {
             cards = cards with
             {
@@ -149,6 +150,19 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool HasPendingWritePreview(ToolExecutionAccumulator results) => results.PendingOperations.Count > 0;
+
+    private static bool SuppressPreviewNarrative(ToolExecutionAccumulator results) =>
+        HasPendingWritePreview(results) && !HasResolutionQuestion(results) && !results.HasBudgetRecovery;
+
+    private static ResponseCards ApplyBudgetRecovery(ResponseCards cards, ToolExecutionAccumulator results,
+        AiResponse response, ProcessUserChatCommand request) => !results.HasBudgetRecovery ? cards : cards with
+        {
+            AiMessage = response.TextMessage,
+            ServerComposedText = true,
+            Parts = request.ClientContext?.SupportsParts == true
+                ? (cards.Parts ?? []).Where(part => part is not ChatTextPart)
+                    .Append<ChatResponsePart>(new ChatTextPart(response.TextMessage!)).ToArray() : cards.Parts
+        };
 
     private sealed class CompositionParts
     {

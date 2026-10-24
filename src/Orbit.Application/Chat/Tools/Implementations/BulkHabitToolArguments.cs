@@ -125,7 +125,7 @@ internal static class BulkHabitToolArguments
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
-            "days", "due_date", "end_date", "due_time", DueEndTimeField, "is_bad_habit", "is_flexible",
+            "days", "due_date", "start_date", "end_date", "due_time", DueEndTimeField, "is_bad_habit", "is_flexible",
             IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
             "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields"
         };
@@ -189,7 +189,9 @@ internal static class BulkHabitToolArguments
             HasSlipAlertEnabled: updates.TryGetProperty(SlipAlertEnabledField, out _),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(updates, SlipAlertEnabledField) ?? false,
             HasRelativeReminders: updates.TryGetProperty(RelativeRemindersField, out _),
-            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(updates));
+            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(updates),
+            HasStartDate: updates.TryGetProperty("start_date", out _),
+            StartDate: JsonArgumentParser.ParseDateOnly(updates, "start_date"));
 
         return (changes, null);
     }
@@ -203,6 +205,7 @@ internal static class BulkHabitToolArguments
     {
         return ValidateUpdateKinds(fields)
             ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
+            ?? ParseNullableDate(fields, "start_date", allowNull: false).Error
             ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
             ?? ParseNullableTime(fields, "due_time").Error
             ?? ParseNullableTime(fields, DueEndTimeField).Error

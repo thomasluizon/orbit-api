@@ -32,9 +32,9 @@ public partial class AgentOperationExecutor
         {
             var stored = pendingOperationStore.GetExecution(execution.Request.UserId, member.PendingOperationId);
             if (stored is null || stored.RequiresReproposal || stored.Surface != execution.Request.Surface
-                || stored.OperationId != member.OperationId || stored.PreviewFingerprint != member.PreviewFingerprint
+                || stored.OperationId != member.OperationId
                 || AgentOperationFingerprint.Compute(stored.OperationId, stored.Arguments.GetRawText())
-                    != AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText()))
+                    != (member.SourceFingerprint ?? AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText())))
                 return (null, "stale_preview");
             var operation = catalogService.GetOperation(member.OperationId);
             var capability = operation is null ? null : catalogService.GetCapability(operation.CapabilityId);
@@ -77,7 +77,7 @@ public partial class AgentOperationExecutor
         }
         foreach (var member in AccountChangeSet.Read(execution.Arguments)!)
             if (!pendingOperationStore.Cancel(execution.Request.UserId, member.PendingOperationId,
-                AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText())))
+                member.SourceFingerprint ?? AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText())))
                 throw new InvalidOperationException("An approved account change lost its reservation.");
         return new ToolResult(true, Payload: results);
     }

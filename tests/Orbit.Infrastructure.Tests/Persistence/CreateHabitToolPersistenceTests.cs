@@ -122,7 +122,7 @@ public sealed class CreateHabitToolPersistenceTests
         var quota = Substitute.For<IPayGateService>();
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var tool = new CreateHabitTool(habits, tags, goals, dates, quota, work);
+        var tool = new CreateHabitTool(dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(habits, tags, goals, dates, quota, work, configureTransactions: false));
         var registry = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();

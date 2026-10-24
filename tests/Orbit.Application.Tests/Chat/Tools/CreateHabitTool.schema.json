@@ -12,7 +12,7 @@
         "string",
         "null"
       ],
-      "description": "Icon emoji. Use the requested emoji or a relevant one."
+      "description": "Emoji icon. Pick a relevant one when clear."
     },
     "frequency_unit": {
       "type": [
@@ -30,7 +30,7 @@
     },
     "frequency_quantity": {
       "type": "integer",
-      "description": "How often (e.g. every 2 days). Defaults to 1."
+      "description": "How often. Defaults to 1."
     },
     "interval_weeks": {
       "type": "integer",
@@ -38,7 +38,7 @@
     },
     "days": {
       "type": "array",
-      "description": "Recurring weekdays with Day and quantity 1; Week with quantity 1 normalizes to Day. Null for one-time tasks.",
+      "description": "Specific weekdays. Only when frequency_quantity is 1.",
       "items": {
         "type": "string",
         "enum": [
@@ -54,32 +54,93 @@
     },
     "due_date": {
       "type": "string",
-      "description": "YYYY-MM-DD. One-time due date or recurrence start. Defaults to today."
+      "description": "YYYY-MM-DD. Defaults to today."
     },
     "end_date": {
       "type": [
         "string",
         "null"
       ],
-      "description": "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits."
+      "description": "YYYY-MM-DD. Optional end date."
     },
     "due_time": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "description": "HH:mm start time. Omit when there is only a deadline."
+      "type": "string",
+      "description": "HH:mm"
     },
     "due_end_time": {
       "type": [
         "string",
         "null"
       ],
-      "description": "HH:mm end time or deadline. For \u0027before 15h\u0027 without a fixed start, set 15:00 and omit due_time."
+      "description": "HH:mm end time or deadline."
+    },
+    "is_bad_habit": {
+      "type": "boolean",
+      "description": "Use is_bad_habit=true only for ongoing reduction or slip tracking, named for the behaviour itself: Fumar, Tomar multivitamínico, Smoking, Drinking soda. For quero parar de fumar or I want to drink less soda, choose that avoid form. A temporary or dated abstinence is a positive commitment, is_bad_habit=false, named Não tomar multivitamínico or Don't take multivitamins, once or within its explicit date range. Never combine an avoid type with a negated name: não, sem, parar de, evitar, don't, stop, avoid."
     },
     "is_general": {
       "type": "boolean",
-      "description": "General habit without a schedule. Children inherit this value."
+      "description": "Whether this is a general habit with no schedule. Defaults to false."
+    },
+    "is_flexible": {
+      "type": "boolean",
+      "description": "Window-based tracking. Requires frequency_unit."
+    },
+    "checklist_items": {
+      "type": "array",
+      "description": "Atomic sub-steps done together in one execution.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "is_checked": {
+            "type": "boolean",
+            "description": "Default: false."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    "start_date": {
+      "type": "string",
+      "description": "YYYY-MM-DD recurrence anchor."
+    },
+    "reminder_enabled": {
+      "type": "boolean"
+    },
+    "reminder_times": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      }
+    },
+    "scheduled_reminders": {
+      "type": "array",
+      "description": "Absolute-time reminders for habits WITHOUT a due_time",
+      "items": {
+        "type": "object",
+        "properties": {
+          "when": {
+            "type": "string",
+            "enum": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          "time": {
+            "type": "string",
+            "description": "HH:mm 24h format"
+          }
+        },
+        "required": [
+          "when",
+          "time"
+        ]
+      }
     },
     "relative_reminders": {
       "type": "array",
@@ -103,90 +164,38 @@
         }
       }
     },
-    "is_bad_habit": {
-      "type": "boolean",
-      "description": "Use is_bad_habit=true only for ongoing reduction or slip tracking, named for the behaviour itself: Fumar, Tomar multivitam\u00EDnico, Smoking, Drinking soda. For quero parar de fumar or I want to drink less soda, choose that avoid form. A temporary or dated abstinence is a positive commitment, is_bad_habit=false, named N\u00E3o tomar multivitam\u00EDnico or Don\u0027t take multivitamins, once or within its explicit date range. Never combine an avoid type with a negated name: n\u00E3o, sem, parar de, evitar, don\u0027t, stop, avoid."
-    },
-    "is_flexible": {
-      "type": "boolean",
-      "description": "True for window-based tracking (e.g. \u00273x per week, any days\u0027). Cannot have days set. Requires frequency_unit."
-    },
     "slip_alert_enabled": {
-      "type": "boolean",
-      "description": "Enable slip pattern alerts. Defaults to true for bad habits."
-    },
-    "reminder_enabled": {
-      "type": "boolean",
-      "description": "Enable reminders"
-    },
-    "reminder_times": {
-      "type": "array",
-      "description": "Minutes before due time to remind (e.g. [15, 60])",
-      "items": {
-        "type": "integer"
-      }
+      "type": "boolean"
     },
     "tag_names": {
       "type": "array",
-      "description": "Tag names to assign. Existing tags reused, new ones created.",
       "items": {
         "type": "string"
       }
     },
-    "checklist_items": {
-      "type": "array",
-      "description": "Steps done together, such as shopping, prep or packing lists. Independent activities use sub_habits.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string"
-          },
-          "is_checked": {
-            "type": "boolean",
-            "description": "Default: false."
-          }
-        },
-        "required": [
-          "text"
-        ]
-      }
+    "habit_id": {
+      "type": "string",
+      "description": "Existing habit ID to reuse and edit instead of creating a duplicate."
     },
-    "scheduled_reminders": {
+    "tag_ids": {
       "type": "array",
-      "description": "Absolute reminders when due_time is absent. Use instead of reminder_times.",
       "items": {
-        "type": "object",
-        "properties": {
-          "when": {
-            "type": "string",
-            "description": "Reminder day.",
-            "enum": [
-              "day_before",
-              "same_day"
-            ]
-          },
-          "time": {
-            "type": "string",
-            "description": "HH:mm"
-          }
-        },
-        "required": [
-          "when",
-          "time"
-        ]
+        "type": "string"
       }
     },
     "goal_ids": {
       "type": "array",
-      "description": "IDs of goals to link this habit to",
       "items": {
         "type": "string"
       }
     },
+    "parent_habit_id": {
+      "type": "string",
+      "description": "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text."
+    },
     "sub_habits": {
       "type": "array",
-      "description": "Children with independent schedules or streaks. Steps done together use checklist_items.",
+      "description": "Independently trackable child habits under this parent.",
       "items": {
         "type": "object",
         "properties": {
@@ -201,14 +210,14 @@
               "string",
               "null"
             ],
-            "description": "Relevant icon emoji."
+            "description": "Emoji icon. Pick a relevant one when clear."
           },
           "frequency_unit": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Override parent recurrence. Use OneTime for a one-time task; null inherits. Otherwise the parent\u0027s unit and quantity are inherited.",
+            "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
             "enum": [
               "Day",
               "Week",
@@ -218,15 +227,16 @@
             ]
           },
           "frequency_quantity": {
-            "type": "integer"
+            "type": "integer",
+            "description": "How often. Defaults to 1."
           },
           "interval_weeks": {
             "type": "integer",
-            "description": "Repeat interval in weeks. Minimum 1."
+            "description": "Repeat interval in weeks. Omit for every week. Minimum 1."
           },
           "days": {
             "type": "array",
-            "description": "Recurring weekdays with Day (or Week normalized to Day) and quantity 1. Omit for dated one-time tasks.",
+            "description": "Specific weekdays. Only when frequency_quantity is 1.",
             "items": {
               "type": "string",
               "enum": [
@@ -242,22 +252,60 @@
           },
           "due_date": {
             "type": "string",
-            "description": "YYYY-MM-DD. Child start date without inherited weekdays. Use OneTime for a one-time child."
+            "description": "YYYY-MM-DD. Defaults to today."
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD. Optional end date."
           },
           "due_time": {
             "type": "string",
-            "description": "Start time (HH:mm)",
-            "nullable": true
+            "description": "HH:mm"
           },
           "due_end_time": {
-            "type": "string",
-            "description": "End time or deadline (HH:mm)",
-            "nullable": true
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "HH:mm end time or deadline."
           },
-          "end_date": {
+          "is_bad_habit": {
+            "type": "boolean",
+            "description": "Use is_bad_habit=true only for ongoing reduction or slip tracking, named for the behaviour itself: Fumar, Tomar multivitamínico, Smoking, Drinking soda. For quero parar de fumar or I want to drink less soda, choose that avoid form. A temporary or dated abstinence is a positive commitment, is_bad_habit=false, named Não tomar multivitamínico or Don't take multivitamins, once or within its explicit date range. Never combine an avoid type with a negated name: não, sem, parar de, evitar, don't, stop, avoid."
+          },
+          "is_general": {
+            "type": "boolean",
+            "description": "Whether this is a general habit with no schedule. Defaults to false."
+          },
+          "is_flexible": {
+            "type": "boolean",
+            "description": "Window-based tracking. Requires frequency_unit."
+          },
+          "checklist_items": {
+            "type": "array",
+            "description": "Atomic sub-steps done together in one execution.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "is_checked": {
+                  "type": "boolean",
+                  "description": "Default: false."
+                }
+              },
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "start_date": {
             "type": "string",
-            "description": "End date (YYYY-MM-DD)",
-            "nullable": true
+            "description": "YYYY-MM-DD recurrence anchor."
           },
           "reminder_enabled": {
             "type": "boolean"
@@ -266,41 +314,6 @@
             "type": "array",
             "items": {
               "type": "integer"
-            }
-          },
-          "slip_alert_enabled": {
-            "type": "boolean"
-          },
-          "is_flexible": {
-            "type": "boolean"
-          },
-          "tag_names": {
-            "type": "array",
-            "description": "Tag names for this child",
-            "items": {
-              "type": "string"
-            }
-          },
-          "relative_reminders": {
-            "type": "array",
-            "description": "Reminders relative to due_time: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.",
-            "items": {
-              "type": "object",
-              "properties": {
-                "minutes_before": {
-                  "type": "integer"
-                },
-                "when": {
-                  "type": "string",
-                  "enum": [
-                    "day_before",
-                    "same_day"
-                  ]
-                },
-                "time": {
-                  "type": "string"
-                }
-              }
             }
           },
           "scheduled_reminders": {
@@ -327,26 +340,662 @@
               ]
             }
           },
-          "is_bad_habit": {
-            "type": "boolean"
-          },
-          "checklist_items": {
+          "relative_reminders": {
             "type": "array",
-            "description": "Inline checklist items",
+            "description": "Reminders relative to due_time: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.",
             "items": {
               "type": "object",
               "properties": {
-                "text": {
-                  "type": "string",
-                  "description": "Checklist item text"
+                "minutes_before": {
+                  "type": "integer"
                 },
-                "is_checked": {
+                "when": {
+                  "type": "string",
+                  "enum": [
+                    "day_before",
+                    "same_day"
+                  ]
+                },
+                "time": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "slip_alert_enabled": {
+            "type": "boolean"
+          },
+          "tag_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "habit_id": {
+            "type": "string",
+            "description": "Existing habit ID to reuse and edit instead of creating a duplicate."
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "goal_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent_habit_id": {
+            "type": "string",
+            "description": "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text."
+          },
+          "sub_habits": {
+            "type": "array",
+            "description": "Independently trackable child habits under this parent.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "emoji": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Emoji icon. Pick a relevant one when clear."
+                },
+                "frequency_unit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+                  "enum": [
+                    "Day",
+                    "Week",
+                    "Month",
+                    "Year",
+                    "OneTime"
+                  ]
+                },
+                "frequency_quantity": {
+                  "type": "integer",
+                  "description": "How often. Defaults to 1."
+                },
+                "interval_weeks": {
+                  "type": "integer",
+                  "description": "Repeat interval in weeks. Omit for every week. Minimum 1."
+                },
+                "days": {
+                  "type": "array",
+                  "description": "Specific weekdays. Only when frequency_quantity is 1.",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "Sunday",
+                      "Monday",
+                      "Tuesday",
+                      "Wednesday",
+                      "Thursday",
+                      "Friday",
+                      "Saturday"
+                    ]
+                  }
+                },
+                "due_date": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD. Defaults to today."
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "YYYY-MM-DD. Optional end date."
+                },
+                "due_time": {
+                  "type": "string",
+                  "description": "HH:mm"
+                },
+                "due_end_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "HH:mm end time or deadline."
+                },
+                "is_bad_habit": {
                   "type": "boolean",
-                  "description": "Whether checked. Defaults to false."
+                  "description": "Use is_bad_habit=true only for ongoing reduction or slip tracking, named for the behaviour itself: Fumar, Tomar multivitamínico, Smoking, Drinking soda. For quero parar de fumar or I want to drink less soda, choose that avoid form. A temporary or dated abstinence is a positive commitment, is_bad_habit=false, named Não tomar multivitamínico or Don't take multivitamins, once or within its explicit date range. Never combine an avoid type with a negated name: não, sem, parar de, evitar, don't, stop, avoid."
+                },
+                "is_general": {
+                  "type": "boolean",
+                  "description": "Whether this is a general habit with no schedule. Defaults to false."
+                },
+                "is_flexible": {
+                  "type": "boolean",
+                  "description": "Window-based tracking. Requires frequency_unit."
+                },
+                "checklist_items": {
+                  "type": "array",
+                  "description": "Atomic sub-steps done together in one execution.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "is_checked": {
+                        "type": "boolean",
+                        "description": "Default: false."
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ]
+                  }
+                },
+                "start_date": {
+                  "type": "string",
+                  "description": "YYYY-MM-DD recurrence anchor."
+                },
+                "reminder_enabled": {
+                  "type": "boolean"
+                },
+                "reminder_times": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                "scheduled_reminders": {
+                  "type": "array",
+                  "description": "Absolute-time reminders for habits WITHOUT a due_time",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "when": {
+                        "type": "string",
+                        "enum": [
+                          "day_before",
+                          "same_day"
+                        ]
+                      },
+                      "time": {
+                        "type": "string",
+                        "description": "HH:mm 24h format"
+                      }
+                    },
+                    "required": [
+                      "when",
+                      "time"
+                    ]
+                  }
+                },
+                "relative_reminders": {
+                  "type": "array",
+                  "description": "Reminders relative to due_time: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "minutes_before": {
+                        "type": "integer"
+                      },
+                      "when": {
+                        "type": "string",
+                        "enum": [
+                          "day_before",
+                          "same_day"
+                        ]
+                      },
+                      "time": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "slip_alert_enabled": {
+                  "type": "boolean"
+                },
+                "tag_names": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "habit_id": {
+                  "type": "string",
+                  "description": "Existing habit ID to reuse and edit instead of creating a duplicate."
+                },
+                "tag_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "goal_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "parent_habit_id": {
+                  "type": "string",
+                  "description": "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text."
+                },
+                "sub_habits": {
+                  "type": "array",
+                  "description": "Independently trackable child habits under this parent.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "emoji": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Emoji icon. Pick a relevant one when clear."
+                      },
+                      "frequency_unit": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+                        "enum": [
+                          "Day",
+                          "Week",
+                          "Month",
+                          "Year",
+                          "OneTime"
+                        ]
+                      },
+                      "frequency_quantity": {
+                        "type": "integer",
+                        "description": "How often. Defaults to 1."
+                      },
+                      "interval_weeks": {
+                        "type": "integer",
+                        "description": "Repeat interval in weeks. Omit for every week. Minimum 1."
+                      },
+                      "days": {
+                        "type": "array",
+                        "description": "Specific weekdays. Only when frequency_quantity is 1.",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "Sunday",
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                            "Thursday",
+                            "Friday",
+                            "Saturday"
+                          ]
+                        }
+                      },
+                      "due_date": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD. Defaults to today."
+                      },
+                      "end_date": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "YYYY-MM-DD. Optional end date."
+                      },
+                      "due_time": {
+                        "type": "string",
+                        "description": "HH:mm"
+                      },
+                      "due_end_time": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "HH:mm end time or deadline."
+                      },
+                      "is_bad_habit": {
+                        "type": "boolean",
+                        "description": "Use is_bad_habit=true only for ongoing reduction or slip tracking, named for the behaviour itself: Fumar, Tomar multivitamínico, Smoking, Drinking soda. For quero parar de fumar or I want to drink less soda, choose that avoid form. A temporary or dated abstinence is a positive commitment, is_bad_habit=false, named Não tomar multivitamínico or Don't take multivitamins, once or within its explicit date range. Never combine an avoid type with a negated name: não, sem, parar de, evitar, don't, stop, avoid."
+                      },
+                      "is_general": {
+                        "type": "boolean",
+                        "description": "Whether this is a general habit with no schedule. Defaults to false."
+                      },
+                      "is_flexible": {
+                        "type": "boolean",
+                        "description": "Window-based tracking. Requires frequency_unit."
+                      },
+                      "checklist_items": {
+                        "type": "array",
+                        "description": "Atomic sub-steps done together in one execution.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "is_checked": {
+                              "type": "boolean",
+                              "description": "Default: false."
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ]
+                        }
+                      },
+                      "start_date": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD recurrence anchor."
+                      },
+                      "reminder_enabled": {
+                        "type": "boolean"
+                      },
+                      "reminder_times": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "scheduled_reminders": {
+                        "type": "array",
+                        "description": "Absolute-time reminders for habits WITHOUT a due_time",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "when": {
+                              "type": "string",
+                              "enum": [
+                                "day_before",
+                                "same_day"
+                              ]
+                            },
+                            "time": {
+                              "type": "string",
+                              "description": "HH:mm 24h format"
+                            }
+                          },
+                          "required": [
+                            "when",
+                            "time"
+                          ]
+                        }
+                      },
+                      "relative_reminders": {
+                        "type": "array",
+                        "description": "Reminders relative to due_time: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "minutes_before": {
+                              "type": "integer"
+                            },
+                            "when": {
+                              "type": "string",
+                              "enum": [
+                                "day_before",
+                                "same_day"
+                              ]
+                            },
+                            "time": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "slip_alert_enabled": {
+                        "type": "boolean"
+                      },
+                      "tag_names": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "habit_id": {
+                        "type": "string",
+                        "description": "Existing habit ID to reuse and edit instead of creating a duplicate."
+                      },
+                      "tag_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "goal_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "parent_habit_id": {
+                        "type": "string",
+                        "description": "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text."
+                      },
+                      "sub_habits": {
+                        "type": "array",
+                        "description": "Independently trackable child habits under this parent.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "emoji": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Emoji icon. Pick a relevant one when clear."
+                            },
+                            "frequency_unit": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "A Task is one-time: frequency_unit=OneTime in create tools, stored as null, with due_date and requested due_time. A dated event or single dated instruction is a Task unless repetition was requested. A Habit has Day, Week, Month or Year and a positive frequency_quantity. Daily weekdays require Day/1; is_flexible tracks a quantity within a window and cannot have weekdays. General items have no schedule, recurrence or avoid type. end_date is inclusive and only recurring items use it. A temporary instruction for N days before an event uses one Task per day or a recurring Habit with end_date equal to the event date. Never leave temporary preparation recurring indefinitely.",
+                              "enum": [
+                                "Day",
+                                "Week",
+                                "Month",
+                                "Year",
+                                "OneTime"
+                              ]
+                            },
+                            "frequency_quantity": {
+                              "type": "integer",
+                              "description": "How often. Defaults to 1."
+                            },
+                            "interval_weeks": {
+                              "type": "integer",
+                              "description": "Repeat interval in weeks. Omit for every week. Minimum 1."
+                            },
+                            "days": {
+                              "type": "array",
+                              "description": "Specific weekdays. Only when frequency_quantity is 1.",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "Sunday",
+                                  "Monday",
+                                  "Tuesday",
+                                  "Wednesday",
+                                  "Thursday",
+                                  "Friday",
+                                  "Saturday"
+                                ]
+                              }
+                            },
+                            "due_date": {
+                              "type": "string",
+                              "description": "YYYY-MM-DD. Defaults to today."
+                            },
+                            "end_date": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "YYYY-MM-DD. Optional end date."
+                            },
+                            "due_time": {
+                              "type": "string",
+                              "description": "HH:mm"
+                            },
+                            "due_end_time": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "HH:mm end time or deadline."
+                            },
+                            "is_bad_habit": {
+                              "type": "boolean",
+                              "description": "Use is_bad_habit=true only for ongoing reduction or slip tracking, named for the behaviour itself: Fumar, Tomar multivitamínico, Smoking, Drinking soda. For quero parar de fumar or I want to drink less soda, choose that avoid form. A temporary or dated abstinence is a positive commitment, is_bad_habit=false, named Não tomar multivitamínico or Don't take multivitamins, once or within its explicit date range. Never combine an avoid type with a negated name: não, sem, parar de, evitar, don't, stop, avoid."
+                            },
+                            "is_general": {
+                              "type": "boolean",
+                              "description": "Whether this is a general habit with no schedule. Defaults to false."
+                            },
+                            "is_flexible": {
+                              "type": "boolean",
+                              "description": "Window-based tracking. Requires frequency_unit."
+                            },
+                            "checklist_items": {
+                              "type": "array",
+                              "description": "Atomic sub-steps done together in one execution.",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "is_checked": {
+                                    "type": "boolean",
+                                    "description": "Default: false."
+                                  }
+                                },
+                                "required": [
+                                  "text"
+                                ]
+                              }
+                            },
+                            "start_date": {
+                              "type": "string",
+                              "description": "YYYY-MM-DD recurrence anchor."
+                            },
+                            "reminder_enabled": {
+                              "type": "boolean"
+                            },
+                            "reminder_times": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              }
+                            },
+                            "scheduled_reminders": {
+                              "type": "array",
+                              "description": "Absolute-time reminders for habits WITHOUT a due_time",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "when": {
+                                    "type": "string",
+                                    "enum": [
+                                      "day_before",
+                                      "same_day"
+                                    ]
+                                  },
+                                  "time": {
+                                    "type": "string",
+                                    "description": "HH:mm 24h format"
+                                  }
+                                },
+                                "required": [
+                                  "when",
+                                  "time"
+                                ]
+                              }
+                            },
+                            "relative_reminders": {
+                              "type": "array",
+                              "description": "Reminders relative to due_time: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "minutes_before": {
+                                    "type": "integer"
+                                  },
+                                  "when": {
+                                    "type": "string",
+                                    "enum": [
+                                      "day_before",
+                                      "same_day"
+                                    ]
+                                  },
+                                  "time": {
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "slip_alert_enabled": {
+                              "type": "boolean"
+                            },
+                            "tag_names": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "habit_id": {
+                              "type": "string",
+                              "description": "Existing habit ID to reuse and edit instead of creating a duplicate."
+                            },
+                            "tag_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "goal_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "title"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "title"
+                    ]
+                  }
                 }
               },
               "required": [
-                "text"
+                "title"
               ]
             }
           }

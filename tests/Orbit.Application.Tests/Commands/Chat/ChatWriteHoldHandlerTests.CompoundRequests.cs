@@ -75,4 +75,33 @@ public sealed partial class ChatWriteHoldHandlerTests
         replay.Operation.Status.Should().NotBe(AgentOperationStatus.Succeeded);
     }
 
+    [Theory]
+    [InlineData("Add Vitamin C to whichever routine fits best")]
+    [InlineData("Coloque vitamina C na rotina que combina melhor")]
+    public async Task CompoundParentSuggestion_OffersExistingParentAndRootChoice(string message)
+    {
+        var parents = ParentAccount("en");
+        ScriptToolCall(JsonSerializer.Serialize(new { habits = new[] { new { title = "Vitamin C", parent_habit_id = parents[0].Id, frequency_unit = "Day" } } }), "bulk_create_habits");
+        var result = await CreateHandler().Handle(new(_userId, message), default);
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle().Which;
+        item.FieldOptions.Should().ContainSingle().Which.Required.Should().BeFalse();
+        item.FieldOptions![0].Options.Should().Contain(option => option.Value.ValueKind == JsonValueKind.Null);
+        item.Fields.Should().Contain(field => field.Field == "parent_habit_id" && field.NewValue == "Post Lunch");
+    }
+
+    [Fact]
+    public async Task CompoundDuplicate_CreateRecognisesChildAndReusesIt()
+    {
+        var parents = ParentAccount("en");
+        var water = Habit.Create(new HabitCreateParams(_userId, "Drink water", Orbit.Domain.Enums.FrequencyUnit.Day, 1,
+            Today, ParentHabitId: parents[0].Id)).Value;
+        UseParentHabits([.. parents, water]);
+        ScriptToolCall("""{"title":"Drink water","frequency_unit":"Day","due_time":"07:00"}""");
+        var result = await CreateHandler().Handle(new(_userId, "Create a habit to drink water every morning"), default);
+        var item = result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle().Which;
+        item.EntityId.Should().Be(water.Id);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
 }

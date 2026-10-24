@@ -104,7 +104,22 @@ public class PendingAgentOperationStore(
             entity.Surface,
             entity.ConfirmationRequirement,
             entity.PreviewFingerprint,
-            entity.ArgumentSchemaVersion);
+            entity.ArgumentSchemaVersion, entity.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(entity.OperationId, entity.ArgumentsJson));
+    }
+
+    public IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var pending = dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
+                && item.ExpiresAtUtc > checkedAtUtc && item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion)
+            .OrderByDescending(item => item.CreatedAtUtc).ToList();
+        var members = pending.Where(item => item.OperationId == Orbit.Application.Chat.AccountChangeSet.OperationId)
+            .SelectMany(item => Orbit.Application.Chat.AccountChangeSet.Read(ParseArguments(item.ArgumentsJson)) ?? [])
+            .Select(member => member.PendingOperationId).ToHashSet();
+        return pending.Where(item => !members.Contains(item.Id)).Select(item => new PendingAgentOperationExecution(
+            item.Id, item.CapabilityId, item.OperationId, ParseArguments(item.ArgumentsJson), item.Surface,
+            item.ConfirmationRequirement, item.PreviewFingerprint, item.ArgumentSchemaVersion, item.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(item.OperationId, item.ArgumentsJson))).ToArray();
     }
 
     public IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId)
@@ -230,7 +245,7 @@ public class PendingAgentOperationStore(
             && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc);
         return entity is null ? null : new PendingAgentOperationExecution(entity.Id, entity.CapabilityId,
             entity.OperationId, ParseArguments(entity.ArgumentsJson), entity.Surface,
-            entity.ConfirmationRequirement, entity.PreviewFingerprint, entity.ArgumentSchemaVersion);
+            entity.ConfirmationRequirement, entity.PreviewFingerprint, entity.ArgumentSchemaVersion, entity.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(entity.OperationId, entity.ArgumentsJson));
     }
 
     public bool TryConsumeFreshConfirmation(

@@ -244,11 +244,11 @@ public partial class ProcessUserChatCommandHandlerTests
         saved[1].FrequencyUnit.Should().Be(FrequencyUnit.Day);
         saved[1].FrequencyQuantity.Should().Be(1);
         saved[1].Days.Should().BeEquivalentTo([DayOfWeek.Sunday, DayOfWeek.Wednesday]);
-        saved[1].NextDueDate.Should().Be(new DateOnly(2026, 9, 15));
+        saved[1].NextDueDate.Should().Be(new DateOnly(2026, 9, 16));
     }
 
     private CreateHabitTool RecoveryCreateHabitTool() =>
-        new(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
+        new(_userDateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork));
 
     private async Task AssertUnboundRecoveryRejectedAsync(IAiTool tool, string originalJson, string replacementJson)
     {

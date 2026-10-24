@@ -1,4 +1,6 @@
 using System.Globalization;
+using MediatR;
+using Orbit.Application.Goals.Commands;
 using System.Text.Json;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -7,7 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalTool(
     IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal";
 
@@ -73,11 +75,10 @@ public class UpdateGoalTool(
         var unit = ResolveUnit(args, goal);
         var deadline = ResolveDeadline(args, goal);
 
-        var result = goal.Update(title, description, targetValue, unit, deadline);
+        var result = await mediator.Send(new UpdateGoalCommand(userId, goal.Id, title, description, targetValue, unit, deadline), ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        await unitOfWork.SaveChangesAsync(ct);
         return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
     }
 

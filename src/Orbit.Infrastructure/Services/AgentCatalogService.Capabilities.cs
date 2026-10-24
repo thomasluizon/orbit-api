@@ -65,6 +65,7 @@ public partial class AgentCatalogService
                 IsMutation: false,
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
+                ChatToolNames: ["revise_pending_changes"],
                 McpToolNames: ["execute_agent_operation_v2", "confirm_agent_operation_v2", "step_up_agent_operation_v2", "verify_step_up_agent_operation_v2"],
                 ControllerActionKeys:
                 [

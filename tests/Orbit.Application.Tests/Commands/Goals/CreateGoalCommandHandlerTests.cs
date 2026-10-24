@@ -305,7 +305,7 @@ public class CreateGoalToolHabitLinkTests
     [Fact]
     public void ParameterSchema_ExposesOptionalHabitIds()
     {
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
 
         JsonSerializer.Serialize(tool.GetParameterSchema()).Should().Contain("habit_ids");
     }
@@ -316,7 +316,7 @@ public class CreateGoalToolHabitLinkTests
         var habit = CreateHabit();
         _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns([habit]);
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
         using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":["{{{habit.Id}}}"]}""");
 
         var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
@@ -333,7 +333,7 @@ public class CreateGoalToolHabitLinkTests
     {
         _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
         using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":["{{{Guid.NewGuid()}}}"]}""");
 
         var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
@@ -347,7 +347,7 @@ public class CreateGoalToolHabitLinkTests
     [Fact]
     public async Task CreateGoalTool_WithNonArrayHabitIds_ReturnsValidationFailure()
     {
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
         using var document = JsonDocument.Parse("""{"title":"Read daily","habit_ids":"not-an-array"}""");
 
         var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
@@ -362,7 +362,7 @@ public class CreateGoalToolHabitLinkTests
     [InlineData("\"not-a-guid\"")]
     public async Task CreateGoalTool_WithInvalidHabitIdItem_ReturnsValidationFailure(string item)
     {
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
         using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":[{{{item}}}]}""");
 
         var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
@@ -375,7 +375,7 @@ public class CreateGoalToolHabitLinkTests
     [Fact]
     public async Task CreateGoalTool_WithEmptyHabitIds_CreatesWithoutLoadingHabits()
     {
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
         using var document = JsonDocument.Parse("""{"title":"Read daily","habit_ids":[]}""");
 
         var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
@@ -386,15 +386,15 @@ public class CreateGoalToolHabitLinkTests
     }
 
     [Fact]
-    public async Task CreateGoalTool_TwoArgumentConstruction_WithHabitIds_ReturnsFailure()
+    public async Task CreateGoalTool_MissingOwnedHabit_ReturnsFailure()
     {
-        var tool = new CreateGoalTool(_goalRepo, _unitOfWork);
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork));
         using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":["{{{Guid.NewGuid()}}}"]}""");
 
         var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("habit_ids is unavailable for this tool instance.");
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 

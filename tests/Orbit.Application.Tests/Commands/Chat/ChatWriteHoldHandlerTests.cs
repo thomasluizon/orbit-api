@@ -77,8 +77,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         _dbContext.Users.Add(_user);
         _dbContext.SaveChanges();
 
-        _createHabitTool = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService,
-            _payGate, _unitOfWork);
+        _createHabitTool = new CreateHabitTool(_userDateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork));
         var emojiTool = new BulkUpdateHabitEmojisTool(_habitRepo, _emojiInference, _unitOfWork,
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
         var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
@@ -243,8 +242,15 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         held.Should().HaveCount(2);
         var single = held[0].PendingOperation!;
         var bulk = held[1].PendingOperation!;
-        result.Value.PendingOperations!.Select(item => item.Id).Should().BeEquivalentTo(
-            reason == "previous_turn" ? [bulk.Id] : new[] { single.Id, bulk.Id });
+        var combined = result.Value.PendingOperations.Should().ContainSingle().Which;
+        if (reason == "previous_turn") combined.Id.Should().Be(bulk.Id);
+        else
+        {
+            _pendingOperationStore.GetExecution(_userId, combined.Id)!.OperationId.Should().Be(Orbit.Application.Chat.AccountChangeSet.OperationId);
+            var members = Orbit.Application.Chat.AccountChangeSet.Read(_pendingOperationStore.GetExecution(_userId, combined.Id)!.Arguments)!;
+            members.Select(member => member.PendingOperationId).Should().BeEquivalentTo([single.Id, bulk.Id]);
+            combined.Items.Should().HaveCount(single.Items!.Count + bulk.Items!.Count);
+        }
         var stored = _pendingOperationStore.GetExecution(_userId, single.Id)!;
         stored.Arguments.GetRawText().Should().Be(singleArgs.GetRawText());
         stored.PreviewFingerprint.Should().Be(single.PreviewFingerprint);

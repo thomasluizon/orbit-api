@@ -35,8 +35,8 @@ public class ChatToolMetadataTests
             Substitute.For<IIdempotencyStore>(), unitOfWork);
         var bulkLogHabitsTool = new BulkLogHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService, replayPlanner);
         var bulkSkipHabitsTool = new BulkSkipHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService, replayPlanner);
-        var createGoalTool = new CreateGoalTool(Repo<Goal>(), unitOfWork);
-        var createHabitTool = new CreateHabitTool(Repo<Habit>(), Repo<Tag>(), Repo<Goal>(), userDateService, payGateService, unitOfWork);
+        var createGoalTool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(Repo<Goal>(), unitOfWork));
+        var createHabitTool = new CreateHabitTool(userDateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(Repo<Habit>(), Repo<Tag>(), Repo<Goal>(), userDateService, payGateService, unitOfWork));
         var createSubHabitTool = new CreateSubHabitTool(mediator);
         var deleteGoalTool = new DeleteGoalTool(Repo<Goal>(), unitOfWork);
         var deleteHabitTool = new DeleteHabitTool(mediator, Repo<Habit>());
@@ -54,10 +54,9 @@ public class ChatToolMetadataTests
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>(), userDateService, Substitute.For<IHabitScheduleLogReader>());
         var skipHabitTool = new SkipHabitTool(mediator, Repo<Habit>());
         var suggestBreakdownTool = new SuggestBreakdownTool();
-        var updateGoalProgressTool = new UpdateGoalProgressTool(
-            Repo<Goal>(), Repo<GoalProgressLog>(), goalCompletionService, unitOfWork);
-        var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
-        var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
+        var updateGoalProgressTool = new UpdateGoalProgressTool(Repo<Goal>(), Orbit.Tests.Shared.GoalToolCommandMediator.Create(Repo<Goal>(), unitOfWork, logs: Repo<GoalProgressLog>(), completion: goalCompletionService));
+        var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), Orbit.Tests.Shared.GoalToolCommandMediator.Create(Repo<Goal>(), unitOfWork, completion: goalCompletionService));
+        var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), Orbit.Tests.Shared.GoalToolCommandMediator.Create(Repo<Goal>(), unitOfWork));
         var updateHabitTool = new UpdateHabitTool(
             Repo<Habit>(), userDateService, mediator);
         var listTagsTool = new ListTagsTool(mediator);

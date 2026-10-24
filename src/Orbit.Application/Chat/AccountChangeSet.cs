@@ -10,13 +10,14 @@ public static class AccountChangeSet
     public const string OperationId = "apply_account_changes";
     public const string CapabilityId = "chat.changes";
 
-    public sealed record Member(Guid PendingOperationId, string OperationId, JsonElement Arguments, string PreviewFingerprint);
+    public sealed record Member(Guid PendingOperationId, string OperationId, JsonElement Arguments, string PreviewFingerprint, string? SourceFingerprint = null);
 
     public static JsonElement Arguments(IEnumerable<PendingAgentOperationExecution> operations) =>
         JsonSerializer.SerializeToElement(new
         {
             operations = operations.Select(operation => new Member(operation.PendingOperationId,
-                operation.OperationId, operation.Arguments, operation.PreviewFingerprint!))
+                operation.OperationId, operation.Arguments, operation.PreviewFingerprint!,
+                AgentOperationFingerprint.Compute(operation.OperationId, operation.Arguments.GetRawText())))
         });
 
     public static IReadOnlyList<Member>? Read(JsonElement arguments)

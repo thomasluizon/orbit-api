@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MediatR;
 using System.Text.Json.Nodes;
 using System.Globalization;
 using Orbit.Application.Chat.Models;
@@ -12,13 +13,7 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class CreateHabitTool(
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<Tag> tagRepository,
-    IGenericRepository<Goal> goalRepository,
-    IUserDateService userDateService,
-    IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IPreparedIntentTool, IClarificationPrecheckTool
+public class CreateHabitTool(IUserDateService userDateService, IMediator mediator) : IPreparedIntentTool, IClarificationPrecheckTool, ITransactionalAiTool
 {
     private const string TitleProperty = "title";
 
@@ -29,122 +24,7 @@ public class CreateHabitTool(
     public string Description =>
         "Use frequency_unit: OneTime for one-time tasks; null leaves recurrence unspecified and may require clarification. Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking." + "\n" + HabitModelInstructions.All;
 
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new
-        {
-            title = new { type = JsonSchemaTypes.String },
-            description = new { type = JsonSchemaTypes.String },
-            emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Icon emoji. Use the requested emoji or a relevant one." },
-            frequency_unit = new
-            {
-                type = new[] { JsonSchemaTypes.String, "null" },
-                description = HabitModelInstructions.Schedule,
-                @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum
-            },
-            frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "How often (e.g. every 2 days). Defaults to 1." },
-            interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
-            days = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Recurring weekdays with Day and quantity 1; Week with quantity 1 normalizes to Day. Null for one-time tasks.",
-                items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum }
-            },
-            due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. One-time due date or recurrence start. Defaults to today." },
-            end_date = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits." },
-            due_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm start time. Omit when there is only a deadline." },
-            due_end_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline. For 'before 15h' without a fixed start, set 15:00 and omit due_time." },
-            is_general = new { type = JsonSchemaTypes.Boolean, description = "General habit without a schedule. Children inherit this value." },
-            relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
-            is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
-            slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip pattern alerts. Defaults to true for bad habits." },
-            reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable reminders" },
-            reminder_times = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Minutes before due time to remind (e.g. [15, 60])",
-                items = new { type = JsonSchemaTypes.Integer }
-            },
-            tag_names = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Tag names to assign. Existing tags reused, new ones created.",
-                items = new { type = JsonSchemaTypes.String }
-            },
-            checklist_items = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Steps done together, such as shopping, prep or packing lists. Independent activities use sub_habits.",
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        text = new { type = JsonSchemaTypes.String },
-                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Default: false." }
-                    },
-                    required = new[] { "text" }
-                }
-            },
-            scheduled_reminders = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Absolute reminders when due_time is absent. Use instead of reminder_times.",
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        when = new { type = JsonSchemaTypes.String, description = "Reminder day.", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
-                        time = new { type = JsonSchemaTypes.String, description = "HH:mm" }
-                    },
-                    required = new[] { "when", "time" }
-                }
-            },
-            goal_ids = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "IDs of goals to link this habit to",
-                items = new { type = JsonSchemaTypes.String }
-            },
-            sub_habits = new
-            {
-                type = JsonSchemaTypes.Array,
-                description = "Children with independent schedules or streaks. Steps done together use checklist_items.",
-                items = new
-                {
-                    type = JsonSchemaTypes.Object,
-                    properties = new
-                    {
-                        title = new { type = JsonSchemaTypes.String },
-                        description = new { type = JsonSchemaTypes.String },
-                        emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Relevant icon emoji." },
-                        frequency_unit = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Override parent recurrence. Use OneTime for a one-time task; null inherits. Otherwise the parent's unit and quantity are inherited.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
-                        frequency_quantity = new { type = JsonSchemaTypes.Integer },
-                        interval_weeks = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Minimum 1." },
-                        days = new { type = JsonSchemaTypes.Array, description = "Recurring weekdays with Day (or Week normalized to Day) and quantity 1. Omit for dated one-time tasks.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
-                        due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Child start date without inherited weekdays. Use OneTime for a one-time child." },
-                        due_time = new { type = JsonSchemaTypes.String, description = "Start time (HH:mm)", nullable = true },
-                        due_end_time = new { type = JsonSchemaTypes.String, description = "End time or deadline (HH:mm)", nullable = true },
-                        end_date = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD)", nullable = true },
-                        reminder_enabled = new { type = JsonSchemaTypes.Boolean },
-                        reminder_times = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } },
-                        slip_alert_enabled = new { type = JsonSchemaTypes.Boolean },
-                        is_flexible = new { type = JsonSchemaTypes.Boolean },
-                        tag_names = new { type = JsonSchemaTypes.Array, description = "Tag names for this child", items = new { type = JsonSchemaTypes.String } },
-                        relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-                        scheduled_reminders = BulkHabitToolArguments.ScheduledRemindersSchema(),
-                        is_bad_habit = new { type = JsonSchemaTypes.Boolean },
-                        checklist_items = BulkHabitToolArguments.ChecklistItemsSchema()
-                    },
-                    required = new[] { TitleProperty }
-                }
-            }
-        },
-        required = new[] { TitleProperty }
-    };
+    public object GetParameterSchema() => BulkCreateHabitsTool.HabitItemSchema(AppConstants.MaxHabitDepth);
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
@@ -159,11 +39,9 @@ public class CreateHabitTool(
         if (fieldError is not null)
             return new ToolResult(false, Error: fieldError);
 
-        return await HabitCeilingLock.ExecuteAsync(
-            unitOfWork,
-            userId,
-            transactionToken => ExecuteLockedAsync(args, userId, title, transactionToken),
-            ct);
+        if (NeedsClarification(args))
+            return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification(args));
+        return await new BulkCreateHabitsTool(mediator).ExecuteSingleAsync(args, userId, ct);
     }
 
     public async Task<Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -278,45 +156,6 @@ public class CreateHabitTool(
     private sealed record HabitCreationIntent(HabitCreateParams Definition,
         IReadOnlyList<string> Tags, IReadOnlyList<Guid> Goals, IReadOnlyList<HabitCreationIntent> Children);
 
-    private async Task<ToolResult> ExecuteLockedAsync(
-        JsonElement args,
-        Guid userId,
-        string title,
-        CancellationToken ct)
-    {
-        var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
-        if (habitGate.IsFailure)
-            return ToolResult.FromFailure(habitGate);
-
-        if (NeedsClarification(args))
-        {
-            return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification(args));
-        }
-
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
-
-        var habitResult = BuildParentHabit(args, userId, title, today);
-        if (habitResult.IsFailure)
-            return ToolResult.FromFailure(habitResult);
-
-        var habit = habitResult.Value;
-
-        var featureGate = await HabitCreationGates.CheckAsync(habit, payGate, ct);
-        if (featureGate.IsFailure)
-            return ToolResult.FromFailure(featureGate);
-
-        var subError = await CreateInlineSubHabitsAsync(args, habit, userId, today, ct);
-        if (subError is not null)
-            return subError;
-
-        await habitRepository.AddAsync(habit, ct);
-        await AssignTagsFromArgsAsync(args, habit, userId, ct);
-        await LinkGoalsFromArgsAsync(args, habit, userId, ct);
-        await unitOfWork.SaveChangesAsync(ct);
-
-        return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
-    }
-
     private static Domain.Common.Result<Habit> BuildParentHabit(
         JsonElement args, Guid userId, string title, DateOnly today)
     {
@@ -368,28 +207,8 @@ public class CreateHabitTool(
             Emoji: JsonArgumentParser.GetOptionalString(args, "emoji"),
             IntervalWeeks: intervalWeeks,
             IsGeneral: JsonArgumentParser.GetOptionalBool(args, "is_general") ?? false,
-            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args)));
-    }
-
-    private async Task<ToolResult?> CreateInlineSubHabitsAsync(
-        JsonElement args, Habit parent, Guid userId, DateOnly parentDueDate, CancellationToken ct)
-    {
-        if (!args.TryGetProperty("sub_habits", out var subEl) || subEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var children = BuildChildHabits(subEl.EnumerateArray().ToList(), userId, parent, parentDueDate);
-        if (children.IsFailure)
-            return ToolResult.FromFailure(children);
-
-        var childArguments = subEl.EnumerateArray().ToList();
-        for (var index = 0; index < children.Value.Count; index++)
-        {
-            var child = children.Value[index];
-            await habitRepository.AddAsync(child, ct);
-            await AssignTagsFromArgsAsync(childArguments[index], child, userId, ct);
-        }
-
-        return null;
+            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
+            StartDate: JsonArgumentParser.ParseDateOnly(args, "start_date")));
     }
 
     private static Domain.Common.Result<List<Habit>> BuildChildHabits(
@@ -470,52 +289,6 @@ public class CreateHabitTool(
         !isFlexible && unit == FrequencyUnit.Week && quantity == 1 && days is { Count: > 0 }
             ? FrequencyUnit.Day
             : unit;
-
-    private async Task AssignTagsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)
-    {
-        if (!args.TryGetProperty("tag_names", out var tagsEl) || tagsEl.ValueKind != JsonValueKind.Array)
-            return;
-
-        var tagNames = new List<string>();
-        foreach (var t in tagsEl.EnumerateArray())
-        {
-            var name = t.GetString();
-            if (!string.IsNullOrWhiteSpace(name))
-                tagNames.Add(name);
-        }
-
-        if (tagNames.Count > 0)
-            await AssignTagsToHabitAsync(habit, tagNames, userId, ct);
-    }
-
-    private async Task LinkGoalsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)
-    {
-        if (!args.TryGetProperty("goal_ids", out var goalIdsEl) || goalIdsEl.ValueKind != JsonValueKind.Array)
-            return;
-
-        var goalIds = new List<Guid>();
-        foreach (var g in goalIdsEl.EnumerateArray())
-        {
-            if (Guid.TryParse(g.GetString(), out var gid))
-                goalIds.Add(gid);
-        }
-
-        if (goalIds.Count == 0)
-            return;
-
-        var goals = await goalRepository.FindTrackedAsync(
-            gl => goalIds.Contains(gl.Id) && gl.UserId == userId, ct);
-
-        foreach (var goal in goals)
-            habit.AddGoal(goal);
-    }
-
-    private async Task AssignTagsToHabitAsync(Habit habit, List<string> tagNames, Guid userId, CancellationToken ct)
-    {
-        var tags = await HabitToolHelpers.ResolveOrCreateTagsAsync(tagRepository, tagNames, userId, ct);
-        foreach (var tag in tags)
-            habit.AddTag(tag);
-    }
 
     private static readonly System.Text.RegularExpressions.Regex HabitWordRegex =
         new(

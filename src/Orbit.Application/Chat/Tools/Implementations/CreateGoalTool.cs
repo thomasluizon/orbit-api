@@ -1,4 +1,6 @@
 using System.Globalization;
+using MediatR;
+using Orbit.Application.Goals.Commands;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Orbit.Application.Common;
@@ -8,31 +10,8 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class CreateGoalTool : IAiTool, IArgumentCheckTool
+public class CreateGoalTool(IMediator mediator) : IAiTool, IArgumentCheckTool
 {
-    private readonly IGenericRepository<Goal> _goalRepository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly IGenericRepository<Habit>? _habitRepository;
-
-    [ActivatorUtilitiesConstructor]
-    public CreateGoalTool(
-        IGenericRepository<Goal> goalRepository,
-        IUnitOfWork unitOfWork,
-        IGenericRepository<Habit> habitRepository)
-    {
-        _goalRepository = goalRepository;
-        _unitOfWork = unitOfWork;
-        _habitRepository = habitRepository;
-    }
-
-    public CreateGoalTool(
-        IGenericRepository<Goal> goalRepository,
-        IUnitOfWork unitOfWork)
-    {
-        _goalRepository = goalRepository;
-        _unitOfWork = unitOfWork;
-    }
-
     public string Name => "create_goal";
     public string Description => "Create a measurable goal with habit_ids inline. Defaults: target 1, unit goal. Streak goals track consecutive habit days.";
 
@@ -100,40 +79,13 @@ public class CreateGoalTool : IAiTool, IArgumentCheckTool
         if (goalResult.IsFailure) return ToolResult.FromFailure(goalResult);
 
         var goal = goalResult.Value;
-        if (habitIds.Count > 0)
-        {
-            if (_habitRepository is null)
-                return new ToolResult(false, Error: "habit_ids is unavailable for this tool instance.");
-
-            var habits = await _habitRepository.FindTrackedAsync(
-                h => habitIds.Contains(h.Id) && h.UserId == userId,
-                ct);
-
-            var habitsResolved = OwnershipValidation.AllResolved(habitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
-            if (habitsResolved.IsFailure)
-                return ToolResult.FromFailure(habitsResolved);
-
-            if (!checkOnly)
-                foreach (var habit in habits)
-                    goal.AddHabit(habit);
-        }
-
+        var command = new CreateGoalCommand(userId, goal.Title, goal.Description, goal.TargetValue, goal.Unit,
+            goal.Deadline, Type: goal.Type, HabitIds: habitIds);
         if (checkOnly)
-        {
-            return ValidateGoal(userId, goal, habitIds);
-        }
-
-        await _goalRepository.AddAsync(goal, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
-        return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
-    }
-
-    private static ToolResult ValidateGoal(Guid userId, Goal goal, List<Guid> habitIds)
-    {
-        var command = new Orbit.Application.Goals.Commands.CreateGoalCommand(userId, goal.Title, goal.Description,
-            goal.TargetValue, goal.Unit, goal.Deadline, Type: goal.Type, HabitIds: habitIds);
-        var validation = new Orbit.Application.Goals.Validators.CreateGoalCommandValidator().Validate(command);
-        return validation.IsValid ? new ToolResult(true) : new ToolResult(false, Error: validation.ToString());
+            return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess ? new ToolResult(true, EntityId: result.Value.ToString(), EntityName: goal.Title)
+            : ToolResult.FromFailure(result);
     }
 
     private static ToolResult? TryParseHabitIds(JsonElement args, out List<Guid> habitIds)

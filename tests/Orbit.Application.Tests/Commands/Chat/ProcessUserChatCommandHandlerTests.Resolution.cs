@@ -21,7 +21,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Replay_GoalWithReadingLink_ResolvesAndCreatesLinkedGoal()
     {
         var habits = SetupResolutionAccount();
-        var goal = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        var goal = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
         var handler = CreateHandler(goal);
         var held = HoldReplayWrites(goal);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -64,7 +64,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         var habits = SetupResolutionAccount();
         var bulk = new BulkCreateHabitsTool(_mediator);
-        var single = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
+        var single = new CreateHabitTool(_userDateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork));
         var handler = CreateHandler(bulk, single);
         var held = HoldReplayWrites(bulk, single);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -158,7 +158,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(ReplayCall("bulk_create_habits", JsonSerializer.Serialize(new { habits = new[] { new { title = proposedName, description = "A changed proposal" } } })));
         ReplyToReplay("A prévia anterior continua disponível.");
 
-        var result = await handler.Handle(new(UserId, "Crie Novo de novo."), default);
+        var result = await handler.Handle(new(UserId, "Crie Novo de novo.", History: [new ChatHistoryMessage("user", "Crie os hábitos da prévia anterior.")]), default);
 
         result.Value.PendingOperations.Should().BeEmpty();
         held.Should().BeEmpty();
@@ -328,7 +328,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"NOVO"}]}"""));
         ReplyToReplay("Revise a prévia.");
 
-        var first = await handler.Handle(new(UserId, "Crie Novo."), default);
+        var first = await handler.Handle(new(UserId, "Crie Novo.", History: [new ChatHistoryMessage("user", "Crie os hábitos da prévia anterior.")]), default);
 
         held.Should().BeEmpty();
         first.Value.AiMessage.Should().Contain("Novo").And.Contain("prévia").And.Contain("Aprove");
@@ -339,7 +339,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task RoundThree_ExistingExactDuplicate_AsksInsteadOfSilentlyRefusing()
+    public async Task RoundThree_ExistingExactDuplicate_ReusesItsIdentityInPreview()
     {
         SetupResolutionAccount();
         var bulk = new BulkCreateHabitsTool(_mediator);
@@ -351,8 +351,9 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var result = await handler.Handle(new(UserId, "Crie Academia."), default);
 
-        result.Value.PendingOperations.Should().BeEmpty();
-        result.Value.AiMessage.Should().Contain("Academia").And.Contain("?");
+        result.Value.PendingOperations.Should().ContainSingle();
+        result.Value.AiMessage.Should().BeNull();
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -453,7 +454,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Novo"}]}"""));
         ReplyToReplay("Review.");
 
-        var result = await handler.Handle(new(UserId, "Crie Novo."), default);
+        var result = await handler.Handle(new(UserId, "Crie Novo.", History: [new ChatHistoryMessage("user", "Crie os hábitos da prévia anterior.")]), default);
 
         result.Value.AiMessage.Should().Be(expected);
         result.Value.PendingOperations.Should().BeEmpty();
@@ -498,7 +499,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Treino"}]}"""));
         ReplyToReplay("Review.");
 
-        var result = await handler.Handle(new(UserId, "Prepare uma nova prévia para Treino."), default);
+        var result = await handler.Handle(new(UserId, "Prepare uma nova prévia para Treino.", History: [new ChatHistoryMessage("user", "Crie os hábitos da prévia anterior.")]), default);
 
         held.Should().BeEmpty();
         result.Value.PendingOperations.Should().BeEmpty();

@@ -141,7 +141,7 @@ public partial class CreateHabitToolTests
         (await Execute(json)).Success.Should().BeTrue();
         var expected = Habit.Create(new HabitCreateParams(UserId, "Aula semanal", FrequencyUnit.Day, 1,
             new DateOnly(2026, 8, 26), "Aulas", Days: [DayOfWeek.Wednesday, DayOfWeek.Friday],
-            DueTime: new TimeOnly(8, 25), IntervalWeeks: 2)).Value;
+            DueTime: new TimeOnly(8, 25), IntervalWeeks: 2, Position: 0)).Value;
 
         AddedHabits().Single().Should().BeEquivalentTo(expected, options => options.ComparingByMembers<Habit>()
             .Excluding(habit => habit.Id).Excluding(habit => habit.CreatedAtUtc).Excluding(habit => habit.UpdatedAtUtc));
@@ -233,7 +233,7 @@ public partial class CreateHabitToolTests
 
         var parent = AddedHabits().Single(habit => habit.ParentHabitId is null);
         var expected = Habit.Create(new HabitCreateParams(UserId, "Aula herdada", FrequencyUnit.Day, 1,
-            Today, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id,
+            parent.NextDueDate, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id, Position: 0,
             DueTime: new TimeOnly(8, 25), DueEndTime: new TimeOnly(11, 15))).Value;
         AddedHabits().Single(habit => habit.ParentHabitId is not null).Should().BeEquivalentTo(expected,
             options => options.ComparingByMembers<Habit>()

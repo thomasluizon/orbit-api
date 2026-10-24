@@ -294,7 +294,7 @@ public class AstraBlockAnswerRecoveryTests
         quota.RefundAiMessage(user.Id, today, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         quota.CanCreateHabits(user.Id, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var work = new UnitOfWork(db, new DatabaseConnectionSettings());
-        var tool = new CreateHabitTool(habits, tags, goals, dates, quota, work);
+        var tool = new CreateHabitTool(dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(habits, tags, goals, dates, quota, work, configureTransactions: false));
         var store = new IssuedAstraBlockStore(db);
         var block = IssuedAstraBlock.Create(user.Id, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
         await store.AddAsync(block, default);

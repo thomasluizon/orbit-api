@@ -115,7 +115,7 @@ public class CreateSubHabitCommandHandler(
         var hasExplicitCadence = frequencyUnit is not null
             || frequencyQuantity is not null
             || intervalWeeks is not null
-            || days is not null;
+            || days is { Count: > 0 };
         if (request.InheritParentFrequency)
         {
             frequencyUnit ??= parent.FrequencyUnit;

@@ -34,7 +34,11 @@ public record UpdateHabitCommand(
 public sealed record UpdateHabitFieldsCommand(
     Guid UserId,
     Guid HabitId,
-    BulkHabitChanges Changes) : IRequest<Result<string>>;
+    BulkHabitChanges Changes,
+    IReadOnlyList<Guid>? GoalIds = null,
+    IReadOnlyList<Guid>? TagIds = null,
+    Guid? ParentId = null,
+    bool? ClearParent = null) : IRequest<Result<string>>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -67,12 +71,13 @@ public class UpdateHabitCommandHandler(
             unitOfWork,
             request.UserId,
             payGate,
-            ct => PrepareUpdateAsync(request.UserId, request.HabitId, null, null,
-                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, null, null, ct),
+            ct => PrepareUpdateAsync(request.UserId, request.HabitId, request.GoalIds, request.TagIds,
+                (habit, today) => HabitUpdateValidation.ResolveSingleUpdate(habit, request.Changes, today), true, request.ParentId, request.ClearParent, ct),
             state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update, state.ParentId),
             async (state, ct) =>
             {
-                var command = HabitUpdateValidation.ToCommand(request.UserId, request.HabitId, state.Update);
+                var command = HabitUpdateValidation.ToCommand(request.UserId, request.HabitId, state.Update) with
+                { GoalIds = request.GoalIds, TagIds = request.TagIds, ParentId = request.ParentId, ClearParent = request.ClearParent };
                 var result = await ApplyUpdateAsync(command, state, ct);
                 return result.IsFailure ? result.PropagateError<string>() : Result.Success(state.Habit.Title);
             },

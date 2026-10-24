@@ -21,7 +21,7 @@ public sealed record PendingOperationRevisionResult(
     PendingOperationChangePreview? Preview,
     bool Cancelled = false);
 
-public sealed class PendingOperationRevisionService(
+public sealed partial class PendingOperationRevisionService(
     IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer,
     IValidator<RevisePendingOperationRequest> validator,
@@ -71,6 +71,9 @@ public sealed class PendingOperationRevisionService(
 
         if (execution.RequiresReproposal)
             return Failure("pending_operation_schema_changed");
+
+        if (execution.OperationId == AccountChangeSet.OperationId)
+            return await ReviseChangeSetAsync(userId, execution, request, cancellationToken);
 
         var originalResult = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
@@ -175,7 +178,7 @@ public sealed class PendingOperationRevisionService(
     {
         if (execution.RequiresReproposal)
             return "pending_operation_schema_changed";
-        if (execution.OperationId != "bulk_create_habits")
+        if (execution.OperationId is not ("bulk_create_habits" or AccountChangeSet.OperationId))
             return null;
 
         var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
@@ -342,9 +345,12 @@ public sealed class PendingOperationRevisionService(
                 && edits.TryGetProperty("parent_habit_id", out var parent))
             {
                 copy.Remove(HabitHeadingParents.CandidateIdsField);
+                copy.Remove(HabitHeadingParents.SuggestedParentField);
                 if (parent.ValueKind == JsonValueKind.Null)
                     copy.Remove("parent_habit_id");
             }
+            if (item.Edits is { ValueKind: JsonValueKind.Object } changed && changed.TryGetProperty("habit_id", out _))
+                copy.Remove(HabitHeadingParents.ExistingCandidatesField);
             copy["preview_item_id"] = item.ItemId;
             revisedHabits.Add(copy);
         }

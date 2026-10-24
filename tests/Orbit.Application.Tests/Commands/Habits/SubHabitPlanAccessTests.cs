@@ -161,7 +161,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
             case "astra":
                 using (var args = JsonDocument.Parse("""{"title":"Parent","frequency_unit":"Day","sub_habits":[{"title":"Child","is_bad_habit":true},{"title":"Second child"}]}"""))
                 {
-                    var astra = await new CreateHabitTool(_habits, _tags, _goals, _dates, _payGate, _unitOfWork)
+                    var astra = await new CreateHabitTool(_dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dates, _payGate, _unitOfWork))
                         .ExecuteAsync(args.RootElement, _user.Id, CancellationToken.None);
                     astra.Success.Should().BeTrue("{0}", astra.Error);
                     parentId = Guid.Parse(astra.EntityId!);
@@ -177,7 +177,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
             .OnlyContain(habit => habit.ParentHabitId == parentId);
         _added.Should().OnlyContain(habit => habit.UserId == _user.Id);
         _added.Should().OnlyContain(habit => !habit.SlipAlertEnabled);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(path == "astra" ? 3 : 1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -226,7 +226,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
                     ? """{"title":"Bad parent","frequency_unit":"Day","is_bad_habit":true,"slip_alert_enabled":true,"sub_habits":[{"title":"Child"}]}"""
                     : """{"title":"Bad parent","frequency_unit":"Day","is_bad_habit":true,"sub_habits":[{"title":"Child"}]}"""))
                 {
-                    var astra = await new CreateHabitTool(_habits, _tags, _goals, _dates, _payGate, _unitOfWork)
+                    var astra = await new CreateHabitTool(_dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dates, _payGate, _unitOfWork))
                         .ExecuteAsync(args.RootElement, _user.Id, CancellationToken.None);
                     success = astra.Success;
                     errorCode = astra.ErrorCode;
@@ -249,7 +249,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
         _added.Where(habit => habit.IsBadHabit).Should().ContainSingle()
             .Which.SlipAlertEnabled.Should().BeTrue();
         _added.Where(habit => !habit.IsBadHabit).Should().OnlyContain(habit => !habit.SlipAlertEnabled);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(path.StartsWith("astra-", StringComparison.Ordinal) ? 2 : 1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]

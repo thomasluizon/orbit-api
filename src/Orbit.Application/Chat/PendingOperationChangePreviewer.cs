@@ -41,7 +41,7 @@ public sealed class PendingOperationChangePreviewer(
     private static readonly HashSet<string> CreateFields = new(StringComparer.Ordinal)
     {
         "title", "description", "emoji", "frequency_unit", "frequency_quantity",
-        "interval_weeks", "days", "due_date", "end_date", "due_time",
+        "interval_weeks", "days", "due_date", "start_date", "end_date", "due_time", "goal_ids", "tag_names", "tag_ids", "habit_id",
         IsBadHabitField, IsGeneralField, IsFlexibleField, ChecklistItemsField, "sub_habits",
         DueEndTimeField, SlipAlertEnabledField, ReminderEnabledField, ReminderTimesField,
         ScheduledRemindersField, RelativeRemindersField
@@ -619,6 +619,8 @@ public sealed class PendingOperationChangePreviewer(
                     property.Value.Clone(), true)).ToList()
                 : [];
             var (parentFingerprint, parentOptions) = AddCreationParent(arguments, habit, parents, name, fields, errors);
+            var (existing, reuseOptions) = AddCreationReuse(habit, parents, name, fields, errors);
+            parentFingerprint += existing is null ? string.Empty : FingerprintHabit(existing);
             foreach (var error in errors.Where(error => CreateFields.Contains(error.Field)))
                 if (fields.All(field => field.Field != error.Field))
                     fields.Add(new PendingOperationChange(Guid.Empty, name, error.Field,
@@ -626,10 +628,11 @@ public sealed class PendingOperationChangePreviewer(
             var itemId = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("preview_item_id", out var storedId)
                 ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);
-            return new PendingOperationItem(itemId, null,
+            return new PendingOperationItem(itemId, existing?.Id,
                 name, fields, AgentOperationFingerprint.Compute("bulk_create_habits" + parentFingerprint, habit.GetRawText()),
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null,
-                FieldOptions: parentOptions is null ? null : [parentOptions]);
+                FieldOptions: parentOptions is null && reuseOptions is null ? null
+                    : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray());
         }).ToList();
         return BuildPreview("bulk_create_habits", items.SelectMany(item => item.Fields)
             .Where(field => field.Field == "parent_habit_id" && field.EntityId != Guid.Empty)
@@ -643,6 +646,7 @@ public sealed class PendingOperationChangePreviewer(
         var names = new HashSet<string>();
         foreach (var habit in habits.EnumerateArray())
         {
+            ids.UnionWith(DependencyIds(habit, "habit_id", HabitHeadingParents.ExistingCandidatesField));
             var value = CreationParentValue(arguments, habit);
             if (value.ValueKind != JsonValueKind.String)
                 continue;
@@ -686,12 +690,35 @@ public sealed class PendingOperationChangePreviewer(
         else if (unresolved || isParentId && parent is null)
             errors.Add(new PendingOperationValidationError("parent_habit_id", "parent_not_found", "Parent habit not found."));
         if (!requiresChoice)
-            return (parentFingerprint, null);
+            return (parentFingerprint, SuggestedParentOptions(habit, parent));
         var options = candidates.OrderBy(candidate => candidate.Id)
             .Select(candidate => new PendingOperationFieldOption(JsonSerializer.SerializeToElement(candidate.Id), candidate.Title))
             .Append(new PendingOperationFieldOption(JsonSerializer.SerializeToElement<string?>(null), "No parent")).ToArray();
         parentFingerprint = string.Join('|', candidates.OrderBy(candidate => candidate.Id).Select(FingerprintHabit));
         return (parentFingerprint, new PendingOperationFieldOptions("parent_habit_id", true, options));
+    }
+
+    private static PendingOperationFieldOptions? SuggestedParentOptions(JsonElement source, Habit? parent) =>
+        parent is not null && source.TryGetProperty(HabitHeadingParents.SuggestedParentField, out var suggested) && suggested.ValueKind == JsonValueKind.True
+            ? new("parent_habit_id", false, [new(JsonSerializer.SerializeToElement(parent.Id), parent.Title), new(JsonSerializer.SerializeToElement<string?>(null), "No parent")])
+            : null;
+
+    private static (Habit? Existing, PendingOperationFieldOptions? Options) AddCreationReuse(JsonElement source,
+        IReadOnlyList<Habit> known, string name, List<PendingOperationChange> fields, List<PendingOperationValidationError> errors)
+    {
+        if (!source.TryGetProperty("habit_id", out var value)) return (null, null);
+        var field = fields.FindIndex(field => field.Field == "habit_id");
+        if (Guid.TryParse(value.ToString(), out var id))
+        {
+            var existing = known.FirstOrDefault(habit => habit.Id == id);
+            if (existing is null) errors.Add(new("habit_id", "habit_not_found", "Habit not found."));
+            if (field >= 0) fields[field] = fields[field] with { NewValue = existing?.Title ?? name, IsEditable = false };
+            return (existing, null);
+        }
+        var ids = DependencyIds(source, HabitHeadingParents.ExistingCandidatesField);
+        var candidates = known.Where(habit => ids.Contains(habit.Id)).OrderBy(habit => habit.Id).ToArray();
+        errors.Add(new("habit_id", "habit_choice_required", "Choose an existing habit in the preview."));
+        return (null, new("habit_id", true, candidates.Select(habit => new PendingOperationFieldOption(JsonSerializer.SerializeToElement(habit.Id), habit.Title)).ToArray()));
     }
 
     private static PendingOperationChangePreview? BuildPreview(
@@ -756,6 +783,7 @@ public sealed class PendingOperationChangePreviewer(
         Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text",
             typedValue: JsonSerializer.SerializeToElement(effective.Days.Select(day => day.ToString())));
         Add("due_date", habit.NextDueDate, effective.NextDueDate, "date");
+        if (changes.HasStartDate) Add("start_date", habit.StartDate, effective.StartDate, "date");
         Add("end_date", habit.EndDate, effective.EndDate, "date");
         Add("due_time", habit.DueTime, effective.DueTime, "time");
         Add(DueEndTimeField, habit.DueEndTime, effective.DueEndTime, "time");

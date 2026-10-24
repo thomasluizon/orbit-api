@@ -23,7 +23,7 @@ public class UpdateGoalProgressToolTests
 
     public UpdateGoalProgressToolTests()
     {
-        _tool = new UpdateGoalProgressTool(_goalRepo, _progressLogRepo, _goalCompletionService, _unitOfWork);
+        _tool = new UpdateGoalProgressTool(_goalRepo, Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, logs: _progressLogRepo, completion: _goalCompletionService));
     }
 
     [Fact]

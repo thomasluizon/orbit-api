@@ -27,7 +27,7 @@ public class BulkCreateHabitsTool(
             {
                 type = JsonSchemaTypes.Array,
                 description = HabitModelInstructions.Batch,
-                items = HabitItemSchema(includeSubHabits: true)
+                items = HabitItemSchema(Orbit.Application.Common.AppConstants.MaxHabitDepth)
             }
         },
         required = new[] { "habits" }
@@ -44,6 +44,8 @@ public class BulkCreateHabitsTool(
             {
                 habit.Remove("preview_item_id");
                 habit.Remove(HabitHeadingParents.CandidateIdsField);
+                habit.Remove(HabitHeadingParents.SuggestedParentField);
+                habit.Remove(HabitHeadingParents.ExistingCandidatesField);
             }
         return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
             () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
@@ -63,7 +65,7 @@ public class BulkCreateHabitsTool(
         {
             if (habitEl.ValueKind != JsonValueKind.Object)
                 return new ToolResult(false, Error: "Each habit must be an object.");
-            var fieldError = BulkHabitToolArguments.CheckCreateHabitFields(habitEl);
+            var fieldError = ValidateTree(habitEl);
             if (fieldError is not null)
                 return new ToolResult(false, Error: fieldError);
             var item = ParseBulkHabitItem(habitEl);
@@ -78,7 +80,7 @@ public class BulkCreateHabitsTool(
         if (HasExistingParent(args, habitsEl))
             return await ExecuteWithParentsAsync(args, habitsEl, items, userId, checkOnly, ct);
 
-        if (habitsEl.EnumerateArray().Any(HasGoalLinks))
+        if (habitsEl.EnumerateArray().Any(item => HasGoalLinks(item) || item.TryGetProperty("habit_id", out _) || item.TryGetProperty("tag_ids", out _)))
         {
             var created = new List<BulkCreateItemResult>();
             for (var index = 0; index < items.Count; index++)
@@ -119,18 +121,10 @@ public class BulkCreateHabitsTool(
                 || args.TryGetProperty("parent_habit_id", out parentValue);
             if (!hasParent)
             {
-                var rootCommand = new BulkCreateHabitsCommand(userId, [item]);
-                if (checkOnly)
-                {
-                    var checkedRoot = await ChatToolArgumentCheck.CheckCommandAsync(mediator, rootCommand, ct);
-                    if (!checkedRoot.Success) return checkedRoot;
-                }
-                else
-                {
-                    var rootResult = await mediator.Send(rootCommand, ct);
-                    if (rootResult.IsFailure) return ToolResult.FromFailure(rootResult);
-                    created.AddRange(rootResult.Value.Results.Select(result => result with { Index = index }));
-                }
+                var rootResult = await ExecuteTreeAsync(source, item, userId, null, checkOnly, ct);
+                if (!rootResult.Success) return rootResult;
+                created.Add(new(index, BulkItemStatus.Success,
+                    Guid.TryParse(rootResult.EntityId, out var rootId) ? rootId : null, item.Title));
                 continue;
             }
             if (parentValue.ValueKind != JsonValueKind.String || !Guid.TryParse(parentValue.GetString(), out var parentId))
@@ -147,20 +141,62 @@ public class BulkCreateHabitsTool(
     private static bool HasGoalLinks(JsonElement item) => item.TryGetProperty("goal_ids", out _)
         || item.TryGetProperty("sub_habits", out var children) && children.EnumerateArray().Any(HasGoalLinks);
 
+    internal async Task<ToolResult> ExecuteSingleAsync(JsonElement source, Guid userId, CancellationToken ct)
+    {
+        if (source.ValueKind != JsonValueKind.Object || string.IsNullOrWhiteSpace(JsonArgumentParser.GetOptionalString(source, "title")))
+            return new(false, Error: "title is required.");
+        var error = ValidateTree(source);
+        if (error is not null) return new(false, Error: error);
+        var frequency = JsonArgumentParser.ParseFrequencyUnit(source);
+        if (frequency.IsFailure) return ToolResult.FromFailure(frequency);
+        var parent = Guid.TryParse(JsonArgumentParser.GetOptionalString(source, "parent_habit_id"), out var id) ? id : (Guid?)null;
+        var item = ParseBulkHabitItem(source, isRoot: parent is null);
+        if (item is null) return new ToolResult(false, Error: "A title and valid schedule are required.");
+        if (parent is null) item = item with { SlipAlertEnabled = JsonArgumentParser.GetOptionalBool(source, "slip_alert_enabled") ?? item.IsBadHabit };
+        return await ExecuteTreeAsync(source, item, userId, parent, false, ct);
+    }
+
+    private static string? ValidateTree(JsonElement source)
+    {
+        foreach (var field in new[] { "tag_ids", "goal_ids" })
+            if (source.TryGetProperty(field, out var ids) && (ids.ValueKind != JsonValueKind.Array
+                || ids.EnumerateArray().Any(id => id.ValueKind != JsonValueKind.String || !Guid.TryParse(id.GetString(), out _))))
+                return $"{field} must contain valid GUIDs.";
+        var error = BulkHabitToolArguments.CheckCreateHabitFields(source);
+        if (error is not null) return error;
+        if (source.TryGetProperty("sub_habits", out var children))
+        {
+            if (children.ValueKind != JsonValueKind.Array) return "sub_habits must be an array.";
+            foreach (var child in children.EnumerateArray())
+            {
+                if (child.ValueKind != JsonValueKind.Object || string.IsNullOrWhiteSpace(JsonArgumentParser.GetOptionalString(child, "title")))
+                    return "Each child needs a title.";
+                if (ValidateTree(child) is { } childError) return childError;
+            }
+        }
+        return null;
+    }
+
     private async Task<ToolResult> ExecuteTreeAsync(JsonElement source, BulkHabitItem item, Guid userId,
         Guid? parentId, bool checkOnly, CancellationToken ct)
     {
-        var options = new HabitCommandOptions(item.Days, item.DueTime, item.DueEndTime,
+        var options = new HabitCommandOptions(item.Days ?? (item.DueDate.HasValue ? [] : null), item.DueTime, item.DueEndTime,
             item.ReminderEnabled, item.ReminderTimes, item.SlipAlertEnabled, item.ChecklistItems,
             item.ScheduledReminders, item.EndDate, item.IsFlexible, item.RelativeReminders);
+        if (source.TryGetProperty("habit_id", out var existingId))
+            return existingId.ValueKind == JsonValueKind.String && Guid.TryParse(existingId.GetString(), out var reusedId)
+                ? await UpdateExistingTreeAsync(source, item, reusedId, parentId, userId, checkOnly, ct)
+                : new ToolResult(false, Error: "habit_choice_required");
         IRequest<Orbit.Domain.Common.Result<Guid>> command = parentId is { } parent
             ? new CreateSubHabitCommand(userId, parent, item.Title, item.Description,
                 item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate, options,
+                TagIds: JsonArgumentParser.ParseGuidArray(source, "tag_ids"),
                 Emoji: item.Emoji, InheritParentFrequency: item.InheritParentFrequency,
                 IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate)
             : new CreateHabitCommand(userId, item.Title, item.Description, item.FrequencyUnit,
                 item.FrequencyQuantity, item.IsBadHabit, DueDate: item.DueDate, IsGeneral: item.IsGeneral,
-                Options: options, GoalIds: JsonArgumentParser.ParseGuidArray(source, "goal_ids"),
+                Options: options, TagIds: JsonArgumentParser.ParseGuidArray(source, "tag_ids"),
+                GoalIds: JsonArgumentParser.ParseGuidArray(source, "goal_ids"),
                 Emoji: item.Emoji, IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate);
         if (checkOnly)
         {
@@ -173,10 +209,10 @@ public class BulkCreateHabitsTool(
         var id = result.Value;
         if (item.Tags is { Count: > 0 })
         {
-            var available = await mediator.Send(new GetTagsQuery(userId), ct);
+            var available = await mediator.Send(new GetTagsQuery(userId, BypassCache: true), ct);
             if (available.IsFailure) return ToolResult.FromFailure(available);
-            var tagIds = new List<Guid>();
-            foreach (var name in item.Tags)
+            var tagIds = new List<Guid>(JsonArgumentParser.ParseGuidArray(source, "tag_ids") ?? []);
+            foreach (var name in item.Tags.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var matches = available.Value.Where(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase)).ToArray();
                 if (matches.Length > 1) return new ToolResult(false, Error: "tag_choice_required");
@@ -199,7 +235,7 @@ public class BulkCreateHabitsTool(
         if (source.TryGetProperty("sub_habits", out var children))
             foreach (var child in children.EnumerateArray())
             {
-                var parsed = ParseBulkHabitItem(child);
+                var parsed = ParseBulkHabitItem(child, isRoot: false);
                 if (parsed is null) return new ToolResult(false, Error: "Each child needs a title.");
                 var added = await ExecuteTreeAsync(child, parsed, userId, id, false, ct);
                 if (!added.Success) return added;
@@ -207,7 +243,28 @@ public class BulkCreateHabitsTool(
         return new ToolResult(true, EntityId: id.ToString(), EntityName: item.Title);
     }
 
-    internal static BulkHabitItem? ParseBulkHabitItem(JsonElement el, bool allowEmptyTitle = false)
+    private async Task<ToolResult> UpdateExistingTreeAsync(JsonElement source, BulkHabitItem item, Guid habitId,
+        Guid? parentId, Guid userId, bool checkOnly, CancellationToken ct)
+    {
+        var patch = JsonNode.Parse(source.GetRawText())!.AsObject();
+        foreach (var field in new[] { "habit_id", "parent_habit_id", "sub_habits", "tag_names", "tag_ids", "goal_ids", "preview_item_id", HabitHeadingParents.SuggestedParentField, HabitHeadingParents.CandidateIdsField, HabitHeadingParents.ExistingCandidatesField }) patch.Remove(field);
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(JsonSerializer.SerializeToElement(patch));
+        if (error is not null) return new(false, Error: error);
+        var command = new UpdateHabitFieldsCommand(userId, habitId, changes!,
+            JsonArgumentParser.ParseGuidArray(source, "goal_ids"), JsonArgumentParser.ParseGuidArray(source, "tag_ids"), parentId);
+        if (checkOnly) return new(true);
+        var updated = await mediator.Send(command, ct);
+        if (updated.IsFailure) return ToolResult.FromFailure(updated);
+        foreach (var child in item.SubHabits ?? [])
+        {
+            var sourceChild = source.GetProperty("sub_habits")[item.SubHabits!.ToList().IndexOf(child)];
+            var added = await ExecuteTreeAsync(sourceChild, child, userId, habitId, false, ct);
+            if (!added.Success) return added;
+        }
+        return new(true, EntityId: habitId.ToString(), EntityName: item.Title);
+    }
+
+    internal static BulkHabitItem? ParseBulkHabitItem(JsonElement el, bool allowEmptyTitle = false, bool isRoot = true)
     {
         var title = JsonArgumentParser.GetOptionalString(el, TitleProperty);
         if (!allowEmptyTitle && string.IsNullOrWhiteSpace(title))
@@ -219,9 +276,9 @@ public class BulkCreateHabitsTool(
             subHabits = new List<BulkHabitItem>();
             foreach (var child in subEl.EnumerateArray())
             {
-                var parsedChild = ParseBulkHabitItem(child);
-                if (parsedChild is not null)
-                    subHabits.Add(parsedChild);
+                var parsedChild = ParseBulkHabitItem(child, isRoot: false);
+                if (parsedChild is null) return null;
+                subHabits.Add(parsedChild);
             }
         }
 
@@ -229,16 +286,20 @@ public class BulkCreateHabitsTool(
         if (parsedFrequency.IsFailure)
             return null;
         var frequencyUnit = parsedFrequency.Value;
-        var oneTime = JsonArgumentParser.GetOptionalString(el, "frequency_unit") == "OneTime";
+        var oneTime = IsOneTime(el, frequencyUnit, isRoot);
         var frequencyQuantity = oneTime ? null : JsonArgumentParser.GetOptionalInt(el, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : (int?)null);
 
+        var days = oneTime ? null : JsonArgumentParser.ParseDays(el);
+        if (frequencyUnit == Orbit.Domain.Enums.FrequencyUnit.Week && frequencyQuantity == 1 && days is { Count: > 0 }
+            && JsonArgumentParser.GetOptionalBool(el, "is_flexible") != true)
+            frequencyUnit = Orbit.Domain.Enums.FrequencyUnit.Day;
         return new BulkHabitItem(
             title ?? string.Empty,
             JsonArgumentParser.GetOptionalString(el, "description"),
             frequencyUnit,
             frequencyQuantity,
-            Days: oneTime ? null : JsonArgumentParser.ParseDays(el),
+            Days: days,
             IsBadHabit: JsonArgumentParser.GetOptionalBool(el, "is_bad_habit") ?? false,
             DueDate: JsonArgumentParser.ParseDateOnly(el, "due_date"),
             DueTime: JsonArgumentParser.ParseTimeOnly(el, "due_time"),
@@ -260,7 +321,11 @@ public class BulkCreateHabitsTool(
         { InheritParentFrequency = !oneTime };
     }
 
-    private static object HabitItemSchema(bool includeSubHabits)
+    private static bool IsOneTime(JsonElement item, Orbit.Domain.Enums.FrequencyUnit? unit, bool isRoot) =>
+        JsonArgumentParser.GetOptionalString(item, "frequency_unit") == "OneTime"
+        || isRoot && unit is null && JsonArgumentParser.ParseDateOnly(item, "due_date") is not null;
+
+    internal static object HabitItemSchema(int remainingDepth)
     {
         var properties = new Dictionary<string, object>
         {
@@ -302,15 +367,17 @@ public class BulkCreateHabitsTool(
         properties["relative_reminders"] = BulkHabitToolArguments.RelativeRemindersSchema();
         properties["slip_alert_enabled"] = new { type = JsonSchemaTypes.Boolean };
         properties["tag_names"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
+        properties["habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing habit ID to reuse and edit instead of creating a duplicate." };
+        properties["tag_ids"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
         properties["goal_ids"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
-        if (includeSubHabits)
+        if (remainingDepth > 1)
         {
             properties["parent_habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text." };
             properties["sub_habits"] = new
             {
                 type = JsonSchemaTypes.Array,
                 description = "Independently trackable child habits under this parent.",
-                items = HabitItemSchema(includeSubHabits: false)
+                items = HabitItemSchema(remainingDepth - 1)
             };
         }
 

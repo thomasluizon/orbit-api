@@ -35,6 +35,7 @@ public partial class ProcessUserChatCommandHandler
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
     {
+        if (request.History is not { Count: > 0 }) return;
         var proposals = execution.PendingOperationStore.GetPendingHabitCreations(request.UserId);
         var normalizedMessage = HabitNameMatcher.Normalize(request.Message);
         var asksForReplacement = Regex.IsMatch(normalizedMessage,
@@ -64,10 +65,11 @@ public partial class ProcessUserChatCommandHandler
     {
         if (!HasResolutionQuestion(results))
             return cards;
-        var message = AddResolutionQuestion(cards.AiMessage, results, language)!;
+        var message = AddResolutionQuestion(null, results, language)!;
         return cards with
         {
             AiMessage = message,
+            ServerComposedText = true,
             Parts = cards.Parts is null ? null : new ChatResponsePart[] { new ChatTextPart(message) }
                 .Concat(cards.Parts.Where(part => part is not ChatTextPart)).ToArray()
         };
@@ -85,12 +87,6 @@ public partial class ProcessUserChatCommandHandler
             return null;
         }
 
-        if (arguments["parent_habit_id"] is not null && !results.RequiresExistingParent && results.ParentHeadings.Count == 0
-            && call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
-        {
-            results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
-            return null;
-        }
         if (call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
             return ResolveHabitCreation(call, arguments, results);
 
@@ -201,10 +197,7 @@ public partial class ProcessUserChatCommandHandler
             else if (item["parent_habit_id"] is not null)
             {
                 if (!results.RequiresExistingParent)
-                {
-                    results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
-                    return false;
-                }
+                    item[HabitHeadingParents.SuggestedParentField] = true;
                 if (!ResolveHabitIdentifiers(item, call.Name, results)) return false;
             }
         }
@@ -234,6 +227,11 @@ public partial class ProcessUserChatCommandHandler
                 call = call with { Name = "bulk_create_habits" };
             }
         }
+        if (proposed.OfType<JsonObject>().Any(item => item["habit_id"] is not null || item[HabitHeadingParents.SuggestedParentField] is not null))
+        {
+            call = call with { Name = "bulk_create_habits" };
+            arguments = new JsonObject { ["habits"] = proposed.DeepClone() };
+        }
         return call with { Args = JsonSerializer.SerializeToElement(arguments) };
     }
 
@@ -250,12 +248,19 @@ public partial class ProcessUserChatCommandHandler
             var itemParentId = Guid.TryParse(item["parent_habit_id"]?.ToString(), out var itemParent) ? itemParent : parentId;
             if (results.IsTaggingIntent)
                 continue;
-            var existing = results.Habits.FirstOrDefault(habit => habit.ParentHabitId == itemParentId
-                && HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name));
+            var matches = results.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)
+                && (itemParentId is null || habit.ParentHabitId == itemParentId)).ToArray();
+            var existing = matches.Length == 1 ? matches[0] : null;
+            if (matches.Length > 1)
+            {
+                item["habit_id"] = name;
+                item[HabitHeadingParents.ExistingCandidatesField] = new JsonArray(matches.Select(habit => (JsonNode?)JsonValue.Create(habit.Id.ToString())).ToArray());
+            }
             if (existing is not null)
             {
-                results.ExistingDuplicateNames.Add(existing.Title);
-                continue;
+                item["habit_id"] = existing.Id.ToString();
+                if (item["parent_habit_id"] is null && existing.ParentHabitId is { } existingParent)
+                    item["parent_habit_id"] = existingParent.ToString();
             }
             if (results.ProposedHabitNames.Contains((itemParentId, HabitNameMatcher.Normalize(name))))
             {

@@ -185,6 +185,15 @@ internal sealed class HeldWriteTestContext : IDisposable
 
     public IAiTool Tool(string name)
     {
+        if (name == "create_habit")
+            return new CreateHabitTool(Dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(Repository<Habit>(), Repository<Tag>(), Repository<Goal>(), Dates,
+                _services.GetRequiredService<IPayGateService>(), UnitOfWork));
+        var goalMediator = name is "create_goal" or "update_goal" or "update_goal_progress" or "update_goal_status"
+            ? Orbit.Tests.Shared.GoalToolCommandMediator.Create(Repository<Goal>(), UnitOfWork, habits: Repository<Habit>(), logs: Repository<GoalProgressLog>()) : null;
+        if (name == "create_goal") return new CreateGoalTool(goalMediator!);
+        if (name == "update_goal") return new UpdateGoalTool(Repository<Goal>(), goalMediator!);
+        if (name == "update_goal_progress") return new UpdateGoalProgressTool(Repository<Goal>(), goalMediator!);
+        if (name == "update_goal_status") return new UpdateGoalStatusTool(Repository<Goal>(), goalMediator!);
         var typeName = string.Concat(name.Split('_').Select(part => char.ToUpperInvariant(part[0]) + part[1..])) + "Tool";
         var type = typeof(IAiTool).Assembly.GetTypes().Single(type => type.Name == typeName);
         return (IAiTool)ActivatorUtilities.CreateInstance(_services, type);

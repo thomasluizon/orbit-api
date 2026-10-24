@@ -74,7 +74,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         var nextParent = parents[differentParent ? 1 : 0];
         ScriptToolCall(JsonSerializer.Serialize(new { habits = new[] { new { title = "Take vitamin D", parent_habit_id = nextParent.Id, frequency_unit = "Day" } } }), "bulk_create_habits");
 
-        var second = await handler.Handle(new(_userId, $"{nextParent.Title}: take vitamin D (everyday)"), default);
+        var second = await handler.Handle(new(_userId, $"{nextParent.Title}: take vitamin D (everyday)",
+            History: [new ChatHistoryMessage("user", "Post lunch: take vitamin D (once a week)")]), default);
 
         _pendingOperationStore.GetPendingHabitCreations(_userId).Should().Contain(item => item.ParentHabitId == parents[0].Id);
         second.Value.PendingOperations.Should().HaveCount(differentParent ? 1 : 0);

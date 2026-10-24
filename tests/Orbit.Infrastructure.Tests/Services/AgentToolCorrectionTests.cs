@@ -58,7 +58,7 @@ public sealed partial class AgentToolCorrectionTests : IDisposable
         gate.CanCreateHabits(_userId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<ToolResult>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<CancellationToken, Task<ToolResult>>>(0)(call.ArgAt<CancellationToken>(1)));
-        var tool = new CreateHabitTool(habits, tags, goals, dates, gate, _unitOfWork);
+        var tool = new CreateHabitTool(dates, Orbit.Tests.Shared.HabitToolCommandMediator.Create(habits, tags, goals, dates, gate, _unitOfWork));
         _registry = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
         var settings = Options.Create(new AgentPlatformSettings { ShadowModeEnabled = false });

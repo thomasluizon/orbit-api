@@ -158,7 +158,7 @@ public class BulkCreateHabitsToolTests
         var result = await Execute("""
             {"habits": [
               {"title": "Morning routine", "frequency_unit": "day", "frequency_quantity": 1, "interval_weeks": 2,
-               "sub_habits": [{"title": "Make bed"}, {"description": "child missing title"}]},
+               "sub_habits": [{"title": "Make bed"}]},
               {"title": "Gym", "is_bad_habit": false}
             ]}
             """);
@@ -174,6 +174,15 @@ public class BulkCreateHabitsToolTests
         captured!.Habits.Should().HaveCount(2);
         captured.Habits[0].IntervalWeeks.Should().Be(2);
         captured.Habits[0].SubHabits.Should().ContainSingle().Which.Title.Should().Be("Make bed");
+    }
+
+    [Fact]
+    public async Task InvalidNestedChild_RejectsWholeRequestBeforeWriting()
+    {
+        var result = await Execute("""{"habits":[{"title":"Morning routine","sub_habits":[{"description":"missing title"}]}]}""");
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("title");
+        await _mediator.DidNotReceive().Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -228,14 +237,17 @@ public class BulkCreateHabitsToolTests
     }
 
     [Fact]
-    public void Schema_AdvertisesExactlyOneInlineChildLevel()
+    public void Schema_AdvertisesEverySupportedHabitDepth()
     {
         var schema = JsonSerializer.SerializeToElement(_tool.GetParameterSchema());
-        var root = schema.GetProperty("properties").GetProperty("habits").GetProperty("items").GetProperty("properties");
-        var child = root.GetProperty("sub_habits").GetProperty("items").GetProperty("properties");
-
-        child.TryGetProperty("sub_habits", out _).Should().BeFalse();
-        child.GetProperty("title").GetProperty("type").GetString().Should().Be("string");
+        var node = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
+        for (var depth = 1; depth <= Orbit.Application.Common.AppConstants.MaxHabitDepth; depth++)
+        {
+            var fields = node.GetProperty("properties");
+            fields.GetProperty("title").GetProperty("type").GetString().Should().Be("string");
+            fields.TryGetProperty("sub_habits", out var children).Should().Be(depth < Orbit.Application.Common.AppConstants.MaxHabitDepth);
+            if (depth < Orbit.Application.Common.AppConstants.MaxHabitDepth) node = children.GetProperty("items");
+        }
     }
 
     private async Task<ToolResult> Execute(string json) =>
