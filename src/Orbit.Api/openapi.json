@@ -3603,6 +3603,13 @@
             }
           },
           {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "api-version",
             "in": "header",
             "schema": {

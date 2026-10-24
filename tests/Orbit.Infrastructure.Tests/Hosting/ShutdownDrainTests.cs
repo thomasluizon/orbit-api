@@ -19,6 +19,11 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
+using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Tests.Persistence;
+using Orbit.Api.Idempotency;
 
 namespace Orbit.Infrastructure.Tests.Hosting;
 
@@ -38,13 +43,15 @@ public sealed class ShutdownDrainTests
             .Should().Be(TimeSpan.FromSeconds(240));
     }
 
-    [Fact]
-    public async Task Sigterm_AcknowledgedReplyLongerThanDefaultShutdown_ReachesFinal()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Sigterm_AcknowledgedReplyLongerThanDefaultShutdown_ReachesFinal(bool keyed)
     {
         if (OperatingSystem.IsWindows())
             return;
 
-        using var fixture = new StreamHost();
+        using var fixture = new StreamHost(keyed: keyed);
         await fixture.Host.StartAsync();
         var request = fixture.StartStream();
         await fixture.ProcessingStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -156,6 +163,7 @@ public sealed class ShutdownDrainTests
     private sealed class StreamHost : IDisposable
     {
         private readonly MemoryStream _body = new();
+        private readonly SqliteOrbitDbContextFactory? _database;
         private readonly RequestDelegate _pipeline;
         public IHost Host { get; }
         public IMediator Mediator { get; } = Substitute.For<IMediator>();
@@ -169,13 +177,31 @@ public sealed class ShutdownDrainTests
         public TaskCompletionSource Stopping { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool CommandCancelled { get; private set; }
 
-        public StreamHost(TimeSpan? drainTimeout = null)
+        public StreamHost(TimeSpan? drainTimeout = null, bool keyed = false)
         {
             var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
             builder.Services.AddOrbitShutdownDrain();
+            if (keyed)
+            {
+                _database = new SqliteOrbitDbContextFactory();
+                var user = User.Create("Stream User", "stream@example.com").Value;
+                _database.Context.Entry(user).Property(value => value.Id).CurrentValue = Guid.Parse(Http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                _database.Context.Users.Add(user);
+                _database.Context.SaveChanges();
+                builder.Services.AddScoped(_ => _database.CreateContext());
+                builder.Services.AddSingleton<IChatTurnStore, ChatTurnStore>();
+                builder.Services.AddSingleton(Mediator);
+                builder.Services.AddScoped<ChatTurnStream>();
+                var limits = Substitute.For<IDistributedRateLimitService>();
+                limits.TryAcquireLeaseAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+                    .Returns(new DistributedRateLimitDecision(true, 1, 1, DateTime.UtcNow.AddMinutes(5)));
+                builder.Services.AddSingleton(limits);
+                Http.Request.Headers["Idempotency-Key"] = "sigterm-turn";
+            }
             if (drainTimeout is { } timeout)
                 builder.Services.Configure<ShutdownDrainOptions>(options => options.Timeout = timeout);
             Host = builder.Build();
+            Http.RequestServices = Host.Services;
             Host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.Register(() => Stopping.TrySetResult());
             Http.Response.Body = _body;
             Mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
@@ -216,6 +242,7 @@ public sealed class ShutdownDrainTests
             FinishReply.TrySetResult();
             Host.Dispose();
             _body.Dispose();
+            _database?.Dispose();
         }
     }
 }

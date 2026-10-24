@@ -18,6 +18,8 @@ public sealed partial class ShutdownDrain(
     private int _activeRequests;
     private bool _stopping;
 
+    public CancellationToken ExecutionDeadline => _expired.Token;
+
     public Lease? TryEnter(CancellationToken requestAborted)
     {
         lock (_gate)

@@ -14,7 +14,10 @@ public sealed record ChatStreamEvent(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Code = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Domain = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Access = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? TurnId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Replayed = null)
 {
     internal static readonly JsonSerializerOptions SerializerOptions = new()
     {

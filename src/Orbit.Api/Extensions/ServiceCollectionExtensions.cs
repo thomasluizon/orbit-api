@@ -98,6 +98,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
         builder.Services.AddScoped<IFoundingAchievementReader, FoundingAchievementReader>();
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
+        builder.Services.AddScoped<Orbit.Application.Chat.IChatTurnStore, ChatTurnStore>();
+        builder.Services.AddScoped<ChatTurnStream>();
         builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddSingleton<Orbit.Application.Auth.Services.EmailChallengeService>();

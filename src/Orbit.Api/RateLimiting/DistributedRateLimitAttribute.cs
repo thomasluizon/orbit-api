@@ -301,6 +301,15 @@ public sealed partial class ConcurrentChatLimitFilter(
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        if (context.HttpContext.Request.Headers.ContainsKey("Idempotency-Key")
+            && context.ActionDescriptor is Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor action
+            && action.ControllerTypeInfo?.AsType() == typeof(Orbit.Api.Controllers.ChatController)
+            && action.MethodInfo.Name == nameof(Orbit.Api.Controllers.ChatController.ProcessChatStream))
+        {
+            await next();
+            return;
+        }
+
         var partitionKey = $"user:{context.HttpContext.GetUserId()}";
         var decision = await distributedRateLimitService.TryAcquireLeaseAsync(
             PolicyName,

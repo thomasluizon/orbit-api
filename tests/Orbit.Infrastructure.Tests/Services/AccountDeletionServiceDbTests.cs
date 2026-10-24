@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -63,11 +65,15 @@ public class AccountDeletionServiceDbTests : IDisposable
         SeedUser(otherUserId, "other-proactive@example.com");
         SeedProactiveData(userId);
         SeedProactiveData(otherUserId);
+        SeedChatTurns(userId);
+        SeedChatTurns(otherUserId);
         await _dbContext.SaveChangesAsync();
         await AssertRetiredLedgerAbsent();
 
         await new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()).DeleteAllUserDataAsync(userId);
 
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == userId)).Should().Be(0);
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == otherUserId)).Should().Be(2);
         (await _dbContext.ProactiveItems.AnyAsync(p => p.UserId == userId))
             .Should().BeFalse();
         (await _dbContext.ProactiveCalendarDays.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
@@ -87,6 +93,8 @@ public class AccountDeletionServiceDbTests : IDisposable
         _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand", 0));
         SeedProactiveData(userId);
         SeedProactiveData(otherUserId);
+        SeedChatTurns(userId);
+        SeedChatTurns(otherUserId);
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
         await AssertRetiredLedgerAbsent();
@@ -96,6 +104,8 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Users.AnyAsync(u => u.Id == userId)).Should().BeFalse();
         (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();
         (await _dbContext.ProcessedRequests.AnyAsync(r => r.UserId == userId)).Should().BeFalse();
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == userId)).Should().Be(0);
+        (await _dbContext.ChatTurns.CountAsync(turn => turn.UserId == otherUserId)).Should().Be(2);
         (await _dbContext.ProactiveItems.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
         (await _dbContext.ProactiveCalendarDays.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
         (await _dbContext.Users.AnyAsync(u => u.Id == otherUserId)).Should().BeTrue();
@@ -258,6 +268,14 @@ public class AccountDeletionServiceDbTests : IDisposable
         (await _dbContext.Database.SqlQueryRaw<int>(
             "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type = 'table' AND name = 'SentProactiveCheckins'")
             .SingleAsync()).Should().Be(0);
+    }
+
+    private void SeedChatTurns(Guid userId)
+    {
+        var replay = ChatTurn.Create(userId, new string('A', 64), new string('B', 64), DateTime.UtcNow.AddMinutes(4));
+        replay.Complete(ChatStreamEvent.Final(new ChatResponse("Private response", [])).ToJson());
+        _dbContext.ChatTurns.AddRange(replay,
+            ChatTurn.Create(userId, new string('C', 64), new string('D', 64), DateTime.UtcNow.AddMinutes(4)));
     }
 
     private void SeedProactiveData(Guid userId)
