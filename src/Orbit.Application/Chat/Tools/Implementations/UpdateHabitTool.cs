@@ -13,8 +13,11 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateHabitTool(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    IMediator mediator) : IAiTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) =>
+        !arguments.TryGetProperty(ToolArgumentNames.GoalIds, out _);
+
     public string Name => "update_habit";
 
     public string Description =>

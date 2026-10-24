@@ -114,7 +114,7 @@ public class PendingAgentOperationStore(
             .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
                 && item.ExpiresAtUtc > checkedAtUtc && item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion)
             .OrderByDescending(item => item.CreatedAtUtc).ToList();
-        var members = pending.Where(item => item.OperationId == Orbit.Application.Chat.AccountChangeSet.OperationId)
+        var members = pending.Where(item => item.OperationId == Orbit.Application.Chat.AccountChangeSet.OperationName)
             .SelectMany(item => Orbit.Application.Chat.AccountChangeSet.Reservations(ParseArguments(item.ArgumentsJson)))
             .Select(member => member.PendingOperationId).ToHashSet();
         return pending.Where(item => !members.Contains(item.Id)).Select(item => new PendingAgentOperationExecution(
@@ -223,7 +223,7 @@ public class PendingAgentOperationStore(
             || HasChangeSetOwner(userId, pendingOperationId)
             || !entity.Cancel(cancelledAtUtc))
             return false;
-        if (entity.OperationId == AccountChangeSet.OperationId)
+        if (entity.OperationId == AccountChangeSet.OperationName)
             CancelChangeSetMembers(entity, cancelledAtUtc);
         try
         {
@@ -241,7 +241,7 @@ public class PendingAgentOperationStore(
     {
         var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
         return dbContext.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId
-                && item.OperationId == AccountChangeSet.OperationId && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc)
+                && item.OperationId == AccountChangeSet.OperationName && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc)
             .Select(item => item.ArgumentsJson).AsEnumerable()
             .Any(json => AccountChangeSet.Reservations(ParseArguments(json)).Any(member => member.PendingOperationId == pendingOperationId));
     }

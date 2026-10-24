@@ -91,7 +91,8 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
                 _userStreakService, Substitute.For<IGoalCompletionService>()),
             emojiTool,
             updateTool,
-            bulkUpdateTool
+            bulkUpdateTool,
+            new SendSupportRequestTool(_mediator)
         ]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
             _toolRegistry);
@@ -246,7 +247,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         if (reason == "previous_turn") combined.Id.Should().Be(bulk.Id);
         else
         {
-            _pendingOperationStore.GetExecution(_userId, combined.Id)!.OperationId.Should().Be(Orbit.Application.Chat.AccountChangeSet.OperationId);
+            _pendingOperationStore.GetExecution(_userId, combined.Id)!.OperationId.Should().Be(Orbit.Application.Chat.AccountChangeSet.OperationName);
             var members = Orbit.Application.Chat.AccountChangeSet.Read(_pendingOperationStore.GetExecution(_userId, combined.Id)!.Arguments)!;
             members.Select(member => member.PendingOperationId).Should().BeEquivalentTo([single.Id, bulk.Id]);
             combined.Items.Should().HaveCount(single.Items!.Count + bulk.Items!.Count);

@@ -496,21 +496,7 @@ public class HabitToolsTests
         _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
         var tool = new UpdateHabitTool(repository, _userDateService, _mediator);
-        var catalog = new AgentCatalogService([tool]);
-        var policy = Substitute.For<IAgentPolicyEvaluator>();
-        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(
-            AgentPolicyDecisionStatus.Allowed, catalog.GetCapabilityByChatTool(tool.Name)!));
-        var ownership = Substitute.For<IAgentTargetOwnershipService>();
-        ownership.GetDenialReasonAsync(
-            Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
-            .Returns((string?)null);
-        var stepUp = Substitute.For<IAgentStepUpAuthorizationBridge>();
-        stepUp.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((AgentConfirmationRequirement?)null);
-        var executor = new AgentOperationExecutor(
-            catalog, policy, Substitute.For<IAgentAuditService>(), ownership, stepUp,
-            new AiToolRegistry([tool]), Substitute.For<IPendingOperationChangePreviewer>(),
-            Substitute.For<IPendingAgentOperationStore>(), unitOfWork, NullLogger<AgentOperationExecutor>.Instance);
+        var executor = SharedToolExecution.Create(tool, unitOfWork);
         var tools = new HabitTools(_mediator, _userDateService, new McpExecutorBridge(executor));
 
         var result = await tools.UpdateHabit(_user, habit.Id.ToString(), "Read daily");

@@ -155,14 +155,15 @@ public partial class ProcessUserChatCommandHandler
         HasPendingWritePreview(results) && !HasResolutionQuestion(results) && !results.HasBudgetRecovery;
 
     private static ResponseCards ApplyBudgetRecovery(ResponseCards cards, ToolExecutionAccumulator results,
-        AiResponse response, ProcessUserChatCommand request) => !results.HasBudgetRecovery ? cards : cards with
-        {
-            AiMessage = response.TextMessage,
-            ServerComposedText = true,
-            Parts = request.ClientContext?.SupportsParts == true
-                ? (cards.Parts ?? []).Where(part => part is not ChatTextPart)
-                    .Append<ChatResponsePart>(new ChatTextPart(response.TextMessage!)).ToArray() : cards.Parts
-        };
+        AiResponse response, ProcessUserChatCommand request)
+    {
+        if (!results.HasBudgetRecovery) return cards;
+        var parts = cards.Parts;
+        if (request.ClientContext?.SupportsParts == true)
+            parts = (parts ?? []).Where(part => part is not ChatTextPart)
+                .Append<ChatResponsePart>(new ChatTextPart(response.TextMessage!)).ToArray();
+        return cards with { AiMessage = response.TextMessage, ServerComposedText = true, Parts = parts };
+    }
 
     private sealed class CompositionParts
     {
@@ -299,8 +300,7 @@ public partial class ProcessUserChatCommandHandler
         List<QueryReadBlock> candidates, CompositionParts built, bool missingProjection, bool hasOutcome)
     {
         var blocks = built.Parts.OfType<ChatBlockPart>().ToArray();
-        var family = results.AskBlock is not null ? "clarification" : hasOutcome ? "write"
-            : candidates.FirstOrDefault()?.Kind ?? (results.LastSuccessfulOperation("get_habit_ranking") is not null ? "ranking" : "text");
+        var family = CompositionFamily(results, candidates, hasOutcome);
         AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,
             context.User?.Plan.ToString(), "astra_answer_composed", new Dictionary<string, object>
             {
@@ -311,6 +311,14 @@ public partial class ProcessUserChatCommandHandler
                 ["build_failure"] = built.BuildFailure || missingProjection,
                 ["duplicate_suppression"] = built.Duplicates
             });
+    }
+
+    private static string CompositionFamily(ToolExecutionAccumulator results, List<QueryReadBlock> candidates, bool hasOutcome)
+    {
+        if (results.AskBlock is not null) return "clarification";
+        if (hasOutcome) return "write";
+        if (candidates.FirstOrDefault() is { } candidate) return candidate.Kind;
+        return results.LastSuccessfulOperation("get_habit_ranking") is not null ? "ranking" : "text";
     }
 
     private static string? JoinPartText(IEnumerable<ChatResponsePart> parts)

@@ -1,3 +1,4 @@
+using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using MediatR;
 using System.Text.Json.Nodes;
@@ -34,7 +35,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
 
         var title = titleEl.GetString() ?? string.Empty;
         var fieldError = BulkHabitToolArguments.CheckCreateHabitFields(args);
-        if (fieldError is null && args.TryGetProperty("sub_habits", out var subFields) && subFields.ValueKind == JsonValueKind.Array)
+        if (fieldError is null && args.TryGetProperty(SubHabits, out var subFields) && subFields.ValueKind == JsonValueKind.Array)
             fieldError = subFields.EnumerateArray().Select(BulkHabitToolArguments.CheckHabitFields).FirstOrDefault(error => error is not null);
         if (fieldError is not null)
             return new ToolResult(false, Error: fieldError);
@@ -51,7 +52,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return Domain.Common.Result.Failure("title is required.");
 
-        var subHabits = args.TryGetProperty("sub_habits", out var subEl) && subEl.ValueKind == JsonValueKind.Array
+        var subHabits = args.TryGetProperty(SubHabits, out var subEl) && subEl.ValueKind == JsonValueKind.Array
             ? subEl.EnumerateArray().ToList()
             : [];
         var fieldError = BulkHabitToolArguments.CheckCreateHabitFields(args)
@@ -75,7 +76,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             return null;
         var node = JsonNode.Parse(args.GetRawText())!.AsObject();
         NormalizeMinuteTimes(node);
-        if (node["sub_habits"] is JsonArray childNodes)
+        if (node[SubHabits] is JsonArray childNodes)
             foreach (var child in childNodes.OfType<JsonObject>())
                 NormalizeMinuteTimes(child);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
@@ -87,12 +88,12 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var creation = BuildCreationIntent(normalized, userId, today);
         if (creation is null)
             return null;
-        node["due_date"] = creation.Definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        if (node["sub_habits"] is JsonArray nodes)
+        node[DueDate] = creation.Definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (node[SubHabits] is JsonArray nodes)
             foreach (var (child, intent) in nodes.OfType<JsonObject>().Zip(creation.Children))
             {
                 var definition = intent.Definition;
-                child["due_date"] = definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                child[DueDate] = definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 child["frequency_unit"] = definition.FrequencyUnit?.ToString() ?? "OneTime";
                 if (definition.FrequencyQuantity is { } quantity)
                     child["frequency_quantity"] = quantity;
@@ -120,7 +121,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         if (parent.IsFailure)
             return null;
         var children = new List<HabitCreationIntent>();
-        if (args.TryGetProperty("sub_habits", out var nodes))
+        if (args.TryGetProperty(SubHabits, out var nodes))
             foreach (var sub in nodes.EnumerateArray())
             {
                 var definition = BuildChildParameters(sub, userId, parent.Value, parent.Value.NextDueDate);
@@ -150,7 +151,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             RelativeReminders = definition.RelativeReminders is { } relative ? PreparedToolIntent.Values(relative) : null
         },
         PreparedToolIntent.Values(JsonArgumentParser.ParseStringArray(args, "tag_names") ?? []),
-        PreparedToolIntent.Values(JsonArgumentParser.ParseGuidArray(args, "goal_ids") ?? []),
+        PreparedToolIntent.Values(JsonArgumentParser.ParseGuidArray(args, GoalIds) ?? []),
         PreparedToolIntent.Values(children));
 
     private sealed record HabitCreationIntent(HabitCreateParams Definition,
@@ -172,7 +173,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var frequencyUnit = parsedFrequency.Value;
         int? frequencyQuantity = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
             ?? (frequencyUnit is not null ? 1 : null);
-        var dueDate = JsonArgumentParser.ParseDateOnly(args, "due_date");
+        var dueDate = JsonArgumentParser.ParseDateOnly(args, DueDate);
         var days = JsonArgumentParser.ParseDays(args);
         var intervalWeeks = JsonArgumentParser.GetOptionalInt(args, "interval_weeks");
         var isFlexible = JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false;
@@ -191,7 +192,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
 
         return Domain.Common.Result.Success(new HabitCreateParams(
             userId, title, frequencyUnit, frequencyQuantity,
-            HabitScheduleService.InitialDueDate(today, dueDate, JsonArgumentParser.ParseDateOnly(args, "start_date"), days),
+            HabitScheduleService.InitialDueDate(today, dueDate, JsonArgumentParser.ParseDateOnly(args, StartDate), days),
             JsonArgumentParser.GetOptionalString(args, "description"),
             Days: days,
             IsBadHabit: isBadHabit,
@@ -208,7 +209,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             IntervalWeeks: intervalWeeks,
             IsGeneral: JsonArgumentParser.GetOptionalBool(args, "is_general") ?? false,
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
-            StartDate: JsonArgumentParser.ParseDateOnly(args, "start_date")));
+            StartDate: JsonArgumentParser.ParseDateOnly(args, StartDate)));
     }
 
     private static Domain.Common.Result<List<Habit>> BuildChildHabits(
@@ -244,7 +245,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var subFrequencyQuantity = JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity");
         var subIntervalWeeks = JsonArgumentParser.GetOptionalInt(sub, "interval_weeks");
         var subDays = JsonArgumentParser.ParseDays(sub);
-        var subDueDate = JsonArgumentParser.ParseDateOnly(sub, "due_date");
+        var subDueDate = JsonArgumentParser.ParseDateOnly(sub, DueDate);
         var isOneTime = JsonArgumentParser.GetOptionalString(sub, "frequency_unit") == "OneTime";
         var hasExplicitCadence = isOneTime || subFrequencyUnit is not null
             || subFrequencyQuantity is not null
@@ -314,7 +315,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
 
     private static NeedsClarificationPayload BuildFrequencyClarification(JsonElement args)
     {
-        var dueDate = JsonArgumentParser.GetOptionalString(args, "due_date");
+        var dueDate = JsonArgumentParser.GetOptionalString(args, DueDate);
         var oneTimePatch = dueDate is null
             ? """{"frequency_unit":"OneTime"}"""
             : JsonSerializer.Serialize(new { frequency_unit = "OneTime", due_date = dueDate });

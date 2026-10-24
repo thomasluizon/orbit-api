@@ -31,6 +31,10 @@ internal static class SharedToolExecution
 
     internal static AgentOperationExecutor Create(IAiTool tool, IUnitOfWork unitOfWork)
     {
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(0)(call.ArgAt<CancellationToken>(1)));
+        unitOfWork.ExecuteInSavepointAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(0)(call.ArgAt<CancellationToken>(1)));
         var catalog = new AgentCatalogService([tool]);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(new AgentPolicyDecision(

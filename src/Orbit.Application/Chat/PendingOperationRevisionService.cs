@@ -1,3 +1,4 @@
+using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentValidation;
@@ -72,7 +73,7 @@ public sealed partial class PendingOperationRevisionService(
         if (execution.RequiresReproposal)
             return Failure("pending_operation_schema_changed");
 
-        if (execution.OperationId == AccountChangeSet.OperationId)
+        if (execution.OperationId == AccountChangeSet.OperationName)
             return await ReviseChangeSetAsync(userId, execution, request, cancellationToken);
 
         var originalResult = await previewer.PreviewAsync(userId, execution.OperationId,
@@ -114,7 +115,7 @@ public sealed partial class PendingOperationRevisionService(
         var revisedPreview = revisedPreviewResult.Value;
         if (revisedPreview?.Items is null || revisedPreview.Items.Count != request.Items.Count
             || revisedPreview.Items.Any(item => !offered.TryGetValue(item.ItemId, out var previous)
-                || execution.OperationId != "bulk_create_habits"
+                || execution.OperationId != BulkCreateHabits
                     && item.StateFingerprint != previous.StateFingerprint))
             return Failure("stale_preview");
 
@@ -178,7 +179,7 @@ public sealed partial class PendingOperationRevisionService(
     {
         if (execution.RequiresReproposal)
             return "pending_operation_schema_changed";
-        if (execution.OperationId is not ("bulk_create_habits" or AccountChangeSet.OperationId))
+        if (execution.OperationId is not (BulkCreateHabits or AccountChangeSet.OperationName))
             return null;
 
         var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
@@ -204,8 +205,8 @@ public sealed partial class PendingOperationRevisionService(
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
         if (edits.Count == 0)
             return true;
-        if (operationId == "bulk_create_habits")
-            edits = edits.Where(edit => edit.Name != "parent_habit_id").ToList();
+        if (operationId == BulkCreateHabits)
+            edits = edits.Where(edit => edit.Name != ParentHabitId).ToList();
         if (edits.Any(edit => edit.Value.ValueKind == JsonValueKind.Null
             && !OptionalToolArguments.ClearableFields(operationId).Contains(edit.Name)))
             return false;
@@ -213,7 +214,7 @@ public sealed partial class PendingOperationRevisionService(
         if (tool is null)
             return false;
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
-        if (operationId == "bulk_create_habits")
+        if (operationId == BulkCreateHabits)
         {
             var itemSchema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
             return edits.All(edit => AgentArgumentSchema.Accepts(itemSchema, edit.Name, edit.Value))
@@ -248,7 +249,7 @@ public sealed partial class PendingOperationRevisionService(
         IReadOnlyList<RevisedPendingOperationItem> selected,
         IReadOnlyDictionary<string, PendingOperationItem> offered)
     {
-        if (operationId == "bulk_create_habits")
+        if (operationId == BulkCreateHabits)
             return BuildCreateArguments(root, selected);
         if (operationId is "bulk_update_habits" or "bulk_reschedule_habits")
             return BuildUpdatedHabitArguments(root, operationId, selected);
@@ -337,25 +338,25 @@ public sealed partial class PendingOperationRevisionService(
             if (habit is null)
                 return false;
             var copy = (JsonObject)habit.DeepClone();
-            if (!copy.ContainsKey("parent_habit_id") && root["parent_habit_id"] is { } sharedParent)
-                copy["parent_habit_id"] = sharedParent.DeepClone();
+            if (!copy.ContainsKey(ParentHabitId) && root[ParentHabitId] is { } sharedParent)
+                copy[ParentHabitId] = sharedParent.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
-                && edits.TryGetProperty("parent_habit_id", out var parent))
+                && edits.TryGetProperty(ParentHabitId, out var parent))
             {
                 copy.Remove(HabitHeadingParents.CandidateIdsField);
                 copy.Remove(HabitHeadingParents.SuggestedParentField);
                 if (parent.ValueKind == JsonValueKind.Null)
-                    copy.Remove("parent_habit_id");
+                    copy.Remove(ParentHabitId);
             }
-            if (item.Edits is { ValueKind: JsonValueKind.Object } changed && changed.TryGetProperty("habit_id", out _))
+            if (item.Edits is { ValueKind: JsonValueKind.Object } changed && changed.TryGetProperty(HabitId, out _))
                 copy.Remove(HabitHeadingParents.ExistingCandidatesField);
             copy["preview_item_id"] = item.ItemId;
             revisedHabits.Add(copy);
         }
         root["habits"] = revisedHabits;
-        root.Remove("parent_habit_id");
+        root.Remove(ParentHabitId);
         return true;
     }
 
@@ -363,7 +364,7 @@ public sealed partial class PendingOperationRevisionService(
         IReadOnlyList<RevisedPendingOperationItem> selected)
     {
         var updates = operationId == "bulk_reschedule_habits"
-            ? new JsonObject { ["due_date"] = root["due_date"]?.DeepClone() }
+            ? new JsonObject { [DueDate] = root[DueDate]?.DeepClone() }
             : root["updates"]?.DeepClone() as JsonObject;
         if (updates is null)
             return false;
@@ -372,13 +373,13 @@ public sealed partial class PendingOperationRevisionService(
         {
             var previous = root["revised_items"] as JsonArray;
             var previousUpdates = previous?.OfType<JsonObject>().FirstOrDefault(candidate =>
-                candidate["habit_id"]?.ToString() == item.ItemId)?["updates"] as JsonObject;
+                candidate[HabitId]?.ToString() == item.ItemId)?["updates"] as JsonObject;
             var copy = (JsonObject)(previousUpdates ?? updates).DeepClone();
             if (!ApplyEdits(copy, item.Edits, "bulk_update_habits"))
                 return false;
             items.Add(new JsonObject
             {
-                ["habit_id"] = item.ItemId,
+                [HabitId] = item.ItemId,
                 ["updates"] = copy
             });
         }
@@ -414,7 +415,7 @@ public sealed partial class PendingOperationRevisionService(
             var targetId = offered[item.ItemId].EntityId?.ToString();
             if (targetId is null)
                 return false;
-            var revisedItem = new JsonObject { ["habit_id"] = targetId, ["date"] = date };
+            var revisedItem = new JsonObject { [HabitId] = targetId, ["date"] = date };
             if (item.ItemId != targetId)
                 revisedItem["preview_item_id"] = item.ItemId;
             items.Add(revisedItem);
@@ -432,10 +433,10 @@ public sealed partial class PendingOperationRevisionService(
         var items = new JsonArray();
         foreach (var item in selected)
         {
-            var target = new JsonObject { ["habit_id"] = item.ItemId };
+            var target = new JsonObject { [HabitId] = item.ItemId };
             var previous = root["revised_items"] as JsonArray;
             var previousEmoji = previous?.OfType<JsonObject>().FirstOrDefault(candidate =>
-                candidate["habit_id"]?.ToString() == item.ItemId);
+                candidate[HabitId]?.ToString() == item.ItemId);
             if (previousEmoji?.ContainsKey("emoji") == true)
                 target["emoji"] = previousEmoji["emoji"]?.DeepClone();
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits

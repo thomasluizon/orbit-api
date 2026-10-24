@@ -58,7 +58,7 @@ public partial class AgentCatalogService
                     CloneJson(tool.GetParameterSchema()),
                     responseSchema);
             })
-            .Append(new AgentOperation(AccountChangeSet.OperationId, "Account changes", "Apply the approved account changes.",
+            .Append(new AgentOperation(AccountChangeSet.OperationName, "Account changes", "Apply the approved account changes.",
                 AccountChangeSet.CapabilityId, AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, true, true,
                 CloneJson(new { type = SchemaObject }), responseSchema))
             .Concat(BuildDirectFlowOperations())

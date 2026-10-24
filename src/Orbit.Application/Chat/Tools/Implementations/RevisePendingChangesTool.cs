@@ -12,21 +12,21 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
     public string Description => "Correct an existing pending preview. Keep every unchanged field and item. Only explicitly removed item IDs are removed. This revises a proposal and never applies account changes.";
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            pending_operation_id = new { type = "string" },
+            pending_operation_id = new { type = JsonSchemaTypes.String },
             items = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 items = new
                 {
-                    type = "object",
-                    properties = new { item_id = new { type = "string" }, edits_json = new { type = "string", description = "JSON object containing only the changed fields, in the existing preview field names and types." } },
+                    type = JsonSchemaTypes.Object,
+                    properties = new { item_id = new { type = JsonSchemaTypes.String }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the changed fields, in the existing preview field names and types." } },
                     required = new[] { "item_id", "edits_json" }
                 }
             },
-            remove_item_ids = new { type = "array", items = new { type = "string" } }
+            remove_item_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } }
         },
         required = new[] { "pending_operation_id", "items" }
     };

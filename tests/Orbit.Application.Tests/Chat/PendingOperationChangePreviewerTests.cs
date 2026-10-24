@@ -201,7 +201,7 @@ public sealed class PendingOperationChangePreviewerTests
     public async Task RoundThree_CreateChildren_ShowsParentInEveryItemAndOnceInChanges()
     {
         var parent = CreateHabit("Academia", null);
-        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { parent });
+        Setup([parent]);
         var preview = await Preview("bulk_create_habits", JsonSerializer.Serialize(new
         {
             parent_habit_id = parent.Id,

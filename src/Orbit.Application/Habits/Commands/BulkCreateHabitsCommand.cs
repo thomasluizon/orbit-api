@@ -2,6 +2,7 @@ using MediatR;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -109,6 +110,10 @@ public class BulkCreateHabitsCommandHandler(
         if (habitGate.IsFailure)
             return habitGate.PropagateError<BulkCreateResult>();
 
+        var featureGate = await CheckCreationGatesAsync(request, userToday, cancellationToken);
+        if (featureGate.IsFailure)
+            return featureGate.PropagateError<BulkCreateResult>();
+
         var results = new List<BulkCreateItemResult>();
 
         var existingRoots = await repos.Habits.FindAsync(
@@ -166,6 +171,24 @@ public class BulkCreateHabitsCommandHandler(
         }
 
         return Result.Success(new BulkCreateResult(results));
+    }
+
+    private async Task<Result> CheckCreationGatesAsync(
+        BulkCreateHabitsCommand request, DateOnly today, CancellationToken ct)
+    {
+        foreach (var item in request.Habits)
+        {
+            var subtree = BulkHabitSubtree.Build(request.UserId, item, today, 0, int.MaxValue, ct, out _);
+            if (subtree.IsFailure)
+                continue;
+            foreach (var node in subtree.Value)
+            {
+                var gate = await HabitCreationGates.CheckAsync(node.Habit, payGate, ct);
+                if (gate.IsFailure)
+                    return gate;
+            }
+        }
+        return Result.Success();
     }
 
     internal static async Task<Result> CheckArgumentsAsync(

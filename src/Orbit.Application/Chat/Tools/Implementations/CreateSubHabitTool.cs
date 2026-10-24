@@ -8,6 +8,9 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class CreateSubHabitTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) =>
+        arguments.TryGetProperty(ToolArgumentNames.ParentHabitId, out _) && !BulkCreateHabitsTool.HasGoalLinks(arguments);
+
     public string Name => "create_sub_habit";
     public int Order => 1;
     public string Description => "Create a sub-habit under an existing parent with the complete habit fields, checklist, tags, goals and nested children. " + HabitModelInstructions.All;

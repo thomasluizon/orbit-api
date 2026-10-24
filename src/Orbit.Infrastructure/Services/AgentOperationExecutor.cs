@@ -303,7 +303,7 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            if (tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationId)
+            if (tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationName)
                 return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
             return unitOfWork.HasActiveTransaction
                 ? await unitOfWork.ExecuteInSavepointAsync(
@@ -369,7 +369,7 @@ public partial class AgentOperationExecutor(
         }
 
         IReadOnlyList<OperationExecutionContext>? changeSetMembers = null;
-        if (execution.Operation.Id == AccountChangeSet.OperationId)
+        if (execution.Operation.Id == AccountChangeSet.OperationName)
         {
             var prepared = await PrepareChangeSetAsync(execution, cancellationToken);
             if (prepared.Error is { } error)

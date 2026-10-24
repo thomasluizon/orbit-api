@@ -7,13 +7,13 @@ namespace Orbit.Application.Chat;
 
 public static class AccountChangeSet
 {
-    public const string OperationId = "apply_account_changes";
+    public const string OperationName = "apply_account_changes";
     public const string CapabilityId = "chat.changes";
 
     public sealed record Member(Guid PendingOperationId, string OperationId, JsonElement Arguments, string PreviewFingerprint, string? SourceFingerprint = null);
     public sealed record Reservation(Guid PendingOperationId, string Fingerprint);
 
-    public static JsonElement Arguments(IEnumerable<PendingAgentOperationExecution> operations)
+    public static JsonElement BuildArguments(IEnumerable<PendingAgentOperationExecution> operations)
     {
         var members = operations.Select(operation => new Member(operation.PendingOperationId,
             operation.OperationId, operation.Arguments, operation.PreviewFingerprint!,
@@ -42,7 +42,7 @@ public static class AccountChangeSet
         {
             var members = values.Deserialize<List<Member>>();
             return members is not null && members.All(member => member.PendingOperationId != Guid.Empty
-                && !string.IsNullOrWhiteSpace(member.OperationId) && member.OperationId != OperationId
+                && !string.IsNullOrWhiteSpace(member.OperationId) && member.OperationId != OperationName
                 && member.Arguments.ValueKind == JsonValueKind.Object && !string.IsNullOrWhiteSpace(member.PreviewFingerprint))
                 && members.DistinctBy(member => member.PendingOperationId).Count() == members.Count ? members : null;
         }
@@ -65,7 +65,7 @@ public static class AccountChangeSet
             if (result.IsFailure || result.Value?.Items is not { Count: > 0 } children) return null;
             items.AddRange(children.Select(item => item with { ItemId = $"{index}/{item.ItemId}" }));
         }
-        var fingerprint = AgentOperationFingerprint.Compute(OperationId,
+        var fingerprint = AgentOperationFingerprint.Compute(OperationName,
             arguments.GetRawText() + JsonSerializer.Serialize(items));
         return new PendingOperationChangePreview(items.SelectMany(item => item.Fields).ToArray(), items.Count, items, fingerprint);
     }

@@ -1,3 +1,4 @@
+using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -18,6 +19,23 @@ public partial class ProcessUserChatCommandHandler
         if (headings.Count == 0 || headings.Any(heading => heading.Candidates.Count == 0)
             || !request.Message.TrimStart().StartsWith(headings[0].Name, StringComparison.OrdinalIgnoreCase))
             return null;
+        var items = ExplicitHeadingItems(headings);
+        if (items is null || HasActionableHeadingCall(response, headings)) return null;
+        var arguments = JsonSerializer.SerializeToElement(new JsonObject { ["habits"] = items });
+        var held = await DispatchToolCallAsync(new(BulkCreateHabits, Guid.NewGuid().ToString(), arguments),
+            request, execution.OperationExecutor, null, ct);
+        return held.PendingOperation is { } pending
+            ? Result.Success(PendingParentReply(request, pending))
+            : Result.Failure<ChatResponse>(held.Operation.PolicyReason ?? "preview_unavailable", held.Operation.ErrorCode ?? "preview_unavailable");
+    }
+
+    private static bool HasActionableHeadingCall(Result<AiResponse> response, IReadOnlyList<HabitHeadingParents.Heading> headings) =>
+        response.IsSuccess && response.Value.HasToolCalls && response.Value.ToolCalls!.Any(call =>
+            call.Name != "create_habit" || call.Args.TryGetProperty("title", out var title)
+                && headings.All(heading => HabitNameMatcher.Normalize(heading.Name) != HabitNameMatcher.Normalize(title.ToString())));
+
+    private static JsonArray? ExplicitHeadingItems(IReadOnlyList<HabitHeadingParents.Heading> headings)
+    {
         var items = new JsonArray();
         foreach (var heading in headings)
         {
@@ -33,18 +51,7 @@ public partial class ProcessUserChatCommandHandler
             HabitHeadingParents.Bind(item, heading, removeInventedDescription: false);
             items.Add(item);
         }
-        if (response.IsSuccess && response.Value.HasToolCalls
-            && response.Value.ToolCalls!.Any(call => call.Name is "bulk_create_habits" or "create_sub_habit"
-                || call.Name is not ("create_habit" or "bulk_create_habits" or "create_sub_habit")
-                || call.Name == "create_habit" && call.Args.TryGetProperty("title", out var title)
-                    && headings.All(heading => HabitNameMatcher.Normalize(heading.Name) != HabitNameMatcher.Normalize(title.ToString()))))
-            return null;
-        var arguments = JsonSerializer.SerializeToElement(new JsonObject { ["habits"] = items });
-        var held = await DispatchToolCallAsync(new("bulk_create_habits", Guid.NewGuid().ToString(), arguments),
-            request, execution.OperationExecutor, null, ct);
-        return held.PendingOperation is { } pending
-            ? Result.Success(PendingParentReply(request, pending))
-            : Result.Failure<ChatResponse>(held.Operation.PolicyReason ?? "preview_unavailable", held.Operation.ErrorCode ?? "preview_unavailable");
+        return items;
     }
 
     [GeneratedRegex(@"^\s*(?<title>[^()\r\n]+?)\s*\((?<frequency>once a week|weekly|uma vez por semana|semanalmente|everyday|every day|daily|todo dia|todos os dias|diariamente)\)\s*[.;]?\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

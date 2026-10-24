@@ -1,3 +1,4 @@
+using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Habits.Commands;
@@ -22,7 +23,7 @@ internal static class BulkHabitToolArguments
         foreach (var value in values.EnumerateArray())
         {
             if (value.ValueKind != JsonValueKind.Object
-                || !value.TryGetProperty("habit_id", out var idValue)
+                || !value.TryGetProperty(HabitId, out var idValue)
                 || idValue.ValueKind != JsonValueKind.String
                 || !Guid.TryParse(idValue.GetString(), out var id)
                 || !value.TryGetProperty("date", out var dateValue)
@@ -125,11 +126,11 @@ internal static class BulkHabitToolArguments
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
-            "days", "due_date", "start_date", "end_date", "due_time", DueEndTimeField, "is_bad_habit", "is_flexible",
+            "days", DueDate, StartDate, "end_date", "due_time", DueEndTimeField, "is_bad_habit", "is_flexible",
             IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
             "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields"
         };
-        if (allowHabitId) allowed.Add("habit_id");
+        if (allowHabitId) allowed.Add(HabitId);
         if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "updates contains an unsupported field.");
         var rawError = CheckHabitFields(updates);
@@ -144,7 +145,7 @@ internal static class BulkHabitToolArguments
         if (fieldError is not null)
             return (null, fieldError);
 
-        var dateResult = ParseNullableDate(updates, "due_date", allowNull: false);
+        var dateResult = ParseNullableDate(updates, DueDate, allowNull: false);
         var endDateResult = ParseNullableDate(updates, "end_date", allowNull: true);
         var timeResult = ParseNullableTime(updates, "due_time");
         var frequencyResult = ParseFrequency(updates);
@@ -190,8 +191,8 @@ internal static class BulkHabitToolArguments
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(updates, SlipAlertEnabledField) ?? false,
             HasRelativeReminders: updates.TryGetProperty(RelativeRemindersField, out _),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(updates),
-            HasStartDate: updates.TryGetProperty("start_date", out _),
-            StartDate: JsonArgumentParser.ParseDateOnly(updates, "start_date"));
+            HasStartDate: updates.TryGetProperty(StartDate, out _),
+            StartDate: JsonArgumentParser.ParseDateOnly(updates, StartDate));
 
         return (changes, null);
     }
@@ -204,8 +205,8 @@ internal static class BulkHabitToolArguments
     public static string? CheckHabitFields(JsonElement fields)
     {
         return ValidateUpdateKinds(fields)
-            ?? ParseNullableDate(fields, "due_date", allowNull: false).Error
-            ?? ParseNullableDate(fields, "start_date", allowNull: false).Error
+            ?? ParseNullableDate(fields, DueDate, allowNull: false).Error
+            ?? ParseNullableDate(fields, StartDate, allowNull: false).Error
             ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
             ?? ParseNullableTime(fields, "due_time").Error
             ?? ParseNullableTime(fields, DueEndTimeField).Error

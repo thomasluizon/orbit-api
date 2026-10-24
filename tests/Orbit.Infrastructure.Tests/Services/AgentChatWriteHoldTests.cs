@@ -134,7 +134,7 @@ public class AgentChatWriteHoldTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt));
 
-        if (operationId == AccountChangeSet.OperationId)
+        if (operationId == AccountChangeSet.OperationName)
         {
             response.Operation.Status.Should().Be(AgentOperationStatus.Denied);
             response.Operation.PolicyReason.Should().Be("invalid_change_set");
