@@ -13,11 +13,11 @@ public partial class AgentCatalogService : IAgentCatalogService
     private const string UnknownContextValue = "unknown";
 
     private readonly IReadOnlyList<AgentCapability> _capabilities;
-    private readonly IReadOnlyList<AgentOperation> _operations;
+    private readonly Lazy<IReadOnlyList<AgentOperation>> _operations;
     private readonly IReadOnlyList<AppSurface> _surfaces;
     private readonly IReadOnlyList<UserDataCatalogEntry> _userDataCatalog;
     private readonly Dictionary<string, AgentCapability> _capabilitiesById;
-    private readonly Dictionary<string, AgentOperation> _operationsById;
+    private readonly Lazy<Dictionary<string, AgentOperation>> _operationsById;
     private readonly Dictionary<string, AgentCapability> _capabilitiesByChatTool;
     private readonly Dictionary<string, AgentCapability> _capabilitiesByMcpTool;
     private readonly HashSet<string> _equivalentControllerActions;
@@ -32,8 +32,9 @@ public partial class AgentCatalogService : IAgentCatalogService
         _capabilitiesByMcpTool = _capabilities
             .SelectMany(capability => (capability.McpToolNames ?? []).Select(toolName => (toolName, capability)))
             .ToDictionary(item => item.toolName, item => item.capability, StringComparer.OrdinalIgnoreCase);
-        _operations = BuildOperations(tools ?? []);
-        _operationsById = _operations.ToDictionary(operation => operation.Id, StringComparer.OrdinalIgnoreCase);
+        var catalogTools = tools?.ToArray() ?? [];
+        _operations = new(() => BuildOperations(catalogTools));
+        _operationsById = new(() => _operations.Value.ToDictionary(operation => operation.Id, StringComparer.OrdinalIgnoreCase));
         _surfaces = BuildSurfaces();
         _userDataCatalog = BuildUserDataCatalog();
         _equivalentControllerActions = _capabilities
@@ -43,7 +44,7 @@ public partial class AgentCatalogService : IAgentCatalogService
 
     public IReadOnlyList<AgentCapability> GetCapabilities() => _capabilities.Where(capability => capability.Id != FeatureFlagActions.CapabilityId).ToList();
 
-    public IReadOnlyList<AgentOperation> GetOperations() => _operations.Where(operation => operation.Id != FeatureFlagActions.ToolName).ToList();
+    public IReadOnlyList<AgentOperation> GetOperations() => _operations.Value.Where(operation => operation.Id != FeatureFlagActions.ToolName).ToList();
 
     public IReadOnlyList<AppSurface> GetSurfaces() => _surfaces;
 
@@ -53,7 +54,7 @@ public partial class AgentCatalogService : IAgentCatalogService
         => _capabilitiesById.GetValueOrDefault(capabilityId);
 
     public AgentOperation? GetOperation(string operationId)
-        => _operationsById.GetValueOrDefault(operationId);
+        => _operationsById.Value.GetValueOrDefault(operationId);
 
     public AgentCapability? GetCapabilityByChatTool(string toolName)
         => _capabilitiesByChatTool.GetValueOrDefault(toolName);
