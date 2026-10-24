@@ -31,6 +31,20 @@ Apply the uploads IAM policy before releasing the API code that uses it. In stag
 
 The Render provider reads `RENDER_API_KEY` from the environment. The Cloudflare provider reads `CLOUDFLARE_API_TOKEN` from the environment. The AWS provider uses the default credential chain in `us-east-2`. The main S3 state contains decrypted SecureString values, including the Turnstile and SES secrets, so access to that state and its lock file must stay restricted. The staging reseed role can access only the separate staging database state. The existing API is imported with its service ID; do not remove that import block or replace the service.
 
+## Free-service Terraform updates
+
+Render provider v1.9.1, pinned in `versions.tf`, always sends `MaintenanceMode` in
+the web service update body ([provider source, line 53](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/internal/update.go#L53)).
+Render rejects that field for free-plan services with
+"maintenance mode can only be configured for non-free tier services".
+Any targeted apply that updates `render_web_service.staging_api` or the free staging
+web service, `render_web_service.staging_web`, fails until upstream fixes
+[render-oss/terraform-provider-render#80](https://github.com/render-oss/terraform-provider-render/issues/80),
+even when the plan has no shutdown delay change. Change these services through the
+Render API or dashboard instead, and keep the Terraform values matching what the
+API or dashboard sets. Paid services, including the production API and web, are
+unaffected.
+
 ## Staging lifecycle
 
 The staging web app uses `https://app-staging.useorbit.org`. Keep `staging.useorbit.org` as a custom domain on `orbit-web-staging`; the web proxy redirects requests on that host permanently to the new host. The staging API CORS origins, its Google redirect URIs and the staging upload bucket CORS keep the old host beside the new one, so a tab still running the previous web build keeps working through the cutover. Add the new domain to the live Render service before applying the targeted Terraform changes, and confirm the plan has no update to `render_web_service.staging_web`. Update the `STAGING_NEXT_PUBLIC_SITE_URL` repository variable in `orbit-ui-mobile` to `https://app-staging.useorbit.org`, and add `https://app-staging.useorbit.org/auth-callback` to the Google OAuth web client's redirect URIs. Release the staging API and web from `redesign/main`, then verify the new health route, old-host redirect, email sign-in, and Google authorization.
