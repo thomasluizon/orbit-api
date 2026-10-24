@@ -127,19 +127,20 @@ public static partial class WebApplicationExtensions
     {
         app.Use(async (context, next) =>
         {
-            if (!IsMcpPostRequest(context))
+            if (!context.Request.Path.StartsWithSegments("/mcp"))
             {
                 await next();
                 return;
             }
 
-            await HandleMcpRequestAsync(context, next);
-        });
-    }
+            if (!await TryAuthenticateMcpRequestAsync(context))
+                return;
 
-    private static bool IsMcpPostRequest(HttpContext context)
-    {
-        return context.Request.Path.StartsWithSegments("/mcp") && HttpMethods.IsPost(context.Request.Method);
+            if (HttpMethods.IsPost(context.Request.Method))
+                await HandleMcpRequestAsync(context, next);
+            else
+                await next();
+        });
     }
 
     private static async Task HandleMcpRequestAsync(HttpContext context, Func<Task> next)
@@ -162,14 +163,11 @@ public static partial class WebApplicationExtensions
             return;
         }
 
-        if (IsMcpUnauthenticatedMethod(root))
+        if (IsMcpLifecycleMethod(root))
         {
             await next();
             return;
         }
-
-        if (!await TryAuthenticateMcpRequestAsync(context))
-            return;
 
         var isToolCall = TryGetMcpToolCall(
             root,
@@ -321,7 +319,7 @@ public static partial class WebApplicationExtensions
         }
 
         var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
-        var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
+        var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource/mcp";
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{resourceUrl}\"";
         return false;
@@ -511,7 +509,7 @@ public static partial class WebApplicationExtensions
         return options;
     }
 
-    internal static bool IsMcpUnauthenticatedMethod(JsonElement? root)
+    internal static bool IsMcpLifecycleMethod(JsonElement? root)
     {
         if (root is not { ValueKind: JsonValueKind.Object } element ||
             !element.TryGetProperty("method", out var methodProp) || methodProp.ValueKind != JsonValueKind.String)

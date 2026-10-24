@@ -11045,6 +11045,27 @@
         }
       }
     },
+    "/.well-known/oauth-protected-resource/mcp": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/oauth/authorize": {
       "get": {
         "tags": [
