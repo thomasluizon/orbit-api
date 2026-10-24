@@ -100,6 +100,6 @@ internal static partial class RoutineCreationProposal
     [GeneratedRegex(@"\d\s*(?:[:h]|am\b|pm\b)|\b(?:at|às|by|até)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex UnparsedTime();
 
-    [GeneratedRegex(@"[\r\n?;\""/]|\b(?:tomorrow|today|amanh[ãa]|hoje|once|weekly|weekends?|weeks?|days?|dias?|hours?|horas?|vezes|times|during|durante|only|apenas|s[oó]|until|before|after|semanas?|antes|depois|monday|tuesday|wednesday|thursday|friday|saturday|sunday|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|lembre|remind|reminder|tag|goal|meta|checklist|emoji|icon|[ií]cone|instead|rather|troque|mude|altere|replace|update|change|delete|remove)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"[\r\n?;\""/]|\d-\d|\b(?:on|em|from|entre|then|tomorrow|today|amanh[ãa]|hoje|once|weekly|weekends?|weeks?|days?|dias?|hours?|horas?|vezes|times|during|durante|only|apenas|s[oó]|until|before|after|semanas?|antes|depois|monday|tuesday|wednesday|thursday|friday|saturday|sunday|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|january|february|march|april|may|june|july|august|september|october|november|december|janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|lembre|remind|reminder|tag|goal|meta|checklist|emoji|icon|[ií]cone|instead|rather|troque|mude|altere|replace|update|change|delete|remove)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex UnsupportedDetails();
 }
