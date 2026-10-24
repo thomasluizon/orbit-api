@@ -97,5 +97,101 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, preview.Id)!;
+        var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == vitamin
+            && habit.ParentHabitId == parents[0].Id && habit.FrequencyUnit == FrequencyUnit.Week), Arg.Any<CancellationToken>());
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == statin
+            && habit.ParentHabitId == parents[1].Id && habit.FrequencyUnit == FrequencyUnit.Day), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task EmptyContinuation_OnlyCurrentHeldWorkSurvivesProviderFailure(bool unavailable, bool expired)
+    {
+        ParentAccount("en");
+        ScriptToolCall("""{"title":"Journal","frequency_unit":"Day"}""");
+        var error = unavailable ? ErrorMessages.AiUnavailable : ErrorMessages.AiNoOutput;
+        Guid pendingId = default;
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                var entity = _dbContext.PendingAgentOperations.Should().ContainSingle().Which;
+                pendingId = entity.Id;
+                if (expired)
+                {
+                    _dbContext.Entry(entity).Property(item => item.ExpiresAtUtc).CurrentValue = DateTime.UtcNow.AddMinutes(-1);
+                    _dbContext.SaveChanges();
+                }
+                return Result.Failure<AiResponse>(error);
+            });
+
+        var result = await CreateHandler().Handle(new(_userId, "Create a daily Journal habit"), default);
+
+        result.IsSuccess.Should().Be(!expired);
+        if (expired)
+            result.ErrorCode.Should().Be(error.Code);
+        else
+        {
+            result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pendingId);
+            result.Value.AiMessage.Should().BeNullOrEmpty();
+        }
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("AI_EMPTY_RESPONSE", "Review my routines")]
+    [InlineData("AI_UNAVAILABLE", "Post lunch: take vitamin D (once a week) Before bed: take rosuvastatin (everyday)")]
+    [InlineData("AI_DAILY_BUDGET_EXCEEDED", "Post lunch: take vitamin D (once a week) Before bed: take rosuvastatin (everyday)")]
+    public async Task EmptyContinuation_WithoutRecoverableWorkPreservesTypedFailure(string errorCode, string message)
+    {
+        ParentAccount("en");
+        ScriptToolCall("{}", "query_habits");
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(new AppError(errorCode, "Provider failure")));
+
+        var result = await CreateHandler().Handle(new(_userId, message), default);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(errorCode);
+        _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EmptyContinuation_MixedHeldWritesRemainOneAccountApproval()
+    {
+        var parents = ParentAccount("en");
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ToolCalls = [
+                    new("update_habit", "edit", JsonSerializer.SerializeToElement(new { habit_id = parents[0].Id, title = "After Lunch" })),
+                    new("create_sub_habit", "child", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[1].Id, title = "Journal", frequency_unit = "Day" }))
+                ],
+                ConversationContext = new()
+            }));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+
+        var result = await CreateHandler().Handle(new(_userId, "Rename Post Lunch to After Lunch and add Journal under Before Bed"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
+        preview.Items.Should().HaveCount(2);
+        _pendingOperationStore.GetExecution(_userId, preview.Id)!.OperationId.Should().Be("apply_account_changes");
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        parents[0].Title.Should().Be("Post Lunch");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

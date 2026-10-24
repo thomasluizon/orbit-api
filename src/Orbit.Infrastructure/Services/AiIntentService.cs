@@ -241,12 +241,32 @@ public sealed partial class AiIntentService(
                 .Select(call => call.FunctionName)
                 .Where(declaredNames.Contains)
                 .ToArray() ?? [];
+            if (observation.Response is { } response && logger.IsEnabled(LogLevel.Warning)
+                && !response.OutputItems.OfType<FunctionCallResponseItem>().Any()
+                && string.IsNullOrWhiteSpace(AiCompletionClient.GetAssistantOutputText(response)))
+                LogEmptyRound(response, messages, declaredNames, telemetry.RoundCount + 1);
             telemetry.RecordRound(toolNames.Length);
             await RecordChatUsageAsync(observation.Response?.Usage, streamSink is null ? "buffered" : "streaming",
                 userId, new AiCallTelemetry(telemetry.TraceId, stopwatch.Elapsed.TotalSeconds,
                     observation.Response is null || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
                     toolNames, telemetry.Plan, observation.Response?.Usage is not null), cancellationToken);
         }
+    }
+
+    private void LogEmptyRound(ResponseResult response, IReadOnlyList<ResponseItem> messages,
+        HashSet<string> declaredNames, int roundIndex)
+    {
+        var outputKinds = response.OutputItems.GroupBy(item => item.Kind.ToString())
+            .ToDictionary(group => group.Key, group => group.Count());
+        var contentKinds = response.OutputItems.OfType<MessageResponseItem>().SelectMany(item => item.Content)
+            .GroupBy(part => part.Kind.ToString()).ToDictionary(group => group.Key, group => group.Count());
+        var roles = response.OutputItems.OfType<MessageResponseItem>().GroupBy(item => item.Role.ToString())
+            .ToDictionary(group => group.Key, group => group.Count());
+        var earlierToolNames = messages.OfType<FunctionCallResponseItem>().Select(call => call.FunctionName)
+            .Where(declaredNames.Contains).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
+        LogAiEmptyRound(logger, roundIndex, response.Status?.ToString() ?? "unknown",
+            response.IncompleteStatusDetails?.Reason?.ToString() ?? "none", JsonSerializer.Serialize(outputKinds),
+            JsonSerializer.Serialize(contentKinds), JsonSerializer.Serialize(roles), string.Join(",", earlierToolNames));
     }
 
     private sealed class ModelCallObservation
@@ -541,6 +561,10 @@ public sealed partial class AiIntentService(
         string toolName,
         int originalLength,
         int maxLength);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "AI round returned no assistant text or function calls. RoundIndex={RoundIndex} ResponseStatus={ResponseStatus} IncompleteReason={IncompleteReason} OutputItemKinds={OutputItemKinds} ContentPartKinds={ContentPartKinds} MessageRoles={MessageRoles} EarlierToolNames={EarlierToolNames}")]
+    private static partial void LogAiEmptyRound(ILogger logger, int roundIndex, string responseStatus,
+        string incompleteReason, string outputItemKinds, string contentPartKinds, string messageRoles, string earlierToolNames);
 
     private static Dictionary<string, ResponseTool> BuildToolCatalog(IReadOnlyList<object> declarations)
     {

@@ -22,6 +22,91 @@ namespace Orbit.Infrastructure.Tests.AI;
 
 public class AiIntentServiceStreamingTests
 {
+    [Theory]
+    [InlineData("empty", false)]
+    [InlineData("empty", true)]
+    [InlineData("reasoning", false)]
+    [InlineData("reasoning", true)]
+    [InlineData("refusal", false)]
+    [InlineData("refusal", true)]
+    [InlineData("wrong_role", false)]
+    [InlineData("wrong_role", true)]
+    [InlineData("filtered", false)]
+    [InlineData("filtered", true)]
+    [InlineData("truncated", false)]
+    [InlineData("truncated", true)]
+    [InlineData("failed", false)]
+    [InlineData("failed", true)]
+    public async Task ContinueWithToolResultsAsync_EmptyRoundLogsOnlyProtocolMetadata(string kind, bool stream)
+    {
+        var firstResponse = ResponsesTestData.Response();
+        firstResponse.OutputItems.Add(new ReasoningResponseItem("private reasoning summary") { EncryptedContent = "private encrypted state" });
+        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", "query_habits", BinaryData.FromString("{}")));
+        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_2", "private tool name", BinaryData.FromString("{}")));
+        var emptyResponse = ResponsesTestData.Response();
+        switch (kind)
+        {
+            case "reasoning":
+                emptyResponse.OutputItems.Add(new ReasoningResponseItem("private reasoning summary"));
+                break;
+            case "refusal":
+                emptyResponse.OutputItems.Add(ResponseItem.CreateAssistantMessageItem([ResponseContentPart.CreateRefusalPart("private refusal text")]));
+                break;
+            case "wrong_role":
+                emptyResponse.OutputItems.Add(ResponseItem.CreateUserMessageItem("private model text"));
+                break;
+            case "filtered":
+                emptyResponse.Status = ResponseStatus.Incomplete;
+                emptyResponse.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.ContentFilter };
+                break;
+            case "truncated":
+                emptyResponse.Status = ResponseStatus.Incomplete;
+                emptyResponse.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+                break;
+            case "failed":
+                emptyResponse.Status = ResponseStatus.Failed;
+                break;
+        }
+        string Body(ResponseResult response) => !stream ? ModelReaderWriter.Write(response).ToString()
+            : response.Status == ResponseStatus.Failed
+                ? ResponsesTestData.Event(new StreamingResponseFailedUpdate { Response = response })
+                : ResponsesTestData.Stream(response);
+        var handler = new SequenceSseHandler(Body(firstResponse), Body(emptyResponse));
+        var (service, logger) = BuildServiceWithRecordingLogger(handler);
+        var sink = new CollectingSink();
+        var first = await service.SendWithToolsAsync(new AiToolRequest("private user message", "private system instructions",
+            [new { name = "query_habits" }]), stream ? sink.Handle : null);
+        first.IsSuccess.Should().BeTrue();
+        var second = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new("query_habits", "call_1", true, null, "private habit title", null),
+                new("private tool name", "call_2", false, null, null, "private tool failure")], stream ? sink.Handle : null);
+
+        second.IsSuccess.Should().Be(kind == "truncated");
+        if (kind != "truncated")
+            second.ErrorCode.Should().Be(kind == "failed" ? ErrorCodes.AiUnavailable : ErrorCodes.AiEmptyResponse);
+        logger.WarningEventIds.Count(id => id == 14).Should().Be(1);
+        var metadata = logger.WarningProperties.Should().ContainSingle(item => item.EventId == 14).Which.Properties;
+        metadata["RoundIndex"].Should().Be(2);
+        metadata["ResponseStatus"].Should().Be(emptyResponse.Status.ToString());
+        metadata["IncompleteReason"].Should().Be(emptyResponse.IncompleteStatusDetails?.Reason?.ToString() ?? "none");
+        metadata["EarlierToolNames"].Should().Be("query_habits");
+        var outputCounts = JsonSerializer.Deserialize<Dictionary<string, int>>((string)metadata["OutputItemKinds"]!)!;
+        outputCounts.Should().BeEquivalentTo(emptyResponse.OutputItems.GroupBy(item => item.Kind.ToString()).ToDictionary(group => group.Key, group => group.Count()));
+        var contentCounts = JsonSerializer.Deserialize<Dictionary<string, int>>((string)metadata["ContentPartKinds"]!)!;
+        contentCounts.Should().BeEquivalentTo(emptyResponse.OutputItems.OfType<MessageResponseItem>().SelectMany(item => item.Content)
+            .GroupBy(part => part.Kind.ToString()).ToDictionary(group => group.Key, group => group.Count()));
+        JsonSerializer.Serialize(metadata).Should().NotContain("private");
+
+        var options = (CreateResponseOptions)first.Value.ConversationContext!.Options!;
+        options.MaxOutputTokenCount.Should().Be(8192);
+        options.ReasoningOptions.ReasoningEffortLevel.Should().Be(ResponseReasoningEffortLevel.Low);
+        options.ToolChoice.Should().BeNull();
+        options.Tools.OfType<FunctionTool>().Select(tool => tool.FunctionName).Should().Equal("query_habits");
+        options.InputItems.OfType<ReasoningResponseItem>().Should().Contain(item => item.EncryptedContent == "private encrypted state");
+        options.InputItems.OfType<MessageResponseItem>().Should().Contain(item => item.Role == MessageRole.System
+            && item.Content.Any(part => part.Text == "private system instructions"));
+    }
+
     [Fact]
     public async Task SendWithToolsAsync_AllChatToolsHaveStrictWireDeclarations()
     {
@@ -737,6 +822,7 @@ public class AiIntentServiceStreamingTests
     private sealed class RecordingLogger : ILogger<AiIntentService>
     {
         public List<int> WarningEventIds { get; } = [];
+        public List<(int EventId, Dictionary<string, object?> Properties)> WarningProperties { get; } = [];
 
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
@@ -745,7 +831,11 @@ public class AiIntentServiceStreamingTests
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             if (logLevel == LogLevel.Warning)
+            {
                 WarningEventIds.Add(eventId.Id);
+                if (state is IEnumerable<KeyValuePair<string, object?>> properties)
+                    WarningProperties.Add((eventId.Id, properties.ToDictionary(pair => pair.Key, pair => pair.Value)));
+            }
         }
 
         private sealed class NullScope : IDisposable
