@@ -9,6 +9,21 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class SystemPromptBuilderTests
 {
+    [Fact]
+    public void Build_RoutinesChoosePreviewWithoutStructureOrCadenceQuestions()
+    {
+        var prompt = BuildPrompt([]);
+
+        prompt.Should().Contain("one parent habit with sub_habits");
+        prompt.Should().Contain("morning or evening routine implies Day/1");
+        prompt.Should().Contain("Only ask when no usable preview can be proposed");
+        prompt.Should().NotContain("Ask the user which they prefer if unclear");
+        prompt.Should().NotContain("checklist-vs-subhabit unclear");
+        prompt.Should().NotContain("Prefer to ask the schedule INLINE");
+        prompt.Should().NotContain("without a specific hour");
+        prompt.Should().NotContain("the ideal flow is for you to ask first");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
