@@ -32,7 +32,7 @@ public class DropUserHandleColumnMigrationTests
     }
 
     [Fact]
-    public void TargetModel_PreservesPreviousModelAndSnapshot()
+    public void TargetModel_PreservesPreviousModelAndChatTurnTransition()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -42,8 +42,8 @@ public class DropUserHandleColumnMigrationTests
 
         var previous = initializer.Initialize(new AddDesktopHandoffs().TargetModel, designTime: true);
         differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel()).Should().BeEmpty();
-        var snapshot = initializer.Initialize(new OrbitDbContextModelSnapshot().Model, designTime: true);
-        ChatTurnMigrationTests.AssertExpansion(differ.GetDifferences(target.GetRelationalModel(), snapshot.GetRelationalModel()));
+        var chatTurns = initializer.Initialize(new PersistChatTurnIdempotency().TargetModel, designTime: true);
+        ChatTurnMigrationTests.AssertExpansion(differ.GetDifferences(target.GetRelationalModel(), chatTurns.GetRelationalModel()));
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 

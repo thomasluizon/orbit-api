@@ -21,7 +21,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
-public class OAuthPostgresRetryTests
+public partial class OAuthPostgresRetryTests
 {
     private const string ConnectionVariable = "ORBIT_POSTGRES_TEST_CONNECTION";
 

@@ -10,13 +10,10 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
 {
     public bool Put(string secret, string kind, string payload, DateTime expiresAtUtc, int? capacity = null)
     {
-        return db.Database.CurrentTransaction is not null
-            ? PutCore()
-            : db.Database.CreateExecutionStrategy().Execute(PutCore);
+        return VerifiedTransaction.Execute(db, PutCore);
 
         bool PutCore()
         {
-            using var transaction = db.Database.CurrentTransaction is null ? db.Database.BeginTransaction() : null;
             if (capacity.HasValue)
             {
                 if (db.Database.IsNpgsql())
@@ -30,7 +27,6 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
             try
             {
                 db.SaveChanges();
-                transaction?.Commit();
                 return true;
             }
             finally
@@ -49,7 +45,7 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
             .Select(state => new OAuthStateSnapshot(state.Payload, state.ConsumedAtUtc != null)).SingleOrDefault();
     }
 
-    public string? Take(string secret, string kind, DateTime nowAtUtc)
+    public string? Take(string secret, string kind, DateTime nowAtUtc) => VerifiedTransaction.Execute(db, () =>
     {
         var hash = Hash(secret);
         var payload = Read(secret, kind, nowAtUtc);
@@ -61,7 +57,7 @@ public sealed class OAuthStateStore(OrbitDbContext db, TimeProvider timeProvider
                 .ExecuteUpdate(setters => setters.SetProperty(state => state.ConsumedAtUtc, nowAtUtc))
             : query.ExecuteDelete();
         return affected == 1 ? payload : null;
-    }
+    }, transactionRequired: false);
 
     public void RemoveExpired(DateTime nowAtUtc) => db.OAuthStates.Where(state => state.ExpiresAtUtc <= nowAtUtc).ExecuteDelete();
 

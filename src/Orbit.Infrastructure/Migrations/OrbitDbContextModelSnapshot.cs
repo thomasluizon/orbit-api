@@ -2674,6 +2674,22 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("XpAwardLogs");
                 });
 
+            modelBuilder.Entity("Orbit.Infrastructure.Persistence.TransactionCommit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.ToTable("TransactionCommits", (string)null);
+                });
+
             modelBuilder.Entity("HabitGoals", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.Goal", null)

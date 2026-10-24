@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Infrastructure.Migrations;
@@ -12,7 +11,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public sealed class ChatTurnMigrationTests
 {
     [Fact]
-    public void Migration_OnlyAddsTurnLedgerAndUniqueIdentity_AndMatchesSnapshot()
+    public void Migration_OnlyAddsTurnLedgerAndUniqueIdentity_AndMatchesModelTransition()
     {
         var migration = new PersistChatTurnIdempotency();
         AssertExpansion(migration.UpOperations);
@@ -23,10 +22,8 @@ public sealed class ChatTurnMigrationTests
         var initializer = db.GetService<IModelRuntimeInitializer>();
         var previous = initializer.Initialize(new DropUserHandleColumn().TargetModel, designTime: true);
         var target = initializer.Initialize(migration.TargetModel, designTime: true);
-        var current = db.GetService<IDesignTimeModel>().Model;
         var differ = db.GetService<IMigrationsModelDiffer>();
         AssertExpansion(differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel()));
-        differ.GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
         db.Database.HasPendingModelChanges().Should().BeFalse();
         db.GetService<IMigrationsSqlGenerator>().Generate(migration.UpOperations, target).Should().NotBeEmpty();
     }
