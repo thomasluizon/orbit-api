@@ -40,11 +40,10 @@ public class DropUserHandleColumnMigrationTests
         var target = initializer.Initialize(new DropUserHandleColumn().TargetModel, designTime: true);
         var differ = context.GetService<IMigrationsModelDiffer>();
 
-        foreach (var model in new[] { new AddDesktopHandoffs().TargetModel, new OrbitDbContextModelSnapshot().Model })
-        {
-            var previous = initializer.Initialize(model, designTime: true);
-            differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel()).Should().BeEmpty();
-        }
+        var previous = initializer.Initialize(new AddDesktopHandoffs().TargetModel, designTime: true);
+        differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel()).Should().BeEmpty();
+        var snapshot = initializer.Initialize(new OrbitDbContextModelSnapshot().Model, designTime: true);
+        ChatTurnMigrationTests.AssertExpansion(differ.GetDifferences(target.GetRelationalModel(), snapshot.GetRelationalModel()));
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 

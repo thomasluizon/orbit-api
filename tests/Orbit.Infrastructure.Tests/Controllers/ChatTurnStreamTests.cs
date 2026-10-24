@@ -29,8 +29,10 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper output)
 {
-    [Fact]
-    public async Task LostAcknowledgement_ConcurrentRetryAndReplay_PersistAndChargeOnce()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LostAcknowledgement_ConcurrentRetryAndReplay_PersistAndChargeOnce(bool cancelledWrite)
     {
         var mediator = Substitute.For<IMediator>();
         var userId = Guid.NewGuid();
@@ -54,8 +56,11 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             await command.StreamSink!(ChatStreamEvent.Delta("Reply"));
             return Result.Success(new ChatResponse("Reply", []));
         });
-        var first = CreateController(services, userId, "same-key", new BrokenStream());
+        var first = CreateController(services, userId, "same-key", new BrokenStream(cancelledWrite));
         var original = first.ProcessChatStream("Hello", null, null, CancellationToken.None);
+        await Task.WhenAny(original, received.Task).WaitAsync(TimeSpan.FromSeconds(5));
+        if (original.IsCompleted)
+            await original;
         await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var second = CreateController(services, userId, "same-key");
         var retry = second.ProcessChatStream("Hello", null, null, CancellationToken.None);
@@ -168,13 +173,31 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task AbandonedReservation_ExpiredKeyNeverExecutesAgain()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var userId = Guid.NewGuid();
+        using var services = new ChatTurnStreamTestServices(mediator, userId);
+        var command = new ProcessUserChatCommand(userId, "Hello");
+        var candidate = ChatTurn.Create(userId, ChatTurnIdentity.HashKey("abandoned"),
+            ChatTurnIdentity.Fingerprint(command), DateTime.UtcNow.AddSeconds(-1));
+        await services.Provider.GetRequiredService<IChatTurnStore>().ClaimAsync(candidate, default);
+        var controller = CreateController(services, userId, "abandoned");
+
+        await services.Provider.GetRequiredService<ChatTurnStream>()
+            .RunAsync(command, controller.HttpContext, "abandoned", default);
+
+        Events(controller).Last().GetProperty("code").GetString().Should().Be("CHAT_TURN_INTERRUPTED");
+        Events(controller).Last().GetProperty("turnId").GetGuid().Should().Be(candidate.Id);
+        await mediator.DidNotReceiveWithAnyArgs().Send(default(ProcessUserChatCommand)!, default);
+    }
+
+    [Fact]
     public async Task DrainExpiry_StoresInterruptedOutcome_AndNeverRedispatches()
     {
         var mediator = Substitute.For<IMediator>();
         var userId = Guid.NewGuid();
         using var services = new ChatTurnStreamTestServices(mediator, userId);
-        services.Provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ShutdownDrainOptions>>()
-            .Value.Timeout = TimeSpan.FromMilliseconds(100);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
@@ -188,6 +211,8 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             await controller.ProcessChatStream("Hello", null, null, controller.HttpContext.RequestAborted));
         var request = middleware.InvokeAsync(controller.HttpContext, drain);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        services.Provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ShutdownDrainOptions>>()
+            .Value.Timeout = TimeSpan.FromMilliseconds(100);
 
         await drain.StoppingAsync(default).WaitAsync(TimeSpan.FromSeconds(5));
         await request;
@@ -218,10 +243,11 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         .Where(line => line.StartsWith("data: ", StringComparison.Ordinal))
         .Select(line => JsonSerializer.Deserialize<JsonElement>(line[6..])).ToArray();
 
-    private sealed class BrokenStream : MemoryStream
+    private sealed class BrokenStream(bool cancelled) : MemoryStream
     {
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
-            ValueTask.FromException(new IOException("Acknowledgement lost"));
+            ValueTask.FromException(cancelled ? new OperationCanceledException("Acknowledgement lost")
+                : new IOException("Acknowledgement lost"));
     }
 }
 

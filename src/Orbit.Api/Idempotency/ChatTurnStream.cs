@@ -40,7 +40,7 @@ public sealed class ChatTurnStream(
                 await http.Response.WriteAsync($"data: {json}\n\n", transportToken);
                 await http.Response.Body.FlushAsync(transportToken);
             }
-            catch (Exception exception) when (exception is IOException || exception is OperationCanceledException && transportToken.IsCancellationRequested)
+            catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException)
             {
                 connected = false;
             }

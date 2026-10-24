@@ -227,6 +227,27 @@ public class DistributedRateLimitFilterTests
     }
 
     [Fact]
+    public async Task ConcurrentChatLimit_KeyedStream_DefersLeaseUntilTurnReservation()
+    {
+        var filter = new ConcurrentChatLimitFilter(_service, Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+        var (context, http) = CreateAuthenticatedExecutingContext(Guid.NewGuid());
+        http.Request.Headers["Idempotency-Key"] = "turn-key";
+        var descriptor = (ControllerActionDescriptor)context.ActionDescriptor;
+        descriptor.ControllerTypeInfo = typeof(ChatController).GetTypeInfo();
+        descriptor.MethodInfo = typeof(ChatController).GetMethod(nameof(ChatController.ProcessChatStream))!;
+        var called = false;
+
+        await filter.OnActionExecutionAsync(context, () =>
+        {
+            called = true;
+            return Task.FromResult(CreateExecutedContext(context));
+        });
+
+        called.Should().BeTrue();
+        await _service.DidNotReceiveWithAnyArgs().TryAcquireLeaseAsync(default!, default!, default, default, default);
+    }
+
+    [Fact]
     public async Task ConcurrentChatLimit_Success_ReleasesLease()
     {
         var userId = Guid.NewGuid();

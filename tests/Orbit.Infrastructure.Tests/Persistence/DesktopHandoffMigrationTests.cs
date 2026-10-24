@@ -32,8 +32,8 @@ public class DesktopHandoffMigrationTests
         var current = context.GetService<IDesignTimeModel>().Model;
 
         target.FindEntityType(typeof(User).FullName!)!.FindProperty("Handle").Should().BeNull();
-        context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
+        ChatTurnMigrationTests.AssertExpansion(context.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()));
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
