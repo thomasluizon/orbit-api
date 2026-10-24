@@ -72,14 +72,16 @@ public class AgentPolicyEvaluatorTests : IDisposable
         EvaluateFor(other.Id).Reason.Should().Be("feature_disabled:ai_retrospective");
     }
 
-    [Fact]
-    public void Evaluate_MissingApiKeyScope_DeniesOperation()
+    [Theory]
+    [InlineData(AgentAuthMethod.ApiKey)]
+    [InlineData(AgentAuthMethod.OAuth)]
+    public void Evaluate_MissingApiKeyScope_DeniesOperation(AgentAuthMethod authMethod)
     {
         var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsRead,
             _userId,
             AgentExecutionSurface.Mcp,
-            AgentAuthMethod.ApiKey,
+            authMethod,
             [],
             "list_habits",
             "List habits"));

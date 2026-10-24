@@ -30,6 +30,7 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Mcp;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -44,7 +45,7 @@ public class McpConfirmationGateTests : IDisposable
     private readonly AgentOperationExecutor _executor;
     private readonly ApiKeyTools _apiKeyTools;
     private readonly AgentTools _agentTools;
-    private readonly ClaimsPrincipal _user;
+    private ClaimsPrincipal _user;
     private readonly ClaimsPrincipal _apiKeyUser;
     private readonly Guid _userId;
     private readonly Guid _keyId;
@@ -166,24 +167,28 @@ public class McpConfirmationGateTests : IDisposable
         pendingOperation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.StepUp);
     }
 
-    [Fact]
-    public async Task StepUpTool_AfterTheFourRecoveryToolsRun_RunsInsteadOfBeingRefused()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StepUpTool_AfterTheFourRecoveryToolsRun_RunsInsteadOfBeingRefused(bool connector)
     {
+        if (connector)
+            _user = await OAuthConnectorConfirmationTests.Authenticate(_userId, Guid.NewGuid(), scopes: [AgentScopes.ManageApiKeys]);
         var refusal = await InvokeManageApiKeysAsync(confirmationToken: null);
         refusal.ToolOutput.Should().Contain("Step-up verification required");
 
         var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
 
-        var challenge = await _agentTools.StepUpAgentOperation(
-            _user, pendingOperationId, "en", CancellationToken.None);
+        var challenge = OAuthConnectorConfirmationTests.Payload<AgentStepUpChallenge>(await _agentTools.StepUpAgentOperation(
+            _user, pendingOperationId, "en", CancellationToken.None));
         _emailedCode.Should().NotBeNull();
 
-        var verified = await _agentTools.VerifyStepUpAgentOperation(
-            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!, CancellationToken.None);
+        var verified = OAuthConnectorConfirmationTests.Payload<PendingAgentOperation>(await _agentTools.VerifyStepUpAgentOperation(
+            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!, CancellationToken.None));
         verified.Id.ToString().Should().Be(pendingOperationId);
         _dbContext.PendingAgentOperations.Single().StepUpSatisfiedAtUtc.Should().NotBeNull();
 
-        var confirmation = _agentTools.ConfirmAgentOperation(_user, pendingOperationId);
+        var confirmation = OAuthConnectorConfirmationTests.Payload<PendingAgentOperationConfirmation>(_agentTools.ConfirmAgentOperation(_user, pendingOperationId));
         confirmation.Should().NotBeNull();
 
         var outcome = await InvokeManageApiKeysAsync(confirmation!.ConfirmationToken);
@@ -200,18 +205,13 @@ public class McpConfirmationGateTests : IDisposable
         await InvokeManageApiKeysAsync(confirmationToken: null);
         var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
 
-        var stepUp = () => _agentTools.StepUpAgentOperation(
-            _apiKeyUser, pendingOperationId, "en", CancellationToken.None);
-        var verify = () => _agentTools.VerifyStepUpAgentOperation(
-            _apiKeyUser, pendingOperationId, Guid.NewGuid().ToString(), "123456", CancellationToken.None);
-        var confirm = () => _agentTools.ConfirmAgentOperation(_apiKeyUser, pendingOperationId);
-
-        await stepUp.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("API key credentials cannot satisfy step-up authorization.");
-        await verify.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("API key credentials cannot satisfy step-up authorization.");
-        confirm.Should().Throw<UnauthorizedAccessException>()
-            .WithMessage("API key credentials cannot confirm pending operations.");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _agentTools.StepUpAgentOperation(_apiKeyUser, pendingOperationId), "interactive_confirmation_required");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _agentTools.VerifyStepUpAgentOperation(_apiKeyUser, pendingOperationId, Guid.NewGuid().ToString(), "123456"),
+            "interactive_confirmation_required");
+        OAuthConnectorConfirmationTests.AssertError(
+            _agentTools.ConfirmAgentOperation(_apiKeyUser, pendingOperationId), "interactive_confirmation_required");
 
         _dbContext.PendingAgentOperations.Single().ConfirmedAtUtc.Should().BeNull();
     }
@@ -235,11 +235,11 @@ public class McpConfirmationGateTests : IDisposable
         refusal.ToolOutput.Should().Contain("Step-up verification required");
 
         var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
-        var challenge = await _agentTools.StepUpAgentOperation(_user, pendingOperationId);
-        var verified = await _agentTools.VerifyStepUpAgentOperation(
-            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!);
+        var challenge = OAuthConnectorConfirmationTests.Payload<AgentStepUpChallenge>(await _agentTools.StepUpAgentOperation(_user, pendingOperationId));
+        var verified = OAuthConnectorConfirmationTests.Payload<PendingAgentOperation>(await _agentTools.VerifyStepUpAgentOperation(
+            _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!));
         verified.Id.ToString().Should().Be(pendingOperationId);
-        var confirmation = _agentTools.ConfirmAgentOperation(_user, pendingOperationId);
+        var confirmation = OAuthConnectorConfirmationTests.Payload<PendingAgentOperationConfirmation>(_agentTools.ConfirmAgentOperation(_user, pendingOperationId));
 
         var outcome = await InvokeGetApiKeysAsync(_user, confirmation!.ConfirmationToken);
 
@@ -266,11 +266,11 @@ public class McpConfirmationGateTests : IDisposable
         var outcome = await InvokeGetApiKeysAsync(_apiKeyUser, null);
 
         outcome.PolicyError.Should().BeNull();
-        outcome.ToolOutput.Should().Contain("Step-up verification required");
+        outcome.ToolOutput.Should().Contain("Claude connector").And.Contain("app");
         outcome.ToolOutput.Should().NotContain("CI key");
         var pendingOperationId = _dbContext.PendingAgentOperations.Single().Id.ToString();
-        var stepUp = () => _agentTools.StepUpAgentOperation(_apiKeyUser, pendingOperationId);
-        await stepUp.Should().ThrowAsync<UnauthorizedAccessException>();
+        OAuthConnectorConfirmationTests.AssertError(
+            await _agentTools.StepUpAgentOperation(_apiKeyUser, pendingOperationId), "interactive_confirmation_required");
         _authorization.HasGrant(_userId).Should().BeFalse();
     }
 
@@ -284,10 +284,10 @@ public class McpConfirmationGateTests : IDisposable
         refusal.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
 
         var pendingOperationId = refusal.Operation.PendingOperationId!.Value.ToString();
-        var challenge = await _agentTools.StepUpAgentOperation(_user, pendingOperationId);
+        var challenge = OAuthConnectorConfirmationTests.Payload<AgentStepUpChallenge>(await _agentTools.StepUpAgentOperation(_user, pendingOperationId));
         await _agentTools.VerifyStepUpAgentOperation(
             _user, pendingOperationId, challenge.ChallengeId.ToString(), _emailedCode!);
-        var confirmation = _agentTools.ConfirmAgentOperation(_user, pendingOperationId);
+        var confirmation = OAuthConnectorConfirmationTests.Payload<PendingAgentOperationConfirmation>(_agentTools.ConfirmAgentOperation(_user, pendingOperationId));
 
         var outcome = await _executor.ExecuteAsync(request with
         {

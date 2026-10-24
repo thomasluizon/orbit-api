@@ -602,7 +602,7 @@ public partial class AgentOperationExecutor(
 
     private IReadOnlyList<string> GetGrantedScopes(AgentExecuteOperationRequest request)
     {
-        if (request.AuthMethod == AgentAuthMethod.ApiKey)
+        if (request.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return request.GrantedScopes ?? [];
 
         if (request.GrantedScopes is { Count: > 0 })

@@ -10,6 +10,9 @@ namespace Orbit.Api.Mcp;
 
 public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
 {
+    internal const string InteractiveConfirmationGuidance =
+        "Manual API keys cannot approve destructive or high-risk actions. Connect through the Claude connector, or make this change in the Orbit app.";
+
     private static readonly JsonSerializerOptions ArgumentSerializerOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -35,23 +38,26 @@ public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
             user.IsReadOnlyCredential(),
             confirmationToken), cancellationToken);
 
-        return Map(response.Operation);
+        return Map(response.Operation, user.GetAgentAuthMethod());
     }
 
-    private static McpExecutorResult Map(AgentOperationResult operation) => operation.Status switch
+    private static McpExecutorResult Map(AgentOperationResult operation, AgentAuthMethod authMethod) => operation.Status switch
     {
         AgentOperationStatus.Succeeded => new McpExecutorResult(
             operation.Status, operation.TargetId, operation.TargetName, operation.Payload, Message: string.Empty),
         AgentOperationStatus.PendingConfirmation => new McpExecutorResult(
             operation.Status, operation.TargetId, operation.TargetName, operation.Payload,
-            Message: BuildPendingMessage(operation)),
+            Message: BuildPendingMessage(operation, authMethod)),
         _ => new McpExecutorResult(
             operation.Status, operation.TargetId, operation.TargetName, operation.Payload,
             Message: $"Error: {operation.PolicyReason ?? operation.Summary ?? "operation failed"}")
     };
 
-    private static string BuildPendingMessage(AgentOperationResult operation)
+    private static string BuildPendingMessage(AgentOperationResult operation, AgentAuthMethod authMethod)
     {
+        if (authMethod == AgentAuthMethod.ApiKey)
+            return InteractiveConfirmationGuidance;
+
         var pendingId = operation.PendingOperationId?.ToString() ?? "unknown";
 
         if (operation.PolicyReason == "step_up_required")

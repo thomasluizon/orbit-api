@@ -37,7 +37,8 @@ public enum AgentAuthMethod
 {
     Unknown = 0,
     Jwt = 1,
-    ApiKey = 2
+    ApiKey = 2,
+    OAuth = 3
 }
 
 public enum AgentExecutionSurface

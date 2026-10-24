@@ -51,7 +51,7 @@ public class CalendarTools(IMediator mediator, McpExecutorBridge executorBridge)
     public async Task<string> SetSelectedCalendars(
         ClaimsPrincipal user,
         [Description("Calendar IDs to sync; an empty list resets to all owned calendars")] string[] calendarIds,
-        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "manage_calendar_sync", new
@@ -68,7 +68,7 @@ public class CalendarTools(IMediator mediator, McpExecutorBridge executorBridge)
         [Description("Action to perform: set_auto_sync, dismiss_import, dismiss_suggestion, run_sync, or set_selected_calendars")] string action,
         [Description("For set_auto_sync: whether auto-sync should be enabled")] bool? enabled = null,
         [Description("For dismiss_suggestion: the suggestion ID (GUID)")] string? suggestionId = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: calendar sync changes are destructive)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: calendar sync changes are destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default,
         [Description("For set_selected_calendars: calendar IDs; empty resets to all owned calendars")] string[]? calendarIds = null)
     {

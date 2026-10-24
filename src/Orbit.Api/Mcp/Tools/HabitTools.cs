@@ -224,7 +224,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     public async Task<string> DeleteHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: deleting a habit is destructive)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: deleting a habit is destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "delete_habit", new
@@ -474,7 +474,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     public async Task<string> BulkCreateHabits(
         ClaimsPrincipal user,
         [Description("JSON array of habit objects. Each with: title (required), description, emoji, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible")] string habitsJson,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk create is a destructive batch operation)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk create is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var parsedHabits = McpToolHelpers.DeserializeJson<List<McpToolHelpers.BulkHabitItemDto>>(habitsJson) ?? [];
@@ -517,7 +517,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     public async Task<string> BulkDeleteHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk delete is destructive)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk delete is destructive)")] string? confirmationToken = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
         CancellationToken cancellationToken = default)
     {
@@ -538,7 +538,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         ClaimsPrincipal user,
         [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("JSON object containing the habit fields to update")] string updatesJson,
-        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var filter = JsonSerializer.Deserialize<JsonElement>(filterJson);
@@ -558,7 +558,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("Emoji to apply, null to clear, or omit to infer from titles")] string? emoji = "",
         [Description("Infer one relevant emoji per habit. Defaults to true when emoji is omitted.")] bool? inferFromTitle = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default,
         [Description("Set true only when the user asks to replace existing icons during inference.")] bool replaceExisting = false)
     {
@@ -581,7 +581,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         ClaimsPrincipal user,
         [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("New due date in YYYY-MM-DD format")] string dueDate,
-        [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app.")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var filter = JsonSerializer.Deserialize<JsonElement>(filterJson);
@@ -600,7 +600,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk log is a destructive batch operation)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk log is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default) =>
         ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
 
@@ -610,7 +610,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Comma-separated habit IDs (GUIDs). Omit when filterJson is provided.")] string? habitIds = null,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         [Description("Optional JSON server-side filter used instead of habitIds")] string? filterJson = null,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk skip is a destructive batch operation)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk skip is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default) =>
         ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", habitIds, date, filterJson, confirmationToken, cancellationToken);
 

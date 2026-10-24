@@ -121,7 +121,7 @@ public class AiController(
     [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RefreshPendingOperationPreview(Guid id, CancellationToken cancellationToken)
     {
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
@@ -147,7 +147,7 @@ public class AiController(
     public async Task<IActionResult> RevisePendingOperation(
         Guid id, [FromBody] RevisePendingOperationRequest request, CancellationToken cancellationToken)
     {
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
@@ -174,7 +174,7 @@ public class AiController(
     [DistributedRateLimit("ai-operations")]
     public async Task<IActionResult> ConfirmPendingOperation(Guid id, CancellationToken cancellationToken)
     {
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
@@ -222,7 +222,7 @@ public class AiController(
         [FromBody] StepUpChallengeRequest? request,
         CancellationToken cancellationToken)
     {
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
@@ -256,7 +256,7 @@ public class AiController(
         [FromBody] VerifyStepUpRequest request,
         CancellationToken cancellationToken)
     {
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
@@ -291,7 +291,7 @@ public class AiController(
         [FromBody] ExecutePendingOperationRequest request,
         CancellationToken cancellationToken)
     {
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
@@ -360,7 +360,7 @@ public class AiController(
         CancellationToken cancellationToken)
     {
         var authMethod = HttpContext.User.GetAgentAuthMethod();
-        if (authMethod == AgentAuthMethod.ApiKey)
+        if (authMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();

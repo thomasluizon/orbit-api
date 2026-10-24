@@ -56,7 +56,7 @@ public class ApiKeyAuthenticationHandler(
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, candidate.UserId.ToString()),
-            new("auth_method", "api_key"),
+            new("auth_method", candidate.OAuthFamilyId.HasValue ? "oauth" : "api_key"),
             new("api_key_id", candidate.Id.ToString()),
             new("api_key_read_only", candidate.IsReadOnly.ToString())
         };

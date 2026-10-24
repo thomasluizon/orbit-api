@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using System.Text.Json;
+using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Orbit.Api.Extensions;
 using Orbit.Application.Chat.Tools;
@@ -49,80 +51,84 @@ public class AgentTools(
             confirmationToken), cancellationToken);
     }
 
-    [McpServerTool(Name = "confirm_agent_operation_v2"), Description("Confirm a pending destructive or high-risk Orbit AI operation and receive a short-lived confirmation token.")]
-    public PendingAgentOperationConfirmation? ConfirmAgentOperation(
+    [McpServerTool(Name = "confirm_agent_operation_v2"), Description("Confirm a pending destructive or high-risk Orbit AI operation and receive a short-lived confirmation token. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
+    public CallToolResult ConfirmAgentOperation(
         ClaimsPrincipal user,
         [Description("Pending operation ID")] string pendingOperationId)
     {
-        if (user.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
-            throw new UnauthorizedAccessException("API key credentials cannot confirm pending operations.");
+        if (ApprovalDenial(user) is { } denial)
+            return denial;
 
         if (!Guid.TryParse(pendingOperationId, out var parsedId))
-            throw new ArgumentException("pendingOperationId must be a valid GUID.", nameof(pendingOperationId));
+            return Error("invalid_pending_operation_id", "pendingOperationId must be a valid GUID.");
 
-        return pendingOperationStore.Confirm(user.GetUserId(), parsedId);
+        var confirmation = pendingOperationStore.Confirm(user.GetUserId(), parsedId);
+        return confirmation is null
+            ? Error("pending_operation_not_found", "The pending operation is unavailable or cannot be confirmed.")
+            : Success(confirmation);
     }
 
-    [McpServerTool(Name = "step_up_agent_operation_v2"), Description("Request a short-lived email step-up challenge for a pending high-risk Orbit AI operation.")]
-    public Task<AgentStepUpChallenge> StepUpAgentOperation(
+    [McpServerTool(Name = "step_up_agent_operation_v2"), Description("Request a short-lived email step-up challenge for a pending high-risk Orbit AI operation. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
+    public async Task<CallToolResult> StepUpAgentOperation(
         ClaimsPrincipal user,
         [Description("Pending operation ID")] string pendingOperationId,
         [Description("Language code for the step-up email")] string language = "en",
         CancellationToken cancellationToken = default)
     {
-        if (user.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
-            throw new UnauthorizedAccessException("API key credentials cannot satisfy step-up authorization.");
+        if (ApprovalDenial(user) is { } denial)
+            return denial;
 
         if (!Guid.TryParse(pendingOperationId, out var parsedId))
-            throw new ArgumentException("pendingOperationId must be a valid GUID.", nameof(pendingOperationId));
+            return Error("invalid_pending_operation_id", "pendingOperationId must be a valid GUID.");
 
-        return IssueChallengeAsync(user.GetUserId(), parsedId, language, cancellationToken);
+        var result = await stepUpService.IssueChallengeAsync(user.GetUserId(), parsedId, language, cancellationToken);
+        return result.IsFailure ? Error("step_up_failed", result.Error) : Success(result.Value);
     }
 
-    [McpServerTool(Name = "verify_step_up_agent_operation_v2"), Description("Verify a step-up email challenge for a pending high-risk Orbit AI operation.")]
-    public Task<PendingAgentOperation> VerifyStepUpAgentOperation(
+    [McpServerTool(Name = "verify_step_up_agent_operation_v2"), Description("Verify a step-up email challenge for a pending high-risk Orbit AI operation. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
+    public async Task<CallToolResult> VerifyStepUpAgentOperation(
         ClaimsPrincipal user,
         [Description("Pending operation ID")] string pendingOperationId,
         [Description("Step-up challenge ID")] string challengeId,
         [Description("6-digit step-up verification code")] string code,
         CancellationToken cancellationToken = default)
     {
-        if (user.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
-            throw new UnauthorizedAccessException("API key credentials cannot satisfy step-up authorization.");
+        if (ApprovalDenial(user) is { } denial)
+            return denial;
 
         if (!Guid.TryParse(pendingOperationId, out var parsedPendingId))
-            throw new ArgumentException("pendingOperationId must be a valid GUID.", nameof(pendingOperationId));
+            return Error("invalid_pending_operation_id", "pendingOperationId must be a valid GUID.");
 
         if (!Guid.TryParse(challengeId, out var parsedChallengeId))
-            throw new ArgumentException("challengeId must be a valid GUID.", nameof(challengeId));
+            return Error("invalid_challenge_id", "challengeId must be a valid GUID.");
 
-        return VerifyChallengeAsync(user.GetUserId(), parsedPendingId, parsedChallengeId, code, cancellationToken);
+        var result = await stepUpService.VerifyChallengeAsync(user.GetUserId(), parsedPendingId, parsedChallengeId, code, cancellationToken);
+        return result.IsFailure ? Error("step_up_failed", result.Error) : Success(result.Value);
     }
 
-    private async Task<AgentStepUpChallenge> IssueChallengeAsync(
-        Guid userId,
-        Guid pendingOperationId,
-        string language,
-        CancellationToken cancellationToken)
+    private static CallToolResult? ApprovalDenial(ClaimsPrincipal user)
     {
-        var result = await stepUpService.IssueChallengeAsync(userId, pendingOperationId, language, cancellationToken);
-        if (result.IsFailure)
-            throw new InvalidOperationException(result.Error);
+        if (user.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+            return Error("interactive_confirmation_required", McpExecutorBridge.InteractiveConfirmationGuidance);
 
-        return result.Value;
+        return user.IsReadOnlyCredential()
+            ? Error("read_only_credential", "Read-only credentials cannot approve write operations.")
+            : null;
     }
 
-    private async Task<PendingAgentOperation> VerifyChallengeAsync(
-        Guid userId,
-        Guid pendingOperationId,
-        Guid challengeId,
-        string code,
-        CancellationToken cancellationToken)
+    private static CallToolResult Success<T>(T value) => new()
     {
-        var result = await stepUpService.VerifyChallengeAsync(userId, pendingOperationId, challengeId, code, cancellationToken);
-        if (result.IsFailure)
-            throw new InvalidOperationException(result.Error);
+        Content = [new TextContentBlock { Text = JsonSerializer.Serialize(value, McpJsonUtilities.DefaultOptions) }]
+    };
 
-        return result.Value;
+    private static CallToolResult Error(string code, string message)
+    {
+        var payload = JsonSerializer.SerializeToElement(new { code, message });
+        return new CallToolResult
+        {
+            IsError = true,
+            StructuredContent = payload,
+            Content = [new TextContentBlock { Text = payload.GetRawText() }]
+        };
     }
 }

@@ -44,6 +44,6 @@ public partial class ChatController
     }
 
     private bool CanReadHabitRanking() => CanAccessChat()
-        && (HttpContext.User.GetAgentAuthMethod() != AgentAuthMethod.ApiKey
+        && (HttpContext.User.GetAgentAuthMethod() is not (AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             || HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ReadHabits, StringComparer.OrdinalIgnoreCase));
 }

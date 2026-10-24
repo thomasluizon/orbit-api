@@ -528,8 +528,11 @@ public class AgentExecutionAndSanitizerTests
         capturedContexts[2].OperationFingerprint.Should().NotBe(capturedContexts[0].OperationFingerprint);
     }
 
-    [Fact]
-    public async Task AgentOperationExecutor_UsesFallbackScopesForJwtRequests()
+    [Theory]
+    [InlineData(AgentAuthMethod.Jwt)]
+    [InlineData(AgentAuthMethod.ApiKey)]
+    [InlineData(AgentAuthMethod.OAuth)]
+    public async Task AgentOperationExecutor_OnlyJwtUsesFallbackScopes(AgentAuthMethod authMethod)
     {
         var catalog = Substitute.For<IAgentCatalogService>();
         var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
@@ -551,11 +554,14 @@ public class AgentExecutionAndSanitizerTests
             operation.Id,
             Parse("""{"title":"Test"}"""),
             AgentExecutionSurface.Chat,
-            AgentAuthMethod.Jwt));
+            authMethod));
 
         response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         capturedContext.Should().NotBeNull();
-        capturedContext.GrantedScopes.Should().Contain(AgentScopes.WriteHabits);
+        if (authMethod == AgentAuthMethod.Jwt)
+            capturedContext.GrantedScopes.Should().Contain(AgentScopes.WriteHabits);
+        else
+            capturedContext.GrantedScopes.Should().BeEmpty();
     }
 
     [Fact]

@@ -159,7 +159,7 @@ public class McpPlanAccessTests
             context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
             context.User.Identity!.IsAuthenticated.Should().BeTrue();
             context.User.FindFirstValue(ClaimTypes.NameIdentifier).Should().Be(user.Id.ToString());
-            context.User.FindFirstValue("auth_method").Should().Be("api_key");
+            context.User.FindFirstValue("auth_method").Should().Be(throughOAuth ? "oauth" : "api_key");
             toolOutput.Should().Be("No habits found for the given date range.");
             await usage.Received(1).MarkUsedAsync(key.Id, Arg.Any<CancellationToken>());
             await mediator.Received(1).Send(
