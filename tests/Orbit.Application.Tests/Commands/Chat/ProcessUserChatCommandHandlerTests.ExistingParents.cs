@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -13,11 +14,36 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Fact]
+    public async Task PendingPreview_GroundingIsEnforcedWithoutTheGlobalFlagAndUsesOnlyPreviewFacts()
+    {
+        SetupExistingParents("en");
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(bulk);
+        HoldReplayWrites(bulk);
+        SetupAiResponse(ReplayCall("bulk_create_habits", """{"habits":[{"title":"Take vitamin D","frequency_unit":"Week","frequency_quantity":1}]}""").Value);
+        ReplyToReplay("Yes, they are sub-habits of Before Bed and Post Lunch, every 99 days.");
+
+        var result = await handler.Handle(new(UserId, "Create a weekly vitamin D habit."), default);
+
+        result.Value.PendingOperations.Should().ContainSingle();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.GroundingFacts.Facts.Should().NotContain(fact => fact.Value == "99"
+            || fact.Kind == "EntityName" && (fact.Value == "BEFORE BED" || fact.Value == "POST LUNCH"));
+        var warnings = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning).Select(call =>
+                ((IEnumerable<KeyValuePair<string, object?>>)call.GetArguments()[2]!).ToDictionary()).ToArray();
+        warnings.Should().Contain(properties => properties.ContainsKey("ViolationKind")
+            && Equals(properties["Enforced"], true));
+    }
+
     [Theory]
     [InlineData("en", "Post lunch: take vitamin D (once a week) Before bed: take rovustatina (everyday)")]
     [InlineData("pt-BR", "Post lunch: tomar vitamina D (uma vez por semana) Before bed: tomar rovustatina (todo dia)")]
     [InlineData("en", "POST LUNCH | take vitamin D (once a week) BEFORE BED = take rovustatina (everyday)")]
     [InlineData("en", "Post lunc: take vitamin D (once a week) Befor bed: take rovustatina (everyday)")]
+    [InlineData("en", "Post lunch - take vitamin D (once a week) Before bed -> take rovustatina (everyday)")]
+    [InlineData("en", "Post lunch / take vitamin D (once a week) Before bed > take rovustatina (everyday)")]
     public async Task ExistingHeadings_OnePreviewBindsEachItemToItsAccountParent(string language, string message)
     {
         var parents = SetupExistingParents(language);

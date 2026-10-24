@@ -43,9 +43,18 @@ public partial class ProcessUserChatCommandHandler
         string? message, IReadOnlyList<string>? followUps, ToolExecutionAccumulator results,
         ProcessUserChatCommand request, GroundingTurn turn)
     {
-        var facts = TurnFactSet.FromToolResults(results.ToolResults);
+        var previewClaims = results.PendingOperations.Count > 0;
+        if (previewClaims) turn = turn with { Enforce = true };
+        var facts = previewClaims
+            ? PreviewFacts(results.PendingOperations)
+            : TurnFactSet.FromToolResults(results.ToolResults);
         var textViolations = CheckGrounding(message, "Message", facts, request, turn);
         var followUpViolations = CheckGrounding(followUps is null ? null : string.Join("\n", followUps), "FollowUps", facts, request, turn);
+        if (HasHabitCreationPreview(results))
+        {
+            message = null;
+            followUps = null;
+        }
         if (turn.Enforce)
         {
             if (textViolations)
@@ -61,6 +70,22 @@ public partial class ProcessUserChatCommandHandler
         }
         return new GroundedReply(message, followUps, facts);
     }
+
+    private static TurnFactSet PreviewFacts(IEnumerable<Orbit.Domain.Models.PendingAgentOperation> previews) =>
+        TurnFactSet.FromToolResults(previews.Select(pending => new Orbit.Domain.Models.AiToolCallResult(
+            pending.CapabilityId, pending.Id.ToString(), true, null, null, null,
+            new
+            {
+                count = pending.Items?.Count,
+                preview_items = pending.Items?.Select(item => new
+                {
+                    item.EntityName,
+                    parents = item.Fields.Where(field => field.Field == "parent_habit_id"
+                        && field.ProposedValue is { ValueKind: System.Text.Json.JsonValueKind.String } value
+                        && Guid.TryParse(value.GetString(), out _)).Select(field => new { EntityName = field.NewValue }),
+                    fields = item.Fields.Select(field => new { field.Field, field.NewValue, field.ProposedValue })
+                })
+            })));
 
     private bool CheckGrounding(string? text, string location, TurnFactSet facts, ProcessUserChatCommand request, GroundingTurn turn)
     {

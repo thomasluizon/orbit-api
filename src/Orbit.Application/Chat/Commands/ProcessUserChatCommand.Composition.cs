@@ -97,7 +97,7 @@ public partial class ProcessUserChatCommandHandler
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
         var composition = UsesComposition(request, context);
-        var hasPreview = HasHeadingPreview(executionResults);
+        var hasPreview = HasHabitCreationPreview(executionResults);
         var language = GetUserLanguage(context.User);
         var parsedResponse = FollowUpDirective.Parse(StripJsonWrapper(aiResponse.TextMessage));
         var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
@@ -144,8 +144,11 @@ public partial class ProcessUserChatCommandHandler
         return (cards, followUps, groundedReply.Facts);
     }
 
-    private static bool HasHeadingPreview(ToolExecutionAccumulator results) =>
-        results.PendingOperations.Count > 0 && results.ParentHeadings.Count > 0;
+    private static bool HasHabitCreationPreview(ToolExecutionAccumulator results) =>
+        results.PendingOperations.Count > 0 && (results.ParentHeadings.Count > 0
+            || results.ActionResults.Count == 0
+                && results.PendingOperations.Any(pending => pending.ActionKey is "createHabit" or "createHabits" or "createSubHabit"
+                    || pending.DisplayName is "create_habit" or "bulk_create_habits" or "create_sub_habit"));
 
     private sealed class CompositionParts
     {

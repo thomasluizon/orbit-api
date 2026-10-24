@@ -324,6 +324,29 @@ public class AiControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task PendingOperation_ParentChoiceRequiredReturnsTypedErrorBeforeApproval(bool confirm)
+    {
+        var id = Guid.NewGuid();
+        _pendingOperationStore.GetExecution(UserId, id).Returns(new PendingAgentOperationExecution(id,
+            AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits", Parse("""{"habits":[{"title":"Take vitamin D","parent_habit_id":"Post Lunch"}]}"""),
+            AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        _changePreviewer.PreviewAsync(UserId, "bulk_create_habits", Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<PendingOperationChangePreview?>(new([], 1,
+                [new("0", null, "Take vitamin D", [], "state", ValidationErrors:
+                    [new("parent_habit_id", "parent_choice_required", "Choose a parent habit or No parent.")])], "preview")));
+
+        var result = confirm ? await _controller.ConfirmPendingOperation(id, default)
+            : await _controller.ExecutePendingOperation(id, new("token"), default);
+
+        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<BadRequestObjectResult>().Which.Value);
+        body.GetProperty("error").GetString().Should().Be("parent_choice_required");
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().Confirm(default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task PendingOperation_ValidBulkCreateExecutesOnlyWithStoredFingerprint(bool hasFingerprint)
     {
         var (controller, id) = await SetupBulkCreateAsync(

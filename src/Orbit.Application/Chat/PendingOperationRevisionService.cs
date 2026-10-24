@@ -138,6 +138,10 @@ public sealed class PendingOperationRevisionService(
                 .ToHashSet(StringComparer.Ordinal);
             if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)))
                 return "field_not_offered";
+            foreach (var choice in offered[item.ItemId].FieldOptions ?? [])
+                if (edits.TryGetProperty(choice.Field, out var selected)
+                    && !choice.Options.Any(option => JsonElement.DeepEquals(option.Value, selected)))
+                    return "option_not_offered";
         }
 
         return null;
@@ -163,20 +167,27 @@ public sealed class PendingOperationRevisionService(
     }
 
     public async Task<bool> CanApproveAsync(Guid userId, PendingAgentOperationExecution execution,
+        CancellationToken cancellationToken) =>
+        await ApprovalErrorAsync(userId, execution, cancellationToken) is null;
+
+    public async Task<string?> ApprovalErrorAsync(Guid userId, PendingAgentOperationExecution execution,
         CancellationToken cancellationToken)
     {
         if (execution.RequiresReproposal)
-            return false;
+            return "pending_operation_schema_changed";
         if (execution.OperationId != "bulk_create_habits")
-            return true;
+            return null;
 
         var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
             execution.Arguments, cancellationToken);
         if (previewResult.IsFailure)
-            return false;
+            return previewResult.ErrorCode ?? "validation_error";
         var preview = previewResult.Value;
-        return preview?.Items is { Count: > 0 } items
-            && items.All(item => item.ValidationErrors is null or { Count: 0 });
+        if (preview?.Items is not { Count: > 0 } items)
+            return "preview_unavailable";
+        return items.SelectMany(item => item.ValidationErrors ?? [])
+            .FirstOrDefault(error => error.ErrorCode == "parent_choice_required")?.ErrorCode
+            ?? (items.Any(item => item.ValidationErrors is { Count: > 0 }) ? "validation_error" : null);
     }
 
     /// <summary>
@@ -190,6 +201,8 @@ public sealed class PendingOperationRevisionService(
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
         if (edits.Count == 0)
             return true;
+        if (operationId == "bulk_create_habits")
+            edits = edits.Where(edit => edit.Name != "parent_habit_id").ToList();
         if (edits.Any(edit => edit.Value.ValueKind == JsonValueKind.Null
             && !OptionalToolArguments.ClearableFields(operationId).Contains(edit.Name)))
             return false;
@@ -321,12 +334,18 @@ public sealed class PendingOperationRevisionService(
             if (habit is null)
                 return false;
             var copy = (JsonObject)habit.DeepClone();
+            if (!copy.ContainsKey("parent_habit_id") && root["parent_habit_id"] is { } sharedParent)
+                copy["parent_habit_id"] = sharedParent.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
+            if (item.Edits is { ValueKind: JsonValueKind.Object } edits
+                && edits.TryGetProperty("parent_habit_id", out var parent) && parent.ValueKind == JsonValueKind.Null)
+                copy.Remove("parent_habit_id");
             copy["preview_item_id"] = item.ItemId;
             revisedHabits.Add(copy);
         }
         root["habits"] = revisedHabits;
+        root.Remove("parent_habit_id");
         return true;
     }
 

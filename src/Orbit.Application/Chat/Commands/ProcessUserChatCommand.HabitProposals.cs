@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Validators;
@@ -73,22 +74,20 @@ public partial class ProcessUserChatCommandHandler
         var schema = JsonSerializer.SerializeToElement(bulk.GetParameterSchema())
             .GetProperty("properties").GetProperty("habits").GetProperty("items");
         var groups = calls.Values.OfType<AiToolCall>()
-            .Where(call => call.Name is "create_habit" or "bulk_create_habits")
-            .GroupBy(call => call.Args.TryGetProperty("parent_habit_id", out var parent) ? parent.ToString() : string.Empty)
+            .Where(call => call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
+            .GroupBy(call => results.ParentHeadings.Count > 0 ? string.Empty
+                : call.Args.TryGetProperty("parent_habit_id", out var parent) ? parent.ToString() : string.Empty)
             .Select(group => group.ToArray()).ToArray();
         foreach (var group in groups)
         {
             if (group.Length < 2 || group.Any(call => !HasEquivalentBulkSemantics(call)))
                 continue;
-            var items = group.SelectMany(call => call.Name == "bulk_create_habits"
-                ? call.Args.GetProperty("habits").EnumerateArray().ToArray() : [call.Args]).ToArray();
+            var items = group.SelectMany(CreationItems).ToArray();
             if (items.Any(item => item.EnumerateObject().Any(field =>
                 !AgentArgumentSchema.Accepts(schema, field.Name, field.Value))))
                 continue;
             var first = group[0];
             var arguments = new Dictionary<string, object?> { ["habits"] = items };
-            if (first.Args.TryGetProperty("parent_habit_id", out var parent))
-                arguments["parent_habit_id"] = parent.Clone();
             calls[first.Id] = first with { Name = "bulk_create_habits", Args = JsonSerializer.SerializeToElement(arguments) };
             foreach (var call in group.Skip(1))
             {
@@ -98,9 +97,22 @@ public partial class ProcessUserChatCommandHandler
         }
     }
 
+    private static IEnumerable<JsonElement> CreationItems(AiToolCall call)
+    {
+        if (call.Name != "bulk_create_habits")
+            return [call.Args];
+        return call.Args.GetProperty("habits").EnumerateArray().Select(item =>
+        {
+            var copy = JsonNode.Parse(item.GetRawText())!.AsObject();
+            if (!copy.ContainsKey("parent_habit_id") && call.Args.TryGetProperty("parent_habit_id", out var parent))
+                copy["parent_habit_id"] = JsonNode.Parse(parent.GetRawText());
+            return JsonSerializer.SerializeToElement(copy);
+        }).ToArray();
+    }
+
     private static bool HasEquivalentBulkSemantics(AiToolCall call)
     {
-        if (call.Name == "bulk_create_habits")
+        if (call.Name is "bulk_create_habits" or "create_sub_habit")
             return true;
 
         var arguments = call.Args;

@@ -184,8 +184,9 @@ public class AiController(
             LogPendingRejection(id, execution.OperationId, "pending_operation_schema_changed");
             return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
         }
-        var invalid = execution is not null
-            && !await revisionService.CanApproveAsync(userId, execution, cancellationToken);
+        var approvalError = execution is null ? null
+            : await revisionService.ApprovalErrorAsync(userId, execution, cancellationToken);
+        var invalid = approvalError is not null;
         var confirmation = invalid ? null : pendingStores.OperationStore.Confirm(userId, id);
         await auditService.RecordAsync(new AgentAuditEntry(
             userId,
@@ -199,12 +200,12 @@ public class AiController(
             HttpContext.TraceIdentifier,
             "Confirm pending agent operation",
             TargetId: id.ToString(),
-            Error: invalid ? "validation_error" : confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
+            Error: approvalError ?? (confirmation is null ? "pending_operation_not_found" : null)), cancellationToken);
 
         if (confirmation is null)
-            LogPendingRejection(id, execution?.OperationId ?? "unknown", invalid ? "validation_error" : "pending_operation_not_found");
+            LogPendingRejection(id, execution?.OperationId ?? "unknown", approvalError ?? "pending_operation_not_found");
         if (invalid)
-            return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
+            return ApprovalFailure(approvalError!);
 
         return confirmation is null
             ? NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody())
@@ -321,10 +322,10 @@ public class AiController(
             return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
         }
 
-        if (!await revisionService.CanApproveAsync(userId, pendingExecution, cancellationToken))
+        if (await revisionService.ApprovalErrorAsync(userId, pendingExecution, cancellationToken) is { } approvalError)
         {
-            LogPendingRejection(id, pendingExecution.OperationId, "validation_error");
-            return BadRequest(ErrorMessages.ValidationError.ToErrorBody());
+            LogPendingRejection(id, pendingExecution.OperationId, approvalError);
+            return ApprovalFailure(approvalError);
         }
 
         if (!await revisionService.IsCurrentAsync(userId, pendingExecution, cancellationToken))
@@ -346,6 +347,10 @@ public class AiController(
 
         return Ok(result);
     }
+
+    private BadRequestObjectResult ApprovalFailure(string error) => error == "parent_choice_required"
+        ? BadRequest(new { error, message = "Choose a parent habit or No parent in the preview." })
+        : BadRequest(ErrorMessages.ValidationError.ToErrorBody());
 
     [HttpPost("clarifications/{operationId:guid}/resolve")]
     [DistributedRateLimit("ai-resolve")]

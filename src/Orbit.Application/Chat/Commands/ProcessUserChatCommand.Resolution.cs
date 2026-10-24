@@ -85,18 +85,18 @@ public partial class ProcessUserChatCommandHandler
             return null;
         }
 
-        if (arguments["parent_habit_id"] is not null && !results.RequiresExistingParent
+        if (arguments["parent_habit_id"] is not null && !results.RequiresExistingParent && results.ParentHeadings.Count == 0
             && call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
         {
             results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
             return null;
         }
+        if (call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
+            return ResolveHabitCreation(call, arguments, results);
+
         if (!ResolveHabitIdentifiers(arguments, call.Name, results)
             || !ResolveSearchFilter(call.Name, arguments, results))
             return null;
-
-        if (call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
-            return ResolveHabitCreation(call, arguments, results);
 
         return call with { Args = JsonSerializer.SerializeToElement(arguments) };
     }
@@ -157,20 +157,14 @@ public partial class ProcessUserChatCommandHandler
             results.InvalidCalls[call.Id] = "Habits must be an array of objects.";
             return null;
         }
-        foreach (var item in items.OfType<JsonObject>())
-        {
-            if (HabitHeadingParents.ForItem(item, results.ParentHeadings) is { } heading)
-                HabitHeadingParents.Bind(item, heading, removeInventedDescription: true);
-            else if (item["parent_habit_id"] is not null)
-            {
-                if (!results.RequiresExistingParent)
-                {
-                    results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
-                    return null;
-                }
-                if (!ResolveHabitIdentifiers(item, call.Name, results)) return null;
-            }
-        }
+        var allHaveHeadings = items.Count > 0 && items.OfType<JsonObject>()
+            .All(item => HabitHeadingParents.ForItem(item, results.ParentHeadings) is not null);
+        if (allHaveHeadings)
+            arguments.Remove("parent_habit_id");
+        else if (!ResolveHabitIdentifiers(arguments, call.Name, results))
+            return null;
+        if (!BindHeadingItems(call, items, results))
+            return null;
         if (results.RequiresExistingParent && items.Count == 1 && items[0] is JsonObject root
             && root["title"] is JsonValue titleValue && titleValue.TryGetValue<string>(out var title)
             && root["sub_habits"] is JsonArray children
@@ -180,7 +174,7 @@ public partial class ProcessUserChatCommandHandler
             call = call with { Name = "bulk_create_habits" };
             items = arguments["habits"]!.AsArray();
         }
-        else if (arguments["parent_habit_id"] is null && results.RequiresExistingParent)
+        else if (arguments["parent_habit_id"] is null && results.RequiresExistingParent && !allHaveHeadings)
         {
             var name = (items.FirstOrDefault() as JsonObject)?["title"]?.ToString() ?? string.Empty;
             if (!results.AmbiguousHabitNames.ContainsKey(name))
@@ -195,10 +189,51 @@ public partial class ProcessUserChatCommandHandler
         }
         if (proposed.Count == 0)
             return null;
+        return BindCreationOperation(call, arguments, proposed, allHaveHeadings);
+    }
+
+    private static bool BindHeadingItems(AiToolCall call, JsonArray items, ToolExecutionAccumulator results)
+    {
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            if (HabitHeadingParents.ForItem(item, results.ParentHeadings) is { } heading)
+                HabitHeadingParents.Bind(item, heading, removeInventedDescription: true);
+            else if (item["parent_habit_id"] is not null)
+            {
+                if (!results.RequiresExistingParent)
+                {
+                    results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
+                    return false;
+                }
+                if (!ResolveHabitIdentifiers(item, call.Name, results)) return false;
+            }
+        }
+        return true;
+    }
+
+    private static AiToolCall BindCreationOperation(AiToolCall call, JsonObject arguments, JsonArray proposed, bool hasHeadings)
+    {
         if (call.Name == "bulk_create_habits")
             arguments["habits"] = proposed;
         else
+        {
             arguments = proposed[0]!.AsObject();
+            if (arguments["parent_habit_id"] is not null)
+            {
+                if (Guid.TryParse(arguments["parent_habit_id"]!.ToString(), out _))
+                    call = call with { Name = "create_sub_habit" };
+                else
+                {
+                    arguments = new JsonObject { ["habits"] = proposed };
+                    call = call with { Name = "bulk_create_habits" };
+                }
+            }
+            else if (hasHeadings)
+            {
+                arguments = new JsonObject { ["habits"] = proposed };
+                call = call with { Name = "bulk_create_habits" };
+            }
+        }
         return call with { Args = JsonSerializer.SerializeToElement(arguments) };
     }
 

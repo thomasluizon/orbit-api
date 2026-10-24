@@ -21219,6 +21219,43 @@
           }
         }
       },
+      "PendingOperationFieldOption": {
+        "required": [
+          "value",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingOperationFieldOptions": {
+        "required": [
+          "field",
+          "required",
+          "options"
+        ],
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationFieldOption"
+            }
+          }
+        }
+      },
       "PendingOperationItem": {
         "required": [
           "itemId",
@@ -21264,6 +21301,15 @@
             ],
             "items": {
               "$ref": "#/components/schemas/PendingOperationValidationError"
+            }
+          },
+          "fieldOptions": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PendingOperationFieldOptions"
             }
           }
         }

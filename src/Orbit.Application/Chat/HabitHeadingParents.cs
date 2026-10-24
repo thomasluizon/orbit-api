@@ -16,9 +16,7 @@ internal static partial class HabitHeadingParents
             var name = match.Groups["heading"].Value.Trim();
             var end = index + 1 < matches.Count ? matches[index + 1].Index : message.Length;
             var body = message[(match.Index + match.Length)..end];
-            var exact = habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)).ToArray();
-            var candidates = exact.Length > 0 ? exact : habits.Where(habit => CloseName(habit.Title, name)).ToArray();
-            return new Heading(name, body, candidates);
+            return new Heading(name, body, Candidates(name, habits));
         }).ToArray();
     }
 
@@ -32,12 +30,21 @@ internal static partial class HabitHeadingParents
 
     public static bool Bind(JsonObject item, Heading heading, bool removeInventedDescription)
     {
-        item["parent_habit_id"] = heading.Candidates.Count == 1
-            ? heading.Candidates[0].Id.ToString() : heading.Name;
+        if (heading.Candidates.Count == 0)
+            item.Remove("parent_habit_id");
+        else
+            item["parent_habit_id"] = heading.Candidates.Count == 1
+                ? heading.Candidates[0].Id.ToString() : heading.Name;
         if (removeInventedDescription && item["description"] is { } description
             && !HabitNameMatcher.Normalize(heading.Body).Contains(HabitNameMatcher.Normalize(description.ToString()), StringComparison.Ordinal))
             item.Remove("description");
         return heading.Candidates.Count == 1;
+    }
+
+    internal static IReadOnlyList<Habit> Candidates(string name, IReadOnlyList<Habit> habits)
+    {
+        var exact = habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)).ToArray();
+        return exact.Length > 0 ? exact : habits.Where(habit => CloseName(habit.Title, name)).ToArray();
     }
 
     private static bool CloseName(string left, string right)
@@ -57,6 +64,6 @@ internal static partial class HabitHeadingParents
         return previous[b.Length] <= 1;
     }
 
-    [GeneratedRegex(@"(?<heading>[\p{L}\p{N}][\p{L}\p{N} \t]*?)\s*[:=|>\-\u2013\u2014]+\s*", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<heading>[\p{L}\p{N}][\p{L}\p{N} \t]*?)\s*(?:[:=|>/\u2192\uFF1A]+|[\-\u2013\u2014]+(?:>+|(?=\s)))\s*", RegexOptions.CultureInvariant)]
     private static partial Regex Separator();
 }

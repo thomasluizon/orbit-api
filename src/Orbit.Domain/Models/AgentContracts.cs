@@ -152,7 +152,13 @@ public record PendingOperationItem(
     string StateFingerprint,
     bool? RemovesData = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<PendingOperationValidationError>? ValidationErrors = null);
+    IReadOnlyList<PendingOperationValidationError>? ValidationErrors = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<PendingOperationFieldOptions>? FieldOptions = null);
+
+public record PendingOperationFieldOptions(string Field, bool Required, IReadOnlyList<PendingOperationFieldOption> Options);
+
+public record PendingOperationFieldOption(JsonElement Value, string Label);
 
 public record PendingOperationValidationError(string Field, string ErrorCode, string Error);
 
@@ -497,4 +503,5 @@ public static class AgentScopes
     ];
 }
 
-public sealed record PendingHabitCreation(string Title, Guid? ParentHabitId = null);
+public sealed record PendingHabitCreation(string Title, Guid? ParentHabitId = null,
+    Guid? PendingOperationId = null, DateTime? ExpiresAtUtc = null, string? ActionKey = null);
