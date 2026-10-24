@@ -8,6 +8,19 @@ public class ApiKeyTests
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
     [Fact]
+    public void Create_ValidatesAndPreservesOAuthClientIdentity()
+    {
+        const string clientId = "https://claude.ai/oauth/mcp-oauth-client-metadata";
+        var family = Guid.NewGuid();
+        ApiKey.Create(ValidUserId, "OAuth", oauthClientId: clientId).IsFailure.Should().BeTrue();
+        ApiKey.Create(ValidUserId, "OAuth", oauthFamilyId: family, oauthClientId: " ").IsFailure.Should().BeTrue();
+        ApiKey.Create(ValidUserId, "OAuth", oauthFamilyId: family, oauthClientId: new string('x', 1025)).IsFailure.Should().BeTrue();
+        ApiKey.Create(ValidUserId, "OAuth", oauthFamilyId: family, oauthClientId: "http://client.example/metadata").IsFailure.Should().BeTrue();
+        ApiKey.Create(ValidUserId, "OAuth", oauthFamilyId: family, oauthClientId: clientId).Value.Entity.OAuthClientId.Should().Be(clientId);
+        ApiKey.Create(ValidUserId, "OAuth").Value.Entity.OAuthClientId.Should().BeNull();
+    }
+
+    [Fact]
     public void Create_ValidatesAndPreservesOAuthFamily()
     {
         var family = Guid.NewGuid();

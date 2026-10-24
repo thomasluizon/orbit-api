@@ -291,6 +291,10 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("OAuthClientId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<Guid?>("OAuthFamilyId")
                         .HasColumnType("uuid");
 

@@ -55,6 +55,8 @@ form.addEventListener('submit', (event) => {
         var groups = string.Join("", scopes.Select(scope => PermissionLabel(scope, consent)).Distinct()
             .Select(label => $"<li>{BrandText(label)}</li>"));
         var items = string.Join("", scopes.Select(scope => $"<li><code>{WebUtility.HtmlEncode(scope)}</code></li>"));
+        var clientDetails = entry.ClientName is null ? string.Empty
+            : $"<p class=\"body-line\" id=\"oauth-client\">{WebUtility.HtmlEncode(entry.ClientName)} · {WebUtility.HtmlEncode(new Uri(entry.RedirectUri).Host)}</p>";
         return $$"""
 <!DOCTYPE html>
 <html lang="{{copy.Locale}}">
@@ -62,6 +64,7 @@ form.addEventListener('submit', (event) => {
 <body><main class="card">
 {{OAuthPageStyles.Mark}}
 <div class="intro"><h1>{{BrandText(consent.Title)}}</h1><p class="body-line">{{WebUtility.HtmlEncode(consent.Body)}}</p></div>
+{{clientDetails}}
 <section class="scopes">
 <ul id="permission-groups">{{groups}}</ul>
 <details><summary>{{WebUtility.HtmlEncode(consent.Disclosure)}}</summary><ul>{{items}}</ul></details>

@@ -130,6 +130,22 @@ public class OAuthClientMetadataServiceTests : IDisposable
         handler.UseProxy.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task GetAsync_EnforcesDeadlineWhileReadingBody()
+    {
+        _handler.StallBody = true;
+        (await _service.GetAsync(ClientId, default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_PropagatesCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        var fetch = () => _service.GetAsync(ClientId, cancellation.Token);
+        await fetch.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     [Theory]
     [InlineData("127.0.0.1")]
     [InlineData("10.0.0.1")]
@@ -176,6 +192,7 @@ public class OAuthClientMetadataServiceTests : IDisposable
         public DateTimeOffset? Expires { get; set; }
         public TimeSpan? Age { get; set; }
         public bool Streamed { get; set; }
+        public bool StallBody { get; set; }
         public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
         public int Requests { get; private set; }
 
@@ -183,7 +200,7 @@ public class OAuthClientMetadataServiceTests : IDisposable
         {
             Requests++;
             request.RequestUri!.OriginalString.Should().Be(ClientId);
-            var content = Streamed
+            var content = StallBody ? new StreamContent(new StalledStream()) : Streamed
                 ? (HttpContent)new StreamContent(new UnseekableStream(Encoding.UTF8.GetBytes(Body)))
                 : new StringContent(Body);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
@@ -200,5 +217,16 @@ public class OAuthClientMetadataServiceTests : IDisposable
     private sealed class UnseekableStream(byte[] bytes) : MemoryStream(bytes)
     {
         public override bool CanSeek => false;
+    }
+
+    private sealed class StalledStream : MemoryStream
+    {
+        public override bool CanSeek => false;
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, cancellationToken);
+            return 0;
+        }
     }
 }

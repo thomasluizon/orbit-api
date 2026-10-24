@@ -11411,6 +11411,14 @@
                         "type": "string"
                       }
                     }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "client_id": {
+                        "type": "string"
+                      }
+                    }
                   }
                 ]
               }

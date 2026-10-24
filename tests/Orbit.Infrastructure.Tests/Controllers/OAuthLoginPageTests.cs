@@ -39,7 +39,7 @@ public class OAuthLoginPageTests : IDisposable
             Substitute.For<IGenericRepository<ApiKey>>(),
             Substitute.For<IUnitOfWork>(),
             googleSettings, _configuration,
-            Substitute.For<ILogger<OAuthController>>());
+            Substitute.For<ILogger<OAuthController>>(), Substitute.For<IOAuthClientMetadataService>());
 
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = "https";
@@ -57,10 +57,10 @@ public class OAuthLoginPageTests : IDisposable
         "client-123", "https://claude.ai/callback", "client-state",
         "mcp-challenge", "S256", "mcp-nonce", error: null, language: language);
 
-    private string RenderThroughController(string acceptLanguage)
+    private async Task<string> RenderThroughController(string acceptLanguage)
     {
         _controller.HttpContext.Request.Headers.AcceptLanguage = acceptLanguage;
-        return _controller.Authorize(new OAuthController.AuthorizeRequest
+        return (await _controller.Authorize(new OAuthController.AuthorizeRequest
         {
             ClientId = "client-123",
             RedirectUri = "https://claude.ai/callback",
@@ -68,7 +68,7 @@ public class OAuthLoginPageTests : IDisposable
             State = "client-state",
             CodeChallenge = "mcp-challenge",
             CodeChallengeMethod = "S256",
-        })
+        }))
             .Should().BeOfType<ContentResult>().Subject.Content!;
     }
 
@@ -85,7 +85,7 @@ public class OAuthLoginPageTests : IDisposable
             .Should().BeOfType<ContentResult>().Subject;
         invalid.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         invalid.ContentType.Should().Be("text/html");
-        var invalidStart = _controller.GoogleStart("client", "https://claude.ai/callback", "", "challenge", "S256")
+        var invalidStart = (await _controller.GoogleStart("client", "https://claude.ai/callback", "", "challenge", "S256"))
             .Should().BeOfType<ContentResult>().Subject;
         var invalidConsent = _controller.Consent("missing").Should().BeOfType<ContentResult>().Subject;
         var invalidGrant = _controller.GrantConsent("missing", "requested").Should().BeOfType<ContentResult>().Subject;
@@ -294,9 +294,9 @@ public class OAuthLoginPageTests : IDisposable
     [InlineData("en")]
     [InlineData("en-GB,en;q=0.9")]
     [InlineData("")]
-    public void Authorize_RendersEnglishForAnyRequestThatDoesNotAskForPortuguese(string acceptLanguage)
+    public async Task Authorize_RendersEnglishForAnyRequestThatDoesNotAskForPortuguese(string acceptLanguage)
     {
-        var page = RenderThroughController(acceptLanguage);
+        var page = (await RenderThroughController(acceptLanguage));
 
         page.Should().Contain("<html lang=\"en\">");
         page.Should().Contain("Sign in with your email");
@@ -307,9 +307,9 @@ public class OAuthLoginPageTests : IDisposable
     [Theory]
     [InlineData("pt-BR,pt;q=0.9")]
     [InlineData("pt")]
-    public void Authorize_RendersBrazilianPortugueseForAPortugueseRequest(string acceptLanguage)
+    public async Task Authorize_RendersBrazilianPortugueseForAPortugueseRequest(string acceptLanguage)
     {
-        var page = RenderThroughController(acceptLanguage);
+        var page = (await RenderThroughController(acceptLanguage));
 
         page.Should().Contain("<html lang=\"pt-BR\">");
         page.Should().Contain("Entre com o seu email");
@@ -322,13 +322,13 @@ public class OAuthLoginPageTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void Authorize_OnlyLoadsTurnstileWhenEnabled_AndNeverPublishesSecret(bool enabled)
+    public async Task Authorize_OnlyLoadsTurnstileWhenEnabled_AndNeverPublishesSecret(bool enabled)
     {
         _configuration["BotProtection:Enabled"] = enabled.ToString();
         _configuration["BotProtection:SiteKey"] = "public-site-key";
         _configuration["BotProtection:SecretKey"] = "private-secret-key";
 
-        var page = RenderThroughController("pt-BR");
+        var page = (await RenderThroughController("pt-BR"));
         var requestJson = Regex.Match(page, "<script type=\"application/json\" id=\"oauth-request\">(.*?)</script>", RegexOptions.Singleline).Groups[1].Value;
         using var request = JsonDocument.Parse(requestJson);
 

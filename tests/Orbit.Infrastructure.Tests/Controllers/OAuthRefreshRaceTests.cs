@@ -52,7 +52,7 @@ public class OAuthRefreshRaceTests
                 {
                     var winnerStore = new OAuthAuthorizationStore(new OAuthStateStore(revokeDb, TimeProvider.System), TimeProvider.System);
                     var winner = Controller(winnerStore, new GenericRepository<ApiKey>(revokeDb), new UnitOfWork(revokeDb, new DatabaseConnectionSettings()));
-                    (await winner.Token("refresh_token", null, null, null, default, refresh)).Should().BeOfType<OkObjectResult>();
+                    (await winner.Token("refresh_token", null, null, null, default, refresh, client_id: "client")).Should().BeOfType<OkObjectResult>();
                     return tracked;
                 }
                 var payGate = Substitute.For<IPayGateService>();
@@ -70,7 +70,7 @@ public class OAuthRefreshRaceTests
         interleaved.AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>()).Returns(call => repository.AddAsync(call.Arg<ApiKey>(), call.Arg<CancellationToken>()));
         var controller = Controller(store, interleaved, new UnitOfWork(db, new DatabaseConnectionSettings()));
 
-        var result = await controller.Token("refresh_token", null, null, null, default, refresh);
+        var result = await controller.Token("refresh_token", null, null, null, default, refresh, client_id: "client");
 
         result.Should().BeOfType<BadRequestObjectResult>();
         using var verify = database.CreateContext();
@@ -91,19 +91,19 @@ public class OAuthRefreshRaceTests
         var original = store.CreateRefreshToken(new(user.Id, first.Id, "client"));
         var other = store.CreateRefreshToken(new(user.Id, unrelated.Id, "other-client"));
         var controller = Controller(store, new GenericRepository<ApiKey>(db), new UnitOfWork(db, new DatabaseConnectionSettings()));
-        var rotated = (OkObjectResult)await controller.Token("refresh_token", null, null, null, default, original);
+        var rotated = (OkObjectResult)await controller.Token("refresh_token", null, null, null, default, original, client_id: "client");
         var successor = JsonSerializer.SerializeToElement(rotated.Value).GetProperty("refresh_token").GetString()!;
 
-        (await controller.Token("refresh_token", null, null, null, default, "unknown")).Should().BeOfType<BadRequestObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, "unknown", client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
         db.ApiKeys.AsNoTracking().Count(key => !key.IsRevoked).Should().Be(2);
-        (await controller.Token("refresh_token", null, null, null, default, original)).Should().BeOfType<BadRequestObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, original, client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
         db.ApiKeys.AsNoTracking().Where(key => !key.IsRevoked).Select(key => key.Id).Should().Equal(unrelated.Id);
-        (await controller.Token("refresh_token", null, null, null, default, successor)).Should().BeOfType<BadRequestObjectResult>();
-        (await controller.Token("refresh_token", null, null, null, default, other)).Should().BeOfType<OkObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, successor, client_id: "client")).Should().BeOfType<BadRequestObjectResult>();
+        (await controller.Token("refresh_token", null, null, null, default, other, client_id: "other-client")).Should().BeOfType<OkObjectResult>();
     }
 
     private static OAuthController Controller(OAuthAuthorizationStore store, IGenericRepository<ApiKey> keys, IUnitOfWork work) =>
         new(Substitute.For<IMediator>(), store, keys, work, Options.Create(new GoogleSettings()),
-            new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance)
+            new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>())
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 }
