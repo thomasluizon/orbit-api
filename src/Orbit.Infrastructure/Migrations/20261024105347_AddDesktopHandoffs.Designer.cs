@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261024100714_AddDesktopHandoffs")]
+    [Migration("20261024105347_AddDesktopHandoffs")]
     partial class AddDesktopHandoffs
     {
         /// <inheritdoc />
@@ -2263,10 +2263,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("GoogleRefreshToken")
                         .HasColumnType("text");
-
-                    b.Property<string>("Handle")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
 
                     b.Property<bool>("HasCompletedOnboarding")
                         .HasColumnType("boolean");

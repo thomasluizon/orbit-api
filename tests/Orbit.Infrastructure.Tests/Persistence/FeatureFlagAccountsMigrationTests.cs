@@ -135,7 +135,9 @@ public class FeatureFlagAccountsMigrationTests
             "20261023092738_AddAppleSignInCredentials",
             "20261023092801_PreserveProviderPaidCoverage",
             "20261023103527_DropRetiredFeatureTables",
-            "20261023111014_DropSentProactiveCheckins");
+            "20261023111014_DropSentProactiveCheckins",
+            "20261024102647_UnmapUserHandle",
+            "20261024105347_AddDesktopHandoffs");
         var preference = current.FindEntityType(typeof(User))!.FindProperty(nameof(User.ProactiveAstraEnabled))!;
         preference.ClrType.Should().Be(typeof(bool));
         preference.IsNullable.Should().BeFalse();
