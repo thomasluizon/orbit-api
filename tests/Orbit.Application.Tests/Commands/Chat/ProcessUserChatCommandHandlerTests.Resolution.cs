@@ -125,6 +125,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     [Theory]
     [InlineData("""{"habit_ids":["meditação"]}""")]
+    [InlineData("""{"filter":{"search":"meditação"}}""")]
     public async Task Replay_UnresolvedNames_NoEmptyPreviewAndOneQuestion(string arguments)
     {
         SetupResolutionAccount();

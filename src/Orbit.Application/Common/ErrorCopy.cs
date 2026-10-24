@@ -139,6 +139,8 @@ public static partial class ErrorCopy
     /// <summary>Astra, the daily summary and every other model-backed surface.</summary>
     private static readonly (string Code, string En, string PtBr)[] Astra =
     [
+        ("chat.bulk.iconsAlreadyPresent", "All your habits already have an icon.", "Todos os seus hábitos já têm ícone."),
+        ("chat.bulk.noChanges", "No habits need changes.", "Nenhum hábito precisa de alterações."),
         (ErrorCodes.AiUnavailable, "Astra is not answering right now. Try again in a moment.", "A Astra não está respondendo agora. Tente de novo em instantes."),
         (ErrorCodes.AiEmptyResponse, "Astra did not return an answer. Ask again.", "A Astra não devolveu uma resposta. Pergunte de novo."),
         (ErrorCodes.AiNoActiveConversation, "That conversation is no longer open. Start a new one.", "Essa conversa não está mais aberta. Comece outra."),

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Common;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 
@@ -15,12 +16,7 @@ public sealed record BulkNoChangesOutcome(bool IconsAlreadyPresent)
         && BulkUpdateHabitEmojisTool.ResolveEmojiOperation(arguments).Infer
         && JsonArgumentParser.GetOptionalBool(arguments, "replace_existing") != true);
 
-    internal string Message(string? language) => (IconsAlreadyPresent,
-        language?.StartsWith("pt", StringComparison.OrdinalIgnoreCase) == true) switch
-    {
-        (true, true) => "Todos os seus hábitos já têm ícone.",
-        (true, false) => "All your habits already have an icon.",
-        (false, true) => "Nenhum hábito precisa de alterações.",
-        (false, false) => "No habits need changes."
-    };
+    internal string Message(string? language) => ErrorCopy.Resolve(
+        IconsAlreadyPresent ? "chat.bulk.iconsAlreadyPresent" : "chat.bulk.noChanges",
+        LocaleHelper.IsPortuguese(language));
 }

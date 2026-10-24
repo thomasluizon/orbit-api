@@ -24,12 +24,12 @@ public partial class AgentChatWriteHoldTests
 {
     [Theory]
     [InlineData("bulk_update_habit_emojis", """{"filter":{"has_emoji":false}}""")]
-    [InlineData("bulk_update_habits", """{"filter":{"search":"absent"},"updates":{"description":"New"}}""")]
-    [InlineData("bulk_reschedule_habits", """{"filter":{"search":"absent"},"due_date":"2026-10-25"}""")]
-    [InlineData("bulk_log_habits", """{"filter":{"search":"absent"}}""")]
-    [InlineData("bulk_log_habits", """{"filter":{"search":"absent"},"dates":["2026-10-24"]}""")]
-    [InlineData("bulk_skip_habits", """{"filter":{"search":"absent"}}""")]
-    [InlineData("bulk_delete_habits", """{"filter":{"search":"absent"}}""")]
+    [InlineData("bulk_update_habits", """{"filter":{"is_bad_habit":true},"updates":{"description":"New"}}""")]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"is_bad_habit":true},"due_date":"2026-10-25"}""")]
+    [InlineData("bulk_log_habits", """{"filter":{"is_bad_habit":true}}""")]
+    [InlineData("bulk_log_habits", """{"filter":{"is_bad_habit":true},"dates":["2026-10-24"]}""")]
+    [InlineData("bulk_skip_habits", """{"filter":{"is_bad_habit":true}}""")]
+    [InlineData("bulk_delete_habits", """{"filter":{"is_bad_habit":true}}""")]
     [InlineData("bulk_update_habit_emojis", """{"filter":{"all":true},"emoji":"📚"}""")]
     [InlineData("bulk_update_habit_emojis", """{"filter":{"all":true},"replace_existing":true}""")]
     public async Task ExecuteAsync_ZeroBulkTargets_SucceedsWithoutApprovalOrMutation(string operationId, string arguments)
@@ -67,25 +67,58 @@ public partial class AgentChatWriteHoldTests
             language, message, expected, supportsParts);
 
     [Theory]
-    [InlineData("bulk_update_habits", """{"filter":{"search":"absent"},"updates":{"description":"New"}}""", "en")]
-    [InlineData("bulk_update_habits", """{"filter":{"search":"absent"},"updates":{"description":"New"}}""", "pt-BR")]
-    [InlineData("bulk_reschedule_habits", """{"filter":{"search":"absent"},"due_date":"2026-10-25"}""", "en")]
-    [InlineData("bulk_reschedule_habits", """{"filter":{"search":"absent"},"due_date":"2026-10-25"}""", "pt-BR")]
-    [InlineData("bulk_log_habits", """{"filter":{"search":"absent"}}""", "en")]
-    [InlineData("bulk_log_habits", """{"filter":{"search":"absent"}}""", "pt-BR")]
-    [InlineData("bulk_log_habits", """{"filter":{"search":"absent"},"dates":["2026-10-24"]}""", "en")]
-    [InlineData("bulk_log_habits", """{"filter":{"search":"absent"},"dates":["2026-10-24"]}""", "pt-BR")]
-    [InlineData("bulk_skip_habits", """{"filter":{"search":"absent"}}""", "en")]
-    [InlineData("bulk_skip_habits", """{"filter":{"search":"absent"}}""", "pt-BR")]
-    [InlineData("bulk_delete_habits", """{"filter":{"search":"absent"}}""", "en")]
-    [InlineData("bulk_delete_habits", """{"filter":{"search":"absent"}}""", "pt-BR")]
+    [InlineData("bulk_update_habits", """{"filter":{"is_bad_habit":true},"updates":{"description":"New"}}""", "en")]
+    [InlineData("bulk_update_habits", """{"filter":{"is_bad_habit":true},"updates":{"description":"New"}}""", "pt-BR")]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"is_bad_habit":true},"due_date":"2026-10-25"}""", "en")]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"is_bad_habit":true},"due_date":"2026-10-25"}""", "pt-BR")]
+    [InlineData("bulk_log_habits", """{"filter":{"is_bad_habit":true}}""", "en")]
+    [InlineData("bulk_log_habits", """{"filter":{"is_bad_habit":true}}""", "pt-BR")]
+    [InlineData("bulk_log_habits", """{"filter":{"is_bad_habit":true},"dates":["2026-10-24"]}""", "en")]
+    [InlineData("bulk_log_habits", """{"filter":{"is_bad_habit":true},"dates":["2026-10-24"]}""", "pt-BR")]
+    [InlineData("bulk_skip_habits", """{"filter":{"is_bad_habit":true}}""", "en")]
+    [InlineData("bulk_skip_habits", """{"filter":{"is_bad_habit":true}}""", "pt-BR")]
+    [InlineData("bulk_delete_habits", """{"filter":{"is_bad_habit":true}}""", "en")]
+    [InlineData("bulk_delete_habits", """{"filter":{"is_bad_habit":true}}""", "pt-BR")]
     public Task Handle_ZeroBulkTargets_ReturnsShortLocalizedSuccess(string operationId, string arguments, string language) =>
         AssertNoChangesChatAsync(operationId, arguments, language,
             language == "en" ? "Apply the change to matching habits" : "Aplica a alteração nos hábitos correspondentes",
             language == "en" ? "No habits need changes." : "Nenhum hábito precisa de alterações.", true);
 
+    [Theory]
+    [InlineData("en", false, false)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, false)]
+    public Task Handle_MissingSearch_ReturnsLocalizedMissingName(string language, bool combined, bool supportsParts) =>
+        AssertNoChangesChatAsync("bulk_delete_habits",
+            combined ? """{"filter":{"search":"meditação","is_bad_habit":true}}""" : """{"filter":{"search":"meditação"}}""",
+            language, language == "en" ? "Delete my meditation habit" : "Exclua meu hábito de meditação",
+            language == "en" ? "I couldn't find this habit: meditação. Which habit would you like to use?"
+                : "Não encontrei este hábito: meditação. Qual hábito você quer usar?", supportsParts, missingName: true);
+
+    [Theory]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", false)]
+    public Task Handle_MissingSearchAlongsideEmptyFilter_PreservesMissingName(string language, bool supportsParts) =>
+        AssertNoChangesChatAsync("bulk_delete_habits", """{"filter":{"search":"meditação"}}""",
+            language, language == "en" ? "Delete meditation and all bad habits" : "Exclua meditação e todos os maus hábitos",
+            language == "en" ? "I couldn't find this habit: meditação. Which habit would you like to use?"
+                : "Não encontrei este hábito: meditação. Qual hábito você quer usar?", supportsParts,
+            missingName: true, includeEmptyFilter: true);
+
+    [Theory]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    public Task Handle_SearchMatchesOnlyNoOps_ReturnsNoChanges(string language, bool combined) =>
+        AssertNoChangesChatAsync("bulk_update_habit_emojis",
+            combined ? """{"filter":{"search":"Read","has_emoji":false},"emoji":"📚"}""" : """{"filter":{"search":"Read"},"emoji":"📚"}""",
+            language, language == "en" ? "Set the Read icon to 📚" : "Coloca 📚 no hábito Read",
+            language == "en" ? "No habits need changes." : "Nenhum hábito precisa de alterações.", true);
+
     private async Task AssertNoChangesChatAsync(string operationId, string arguments, string language,
-        string message, string expected, bool supportsParts)
+        string message, string expected, bool supportsParts, bool missingName = false, bool includeEmptyFilter = false)
     {
         var (tools, previewer, inference, work) = await NoChangesToolsAsync(operationId);
         var user = await _dbContext.Users.SingleAsync();
@@ -95,12 +128,16 @@ public partial class AgentChatWriteHoldTests
         intent.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse
             {
-                ToolCalls = [new(operationId, "change", Parse(arguments))],
+                ToolCalls = includeEmptyFilter
+                    ? [new(operationId, "change", Parse(arguments)), new(operationId, "empty", Parse("""{"filter":{"is_bad_habit":true}}"""))]
+                    : [new(operationId, "change", Parse(arguments))],
                 ConversationContext = new AiConversationContext()
             }));
         intent.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+            .Returns(missingName
+                ? Result.Success(new AiResponse { TextMessage = "Choose a habit.", ConversationContext = new AiConversationContext() })
+                : Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
         var quota = Substitute.For<IPayGateService>();
         quota.TryConsumeAiMessage(_userId, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
@@ -141,12 +178,16 @@ public partial class AgentChatWriteHoldTests
         response.Value.PendingOperations.Should().BeEmpty();
         response.Value.PolicyDenials.Should().BeEmpty();
         response.Value.Actions.Should().BeEmpty();
-        response.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Succeeded);
+        if (missingName && !includeEmptyFilter)
+            response.Value.Operations.Should().BeEmpty();
+        else
+            response.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Succeeded);
         if (supportsParts)
             response.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expected);
         await intent.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request => request.UserMessage == message),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
-        await intent.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+        if (!missingName)
+            await intent.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         await inference.DidNotReceiveWithAnyArgs().InferAsync(default, default!, default);
     }
 

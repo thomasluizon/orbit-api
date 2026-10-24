@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandler
 
     private string? BulkNoChangesMessage(ToolExecutionAccumulator results, string? language)
     {
-        if (results.PendingOperations.Count > 0 || results.ActionResults.Count > 0 || results.AskBlock is not null
+        if (HasResolutionQuestion(results) || results.PendingOperations.Count > 0 || results.ActionResults.Count > 0 || results.AskBlock is not null
             || results.OperationResults.Any(operation => operation.Status != AgentOperationStatus.Succeeded
                 || operation.Payload is not BulkNoChangesOutcome
                 && ai.ToolRegistry.GetTool(operation.OperationId) is not { IsReadOnly: true }))

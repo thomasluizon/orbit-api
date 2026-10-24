@@ -185,8 +185,7 @@ public sealed class PendingOperationChangePreviewerTests
         }
         var read = await Preview("bulk_delete_habits", """{"filter":{"search":"ler"}}""");
         read!.Items.Should().ContainSingle().Which.EntityId.Should().Be(reading.Id);
-        (await Preview("bulk_delete_habits", """{"filter":{"search":"medit"}}"""))!
-            .ChangeTargetCount.Should().Be(0);
+        (await Preview("bulk_delete_habits", """{"filter":{"search":"medit"}}""")).Should().BeNull();
     }
 
     [Fact]
@@ -236,11 +235,52 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
-    public async Task PreviewAsync_NoMatches_ReturnsSuccessfulEmptySelection()
+    public async Task PreviewAsync_SearchMatchesNothing_DoesNotOfferPreview()
     {
         Setup([]);
 
         var preview = await Preview("bulk_log_habits", """{"filter":{"search":"meditação"}}""");
+
+        preview.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("bulk_update_habits", """{"filter":{"search":"meditação","is_bad_habit":true},"updates":{"description":"New"}}""")]
+    [InlineData("bulk_reschedule_habits", """{"filter":{"search":"meditação"},"due_date":"2026-10-25"}""")]
+    [InlineData("bulk_log_habits", """{"filter":{"search":"meditação"},"dates":["2026-09-25"]}""")]
+    [InlineData("bulk_skip_habits", """{"filter":{"search":"meditação"}}""")]
+    [InlineData("bulk_delete_habits", """{"filter":{"search":"meditação","is_bad_habit":true}}""")]
+    [InlineData("bulk_update_habit_emojis", """{"filter":{"search":"meditação"},"emoji":"📚"}""")]
+    [InlineData("bulk_update_habit_emojis", """{"filter":{"search":"meditação","has_emoji":false}}""")]
+    public async Task PreviewAsync_MissingSearchWithOtherCriteria_DoesNotOfferPreview(string operationId, string arguments)
+    {
+        Setup([CreateHabit("Read", "📚")]);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+        var previewer = new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService, new AiToolRegistry([tool]));
+
+        var result = await previewer.PreviewAsync(UserId, operationId, JsonSerializer.Deserialize<JsonElement>(arguments));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeNull();
+        await inference.DidNotReceiveWithAnyArgs().InferAsync(default, default!, default);
+    }
+
+    [Theory]
+    [InlineData("""{"filter":{"search":"Read"},"emoji":"📚"}""", false)]
+    [InlineData("""{"filter":{"search":"Read","has_emoji":false},"emoji":"📚"}""", false)]
+    [InlineData("""{"filter":{"search":"Read"},"emoji":"📚"}""", true)]
+    public async Task PreviewAsync_SearchExistsButNeedsNoChanges_ReturnsEmptySelection(string arguments, bool completed)
+    {
+        var habit = completed
+            ? Habit.Create(new HabitCreateParams(UserId, "Read", null, null, new DateOnly(2026, 9, 25), Emoji: "📚")).Value
+            : CreateHabit("Read", "📚");
+        if (completed)
+            habit.Log(new DateOnly(2026, 9, 25)).IsSuccess.Should().BeTrue();
+        Setup([habit]);
+
+        var preview = await Preview("bulk_update_habit_emojis", arguments);
 
         preview.Should().NotBeNull();
         preview!.ChangeTargetCount.Should().Be(0);

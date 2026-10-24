@@ -92,10 +92,24 @@ public partial class ProcessUserChatCommandHandler
         if (call.Name is "create_habit" or BulkCreateHabits or "create_sub_habit")
             return ResolveHabitCreation(call, arguments, results);
 
-        if (!ResolveHabitIdentifiers(arguments, call.Name, results))
+        if (!ResolveHabitIdentifiers(arguments, call.Name, results)
+            || !ResolveSearchFilter(call.Name, arguments, results))
             return null;
 
         return call with { Args = JsonSerializer.SerializeToElement(arguments) };
+    }
+
+    private static bool ResolveSearchFilter(string operationId, JsonObject arguments, ToolExecutionAccumulator results)
+    {
+        if (!BulkNoChangesOutcome.Supports(operationId) || arguments["revised_items"] is not null
+            || arguments["filter"] is not JsonObject)
+            return true;
+        var (filter, error) = BulkHabitToolArguments.ParseRequiredFilter(JsonSerializer.SerializeToElement(arguments));
+        if (error is not null || string.IsNullOrWhiteSpace(filter?.Search)
+            || results.AllHabits.Any(habit => HabitNameMatcher.Matches(habit.Title, filter.Search)))
+            return true;
+        results.MissingHabitNames.Add(filter.Search);
+        return false;
     }
 
     private static bool ResolveHabitIdentifiers(JsonObject arguments, string operationId, ToolExecutionAccumulator results)

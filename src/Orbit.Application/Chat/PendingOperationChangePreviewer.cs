@@ -57,9 +57,24 @@ public sealed partial class PendingOperationChangePreviewer(
             return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken));
         if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
             arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
+        if (await HasMissingSearchAsync(userId, operationId, arguments, cancellationToken))
+            return Result.Success<PendingOperationChangePreview?>(null);
         if (RequiresEmojiInference(operationId, arguments))
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
         return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
+    }
+
+    private async Task<bool> HasMissingSearchAsync(Guid userId, string operationId, JsonElement arguments,
+        CancellationToken ct)
+    {
+        if (!BulkNoChangesOutcome.Supports(operationId) || arguments.TryGetProperty("revised_items", out _))
+            return false;
+        var (filter, error) = BulkHabitToolArguments.ParseRequiredFilter(arguments);
+        if (error is not null || string.IsNullOrWhiteSpace(filter?.Search))
+            return false;
+        var matches = await BulkHabitSelection.LoadAsync(habitRepository, userId,
+            new BulkHabitFilter(true, [], IncludeCompleted: true, Search: filter.Search), ct);
+        return matches.Count == 0;
     }
 
     private async Task<PendingOperationChangePreview?> PreviewChangesAsync(
