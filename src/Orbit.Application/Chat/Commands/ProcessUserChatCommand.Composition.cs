@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Orbit.Application.Common;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Grounding;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
@@ -96,6 +97,7 @@ public partial class ProcessUserChatCommandHandler
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
         var composition = UsesComposition(request, context);
+        var hasPreview = executionResults.PendingOperations.Count > 0;
         var language = GetUserLanguage(context.User);
         var parsedResponse = FollowUpDirective.Parse(StripJsonWrapper(aiResponse.TextMessage));
         var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
@@ -115,7 +117,7 @@ public partial class ProcessUserChatCommandHandler
             cards = ApplyResolutionToCards(cards, executionResults, language);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition ? request with { StreamSink = null } : request,
-            composition ? groundingTurn with { Enforce = true } : groundingTurn);
+            composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
         var aiMessage = cards.ServerComposedText ? cards.AiMessage : groundedReply.Message;
         followUps = groundedReply.FollowUps;
         cards = ApplyGroundingToCards(cards, aiMessage);
@@ -127,6 +129,13 @@ public partial class ProcessUserChatCommandHandler
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
 
+        if (hasPreview)
+        {
+            cards = new ResponseCards(null, Parts: request.ClientContext?.SupportsParts == true ? [] : null)
+            { ServerComposedText = true };
+            followUps = null;
+            if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
+        }
         followUps = composition ? ContextualFollowUps(followUps, executionResults) : followUps;
         if (composition)
             AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,

@@ -587,12 +587,12 @@ public sealed class PendingOperationChangePreviewer(
                 : null)
             .Select(item => item ?? new BulkHabitItem(string.Empty, null, null, null)).ToList());
         var validation = await new BulkCreateHabitsCommandValidator().ValidateAsync(command, cancellationToken);
-        var parent = TryReadId(arguments, "parent_habit_id", out var parentId)
-            ? await habitRepository.FindAsync(habit => habit.UserId == userId && habit.Id == parentId, cancellationToken)
-            : [];
-        if (arguments.TryGetProperty("parent_habit_id", out _) && parent.Count != 1)
-            return null;
-        var parentFingerprint = parent.Count == 1 ? FingerprintHabit(parent[0]) : string.Empty;
+        var parentIds = habits.EnumerateArray().Select(habit =>
+            TryReadId(habit, "parent_habit_id", out var itemParent) ? itemParent
+                : TryReadId(arguments, "parent_habit_id", out var sharedParent) ? sharedParent : Guid.Empty)
+            .Where(id => id != Guid.Empty).Distinct().ToArray();
+        var parents = parentIds.Length == 0 ? [] : await habitRepository.FindAsync(
+            habit => habit.UserId == userId && !habit.IsDeleted && parentIds.Contains(habit.Id), cancellationToken);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var items = habits.EnumerateArray().Select((habit, index) =>
         {
@@ -621,9 +621,7 @@ public sealed class PendingOperationChangePreviewer(
                     Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value), AgentArgumentPreview.ResolveValueType(property.Name, property.Value),
                     property.Value.Clone(), true)).ToList()
                 : [];
-            if (parent.Count == 1)
-                fields.Add(new PendingOperationChange(parent[0].Id, name, "parent_habit_id", null,
-                    parent[0].Title, "text", JsonSerializer.SerializeToElement(parent[0].Id), false));
+            var parentFingerprint = AddCreationParent(arguments, habit, parents, name, fields, errors);
             foreach (var error in errors.Where(error => CreateFields.Contains(error.Field)))
                 if (fields.All(field => field.Field != error.Field))
                     fields.Add(new PendingOperationChange(Guid.Empty, name, error.Field,
@@ -637,6 +635,25 @@ public sealed class PendingOperationChangePreviewer(
         }).ToList();
         return BuildPreview("bulk_create_habits", items.SelectMany(item => item.Fields)
             .Where(field => field.Field == "parent_habit_id").DistinctBy(field => field.EntityId).ToList(), items);
+    }
+
+    private static string AddCreationParent(JsonElement arguments, JsonElement habit, IReadOnlyList<Habit> parents,
+        string name, List<PendingOperationChange> fields, List<PendingOperationValidationError> errors)
+    {
+        var hasParent = habit.TryGetProperty("parent_habit_id", out var parentValue)
+            || arguments.TryGetProperty("parent_habit_id", out parentValue);
+        var parent = hasParent && parentValue.ValueKind == JsonValueKind.String && Guid.TryParse(parentValue.GetString(), out var id)
+            ? parents.FirstOrDefault(candidate => candidate.Id == id) : null;
+        var parentFingerprint = parent is null ? string.Empty : FingerprintHabit(parent);
+        if (hasParent)
+        {
+            fields.Add(new PendingOperationChange(parent?.Id ?? Guid.Empty, name, "parent_habit_id", null,
+                parent?.Title ?? parentValue.ToString(), "text", parentValue.Clone(), true));
+            if (parent is null)
+                errors.Add(new PendingOperationValidationError("parent_habit_id", "parent_choice_required",
+                "Choose an existing parent habit."));
+        }
+        return parentFingerprint;
     }
 
     private static PendingOperationChangePreview? BuildPreview(

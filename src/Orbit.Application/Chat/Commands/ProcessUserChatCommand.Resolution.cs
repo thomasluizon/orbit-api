@@ -157,6 +157,20 @@ public partial class ProcessUserChatCommandHandler
             results.InvalidCalls[call.Id] = "Habits must be an array of objects.";
             return null;
         }
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            if (HabitHeadingParents.ForItem(item, results.ParentHeadings) is { } heading)
+                HabitHeadingParents.Bind(item, heading, removeInventedDescription: true);
+            else if (item["parent_habit_id"] is not null)
+            {
+                if (!results.RequiresExistingParent)
+                {
+                    results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
+                    return null;
+                }
+                if (!ResolveHabitIdentifiers(item, call.Name, results)) return null;
+            }
+        }
         if (results.RequiresExistingParent && items.Count == 1 && items[0] is JsonObject root
             && root["title"] is JsonValue titleValue && titleValue.TryGetValue<string>(out var title)
             && root["sub_habits"] is JsonArray children
@@ -198,22 +212,23 @@ public partial class ProcessUserChatCommandHandler
         foreach (var item in items.OfType<JsonObject>())
         {
             var name = item["title"]!.GetValue<string>();
+            var itemParentId = Guid.TryParse(item["parent_habit_id"]?.ToString(), out var itemParent) ? itemParent : parentId;
             if (results.IsTaggingIntent)
                 continue;
-            var existing = results.Habits.FirstOrDefault(habit => habit.ParentHabitId == parentId
+            var existing = results.Habits.FirstOrDefault(habit => habit.ParentHabitId == itemParentId
                 && HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name));
             if (existing is not null)
             {
                 results.ExistingDuplicateNames.Add(existing.Title);
                 continue;
             }
-            if (results.ProposedHabitNames.Contains((parentId, HabitNameMatcher.Normalize(name))))
+            if (results.ProposedHabitNames.Contains((itemParentId, HabitNameMatcher.Normalize(name))))
             {
                 results.PendingDuplicateNames.Add(results.PendingHabitNames.GetValueOrDefault(
-                    (parentId, HabitNameMatcher.Normalize(name)), name));
+                    (itemParentId, HabitNameMatcher.Normalize(name)), name));
                 continue;
             }
-            results.ProposedHabitNames.Add((parentId, HabitNameMatcher.Normalize(name)));
+            results.ProposedHabitNames.Add((itemParentId, HabitNameMatcher.Normalize(name)));
             proposed.Add(item.DeepClone());
         }
         return proposed;

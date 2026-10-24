@@ -349,7 +349,8 @@ public partial class ProcessUserChatCommandHandler(
             Habits = context.ActiveHabits,
             AllHabits = context.UserHabits,
             IsTaggingIntent = IsTagOnlyIntent(request.Message),
-            RequiresExistingParent = RequestsExistingParent(request.Message, context.ActiveHabits)
+            RequiresExistingParent = RequestsExistingParent(request.Message, context.ActiveHabits),
+            ParentHeadings = HabitHeadingParents.Read(request.Message, context.ActiveHabits)
         };
         SeedProposedHabitNames(request, executionResults);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
