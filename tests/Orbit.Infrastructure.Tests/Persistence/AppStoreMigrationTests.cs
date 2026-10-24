@@ -82,10 +82,10 @@ public class AppStoreMigrationTests
             .GetDifferences(preceding.GetRelationalModel(), latest.GetRelationalModel())).Should().BeEmpty();
         var contracted = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
-        var current = context.GetService<IModelRuntimeInitializer>()
+        var retiredLedger = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new DropSentProactiveCheckins().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(contracted.GetRelationalModel(), current.GetRelationalModel());
+            .GetDifferences(contracted.GetRelationalModel(), retiredLedger.GetRelationalModel());
         differences.Should().ContainSingle();
         DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
         context.Database.HasPendingModelChanges().Should().BeFalse();

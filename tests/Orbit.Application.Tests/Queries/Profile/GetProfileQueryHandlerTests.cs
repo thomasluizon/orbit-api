@@ -125,7 +125,6 @@ public class GetProfileQueryHandlerTests
     public async Task Handle_LegacySocialSettings_ReturnsNeutralCompatibilityFields()
     {
         var user = CreateTestUser();
-        typeof(User).GetProperty(nameof(User.Handle))!.SetValue(user, "old_handle");
         typeof(User).GetProperty(nameof(User.SocialOptIn))!.SetValue(user, true);
         typeof(User).GetProperty(nameof(User.PublicProfileSlug))!.SetValue(user, "OLDPUBLICSLUG");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -140,7 +139,6 @@ public class GetProfileQueryHandlerTests
         payload.GetProperty("publicProfile").ValueKind.Should().Be(JsonValueKind.Null);
         payload.GetProperty("name").GetString().Should().Be(user.Name);
         payload.GetProperty("totalXp").GetInt32().Should().Be(user.TotalXp);
-        user.Handle.Should().Be("old_handle");
         user.SocialOptIn.Should().BeTrue();
         user.PublicProfileSlug.Should().Be("OLDPUBLICSLUG");
     }
@@ -278,7 +276,7 @@ public class GetProfileQueryHandlerTests
             GoogleCalendarAutoSyncStatus = Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
             CanViewGamification = true,
-            user.Handle,
+            Handle = (string?)null,
             user.SocialOptIn,
             Uses24HourClock = true,
             PublicProfile = (Orbit.Application.Profile.Commands.PublicProfileSettings?)null,

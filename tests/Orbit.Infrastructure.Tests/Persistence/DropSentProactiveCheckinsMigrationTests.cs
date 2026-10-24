@@ -49,14 +49,13 @@ public class DropSentProactiveCheckinsMigrationTests
         var initializer = context.GetService<IModelRuntimeInitializer>();
         var previous = initializer.Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var target = initializer.Initialize(migration.TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
         var differ = context.GetService<IMigrationsModelDiffer>();
         var changes = differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel());
         changes.Should().ContainSingle();
         AssertRetiredLedgerDrop(changes);
         context.Database.HasPendingModelChanges().Should().BeFalse();
 
-        var sql = context.GetService<IMigrationsSqlGenerator>().Generate(migration.UpOperations, current);
+        var sql = context.GetService<IMigrationsSqlGenerator>().Generate(migration.UpOperations, target);
         sql.Should().ContainSingle().Which.CommandText.Trim().Should().Be("DROP TABLE \"SentProactiveCheckins\";");
     }
 
