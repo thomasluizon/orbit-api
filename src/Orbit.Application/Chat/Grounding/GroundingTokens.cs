@@ -92,7 +92,7 @@ internal static partial class GroundingTokens
     [GeneratedRegex(@"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|\d{1,2}(?: de)? [\p{L}]+(?: de)? \d{4}|[\p{L}]+ \d{1,2},? \d{4})\b", RegexOptions.IgnoreCase, 1000)]
     private static partial Regex DatePattern();
 
-    [GeneratedRegex(@"(?<![\p{L}\d])(?<hour>\d{1,2})(?:(?::|h)(?<minute>\d{2})(?:\s*(?<meridiem>[ap]\.?m\.?))?|h|\s*(?<meridiem>[ap]\.?m\.?))(?![\p{L}\d])", RegexOptions.IgnoreCase, 1000)]
+    [GeneratedRegex(@"(?<![\p{L}\d])(?<hour>[0-9]{1,2})(?:(?::|h)(?<minute>[0-9]{2})(?:\s*(?<meridiem>[ap]\.?m\.?))?|h|\s*(?<meridiem>[ap]\.?m\.?))(?![\p{L}\d])", RegexOptions.IgnoreCase, 1000)]
     private static partial Regex TimePattern();
 
     [GeneratedRegex(@"(?<![\p{L}\d])[-+]?\d+(?:[.,]\d+)*(?!\d)", RegexOptions.None, 1000)]

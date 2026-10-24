@@ -159,6 +159,14 @@ public class GroundednessCheckerTests
             .Should().NotBeEmpty();
     }
 
+    [Theory]
+    [InlineData("٢١:٣٠")]
+    [InlineData("21h٣٠")]
+    public void Check_UnsupportedClockDigits_RemainUngroundedWithoutThrowing(string claim)
+    {
+        GroundednessChecker.Check(claim, TurnFactSet.Empty).Should().NotBeEmpty();
+    }
+
     private static TurnFactSet Facts(object payload) => TurnFactSet.FromToolResults([
         new AiToolCallResult("query_habits", "call_1", true, null, null, null, payload)]);
 }
