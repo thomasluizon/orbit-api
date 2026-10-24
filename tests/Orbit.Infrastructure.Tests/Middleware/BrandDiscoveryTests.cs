@@ -19,6 +19,19 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 
 public class BrandDiscoveryTests(ITestOutputHelper output)
 {
+    [Fact]
+    public async Task Shutdown_RejectsBeforeBrandRoutesAuthenticationAndRateLimits()
+    {
+        await using var app = await CreateApplication();
+        app.Lifetime.StopApplication();
+        var context = CreateRequest(app, "/favicon.svg");
+
+        await ((IApplicationBuilder)app).Build()(context);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        context.Response.Body.Length.Should().Be(0);
+    }
+
     [Theory]
     [InlineData("/favicon.ico", "image/x-icon")]
     [InlineData("/favicon.svg", "image/svg+xml")]
@@ -176,6 +189,7 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
         builder.Configuration["Database:MigrateOnStartup"] = "false";
+        builder.Services.AddOrbitShutdownDrain();
         builder.Services.AddResponseCompression();
         builder.Services.AddExceptionHandler(options => options.ExceptionHandler = _ => Task.CompletedTask);
         builder.Services.AddCors(options => options.AddPolicy("ThirdParty", policy => policy.WithOrigins("https://claude.ai")));
