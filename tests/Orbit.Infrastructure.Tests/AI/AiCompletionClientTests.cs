@@ -309,22 +309,25 @@ public class AiCompletionClientTests
     [InlineData("stream")]
     public async Task CompletionDeadline_CancelsTheWholeCallIncludingRetryWaits(string kind)
     {
-        using var handler = new WaitingHandler();
-        var clock = new CompletionTestClock();
-        var retry = new ObservingRetryPolicy();
-        var usage = Substitute.For<IAiUsageRecorder>();
-        usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>(), Arg.Any<long>())
-            .Returns(Task.FromException(new OperationCanceledException("usage recording canceled")));
-        var client = new AiCompletionClient(BuildResponsesClient(handler, retry), NullLogger<AiCompletionClient>.Instance,
-            usage, TimeSpan.FromMilliseconds(50), timeProvider: clock);
-        using var caller = new CancellationTokenSource();
-        var call = StartCompletion(client, usage, kind, caller.Token);
+        for (var index = 0; index < (kind == "json" ? 200 : 1); index++)
+        {
+            using var handler = new WaitingHandler();
+            var clock = new CompletionTestClock();
+            var retry = new ObservingRetryPolicy();
+            var usage = Substitute.For<IAiUsageRecorder>();
+            usage.RecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
+                    Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>(), Arg.Any<AiCallTelemetry>(), Arg.Any<long>())
+                .Returns(Task.FromException(new OperationCanceledException("usage recording canceled")));
+            var client = new AiCompletionClient(BuildResponsesClient(handler, retry), NullLogger<AiCompletionClient>.Instance,
+                usage, TimeSpan.FromMilliseconds(50), timeProvider: clock);
+            using var caller = new CancellationTokenSource();
+            var call = StartCompletion(client, usage, kind, caller.Token);
 
-        await AssertDeadlineDuringRetryAsync(call, retry, clock, client.CompletionTimeout, caller, kind);
-        handler.RequestCount.Should().Be(1);
-        clock.ActiveTimers.Should().Be(0);
-        AssertFailedUsage(usage);
+            await AssertDeadlineDuringRetryAsync(call, retry, clock, client.CompletionTimeout, caller, kind);
+            handler.RequestCount.Should().Be(1);
+            clock.ActiveTimers.Should().Be(0);
+            AssertFailedUsage(usage);
+        }
     }
 
     [Theory]
