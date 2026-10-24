@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
@@ -94,7 +95,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     public async Task CompoundDuplicate_CreateRecognisesChildAndReusesIt()
     {
         var parents = ParentAccount("en");
-        var water = Habit.Create(new HabitCreateParams(_userId, "Drink water", Orbit.Domain.Enums.FrequencyUnit.Day, 1,
+        var water = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Drink water", Orbit.Domain.Enums.FrequencyUnit.Day, 1,
             Today, ParentHabitId: parents[0].Id)).Value;
         UseParentHabits([.. parents, water]);
         ScriptToolCall("""{"title":"Drink water","frequency_unit":"Day","due_time":"07:00"}""");

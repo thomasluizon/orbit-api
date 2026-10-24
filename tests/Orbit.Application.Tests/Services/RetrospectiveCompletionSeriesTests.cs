@@ -54,8 +54,8 @@ public class RetrospectiveCompletionSeriesTests
     public void ExcludesBadHabitsAndMarksUnscheduledDayNull()
     {
         var from = new DateOnly(2026, 9, 1);
-        var oneTime = Habit.Create(new HabitCreateParams(UserId, "Once", null, null, from.AddDays(2))).Value;
-        var bad = Habit.Create(new HabitCreateParams(UserId, "Slip", FrequencyUnit.Day, 1, from, IsBadHabit: true)).Value;
+        var oneTime = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Once", null, null, from.AddDays(2))).Value;
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Slip", FrequencyUnit.Day, 1, from, IsBadHabit: true)).Value;
         bad.Log(from.AddDays(2), advanceDueDate: false);
 
         var series = RetrospectiveMetricsCalculator.Compute([oneTime, bad], from, from.AddDays(6), 0, 0)
@@ -89,7 +89,7 @@ public class RetrospectiveCompletionSeriesTests
     {
         var today = new DateOnly(2026, 4, 3);
         var anchor = today.AddDays(-1);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 2, anchor)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 2, anchor)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
         habit.Log(today).IsSuccess.Should().BeTrue();
@@ -115,7 +115,7 @@ public class RetrospectiveCompletionSeriesTests
     public void LiveRetrospectiveAndMetricsCard_CreditOffCadenceLog()
     {
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Read", FrequencyUnit.Day, 2, today.AddDays(-1))).Value;
         habit.Log(today).IsSuccess.Should().BeTrue();
 
@@ -134,7 +134,7 @@ public class RetrospectiveCompletionSeriesTests
     public void UnvalidatedExtraLogs_DoNotCreditMissedOccurrences()
     {
         var from = new DateOnly(2026, 4, 1);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Weekly", FrequencyUnit.Day, 2, from)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Weekly", FrequencyUnit.Day, 2, from)).Value;
         habit.Log(from, advanceDueDate: false);
         habit.Log(from.AddDays(1), advanceDueDate: false);
 
@@ -203,12 +203,12 @@ public class RetrospectiveCompletionSeriesTests
 
     private static Habit Monthly(DateOnly dueDate)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Monthly", FrequencyUnit.Month, 1, dueDate)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Monthly", FrequencyUnit.Month, 1, dueDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2026, 1, 30, 12, 0, 0, DateTimeKind.Utc));
         return habit;
     }
 
     private static Habit Daily(string title, DateOnly dueDate) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, dueDate)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, dueDate)).Value;
 }

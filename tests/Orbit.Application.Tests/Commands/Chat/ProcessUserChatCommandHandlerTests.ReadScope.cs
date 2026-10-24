@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Linq.Expressions;
 using System.Text.Json;
 using Orbit.Application.Chat.Models;
@@ -22,7 +23,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         var past = Today.AddDays(-7);
-        var old = Habit.Create(new HabitCreateParams(UserId, "Historical task", null, null, past)).Value;
+        var old = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Historical task", null, null, past)).Value;
         var live = CreateHabit("Live task");
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
@@ -135,7 +136,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         var past = Today.AddDays(-7);
-        var old = Habit.Create(new HabitCreateParams(UserId, "Historical task", null, null, past)).Value;
+        var old = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Historical task", null, null, past)).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
             .Returns(call => new[] { old }.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList());

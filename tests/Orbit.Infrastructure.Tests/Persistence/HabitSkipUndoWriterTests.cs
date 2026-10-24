@@ -17,7 +17,7 @@ public sealed class HabitSkipUndoWriterTests
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Alex", "alex@test.com").Value;
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, today)).Value;
         var receipt = HabitSkipUndo.Create(Guid.NewGuid(), habit).Value;
         habit.AdvanceDueDate(today);
         factory.Context.Users.Add(user);

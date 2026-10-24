@@ -30,7 +30,7 @@ public class StreakProjectionQueryTests
         factory.Context.Users.Add(user);
         for (var index = 0; index < 1000; index++)
         {
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 user.Id, $"Habit {index}", FrequencyUnit.Day, 1, today.AddDays(-4),
                 IsBadHabit: index >= 100)).Value;
             typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
@@ -90,15 +90,15 @@ public class StreakProjectionQueryTests
         using var factory = new SqliteOrbitDbContextFactory(counter);
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Progress User", "progress@example.com").Value;
-        var good = Habit.Create(new HabitCreateParams(
-            user.Id, "Flexible", FrequencyUnit.Day, 2, today.AddDays(-2), IsFlexible: true)).Value;
+        var good = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            user.Id, "Flexible", FrequencyUnit.Day, 2, today.AddDays(-2))).Value;
         good.Log(today.AddDays(-1), advanceDueDate: false);
         good.Log(today.AddDays(-1), advanceDueDate: false);
         good.Log(today, advanceDueDate: false);
         good.Log(today, advanceDueDate: false);
         good.Log(today.AddDays(-2), advanceDueDate: false);
         good.Unlog(today.AddDays(-2));
-        var bad = Habit.Create(new HabitCreateParams(
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Bad", FrequencyUnit.Day, 1, today.AddDays(-2), IsBadHabit: true)).Value;
         bad.Log(today.AddDays(-1), advanceDueDate: false);
         bad.Log(today, advanceDueDate: false);
@@ -177,7 +177,7 @@ public class StreakProjectionQueryTests
         using var factory = new SqliteOrbitDbContextFactory();
         var start = new DateOnly(2026, 4, 1);
         var user = User.Create("Schedule User", "schedule@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Weekdays", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Weekdays", FrequencyUnit.Day, 1,
             start, Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -257,12 +257,12 @@ public class StreakProjectionQueryTests
         var user = User.Create("Schedule User", $"schedule-{Guid.NewGuid():N}@example.com").Value;
         var today = new DateOnly(2026, 4, 3);
         var streakHabit = CreateHabit(user.Id, today);
-        var achievementHabit = Habit.Create(new HabitCreateParams(
+        var achievementHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Bad habit", FrequencyUnit.Day, 1, today, IsBadHabit: true)).Value;
         var habits = new List<Habit> { streakHabit, achievementHabit };
         for (var index = 0; index < excludedHabitCount; index++)
         {
-            var excluded = Habit.Create(new HabitCreateParams(
+            var excluded = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 user.Id, "Completed bad habit", FrequencyUnit.Day, 1, today, IsBadHabit: true)).Value;
             if (index < 930)
             {
@@ -308,7 +308,7 @@ public class StreakProjectionQueryTests
 
     private static Habit CreateHabit(Guid userId, DateOnly start)
     {
-        var habit = Habit.Create(new HabitCreateParams(userId, "Daily", FrequencyUnit.Day, 1, start)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Daily", FrequencyUnit.Day, 1, start)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         return habit;

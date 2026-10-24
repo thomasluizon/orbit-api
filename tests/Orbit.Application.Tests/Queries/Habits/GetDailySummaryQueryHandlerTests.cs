@@ -140,10 +140,10 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var active = Habit.Create(new HabitCreateParams(
+        var active = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var skipped = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible workout", FrequencyUnit.Week, 3, DueDate: Today, IsFlexible: true)).Value;
+        var skipped = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible workout", FrequencyUnit.Week, 3, DueDate: Today)).Value;
         skipped.SkipFlexible(Today);
         _summaryLogReader.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(),
             Arg.Any<CancellationToken>()).Returns(
@@ -183,7 +183,7 @@ public class GetDailySummaryQueryHandlerTests
         var user = CreateTestUser();
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Gym", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Gym", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-13))).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
@@ -218,7 +218,7 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
 
         _habitRepo.FindAsync(
@@ -259,7 +259,7 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -299,7 +299,7 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var goodHabit = Habit.Create(new HabitCreateParams(
+        var goodHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _habitRepo.FindAsync(

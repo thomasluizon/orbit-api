@@ -106,7 +106,7 @@ public class ClosedMonthRecapResetRaceTests
                 user,
                 new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 UserId,
                 "Walk",
                 FrequencyUnit.Day,

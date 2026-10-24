@@ -142,7 +142,7 @@ public class GetGoalReviewQueryHandlerTests
     {
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Doom scrolling", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(-3))).Value;
         badHabit.AddGoal(streakGoal);

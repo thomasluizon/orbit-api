@@ -75,17 +75,18 @@ internal static class BulkHabitSubtree
     private static Result<Habit> BuildHabit(
         Guid userId, BulkHabitItem item, Habit? parent, DateOnly today, int position)
     {
-        var hasExplicitCadence = item.FrequencyUnit is not null
-            || item.FrequencyQuantity is not null
-            || item.IntervalWeeks is not null
-            || item.Days is not null;
+        var hasExplicitCadence = HasExplicitCadence(item);
         var frequencyUnit = item.FrequencyUnit ?? (item.InheritParentFrequency ? parent?.FrequencyUnit : null);
         var frequencyQuantity = item.FrequencyQuantity ?? (item.InheritParentFrequency ? parent?.FrequencyQuantity : null);
         var days = item.Days;
         if (days is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
             days = item.InheritParentFrequency ? parent?.Days.ToList() : null;
 
-        return Habit.Create(new HabitCreateParams(
+        var schedule = LegacyHabitSchedule.Resolve(parent is null ? item.IsGeneral : parent.Schedule == HabitSchedule.General, item.IsFlexible, frequencyUnit, frequencyQuantity, item.IsBadHabit, days, item.IntervalWeeks);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<Habit>();
+
+        return Habit.Create(new HabitCreateParams(schedule.Value,
             userId, item.Title, frequencyUnit, frequencyQuantity,
             item.StartDate ?? item.DueDate ?? parent?.NextDueDate ?? today, item.Description,
             Emoji: item.Emoji,
@@ -102,12 +103,14 @@ internal static class BulkHabitSubtree
             EndDate: item.EndDate,
             ChecklistItems: item.ChecklistItems,
             ParentHabitId: parent?.Id,
-            IsGeneral: parent is null ? item.IsGeneral : parent.Schedule == HabitSchedule.General,
-            IsFlexible: item.IsFlexible,
             Position: position,
             GoogleEventId: item.GoogleEventId,
             IntervalWeeks: item.IntervalWeeks ?? (hasExplicitCadence || !item.InheritParentFrequency ? null : parent?.IntervalWeeks)));
     }
+
+    private static bool HasExplicitCadence(BulkHabitItem item) =>
+        item.FrequencyUnit is not null || item.FrequencyQuantity is not null
+        || item.IntervalWeeks is not null || item.Days is not null;
 
     private static string? DetermineField(string? code, string error)
     {

@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Globalization;
 using System.ComponentModel;
 using System.Security.Claims;
@@ -54,7 +55,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         foreach (var h in items)
         {
             lines.Add(McpToolHelpers.FormatHabitLine(new McpToolHelpers.HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
-                h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.IsGeneral, h.IsFlexible,
+                h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.Schedule ?? HabitSchedule.OneTime,
                 h.ChecklistItems, h.Tags, h.Emoji,
                 new HabitFieldSummary
                 {
@@ -73,7 +74,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                     ScheduledReminders = h.ScheduledReminders,
                     RelativeReminders = h.RelativeReminders ?? [],
                     SlipAlertEnabled = h.SlipAlertEnabled,
-                    IsFlexible = h.IsFlexible,
+                    Schedule = h.Schedule ?? HabitSchedule.OneTime,
                     ChecklistItems = h.ChecklistItems
                 }.Format(h.DueDate)), indent: 0));
             McpToolHelpers.AppendChildren(lines, h.Children, indent: 1);
@@ -106,8 +107,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                    (h.DueTime is not null ? string.Create(CultureInfo.InvariantCulture, $"Due Time: {h.DueTime:HH:mm}\n") : "") +
                    (h.Days.Count > 0 ? $"Days: {string.Join(", ", h.Days)}\n" : "") +
                    (h.IsBadHabit ? "Bad Habit: Yes\n" : "") +
-                   (h.IsGeneral ? "General: Yes\n" : "") +
-                   (h.IsFlexible ? "Flexible: Yes\n" : "") +
+                   (h.Schedule == HabitSchedule.General ? "General: Yes\n" : "") +
+                   (h.Schedule == HabitSchedule.Flexible ? "Flexible: Yes\n" : "") +
                    (h.ChecklistItems.Count > 0 ? string.Create(CultureInfo.InvariantCulture, $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n") : "") +
                    string.Create(CultureInfo.InvariantCulture, $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n") +
                    (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
@@ -128,7 +129,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             ScheduledReminders = h.ScheduledReminders,
             RelativeReminders = h.RelativeReminders ?? [],
             SlipAlertEnabled = h.SlipAlertEnabled == true,
-            IsFlexible = false,
+            Schedule = HabitSchedule.OneTime,
             ChecklistItems = h.ChecklistItems
         }.Format();
         if (details.Length > 0) habitSummary += details + "\n";

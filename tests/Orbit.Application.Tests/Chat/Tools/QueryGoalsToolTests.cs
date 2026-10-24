@@ -83,7 +83,7 @@ public class QueryGoalsToolTests
     {
         var goal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Run", 10, "miles", "Race training", Deadline: new DateOnly(2026, 12, 31))).Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Morning run", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(habit);
         _goalRepository.FindAsync(

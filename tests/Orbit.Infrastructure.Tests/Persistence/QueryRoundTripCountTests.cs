@@ -30,15 +30,15 @@ public class QueryRoundTripCountTests
         user.SetTimeZone("UTC");
         context.Users.Add(user);
 
-        var overdue = Habit.Create(new HabitCreateParams(userId, "Overdue", FrequencyUnit.Week, 1,
+        var overdue = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Overdue", FrequencyUnit.Week, 1,
             DueDate: today.AddDays(-10))).Value;
-        var skippedToday = Habit.Create(new HabitCreateParams(userId, "Skipped today", FrequencyUnit.Day, 1,
+        var skippedToday = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Skipped today", FrequencyUnit.Day, 1,
             DueDate: today.AddDays(-3))).Value;
-        var skippedEarlier = Habit.Create(new HabitCreateParams(userId, "Skipped earlier", FrequencyUnit.Day, 1,
+        var skippedEarlier = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Skipped earlier", FrequencyUnit.Day, 1,
             DueDate: today.AddDays(-3))).Value;
-        var bad = Habit.Create(new HabitCreateParams(userId, "Bad habit", FrequencyUnit.Day, 1,
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Bad habit", FrequencyUnit.Day, 1,
             DueDate: today.AddDays(-10), IsBadHabit: true)).Value;
-        var oldResolved = Habit.Create(new HabitCreateParams(userId, "Old resolved", FrequencyUnit.Year, 2,
+        var oldResolved = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Old resolved", FrequencyUnit.Year, 2,
             DueDate: today.AddDays(-400))).Value;
         context.Habits.AddRange(overdue, skippedToday, skippedEarlier, bad, oldResolved);
         context.HabitLogs.AddRange(
@@ -97,7 +97,7 @@ public class QueryRoundTripCountTests
         receivedContext!.LastBadHabitSlipDates[bad.Id].Should().Be(today.AddDays(-5));
 
         var legacyHabits = await new GenericRepository<Habit>(context).FindAsync(
-            habit => habit.UserId == userId && !habit.IsGeneral,
+            habit => habit.UserId == userId && habit.Schedule != HabitSchedule.General,
             query => query
                 .Include(habit => habit.Logs.Where(log =>
                     log.Date >= today.AddDays(-366) && log.Date <= today))
@@ -288,7 +288,7 @@ public class QueryRoundTripCountTests
 
         for (var index = 0; index < habitCount; index++)
         {
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 userId, $"Habit {index}", FrequencyUnit.Day, 1, DueDate: DateFrom)).Value;
 
             var logCount = logsPerHabit + (index < extraLogHabitCount ? 1 : 0);
@@ -330,9 +330,9 @@ public class QueryRoundTripCountTests
         var userId = Guid.NewGuid();
         var user = User.Create("Detail User", $"detail-{userId:N}@example.com").Value;
         typeof(User).GetProperty("Id")!.SetValue(user, userId);
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Parent", FrequencyUnit.Day, 1, DueDate: DateFrom)).Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId,
             "Nested Detail",
             FrequencyUnit.Day,
@@ -352,7 +352,7 @@ public class QueryRoundTripCountTests
 
         for (var childIndex = 0; childIndex < childCount; childIndex++)
         {
-            var child = Habit.Create(new HabitCreateParams(
+            var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 userId,
                 $"Child {childIndex}",
                 FrequencyUnit.Day,

@@ -94,7 +94,7 @@ public class GetRecapQueryHandlerTests
 
     private static Habit CreateLoggedDailyHabit()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Read", FrequencyUnit.Day, 1, DueDate: DateFrom)).Value;
         habit.Log(DateFrom);
         habit.Log(DateFrom.AddDays(1));
@@ -159,7 +159,7 @@ public class GetRecapQueryHandlerTests
     [Fact]
     public async Task Handle_TwoLogs_ReturnsExactlyTwoCompletions()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Day, 1, DueDate: DateFrom)).Value;
         habit.Log(DateFrom);
         habit.Log(DateFrom.AddDays(1));
@@ -256,7 +256,7 @@ public class GetRecapQueryHandlerTests
     {
         var dateFrom = week ? new DateOnly(2026, 8, 17) : new DateOnly(2025, 1, 1);
         var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2025, 12, 31);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Day, 1, DueDate: dateFrom)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -293,7 +293,7 @@ public class GetRecapQueryHandlerTests
     {
         var dateFrom = week ? new DateOnly(2026, 8, 17) : new DateOnly(2025, 1, 1);
         var dateTo = week ? dateFrom.AddDays(6) : new DateOnly(2025, 12, 31);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Day, 1, DueDate: dateFrom)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -306,7 +306,7 @@ public class GetRecapQueryHandlerTests
             ClosedYear: week ? null : 2025, ClosedWeekStart: week ? dateFrom : null);
 
         var first = await _handler.Handle(query, CancellationToken.None);
-        var update = habit.Update(new HabitUpdateParams(
+        var update = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Week, 1, null,
             habit.IsBadHabit, dateTo.AddMonths(2)));
         update.IsSuccess.Should().BeTrue();
@@ -331,7 +331,7 @@ public class GetRecapQueryHandlerTests
         user.SetWeekStartDay(currentWeekStartDay).IsSuccess.Should().BeTrue();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Walk",
             FrequencyUnit.Day,
@@ -514,7 +514,7 @@ public class GetRecapQueryHandlerTests
     {
         var monthStart = new DateOnly(2026, 6, 1);
         var monthEnd = new DateOnly(2026, 6, 30);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Day, 1, DueDate: monthStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit,
@@ -540,7 +540,7 @@ public class GetRecapQueryHandlerTests
     {
         var monthStart = new DateOnly(2026, 6, 1);
         var monthEnd = new DateOnly(2026, 6, 30);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Day, 1, DueDate: monthStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit,
@@ -550,7 +550,7 @@ public class GetRecapQueryHandlerTests
         var query = new GetRecapQuery(UserId, monthStart, monthEnd, "month", 2026, 6);
 
         var first = await _handler.Handle(query, CancellationToken.None);
-        var updateResult = habit.Update(new HabitUpdateParams(
+        var updateResult = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title,
             habit.Description,
             FrequencyUnit.Week,
@@ -571,7 +571,7 @@ public class GetRecapQueryHandlerTests
     public async Task Handle_ClosedMonthWithDeletedLog_ExcludesDeletedCompletion()
     {
         var monthStart = new DateOnly(2026, 6, 1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Day, 1, DueDate: monthStart)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit,

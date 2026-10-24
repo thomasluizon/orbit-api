@@ -39,8 +39,8 @@ public sealed class UndoSkipHabitCommandHandlerTests
     public async Task SkipThenUndo_AcrossContexts_RestoresScheduleAndExistingLogs(FrequencyUnit? frequency, bool flexible)
     {
         var dueDate = frequency == FrequencyUnit.Month ? new DateOnly(2026, 3, 31) : Today;
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", frequency, flexible ? 3 : 1,
-            dueDate, IsFlexible: flexible)).Value;
+        var habit = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : ((FrequencyUnit?)(frequency)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, "Read", frequency, flexible ? 3 : 1,
+            dueDate)).Value;
         var existing = habit.Log(Today.AddDays(-4), "Keep this note", advanceDueDate: false).Value;
         if (frequency is null)
             habit.Unlog(existing.Date);
@@ -162,7 +162,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
     [Fact]
     public async Task Undo_LastOccurrence_RestoresCompletedFlagAndLegacyScheduleAnchor()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1,
             Today, EndDate: Today)).Value;
         var skipId = Guid.NewGuid();
         await Seed(habit);
@@ -197,9 +197,9 @@ public sealed class UndoSkipHabitCommandHandlerTests
         (await verify.HabitSkipUndos.CountAsync()).Should().Be(1);
     }
 
-    private static Habit CreateHabit(bool flexible = false) => Habit.Create(new HabitCreateParams(
+    private static Habit CreateHabit(bool flexible = false) => Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : ((FrequencyUnit?)(flexible ? (FrequencyUnit?)FrequencyUnit.Week : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
         UserId, "Read", flexible ? FrequencyUnit.Week : FrequencyUnit.Day, flexible ? 3 : 1,
-        Today, IsFlexible: flexible)).Value;
+        Today)).Value;
 
     private OrbitDbContext Context() => new(new DbContextOptionsBuilder<OrbitDbContext>()
         .UseInMemoryDatabase(_databaseName).Options);

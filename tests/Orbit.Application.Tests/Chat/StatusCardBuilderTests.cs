@@ -18,7 +18,7 @@ public class StatusCardBuilderTests
     {
         var today = new DateOnly(2026, 9, 25);
         var habits = Enumerable.Range(0, 3).Select(index =>
-            Habit.Create(new HabitCreateParams(Guid.NewGuid(), $"Habit {index}", FrequencyUnit.Day, 1, today)).Value)
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), $"Habit {index}", FrequencyUnit.Day, 1, today)).Value)
             .ToList();
         habits[0].Log(today, advanceDueDate: false);
 
@@ -53,15 +53,15 @@ public class StatusCardBuilderTests
     {
         var today = new DateOnly(2026, 9, 25);
         var userId = Guid.NewGuid();
-        var done = Habit.Create(new HabitCreateParams(userId, "Done", null, null, today,
+        var done = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, userId, "Done", null, null, today,
             Position: 0, Emoji: "✅")).Value;
         done.Log(today).IsSuccess.Should().BeTrue();
-        var due = Habit.Create(new HabitCreateParams(userId, "Due", null, null, today, Position: 1)).Value;
-        var child = Habit.Create(new HabitCreateParams(userId, "Child", null, null, today,
+        var due = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, userId, "Due", null, null, today, Position: 1)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, userId, "Child", null, null, today,
             ParentHabitId: due.Id, Position: 0)).Value;
-        var overdue = Habit.Create(new HabitCreateParams(userId, "Overdue", null, null,
+        var overdue = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, userId, "Overdue", null, null,
             today.AddDays(-1), Position: 2)).Value;
-        var bad = Habit.Create(new HabitCreateParams(userId, "Bad", FrequencyUnit.Day, 1, today,
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Bad", FrequencyUnit.Day, 1, today,
             IsBadHabit: true, Position: 3)).Value;
         List<Habit> habits = [bad, overdue, child, due, done];
         var rows = HabitListCardBuilder.Build(habits, today, HabitListCardBuilder.ScopeToday,
@@ -85,7 +85,7 @@ public class StatusCardBuilderTests
     public void Day_TwentyFiveRows_ReturnsFirstTwentyAndFullCount()
     {
         var today = new DateOnly(2026, 9, 25);
-        var habits = Enumerable.Range(0, 25).Select(index => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(0, 25).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             Guid.NewGuid(), $"Habit {index}", null, null, today, Position: index)).Value).ToList();
         var rows = HabitListCardBuilder.Build(habits, today, HabitListCardBuilder.ScopeToday).Items;
         var metrics = RetrospectiveMetricsCalculator.Compute(habits, today, today, 0, 0);

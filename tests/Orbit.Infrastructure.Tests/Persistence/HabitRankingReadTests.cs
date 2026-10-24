@@ -29,7 +29,7 @@ public class HabitRankingReadTests
         var user = User.Create("Ranking user", "ranking@example.test").Value;
         context.Users.Add(user);
         var from = new DateOnly(2024, 1, 1);
-        var habits = Enumerable.Range(0, count).Select(i => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(0, count).Select(i => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, $"Private habit {i}", FrequencyUnit.Day, 1, DueDate: from)).Value).ToArray();
         foreach (var habit in habits)
         {

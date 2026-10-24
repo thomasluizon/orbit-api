@@ -1,3 +1,4 @@
+using Orbit.Application.Habits.Commands;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
@@ -151,7 +152,11 @@ public class ApplyOnboardingCommandHandler(
 
         foreach (var item in habits)
         {
-            var habitResult = Habit.Create(new HabitCreateParams(
+            var schedule = LegacyHabitSchedule.Resolve(item.IsGeneral, item.IsFlexible, item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.Days, item.IntervalWeeks);
+            if (schedule.IsFailure)
+                return schedule.PropagateError<List<Habit>>();
+
+            var habitResult = Habit.Create(new HabitCreateParams(schedule.Value,
                 userId,
                 item.Title,
                 item.FrequencyUnit,
@@ -165,8 +170,6 @@ public class ApplyOnboardingCommandHandler(
                 ReminderEnabled: item.ReminderEnabled,
                 ReminderTimes: item.ReminderTimes,
                 ChecklistItems: item.ChecklistItems,
-                IsGeneral: item.IsGeneral,
-                IsFlexible: item.IsFlexible,
                 Position: position++,
                 IntervalWeeks: item.IntervalWeeks));
 

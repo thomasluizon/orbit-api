@@ -18,8 +18,6 @@ public sealed record HabitScheduleSnapshot(
     bool IsDeleted,
     bool IsBadHabit,
     bool IsCompleted,
-    bool IsGeneral,
-    bool IsFlexible,
     IReadOnlyList<DayOfWeek> Days,
     HabitSchedule Schedule,
     DateOnly StartDate)
@@ -39,8 +37,6 @@ public sealed record HabitScheduleSnapshot(
         habit.IsDeleted,
         habit.IsBadHabit,
         habit.IsCompleted,
-        habit.Schedule == HabitSchedule.General,
-        habit.Schedule == HabitSchedule.Flexible,
         habit.Days.ToList(),
         habit.Schedule,
         habit.StartDate);

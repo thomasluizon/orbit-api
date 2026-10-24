@@ -51,7 +51,7 @@ public partial class ReminderInputContractTests
         var root = fixture.Added.Should().ContainSingle().Which;
         await fixture.AssertReadBack(root, expected, relative);
 
-        root.Update(new HabitUpdateParams(root.Title, root.Description, root.FrequencyUnit, root.FrequencyQuantity,
+        root.Update(new HabitUpdateParams(root.Schedule, root.Title, root.Description, root.FrequencyUnit, root.FrequencyQuantity,
             null, false, null, ReminderEnabled: false, ReminderTimes: [], ScheduledReminders: [], RelativeReminders: []))
             .IsSuccess.Should().BeTrue();
         var update = JsonSerializer.Deserialize<HabitsController.UpdateHabitRequest>(json, options)!;

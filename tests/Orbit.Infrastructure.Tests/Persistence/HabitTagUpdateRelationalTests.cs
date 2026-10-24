@@ -46,12 +46,12 @@ public class HabitTagUpdateRelationalTests
         using var factory = new SqliteOrbitDbContextFactory(probe);
         var seed = factory.Context;
         var user = User.Create("Alex", "habit-rollback@example.test").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Original", FrequencyUnit.Day, 1, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Original", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15],
             ChecklistItems: [new("Same", false), new("Same", true), new("Other", false)])).Value;
         habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
         habit.UpdateChecklist([new("Same", false), new("Same", true), new("Other", false)]);
-        var parent = Habit.Create(new HabitCreateParams(user.Id, "Parent", FrequencyUnit.Day, 1, Today)).Value;
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Parent", FrequencyUnit.Day, 1, Today)).Value;
         if (clearParent) habit.SetParentHabitId(parent.Id);
         Guid? finalParentId = clearParent ? null : parent.Id;
         var oldTag = Tag.Create(user.Id, "Old", "#ffffff").Value;
@@ -221,9 +221,7 @@ public class HabitTagUpdateRelationalTests
             habit.RelativeReminders,
             habit.SlipAlertEnabled,
             habit.ChecklistItems,
-            habit.IsGeneral,
             habit.EndDate,
-            habit.IsFlexible,
             habit.Emoji,
             habit.IntervalWeeks,
             habit.StartDate,

@@ -365,6 +365,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     }
 
     private static HabitUpdateParams EmojiUpdate(Habit habit, string? emoji) => new(
+            habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -378,8 +379,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             ReminderTimes: habit.ReminderTimes,
             SlipAlertEnabled: habit.SlipAlertEnabled,
             ChecklistItems: habit.ChecklistItems,
-            IsGeneral: habit.Schedule == HabitSchedule.General,
-            IsFlexible: habit.Schedule == HabitSchedule.Flexible,
+
             EndDate: habit.EndDate,
             ScheduledReminders: habit.ScheduledReminders,
             Emoji: emoji,

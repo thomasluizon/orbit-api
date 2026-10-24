@@ -47,12 +47,12 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [InlineData(10)]
     public async Task GeneralValidation_LoadsRelatedHabitsOncePerChunk(int count)
     {
-        var habits = Enumerable.Range(0, count).Select(i => Habit.Create(new HabitCreateParams(UserId, $"Parent {i}", null, null, Today)).Value).ToArray();
+        var habits = Enumerable.Range(0, count).Select(i => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, $"Parent {i}", null, null, Today)).Value).ToArray();
         SetupHabits(habits);
         var result = await _handler.Handle(new BulkUpdateHabitsCommand(UserId, new BulkHabitFilter(true, []),
             new BulkHabitChanges(HasIsGeneral: true, IsGeneral: true)), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
-        habits.Should().OnlyContain(h => h.IsGeneral);
+        habits.Should().OnlyContain(h => (h.Schedule == HabitSchedule.General));
         await _habitRepository.Received(1).FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>());
     }
 
@@ -61,8 +61,8 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [InlineData(true)]
     public async Task GeneralMismatch_RejectsWholeChunkBeforeMutation(bool updateChild)
     {
-        var parent = Habit.Create(new HabitCreateParams(UserId, "Parent", null, null, Today)).Value;
-        var child = Habit.Create(new HabitCreateParams(UserId, "Child", null, null,
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Parent", null, null, Today)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Child", null, null,
             Today, ParentHabitId: parent.Id)).Value;
         SetupHabits(parent, child);
         _habitRepository.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
@@ -74,8 +74,8 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
             new BulkHabitChanges(HasIsGeneral: true, IsGeneral: true)), CancellationToken.None);
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(updateChild ? ErrorMessages.GeneralMismatchWithParent.Message : ErrorMessages.GeneralMismatchWithChildren.Message);
-        parent.IsGeneral.Should().BeFalse();
-        child.IsGeneral.Should().BeFalse();
+        (parent.Schedule == HabitSchedule.General).Should().BeFalse();
+        (child.Schedule == HabitSchedule.General).Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -86,7 +86,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [InlineData("relative_reminders", "[{\"minutes_before\":30}]")]
     public async Task NewFields_UpdateEachSelectedHabit(string field, string value)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Read", null, null, Today,
             DueTime: new TimeOnly(9, 0))).Value;
         SetupHabits(habit);
         _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -99,7 +99,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         switch (field)
         {
             case "due_end_time": habit.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
-            case "is_general": habit.IsGeneral.Should().BeTrue(); break;
+            case "is_general": habit.Schedule.Should().Be(HabitSchedule.General); break;
             case "slip_alert_enabled": habit.SlipAlertEnabled.Should().BeTrue(); break;
             case "relative_reminders": habit.RelativeReminders.Should().Equal(new RelativeReminderTime(MinutesBefore: 30)); break;
         }
@@ -160,7 +160,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_UnrelatedChange_PreservesDueEndTime()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Timed habit",
             FrequencyUnit.Day,
@@ -263,7 +263,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     public async Task Handle_CompletedFilter_UpdatesOnlyCompletedHabits()
     {
         var active = CreateHabit("Active");
-        var completed = Habit.Create(new HabitCreateParams(UserId, "Completed", null, null, Today)).Value;
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Completed", null, null, Today)).Value;
         completed.Log(Today);
         SetupHabits(active, completed);
         var command = new BulkUpdateHabitsCommand(
@@ -307,7 +307,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_AddingDueTime_MigratesScheduledRemindersToRelativeClock()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Appointment",
             FrequencyUnit.Day,
@@ -335,7 +335,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_TimedHabitGivenScheduledReminders_NormalizesToRelativeClock()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Standup",
             FrequencyUnit.Day,
@@ -364,7 +364,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_FlexibleOnly_ClearsExistingDays()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, Today,
             Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value;
         SetupHabits(habit);
@@ -376,7 +376,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsFlexible.Should().BeTrue();
+        habit.Schedule.Should().Be(HabitSchedule.Flexible);
         habit.Days.Should().BeEmpty();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -384,7 +384,7 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OneTimeHabitGivenRecurringUnitWithoutQuantity_RejectsChunkBeforeMutation()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, Today)).Value;
         SetupHabits(habit);
         var command = new BulkUpdateHabitsCommand(
             UserId,
@@ -422,11 +422,11 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
     }
 
     private static Habit CreateHabit(string title) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, Today)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, Today)).Value;
 
     private static Habit CreateCompletedRecurringHabit(string title)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             title,
             FrequencyUnit.Day,

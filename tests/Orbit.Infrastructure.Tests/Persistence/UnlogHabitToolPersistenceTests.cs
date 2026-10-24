@@ -28,7 +28,7 @@ public sealed class UnlogHabitToolPersistenceTests
             """);
         var today = new DateOnly(2026, 8, 6);
         var user = User.Create("Alex", "undo@example.test").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
         habit.Log(today).IsSuccess.Should().BeTrue();
         var goals = Enumerable.Range(1, 3)
             .Select(index => Goal.Create(user.Id, $"Goal {index}", 10m, "completions").Value).ToList();

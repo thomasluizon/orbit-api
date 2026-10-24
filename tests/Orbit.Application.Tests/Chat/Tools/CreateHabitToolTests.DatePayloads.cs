@@ -139,7 +139,7 @@ public partial class CreateHabitToolTests
     {
         const string json = """{"title":"Aula semanal","frequency_unit":"Day","frequency_quantity":1,"interval_weeks":2,"days":["Wednesday","Friday"],"due_date":"2026-08-26","due_time":"08:25","description":"Aulas"}""";
         (await Execute(json)).Success.Should().BeTrue();
-        var expected = Habit.Create(new HabitCreateParams(UserId, "Aula semanal", FrequencyUnit.Day, 1,
+        var expected = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Aula semanal", FrequencyUnit.Day, 1,
             new DateOnly(2026, 8, 26), "Aulas", Days: [DayOfWeek.Wednesday, DayOfWeek.Friday],
             DueTime: new TimeOnly(8, 25), IntervalWeeks: 2, Position: 0)).Value;
 
@@ -232,7 +232,7 @@ public partial class CreateHabitToolTests
         """)).Success.Should().BeTrue();
 
         var parent = AddedHabits().Single(habit => habit.ParentHabitId is null);
-        var expected = Habit.Create(new HabitCreateParams(UserId, "Aula herdada", FrequencyUnit.Day, 1,
+        var expected = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Aula herdada", FrequencyUnit.Day, 1,
             parent.NextDueDate, Days: [DayOfWeek.Wednesday], ParentHabitId: parent.Id, Position: 0,
             DueTime: new TimeOnly(8, 25), DueEndTime: new TimeOnly(11, 15))).Value;
         AddedHabits().Single(habit => habit.ParentHabitId is not null).Should().BeEquivalentTo(expected,

@@ -305,7 +305,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
 
     private Habit AddExisting(string title, Guid? parentId = null, bool slipAlertEnabled = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, title, FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, title, FrequencyUnit.Day, 1,
             DueDate: Today, ParentHabitId: parentId, IsBadHabit: slipAlertEnabled,
             SlipAlertEnabled: slipAlertEnabled)).Value;
         _stored.Add(habit);

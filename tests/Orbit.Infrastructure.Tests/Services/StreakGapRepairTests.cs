@@ -311,7 +311,7 @@ public class StreakGapRepairTests
     public async Task GapPredecessor_Respects732DayLookback(int predecessorDaysAgo, bool isRepairable)
     {
         var firstDate = _today.AddDays(-predecessorDaysAgo);
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Long interval", FrequencyUnit.Day, predecessorDaysAgo - 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Long interval", FrequencyUnit.Day, predecessorDaysAgo - 1,
             DueDate: firstDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             firstDate.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
@@ -660,7 +660,7 @@ public class StreakGapRepairTests
         int gapOccurrences = 1)
     {
         var firstOccurrence = _today.AddDays(-1 - (7 * (priorOccurrences + gapOccurrences - 1)));
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Long run", FrequencyUnit.Week, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Long run", FrequencyUnit.Week, 1,
             DueDate: firstOccurrence)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             firstOccurrence.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
@@ -685,7 +685,7 @@ public class StreakGapRepairTests
     {
         var gapDate = (today ?? _today).AddDays(-1);
         var firstOccurrence = unit == FrequencyUnit.Year ? gapDate.AddYears(-1) : gapDate.AddDays(-365);
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Annual review", unit, unit == FrequencyUnit.Year ? 1 : 365,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Annual review", unit, unit == FrequencyUnit.Year ? 1 : 365,
             DueDate: gapDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             firstOccurrence.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
@@ -705,7 +705,7 @@ public class StreakGapRepairTests
     private Habit SetLongRunningDailyHistory()
     {
         var createdOn = _today.AddDays(-800);
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Daily", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Daily", FrequencyUnit.Day, 1,
             DueDate: createdOn)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             createdOn.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));
@@ -783,7 +783,7 @@ public class StreakGapRepairTests
     private Habit SetHistory(DateOnly today, int gapLength, int frequencyQuantity = 1, int precedingCompletions = 3)
     {
         var createdOn = today.AddDays(-gapLength - precedingCompletions);
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Run", FrequencyUnit.Day, frequencyQuantity,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Run", FrequencyUnit.Day, frequencyQuantity,
             DueDate: createdOn)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(habit,
             createdOn.ToDateTime(new TimeOnly(12, 0), DateTimeKind.Utc));

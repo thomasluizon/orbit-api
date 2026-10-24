@@ -39,10 +39,10 @@ public sealed class PendingOperationChangePreviewerTests
     [InlineData(HabitSchedule.General, true)]
     public async Task Preview_KeepsScheduleFieldsAndFingerprint(HabitSchedule schedule, bool divergentFlags)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",
+        var habit = Habit.Create(new HabitCreateParams(schedule, UserId, "Habit",
             schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
             schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
-            new DateOnly(2026, 9, 25), IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+            new DateOnly(2026, 9, 25))).Value;
         Setup([habit]);
         var args = JsonSerializer.Serialize(new
         {
@@ -65,8 +65,6 @@ public sealed class PendingOperationChangePreviewerTests
         var bulkBefore = await Preview("bulk_update_habits", bulkArgs);
         if (divergentFlags)
         {
-            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
         }
 
         var preview = await Preview("update_habit", args);
@@ -143,7 +141,7 @@ public sealed class PendingOperationChangePreviewerTests
     [InlineData("relative_reminders", "[{\"minutes_before\":30}]", "30 minutes before")]
     public async Task NewFields_PreviewEffectiveValueAndAllowRevision(string field, string value, string expected)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, new DateOnly(2026, 9, 25),
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Read", null, null, new DateOnly(2026, 9, 25),
             DueTime: new TimeOnly(9, 0))).Value;
         Setup([habit]);
         var preview = await Preview("bulk_update_habits", $$$"""{"filter":{"all":true},"updates":{"{{{field}}}":{{{value}}}}}""");
@@ -152,7 +150,7 @@ public sealed class PendingOperationChangePreviewerTests
         change.NewValue.Should().Be(expected);
         change.IsEditable.Should().BeTrue();
         change.ProposedValue.Should().NotBeNull();
-        habit.IsGeneral.Should().BeFalse();
+        (habit.Schedule == HabitSchedule.General).Should().BeFalse();
         habit.DueEndTime.Should().BeNull();
         habit.RelativeReminders.Should().BeEmpty();
     }
@@ -174,7 +172,7 @@ public sealed class PendingOperationChangePreviewerTests
         var water = CreateHabit("Beber água", null);
         var reading = CreateHabit("Ler 10 minutos", null);
         var allergy = CreateHabit("Alergia", null);
-        allergy.Update(new HabitUpdateParams(allergy.Title, "Ler sobre água e meditação",
+        allergy.Update(new HabitUpdateParams(allergy.Schedule, allergy.Title, "Ler sobre água e meditação",
             allergy.FrequencyUnit, allergy.FrequencyQuantity, allergy.Days.ToArray(), allergy.IsBadHabit, allergy.NextDueDate))
             .IsSuccess.Should().BeTrue();
         Setup([water, reading, allergy]);
@@ -274,7 +272,7 @@ public sealed class PendingOperationChangePreviewerTests
     public async Task PreviewAsync_SearchExistsButNeedsNoChanges_ReturnsEmptySelection(string arguments, bool completed)
     {
         var habit = completed
-            ? Habit.Create(new HabitCreateParams(UserId, "Read", null, null, new DateOnly(2026, 9, 25), Emoji: "📚")).Value
+            ? Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Read", null, null, new DateOnly(2026, 9, 25), Emoji: "📚")).Value
             : CreateHabit("Read", "📚");
         if (completed)
             habit.Log(new DateOnly(2026, 9, 25)).IsSuccess.Should().BeTrue();
@@ -669,7 +667,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_FlexibleOnly_ShowsDaysClearedByUpdate()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value;
         Setup([habit]);
@@ -686,7 +684,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_ScheduledReminderForTimedHabit_ShowsNormalizedStore()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             DueTime: new TimeOnly(9, 0), ReminderTimes: [])).Value;
         Setup([habit]);
@@ -703,7 +701,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_EqualSizeReminderAndChecklistReplacement_ShowsActualValues()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             DueTime: new TimeOnly(9, 0), ReminderTimes: [15],
             ChecklistItems: [new ChecklistItem("Warm up", false)])).Value;
@@ -720,7 +718,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_LongChecklist_ShowsThreeValuesAndRemainder()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             ChecklistItems: [new("One", false), new("Two", false), new("Three", false), new("Four", false), new("Five", false)])).Value;
         Setup([habit]);
@@ -742,7 +740,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_ChecklistFourthItemReplacement_ShowsChangedWindow()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             ChecklistItems: [new("One", false), new("Two", false), new("Three", false), new("Four", false), new("Five", false)])).Value;
         Setup([habit]);
@@ -758,7 +756,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_FifthScheduledReminderReplacement_ShowsChangedWindow()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             ScheduledReminders: [
                 new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0)),
@@ -784,7 +782,7 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task PreviewAsync_CrossMidnightRelativeReminder_ShowsOffsetWithoutClock()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "One", FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25),
             DueTime: new TimeOnly(0, 30), ReminderTimes: [15])).Value;
         Setup([habit]);
@@ -960,6 +958,6 @@ public sealed class PendingOperationChangePreviewerTests
             .Returns(habits);
 
     private static Habit CreateHabit(string title, string? emoji) =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25), Emoji: emoji)).Value;
 }

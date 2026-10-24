@@ -216,7 +216,7 @@ public class AccountResetRepositoryTests : IDisposable
         var goal = Goal.Create(userId, "Goal", 10m, "reps").Value;
         _dbContext.Goals.Add(goal);
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         habit.Log(today, "note");

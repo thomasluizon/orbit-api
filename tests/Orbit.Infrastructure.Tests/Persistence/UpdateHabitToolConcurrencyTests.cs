@@ -45,7 +45,7 @@ public class UpdateHabitToolConcurrencyTests
             dependencies => new NpgsqlRetryingExecutionStrategy(dependencies, 1, TimeSpan.Zero, null), transactions);
         var seed = factory.Context;
         var user = User.Create("Alex", "habit-update@example.test").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(10, 0), ReminderEnabled: true,
             ReminderTimes: [15])).Value;
         seed.Users.Add(user);

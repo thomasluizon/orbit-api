@@ -18,8 +18,8 @@ public class RetrospectiveHabitStatTests
         var from = new DateOnly(2026, 3, 2);
         var to = from.AddDays(6);
         var userId = Guid.NewGuid();
-        var strong = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, from)).Value;
-        var weak = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, from)).Value;
+        var strong = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1, from)).Value;
+        var weak = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1, from)).Value;
         foreach (var habit in new[] { strong, weak })
             typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
                 habit, from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));

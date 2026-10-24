@@ -42,7 +42,7 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_OneTimeTask_PostponesToTomorrow()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "One-time task", null, null,
             DueDate: Today)).Value;
         SetupHabitFound(habit);
@@ -59,7 +59,7 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_RecurringHabitDueToday_AdvancesDueDate()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Daily habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
         SetupHabitFound(habit);
@@ -77,7 +77,7 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_OverdueHabit_NotScheduledToday_SkipsAndResolves()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
         SetupHabitFound(habit);
 
@@ -97,7 +97,7 @@ public class SkipHabitCommandHandlerTests
         var inactiveToday = inactiveDueDate.AddDays(1);
         var missedActiveDay = anchor.AddDays(14);
         var catchUpDay = missedActiveDay.AddDays(1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
@@ -141,7 +141,7 @@ public class SkipHabitCommandHandlerTests
     public async Task Handle_WrongUser_ReturnsFailure()
     {
         var otherUserId = Guid.NewGuid();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             otherUserId, "Someone else's habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
         SetupHabitFound(habit);
@@ -158,7 +158,7 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedHabit_ReturnsFailure()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Task", null, null,
             DueDate: Today)).Value;
         habit.Log(Today);
@@ -175,7 +175,7 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_FutureDate_ReturnsFailure()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Daily", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
         SetupHabitFound(habit);
@@ -189,17 +189,13 @@ public class SkipHabitCommandHandlerTests
         result.Error.Should().Be(ErrorMessages.CannotSkipFutureDate.Message);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Handle_NotYetDue_ReturnsFailure(bool divergentLegacyFlag)
+    [Fact]
+    public async Task Handle_NotYetDue_ReturnsFailure()
     {
         var futureDueDate = Today.AddDays(5);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Future habit", FrequencyUnit.Day, 1,
             DueDate: futureDueDate)).Value;
-        if (divergentLegacyFlag)
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, true);
         SetupHabitFound(habit);
 
         var command = new SkipHabitCommand(UserId, habit.Id, Today);
@@ -213,7 +209,7 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Task", null, null,
             DueDate: Today)).Value;
         SetupHabitFound(habit);
@@ -239,7 +235,7 @@ public class SkipHabitCommandHandlerTests
             "days",
             Type: GoalType.Streak)).Value;
 
-        var skippedHabit = Habit.Create(new HabitCreateParams(
+        var skippedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Read",
             FrequencyUnit.Day,
@@ -249,7 +245,7 @@ public class SkipHabitCommandHandlerTests
         skippedHabit.Log(Today.AddDays(-2), advanceDueDate: false);
         skippedHabit.Log(Today.AddDays(-1), advanceDueDate: false);
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Doom scrolling",
             FrequencyUnit.Day,
@@ -283,9 +279,8 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_FlexibleHabit_WithRemainingCompletions_SkipsAndAddsLog()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Workout", FrequencyUnit.Week, 3,
-            IsFlexible: true, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Workout", FrequencyUnit.Week, 3, DueDate: Today)).Value;
         SetupHabitFound(habit);
 
         var command = new SkipHabitCommand(UserId, habit.Id, Today);
@@ -301,9 +296,8 @@ public class SkipHabitCommandHandlerTests
     [Fact]
     public async Task Handle_FlexibleHabit_AllInstancesDoneInWindow_ReturnsFailure()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Workout", FrequencyUnit.Week, 1,
-            IsFlexible: true, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Workout", FrequencyUnit.Week, 1, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
         SetupHabitFound(habit);
 
@@ -320,7 +314,7 @@ public class SkipHabitCommandHandlerTests
     public async Task Handle_TargetBeyondOverdueWindow_ReturnsFailure()
     {
         var beyondWindow = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 3));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Stale overdue", FrequencyUnit.Day, 1,
             DueDate: beyondWindow)).Value;
         SetupHabitFound(habit);
@@ -338,7 +332,7 @@ public class SkipHabitCommandHandlerTests
     public async Task Handle_TargetAtOverdueWindowBoundary_Succeeds()
     {
         var boundary = Today.AddDays(-AppConstants.DefaultOverdueWindowDays);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Boundary", FrequencyUnit.Day, 1,
             DueDate: boundary)).Value;
         SetupHabitFound(habit);

@@ -147,7 +147,10 @@ public class UpdateHabitTool(
             return Result.Failure($"Habit {habitId} not found.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var update = HabitUpdateValidation.ResolveSingleUpdate(habit, changes!, today);
+        var resolved = HabitUpdateValidation.ResolveSingleUpdate(habit, changes!, today);
+        if (resolved.IsFailure)
+            return resolved.PropagateError();
+        var update = resolved.Value;
         var validation = await HabitUpdateValidation.ValidateAsync(userId, habit, update, habitRepository, ct);
         if (validation.IsFailure)
             return validation;

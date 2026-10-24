@@ -202,7 +202,7 @@ public class AiRetrospectiveServiceTests
     [Fact]
     public void BuildHabitBreakdown_NoActivity_ReturnsNoHabitActivity()
     {
-        var futureHabit = Habit.Create(new HabitCreateParams(
+        var futureHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Future", FrequencyUnit.Day, 1,
             DueDate: DateTo.AddDays(10))).Value;
 
@@ -227,7 +227,7 @@ public class AiRetrospectiveServiceTests
     [Fact]
     public void BuildHabitBreakdown_BadHabitSlipsTrackedSeparately()
     {
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: DateFrom)).Value;
 
@@ -244,7 +244,7 @@ public class AiRetrospectiveServiceTests
     [Fact]
     public void BuildHabitBreakdown_OverLoggedHabit_CapsAt100AndDoesNotInflateTotals()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Meds", FrequencyUnit.Week, 1, DueDate: DateFrom)).Value;
         for (var i = 0; i < 7; i++)
             habit.Log(DateFrom.AddDays(i), advanceDueDate: false);
@@ -337,7 +337,7 @@ public class AiRetrospectiveServiceTests
         bool isBadHabit = false,
         Guid? parentId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             title,
             FrequencyUnit.Day,

@@ -22,7 +22,7 @@ public class FoundingAchievementReaderTests
         user.CompleteOnboardingChecklist();
         context.Users.Add(user);
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Historical Habit",
             FrequencyUnit.Day,
@@ -31,7 +31,7 @@ public class FoundingAchievementReaderTests
         habit.Log(new DateOnly(2026, 8, 1));
         habit.SoftDelete();
         context.Habits.Add(habit);
-        var secondHabit = Habit.Create(new HabitCreateParams(
+        var secondHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Second Habit",
             FrequencyUnit.Day,
@@ -94,17 +94,16 @@ public class FoundingAchievementReaderTests
         var badHabitUser = User.Create("Bad Habit User", "bad-habit@example.com").Value;
         context.Users.AddRange(skippedUser, badHabitUser);
 
-        var flexibleHabit = Habit.Create(new HabitCreateParams(
+        var flexibleHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             skippedUser.Id,
             "Flexible Habit",
             FrequencyUnit.Day,
             1,
-            DueDate: new DateOnly(2026, 8, 1),
-            IsFlexible: true)).Value;
+            DueDate: new DateOnly(2026, 8, 1))).Value;
         flexibleHabit.SkipFlexible(new DateOnly(2026, 8, 1));
         context.Habits.Add(flexibleHabit);
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             badHabitUser.Id,
             "Bad Habit",
             FrequencyUnit.Day,
@@ -144,7 +143,7 @@ public class FoundingAchievementReaderTests
 
         foreach (var user in new[] { eligible, complete, deactivated })
         {
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 user.Id,
                 $"Habit {user.Id}",
                 FrequencyUnit.Day,

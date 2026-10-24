@@ -281,7 +281,7 @@ public class CreateGoalCommandHandlerTests
     }
 
     private static Habit CreateHabit(string title) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
     [Fact]
     public void Validate_HabitIdsOverLimit_HasError()
@@ -399,5 +399,5 @@ public class CreateGoalToolHabitLinkTests
     }
 
     private static Habit CreateHabit() =>
-        Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 8, 6))).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 8, 6))).Value;
 }

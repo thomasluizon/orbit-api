@@ -208,8 +208,8 @@ public sealed partial class ChatWriteHoldHandlerTests
     public async Task ExistingParents_AmbiguousHeadingOffersCandidatesAndAcceptsOnlyAnOfferedChoice(bool noParent)
     {
         var parents = ParentAccount("en");
-        var duplicate = Habit.Create(new HabitCreateParams(_userId, "Post Lunch", FrequencyUnit.Day, 1, Today)).Value;
-        var unrelated = Enumerable.Range(0, 40).Select(index => Habit.Create(new HabitCreateParams(
+        var duplicate = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Post Lunch", FrequencyUnit.Day, 1, Today)).Value;
+        var unrelated = Enumerable.Range(0, 40).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, $"Other routine {index}", FrequencyUnit.Day, 1, Today)).Value).ToArray();
         var account = parents.Concat([duplicate]).Concat(unrelated).ToArray();
         UseParentHabits(account);
@@ -260,7 +260,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     public async Task ExistingParents_FreshnessTracksOnlyBoundOrCandidateParents(bool ambiguous)
     {
         var parents = ParentAccount("en");
-        var candidate = Habit.Create(new HabitCreateParams(_userId,
+        var candidate = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId,
             ambiguous ? "Post Lunch" : "Another routine", FrequencyUnit.Day, 1, Today)).Value;
         UseParentHabits([.. parents, candidate]);
         ScriptToolCall("""{"habits":[{"title":"Take vitamin D","frequency_unit":"Week","frequency_quantity":1}]}""", "bulk_create_habits");
@@ -270,13 +270,13 @@ public sealed partial class ChatWriteHoldHandlerTests
         var service = ParentRevisionService();
         (await service.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
 
-        parents[1].Update(new HabitUpdateParams("Unrelated routine renamed", parents[1].Description,
+        parents[1].Update(new HabitUpdateParams(HabitSchedule.Recurring, "Unrelated routine renamed", parents[1].Description,
             parents[1].FrequencyUnit, parents[1].FrequencyQuantity, parents[1].Days.ToArray(), parents[1].IsBadHabit, parents[1].NextDueDate))
             .IsSuccess.Should().BeTrue();
         (await service.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
 
         var dependency = ambiguous ? candidate : parents[0];
-        dependency.Update(new HabitUpdateParams(dependency.Title, "Changed parent description",
+        dependency.Update(new HabitUpdateParams(dependency.Schedule, dependency.Title, "Changed parent description",
             dependency.FrequencyUnit, dependency.FrequencyQuantity, dependency.Days.ToArray(), dependency.IsBadHabit, dependency.NextDueDate))
             .IsSuccess.Should().BeTrue();
         (await service.IsCurrentAsync(_userId, execution, default)).Should().BeFalse();
@@ -328,7 +328,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     private Habit[] ParentAccount(string language)
     {
         _user.SetLanguage(language);
-        var parents = new[] { "Post Lunch", "Before Bed" }.Select(title => Habit.Create(new HabitCreateParams(
+        var parents = new[] { "Post Lunch", "Before Bed" }.Select(title => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, title, FrequencyUnit.Day, 1, Today)).Value).ToArray();
         UseParentHabits(parents);
         var config = Substitute.For<Orbit.Domain.Interfaces.IAppConfigService>();

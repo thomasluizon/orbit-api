@@ -19,12 +19,11 @@ public class HabitListCardBuilderTests
         Guid? parentId = null,
         string? emoji = null)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(isGeneral ? HabitSchedule.General : HabitSchedule.Recurring,
             UserId, title,
             isGeneral ? null : FrequencyUnit.Day,
             isGeneral ? null : 1,
             DueDate: dueDate,
-            IsGeneral: isGeneral,
             IsBadHabit: isBadHabit,
             ParentHabitId: parentId,
             Emoji: emoji)).Value;
@@ -94,7 +93,7 @@ public class HabitListCardBuilderTests
     public void Build_TodayScope_AssignsStatuses()
     {
         var dueToday = CreateHabit("Meditate", Today);
-        var overdue = Habit.Create(new HabitCreateParams(
+        var overdue = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Floss", null, null, DueDate: Today.AddDays(-2))).Value;
 
         var card = HabitListCardBuilder.Build([dueToday, overdue], Today, HabitListCardBuilder.ScopeToday);
@@ -108,10 +107,10 @@ public class HabitListCardBuilderTests
     {
         var daily = CreateHabit("Water", Today);
         daily.Log(Today).IsSuccess.Should().BeTrue();
-        var weekly = Habit.Create(new HabitCreateParams(
+        var weekly = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Walk", FrequencyUnit.Week, 1, DueDate: Today)).Value;
         weekly.Log(Today).IsSuccess.Should().BeTrue();
-        var monthly = Habit.Create(new HabitCreateParams(
+        var monthly = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Budget", FrequencyUnit.Month, 1, DueDate: Today.AddDays(3))).Value;
         monthly.Log(Today).IsSuccess.Should().BeTrue();
 
@@ -188,7 +187,7 @@ public class HabitListCardBuilderTests
     [Fact]
     public void Build_Remaining_ExcludesDoneAncestorAndKeepsDueChild()
     {
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Finished project", null, null, DueDate: Today)).Value;
         parent.Log(Today).IsSuccess.Should().BeTrue();
         var child = CreateHabit("Review notes", Today, parentId: parent.Id);

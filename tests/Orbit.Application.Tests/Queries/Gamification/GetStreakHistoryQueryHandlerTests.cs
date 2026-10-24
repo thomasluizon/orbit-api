@@ -54,14 +54,14 @@ public class GetStreakHistoryQueryHandlerTests
 
     private static Habit CreateDailyHabit(DateOnly start)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Daily", FrequencyUnit.Day, 1, DueDate: start)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Daily", FrequencyUnit.Day, 1, DueDate: start)).Value;
         BackdateCreation(habit, start);
         return habit;
     }
 
     private static Habit CreateWeekdayHabit(DateOnly start)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Work", FrequencyUnit.Day, 1,
             Days: new List<DayOfWeek>
             {
@@ -108,7 +108,7 @@ public class GetStreakHistoryQueryHandlerTests
         var today = new DateOnly(2024, 9, 6);
         var gap = today.AddDays(-1);
         var predecessor = gap.AddYears(-1);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Annual review", FrequencyUnit.Year, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Annual review", FrequencyUnit.Year, 1,
             DueDate: predecessor)).Value;
         BackdateCreation(habit, predecessor);
         Log(habit, predecessor, gap.AddYears(1));
@@ -151,9 +151,9 @@ public class GetStreakHistoryQueryHandlerTests
         Log(second, Today.AddDays(-2), Today.AddDays(-1));
         second.Log(Today, advanceDueDate: false);
         second.Unlog(Today);
-        var flexible = Habit.Create(new HabitCreateParams(
+        var flexible = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible", FrequencyUnit.Week, 2,
-            DueDate: Today.AddDays(-2), IsFlexible: true)).Value;
+            DueDate: Today.AddDays(-2))).Value;
         flexible.SkipFlexible(Today);
         ArrangeHabits(first, second, flexible);
 

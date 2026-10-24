@@ -34,7 +34,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var oldHabit = Habit.Create(new HabitCreateParams(user.Id, "Old reminder", FrequencyUnit.Day, 1,
+        var oldHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Old reminder", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [0])).Value;
         db.Users.Add(user);
@@ -66,7 +66,7 @@ public class ReminderSchedulerCacheTests
             result.Success.Should().BeTrue();
             await writeDb.SaveChangesAsync();
 
-            var replacement = Habit.Create(new HabitCreateParams(user.Id, "New reminder", FrequencyUnit.Day, 1,
+            var replacement = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "New reminder", FrequencyUnit.Day, 1,
                 new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
                 ReminderTimes: [0])).Value;
             writeDb.Habits.Add(replacement);
@@ -109,9 +109,9 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var user = User.Create("Alex", "alex@test.com").Value;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var relative = Habit.Create(new HabitCreateParams(user.Id, "Relative", FrequencyUnit.Day, 1,
+        var relative = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Relative", FrequencyUnit.Day, 1,
             today, DueTime: new TimeOnly(0, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
-        var scheduled = Habit.Create(new HabitCreateParams(user.Id, "Scheduled", FrequencyUnit.Day, 1,
+        var scheduled = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Scheduled", FrequencyUnit.Day, 1,
             today, ReminderEnabled: true, ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(0, 0))])).Value;
         db.Users.Add(user);
         db.Habits.AddRange(relative, scheduled);
@@ -152,7 +152,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Reminder", FrequencyUnit.Day, 1,
             today, ReminderEnabled: change != "toggle",
             EndDate: change == "complete" ? today : null,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(0, 0))])).Value;
@@ -161,7 +161,7 @@ public class ReminderSchedulerCacheTests
         if (change != "create") db.Habits.Add(habit);
         if (change is "create" or "delete")
         {
-            var newer = Habit.Create(new HabitCreateParams(user.Id, "Later reminder", FrequencyUnit.Day, 1,
+            var newer = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Later reminder", FrequencyUnit.Day, 1,
                 today, ReminderEnabled: true,
                 ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(12, 0))])).Value;
             db.Habits.Add(newer);
@@ -203,7 +203,7 @@ public class ReminderSchedulerCacheTests
         using var factory = new SqliteOrbitDbContextFactory(reads);
         var today = new DateOnly(2027, 9, 26);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Reminder", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Reminder", FrequencyUnit.Day, 1,
             today, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
@@ -222,7 +222,7 @@ public class ReminderSchedulerCacheTests
         await firstDb.SaveChangesAsync();
         await service.CheckAndSendReminders(CancellationToken.None);
 
-        secondHabit.Update(new HabitUpdateParams(secondHabit.Title, secondHabit.Description,
+        secondHabit.Update(new HabitUpdateParams(secondHabit.Schedule, secondHabit.Title, secondHabit.Description,
             secondHabit.FrequencyUnit, secondHabit.FrequencyQuantity, secondHabit.Days.ToList(),
             secondHabit.IsBadHabit, today.AddDays(1), DueTime: secondHabit.DueTime,
             ReminderEnabled: secondHabit.ReminderEnabled)).IsSuccess.Should().BeTrue();
@@ -239,7 +239,7 @@ public class ReminderSchedulerCacheTests
     }
 
     private static HabitUpdateParams UpdateParams(Habit habit, string title, bool enabled) =>
-        new(title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
+        new(habit.Schedule, title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.Days.ToList(), habit.IsBadHabit, habit.NextDueDate,
             DueTime: habit.DueTime, ReminderEnabled: enabled);
 
@@ -251,7 +251,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [0])).Value;
         db.Users.Add(user);
@@ -280,7 +280,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 7, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [0])).Value;
         db.Users.Add(user);
@@ -309,7 +309,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var deletedHabit = Habit.Create(new HabitCreateParams(user.Id, "Old reminder", FrequencyUnit.Day, 1,
+        var deletedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Old reminder", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [0])).Value;
         db.Users.Add(user);
@@ -330,7 +330,7 @@ public class ReminderSchedulerCacheTests
             resetUser.ResetAccount();
             await resetDb.SaveChangesAsync();
 
-            var replacement = Habit.Create(new HabitCreateParams(user.Id, "New reminder", FrequencyUnit.Day, 1,
+            var replacement = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "New reminder", FrequencyUnit.Day, 1,
                 new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
                 ReminderTimes: [0])).Value;
             resetDb.Habits.Add(replacement);
@@ -361,11 +361,11 @@ public class ReminderSchedulerCacheTests
         var latestUser = User.Create("Latest", "latest@test.com").Value;
         secondUser.Deactivate(DateTime.UtcNow.AddDays(30));
         var date = new DateOnly(2027, 9, 26);
-        var firstHabit = Habit.Create(new HabitCreateParams(firstUser.Id, "First reminder", FrequencyUnit.Day, 1,
+        var firstHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, firstUser.Id, "First reminder", FrequencyUnit.Day, 1,
             date, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
-        var secondHabit = Habit.Create(new HabitCreateParams(secondUser.Id, "Second reminder", FrequencyUnit.Day, 1,
+        var secondHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, secondUser.Id, "Second reminder", FrequencyUnit.Day, 1,
             date, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
-        var latestHabit = Habit.Create(new HabitCreateParams(latestUser.Id, "Later reminder", FrequencyUnit.Day, 1,
+        var latestHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, latestUser.Id, "Later reminder", FrequencyUnit.Day, 1,
             date, DueTime: new TimeOnly(12, 0), ReminderEnabled: true, ReminderTimes: [0])).Value;
         db.Users.AddRange(firstUser, secondUser, latestUser);
         db.Habits.AddRange(firstHabit, secondHabit, latestHabit);
@@ -398,7 +398,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), ReminderEnabled: true,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(10, 0))])).Value;
         db.Users.Add(user);
@@ -409,7 +409,7 @@ public class ReminderSchedulerCacheTests
             new ConfigurationBuilder().Build(), clock);
         await service.CheckAndSendReminders(CancellationToken.None);
 
-        habit.Update(new HabitUpdateParams(habit.Title, habit.Description, habit.FrequencyUnit,
+        habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, habit.Description, habit.FrequencyUnit,
             habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.NextDueDate,
             ReminderEnabled: true,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))]))
@@ -431,7 +431,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [0])).Value;
         db.Users.Add(user);
@@ -462,7 +462,7 @@ public class ReminderSchedulerCacheTests
         var db = factory.Context;
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 59, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), ReminderEnabled: true,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))])).Value;
         db.Users.Add(user);
@@ -500,7 +500,7 @@ public class ReminderSchedulerCacheTests
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 8, 0, 0, TimeSpan.Zero));
         var user = User.Create("Alex", "alex@test.com").Value;
         db.Users.Add(user);
-        db.Habits.Add(Habit.Create(new HabitCreateParams(user.Id, "Water", FrequencyUnit.Day, 1,
+        db.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Water", FrequencyUnit.Day, 1,
             new DateOnly(2027, 9, 26), ReminderEnabled: true,
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(12, 0))])).Value);
         await db.SaveChangesAsync();

@@ -67,8 +67,8 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_MultipleValidHabits_LogsAllSuccessfully()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         SetupHabitsForUser(new List<Habit> { habit1, habit2 });
 
@@ -91,7 +91,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_HabitNotFound_ReportsFailedItem()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         var missingId = Guid.NewGuid();
 
         SetupHabitsForUser(new List<Habit> { habit1 });
@@ -118,7 +118,7 @@ public class BulkLogHabitsCommandHandlerTests
     public async Task Handle_ReportsStreakBeforeAndAfterAllLogs(int previousStreak, int currentStreak)
     {
         var habits = Enumerable.Range(1, 2)
-            .Select(i => Habit.Create(new HabitCreateParams(
+            .Select(i => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 UserId, $"Habit {i}", FrequencyUnit.Day, 1, DueDate: Today)).Value)
             .ToList();
         SetupHabitsForUser(habits);
@@ -156,7 +156,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OverdueHabit_LogsAsToday()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem> { new(habit.Id) };
@@ -174,11 +174,11 @@ public class BulkLogHabitsCommandHandlerTests
     {
         var anchor = new DateOnly(2025, 1, 6);
         var catchUpDay = anchor.AddDays(15);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.Days.ToList(), habit.IsBadHabit, DueDate: null,
             UserToday: anchor.AddDays(8), IntervalWeeks: 2));
@@ -197,7 +197,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_NotScheduledNotOverdue_ReportsFailedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Future", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Future", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem> { new(habit.Id) };
@@ -212,7 +212,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_FutureDate_ReportsFailedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var futureDate = Today.AddDays(5);
@@ -229,7 +229,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_DateBeyondOverdueWindow_ReportsFailedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var tooOldDate = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 1));
@@ -246,7 +246,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OneTimeTask_LogsAndMarksCompleted()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem> { new(habit.Id) };
@@ -262,7 +262,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_CallsGamificationForSuccessfulLogs()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem> { new(habit.Id) };
@@ -279,9 +279,9 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_ThreeHabits_BatchesGamificationIntoSingleCall()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var habit3 = Habit.Create(new HabitCreateParams(UserId, "Habit 3", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 3", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit1, habit2, habit3 });
 
         var items = new List<BulkLogItem>
@@ -308,7 +308,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_MixedResults_PassesOnlySuccessfulIdsToGamification()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem>
@@ -331,7 +331,7 @@ public class BulkLogHabitsCommandHandlerTests
     [InlineData(2)]
     public async Task Handle_NoSuccessfulLogs_SkipsStreakAndGamification(int currentStreak)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var futureDate = Today.AddDays(5);
@@ -358,7 +358,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
@@ -375,7 +375,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_AlreadyLoggedRecurringHabit_ReturnsSuccessWithoutSecondLog()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkLogItem> { new(habit.Id) };
@@ -404,7 +404,7 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_SaveFailsMidBatch_RunsInsideTransactionAndPropagates()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db failure"));
@@ -422,8 +422,8 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidItemsInterleavedWithValid_AppliesValidReportsInvalidPerItem()
     {
-        var habitA = Habit.Create(new HabitCreateParams(UserId, "Habit A", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var habitB = Habit.Create(new HabitCreateParams(UserId, "Habit B", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habitA = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit A", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habitB = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit B", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habitA, habitB });
 
         var missingId = Guid.NewGuid();
@@ -468,8 +468,8 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_ItemPersistenceThrowsMidBatch_IsolatesFailureAndAppliesOtherItems()
     {
-        var failingHabit = Habit.Create(new HabitCreateParams(UserId, "Failing", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var okHabit = Habit.Create(new HabitCreateParams(UserId, "Ok", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var failingHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Failing", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var okHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Ok", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { failingHabit, okHabit });
 
         _habitLogRepo.AddAsync(
@@ -503,11 +503,11 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedOneTimeTask_ReportsDomainFailurePerItemAndContinuesBatch()
     {
-        var task = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var task = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         task.Log(Today.AddDays(-1));
         task.IsCompleted.Should().BeTrue();
 
-        var okHabit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var okHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { task, okHabit });
 
         var items = new List<BulkLogItem> { new(task.Id), new(okHabit.Id) };
@@ -527,9 +527,9 @@ public class BulkLogHabitsCommandHandlerTests
     public async Task Handle_LinkedStandardGoal_DerivesProgressFromBulkCompletions()
     {
         var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
-        var first = Habit.Create(new HabitCreateParams(
+        var first = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var second = Habit.Create(new HabitCreateParams(
+        var second = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(first);
         goal.AddHabit(second);
@@ -561,9 +561,9 @@ public class BulkLogHabitsCommandHandlerTests
         var firstGoal = Goal.Create(user.Id, "First session", 1, "session").Value;
         var secondGoal = Goal.Create(user.Id, "Second session", 1, "session").Value;
         var thirdGoal = Goal.Create(user.Id, "Third session", 1, "session").Value;
-        var firstHabit = Habit.Create(new HabitCreateParams(
+        var firstHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        var secondHabit = Habit.Create(new HabitCreateParams(
+        var secondHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Stretch", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         firstGoal.AddHabit(firstHabit);
         secondGoal.AddHabit(secondHabit);
@@ -702,7 +702,7 @@ public class BulkLogHabitsCommandHandlerTests
     public async Task Handle_GoalCompletionGamificationFails_PropagatesFromTransaction()
     {
         var goal = Goal.Create(UserId, "Complete a session", 1, "session").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(habit);
         SetupHabitsForUser([habit]);

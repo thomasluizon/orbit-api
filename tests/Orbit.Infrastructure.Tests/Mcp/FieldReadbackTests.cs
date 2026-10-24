@@ -40,9 +40,9 @@ public sealed class FieldReadbackTests
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
         var user = User.Create("Test", "readback@example.com").Value;
-        var parent = Habit.Create(new HabitCreateParams(user.Id, "Routine", FrequencyUnit.Day, 1, Today,
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Routine", FrequencyUnit.Day, 1, Today,
             StartDate: Today.AddDays(-10))).Value;
-        var child = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, Today,
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, Today,
             ParentHabitId: parent.Id, StartDate: Today.AddDays(-5))).Value;
         var tag = Tag.Create(user.Id, "Health", "#123456").Value;
         parent.AddTag(tag);
@@ -97,7 +97,7 @@ public sealed class FieldReadbackTests
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
         var user = User.Create("Test", "goal-readback@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, Today)).Value;
         var goal = Goal.Create(user.Id, "Books", 12, "books").Value;
         goal.AddHabit(habit);
         db.Users.Add(user);

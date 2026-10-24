@@ -326,7 +326,7 @@ public class GoalDeadlineNotificationServiceTests
             5,
             "books",
             Deadline: Today.AddDays(1))).Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Read",
             FrequencyUnit.Day,
@@ -574,7 +574,7 @@ public class GoalDeadlineNotificationServiceTests
 
     private static Habit CreateBadHabitStartedYesterday(Guid userId)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Doom scrolling", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(-1))).Value;
         return habit;

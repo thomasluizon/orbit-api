@@ -119,7 +119,7 @@ public partial class CreateHabitToolTests
         result.Success.Should().BeTrue();
         var habits = _habitRepo.ReceivedCalls().Where(c => c.GetMethodInfo().Name == "AddAsync")
             .Select(c => (Habit)c.GetArguments()[0]!).ToList();
-        habits.Should().HaveCount(2).And.OnlyContain(h => h.IsGeneral);
+        habits.Should().HaveCount(2).And.OnlyContain(h => (h.Schedule == HabitSchedule.General));
     }
 
     [Theory]
@@ -147,7 +147,7 @@ public partial class CreateHabitToolTests
             case "reminder_times": child.ReminderTimes.Should().Equal(30); break;
             case "slip_alert_enabled": child.SlipAlertEnabled.Should().BeTrue(); break;
             case "end_date": child.EndDate.Should().Be(new DateOnly(2026, 12, 31)); break;
-            case "is_flexible": child.IsFlexible.Should().BeTrue(); break;
+            case "is_flexible": (child.Schedule == HabitSchedule.Flexible).Should().BeTrue(); break;
             case "scheduled_reminders": child.ScheduledReminders.Should().ContainSingle(); break;
             case "relative_reminders": child.RelativeReminders.Should().ContainSingle(); break;
         }

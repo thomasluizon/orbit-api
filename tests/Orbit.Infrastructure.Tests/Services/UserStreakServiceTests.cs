@@ -41,7 +41,7 @@ public class UserStreakServiceTests
 
     private static Habit CreateDailyHabitLoggedOn(IEnumerable<DateOnly> completions, DateOnly createdOn)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: createdOn)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Run", FrequencyUnit.Day, 1, DueDate: createdOn)).Value;
         BackdateCreation(habit, createdOn);
         foreach (var date in completions)
             habit.Log(date, advanceDueDate: false);
@@ -142,10 +142,9 @@ public class UserStreakServiceTests
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams((HabitSchedule)type,
             UserId, "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
             type is 1 or 2 ? 1 : null, today.AddDays(-1),
-            IsFlexible: type == 2, IsGeneral: type == 3,
             CreatedAtUtc: today.ToDateTime(new TimeOnly(1, 0), DateTimeKind.Utc))).Value;
         habit.Log(today.AddDays(-1), advanceDueDate: false).IsSuccess.Should().BeTrue();
         if (type != 0)
@@ -200,7 +199,7 @@ public class UserStreakServiceTests
     public async Task RecalculateAsync_DailyHabit_CompletionsAndFreeze_PreservesAndContinuesStreak()
     {
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
@@ -246,7 +245,7 @@ public class UserStreakServiceTests
         var startedOn = new DateOnly(2026, 6, 1);
         var today = new DateOnly(2026, 6, 3);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Run",
             FrequencyUnit.Day,
@@ -261,7 +260,7 @@ public class UserStreakServiceTests
         var beforeCadenceChange = await _sut.RecalculateAsync(
             UserId,
             cancellationToken: CancellationToken.None);
-        var updateResult = habit.Update(new HabitUpdateParams(
+        var updateResult = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title,
             habit.Description,
             FrequencyUnit.Week,
@@ -325,7 +324,7 @@ public class UserStreakServiceTests
         {
             DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday
         };
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Work", FrequencyUnit.Day, 1,
             Days: weekdays,
             DueDate: new DateOnly(2026, 4, 6))).Value;
@@ -352,7 +351,7 @@ public class UserStreakServiceTests
     public async Task RecalculateAsync_MissedExpectedDay_StopsStreak()
     {
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
@@ -375,9 +374,9 @@ public class UserStreakServiceTests
     public async Task RecalculateAsync_MixedDailyAndWeekdayHabits_RequiresAtLeastOneLogPerExpectedDay()
     {
         var user = User.Create("Alex", "alex@test.com").Value;
-        var daily = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 6))).Value;
+        var daily = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Water", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 6))).Value;
         BackdateCreation(daily, new DateOnly(2026, 4, 6));
-        var weekdayHabit = Habit.Create(new HabitCreateParams(
+        var weekdayHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Work", FrequencyUnit.Day, 1,
             Days: new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday },
             DueDate: new DateOnly(2026, 4, 6))).Value;
@@ -405,7 +404,7 @@ public class UserStreakServiceTests
     public async Task RecalculateAsync_FreezeBridgesMissedExpectedDay()
     {
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
@@ -427,7 +426,7 @@ public class UserStreakServiceTests
     public async Task RecalculateAsync_OnlyBadHabits_DoesNotIncreaseStreak()
     {
         var user = User.Create("Alex", "alex@test.com").Value;
-        var bad = Habit.Create(new HabitCreateParams(
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Smoke", FrequencyUnit.Day, 1,
             IsBadHabit: true,
             DueDate: new DateOnly(2026, 4, 1))).Value;

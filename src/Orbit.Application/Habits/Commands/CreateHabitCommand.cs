@@ -76,7 +76,11 @@ public partial class CreateHabitCommandHandler(
 
         var weekStartDay = request.StartDate.HasValue
             ? await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken) : 1;
-        var habitResult = Habit.Create(new HabitCreateParams(
+        var schedule = LegacyHabitSchedule.Resolve(request.IsGeneral, opts.IsFlexible, request.FrequencyUnit, request.FrequencyQuantity, request.IsBadHabit, opts.Days, request.IntervalWeeks);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<Guid>();
+
+        var habitResult = Habit.Create(new HabitCreateParams(schedule.Value,
             request.UserId,
             request.Title,
             request.FrequencyUnit,
@@ -92,8 +96,6 @@ public partial class CreateHabitCommandHandler(
             ReminderTimes: opts.ReminderTimes,
             SlipAlertEnabled: opts.SlipAlertEnabled,
             ChecklistItems: opts.ChecklistItems,
-            IsGeneral: request.IsGeneral,
-            IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
@@ -164,14 +166,14 @@ public partial class CreateHabitCommandHandler(
         var subPosition = 0;
         foreach (var subTitle in request.SubHabits)
         {
-            var childResult = Habit.Create(new HabitCreateParams(
+            var childResult = Habit.Create(new HabitCreateParams(parent.Schedule == HabitSchedule.General ? HabitSchedule.General
+                    : parent.FrequencyUnit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
                 request.UserId,
                 subTitle,
                 request.FrequencyUnit,
                 request.FrequencyQuantity,
                 request.StartDate ?? request.DueDate ?? parent.NextDueDate,
                 ParentHabitId: parent.Id,
-                IsGeneral: request.IsGeneral,
                 EndDate: opts.EndDate,
                 Position: subPosition++,
                 IntervalWeeks: request.IntervalWeeks,

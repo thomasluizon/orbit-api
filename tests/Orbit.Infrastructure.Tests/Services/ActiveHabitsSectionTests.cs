@@ -27,15 +27,14 @@ public class ActiveHabitsSectionTests
 
         if (isGeneral)
         {
-            return Habit.Create(new HabitCreateParams(
+            return Habit.Create(new HabitCreateParams(HabitSchedule.General,
                 ValidUserId, title, null, null,
                 DueDate: effectiveDueDate,
                 ParentHabitId: parentId,
-                IsGeneral: true,
                 Emoji: emoji)).Value;
         }
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, title, FrequencyUnit.Day, 1,
             IsBadHabit: isBadHabit,
             DueDate: effectiveDueDate,
@@ -75,14 +74,12 @@ public class ActiveHabitsSectionTests
     [InlineData(HabitSchedule.General, true)]
     public void Prompt_KeepsFourScheduleLabelsAfterLogging(HabitSchedule schedule, bool divergentFlags)
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Habit",
+        var habit = Habit.Create(new HabitCreateParams(schedule, ValidUserId, "Habit",
             schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
             schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
-            Today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+            Today)).Value;
         if (divergentFlags)
         {
-            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
         }
         var before = _sut.Build(CreateContext([habit]));
         before.Contains("1 general").Should().Be(schedule == HabitSchedule.General);
@@ -164,7 +161,7 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_CompletedHabit_IsExcludedFromIndex()
     {
-        var oneTimeHabit = Habit.Create(new HabitCreateParams(
+        var oneTimeHabit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Done Task", null, null,
             DueDate: Today.AddDays(-1))).Value;
         oneTimeHabit.Log(Today.AddDays(-1));
@@ -180,7 +177,7 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_OneTimeTaskCompletedToday_ShowsTodayAndDoneFacts()
     {
-        var task = Habit.Create(new HabitCreateParams(
+        var task = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
         task.Log(Today).IsSuccess.Should().BeTrue();
         var context = new PromptContext(
@@ -199,19 +196,19 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_CompletedParentWithActiveChild_KeepsHierarchyInIndex()
     {
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Fitness", null, null,
             DueDate: Today)).Value;
         parent.Log(Today);
         var child = CreateHabit("Push-ups", parentId: parent.Id);
-        var earlierParent = Habit.Create(new HabitCreateParams(
+        var earlierParent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Errands", null, null, DueDate: Today.AddDays(-2))).Value;
         earlierParent.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
-        var completedToday = Habit.Create(new HabitCreateParams(
+        var completedToday = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Pick up parcel", null, null, DueDate: Today.AddDays(-1),
             ParentHabitId: earlierParent.Id)).Value;
         completedToday.Log(Today).IsSuccess.Should().BeTrue();
-        var completedEarlier = Habit.Create(new HabitCreateParams(
+        var completedEarlier = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Buy stamps", null, null, DueDate: Today.AddDays(-2),
             ParentHabitId: earlierParent.Id)).Value;
         completedEarlier.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
@@ -379,7 +376,7 @@ public class ActiveHabitsSectionTests
     {
         var generalHabit = CreateHabit("Read", isGeneral: true);
         var todayHabit = CreateHabit("Exercise", dueDate: Today);
-        var overdueHabit = Habit.Create(new HabitCreateParams(
+        var overdueHabit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, "Meditate", null, null, DueDate: Today.AddDays(-2))).Value;
         var habits = new List<Habit> { generalHabit, todayHabit, overdueHabit };
         var context = CreateContext(habits: habits, userToday: Today);

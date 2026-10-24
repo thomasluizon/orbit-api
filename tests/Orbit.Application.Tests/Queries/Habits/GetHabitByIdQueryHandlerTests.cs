@@ -37,14 +37,14 @@ public class GetHabitByIdQueryHandlerTests
 
     private static Habit CreateTestHabit(string title = "Test Habit", string? emoji = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1,
             DueDate: Today, Emoji: emoji)).Value;
     }
 
     private static Habit CreateOneTimeHabit(string title, DateOnly dueDate, Guid? parentHabitId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId,
             title,
             null,
@@ -81,7 +81,7 @@ public class GetHabitByIdQueryHandlerTests
     public async Task Handle_ChildCarriesReminderSettingsAndTags()
     {
         var parent = CreateTestHabit();
-        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1, Today,
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Child", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15], SlipAlertEnabled: true,
             RelativeReminders: [new(MinutesBefore: 30)], ParentHabitId: parent.Id)).Value;
         child.AddTag(Tag.Create(UserId, "Health", "#123456").Value);
@@ -100,7 +100,7 @@ public class GetHabitByIdQueryHandlerTests
     [Fact]
     public async Task Handle_MapsLinkedGoalsAndSlipAlert()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Water", FrequencyUnit.Day, 1, Today,
             SlipAlertEnabled: true)).Value;
         var goal = Goal.Create(UserId, "Health", 10, "times").Value;
         habit.AddGoal(goal);
@@ -138,11 +138,11 @@ public class GetHabitByIdQueryHandlerTests
     [Fact]
     public async Task Handle_LegacyEmptyScheduledEdit_DoesNotReturnFoldedClockReminder()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Timed Habit", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderTimes: [30],
             ScheduledReminders: [new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 45))])).Value;
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             DueTime: habit.DueTime, ScheduledReminders: [])).IsSuccess.Should().BeTrue();
         _habitRepo.FindAsync(
@@ -183,7 +183,7 @@ public class GetHabitByIdQueryHandlerTests
         Guid habitId;
         await using (var seed = CreateContext(databaseName))
         {
-            var ownerHabit = Habit.Create(new HabitCreateParams(
+            var ownerHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 UserId, "Owner-only habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
             seed.Habits.Add(ownerHabit);
             await seed.SaveChangesAsync();
@@ -252,13 +252,12 @@ public class GetHabitByIdQueryHandlerTests
     [Fact]
     public async Task Handle_GeneralHabitLoggedToday_ReturnsCompleted()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General,
             UserId,
             "General Habit",
             null,
             null,
-            DueDate: Today,
-            IsGeneral: true)).Value;
+            DueDate: Today)).Value;
         var log = habit.Log(Today).Value;
 
         _habitRepo.FindAsync(
@@ -283,13 +282,12 @@ public class GetHabitByIdQueryHandlerTests
     public async Task Handle_GeneralDescendantLoggedToday_ReturnsCompleted()
     {
         var parent = CreateTestHabit("Parent Habit");
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.General,
             UserId,
             "General Child",
             null,
             null,
             DueDate: Today,
-            IsGeneral: true,
             ParentHabitId: parent.Id)).Value;
         var grandchild = CreateOneTimeHabit("Grandchild", Today.AddDays(-4), child.Id);
         var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);

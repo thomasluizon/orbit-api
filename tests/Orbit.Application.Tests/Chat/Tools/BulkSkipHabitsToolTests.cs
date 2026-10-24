@@ -85,7 +85,7 @@ public class BulkSkipHabitsToolTests
     [Fact]
     public async Task CompletedHabits_SkipsCompleted()
     {
-        var completed = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         completed.Log(Today);
         var active = CreateHabit("Water", FrequencyUnit.Day, 1, Today);
         SetupHabitLookup(completed, active);
@@ -135,7 +135,7 @@ public class BulkSkipHabitsToolTests
     [Fact]
     public async Task OneTimeTask_DefaultsCommandDateToToday()
     {
-        var task = Habit.Create(new HabitCreateParams(UserId, "Buy milk", null, null, DueDate: Today)).Value;
+        var task = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Buy milk", null, null, DueDate: Today)).Value;
         SetupHabitLookup(task);
 
         var result = await Execute($$$"""{"habit_ids": ["{{{task.Id}}}"]}""");
@@ -151,7 +151,7 @@ public class BulkSkipHabitsToolTests
     {
         var otherUserId = Guid.NewGuid();
         var otherUserHabit = Habit.Create(
-            new HabitCreateParams(otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+            new HabitCreateParams(HabitSchedule.Recurring, otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitLookup(otherUserHabit);
 
         var result = await Execute($$$"""{"habit_ids": ["{{{otherUserHabit.Id}}}"]}""");
@@ -185,7 +185,7 @@ public class BulkSkipHabitsToolTests
 
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty, DateOnly dueDate)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: dueDate)).Value;
+        return Habit.Create(new HabitCreateParams(((FrequencyUnit?)(freq)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, title, freq, qty, DueDate: dueDate)).Value;
     }
 
     private void SetupHabitLookup(params Habit[] habits)

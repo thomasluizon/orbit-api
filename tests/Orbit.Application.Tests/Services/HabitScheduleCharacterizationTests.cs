@@ -17,10 +17,9 @@ public class HabitScheduleCharacterizationTests
     [InlineData(3, false)]
     public void ScheduleAndMetrics_KeepFourTypeBehavior(int type, bool dueTomorrow)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams((HabitSchedule)type,
             Guid.NewGuid(), "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
             type is 1 or 2 ? 1 : null, Today,
-            IsFlexible: type == 2, IsGeneral: type == 3,
             CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
 
         HabitScheduleService.IsHabitDueOnDate(habit, Today.AddDays(-1)).Should().BeFalse();
@@ -40,10 +39,9 @@ public class HabitScheduleCharacterizationTests
     public void Metrics_WithGapsKeepTypeSpecificResults(
         int type, int currentStreak, int longestStreak, int rate, int completions, int lastOffset)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams((HabitSchedule)type,
             Guid.NewGuid(), "Habit", type == 2 ? FrequencyUnit.Week : type == 1 ? FrequencyUnit.Day : null,
             type == 2 ? 2 : type == 1 ? 1 : null, Today,
-            IsFlexible: type == 2, IsGeneral: type == 3,
             CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
         habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
         if (type != 0)
@@ -64,10 +62,9 @@ public class HabitScheduleCharacterizationTests
     public void ScheduleAfterLog_KeepsSelectedStartSeparateFromCursor(
         int type, int cursorOffset, bool dueToday, bool dueTomorrow)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams((HabitSchedule)type,
             Guid.NewGuid(), "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
             type is 1 or 2 ? 1 : null, Today,
-            IsFlexible: type == 2, IsGeneral: type == 3,
             CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
 
         habit.Log(Today).IsSuccess.Should().BeTrue();

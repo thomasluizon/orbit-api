@@ -49,7 +49,7 @@ public class GetRetrospectiveQueryHandlerTests
 
     private static Habit CreateDailyHabit(string title = "Test Habit", string? emoji = null, bool isBadHabit = false)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1,
             Emoji: emoji, IsBadHabit: isBadHabit, DueDate: DateFrom)).Value;
     }
@@ -368,12 +368,12 @@ public class GetRetrospectiveQueryHandlerTests
     [Fact]
     public async Task Handle_CompletionRate_CapsOverLoggingPerHabit_SoMissesStayVisible()
     {
-        var overLogged = Habit.Create(new HabitCreateParams(
+        var overLogged = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Consistent", FrequencyUnit.Week, 1, DueDate: DateFrom)).Value;
         for (var i = 0; i < 7; i++)
             overLogged.Log(DateFrom.AddDays(i), advanceDueDate: false);
 
-        var missed = Habit.Create(new HabitCreateParams(
+        var missed = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Missed", FrequencyUnit.Week, 1, DueDate: DateFrom)).Value;
 
         StubHabits(overLogged, missed);
@@ -394,10 +394,10 @@ public class GetRetrospectiveQueryHandlerTests
         for (var i = 0; i < 6; i++)
             recurring.Log(DateFrom.AddDays(i), advanceDueDate: false);
 
-        var completedOneTime = Habit.Create(new HabitCreateParams(
+        var completedOneTime = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Completed One Time", null, null, DueDate: DateFrom)).Value;
         completedOneTime.Log(DateFrom, advanceDueDate: false);
-        var incompleteOneTime = Habit.Create(new HabitCreateParams(
+        var incompleteOneTime = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Incomplete One Time", null, null, DueDate: DateFrom)).Value;
         StubHabits(recurring, completedOneTime, incompleteOneTime);
         StubNarrative(SampleNarrative);

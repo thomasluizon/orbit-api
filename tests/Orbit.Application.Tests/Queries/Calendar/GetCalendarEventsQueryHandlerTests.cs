@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using FluentAssertions;
 using Orbit.Application.Calendar.Queries;
 using NSubstitute;
@@ -193,7 +194,7 @@ public class GetCalendarEventsQueryHandlerTests
         _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
             .Returns("valid-access-token");
 
-        var importedHabit = Habit.Create(new HabitCreateParams(
+        var importedHabit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Week)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             user.Id, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
             DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             GoogleEventId: "evt_already")).Value;
@@ -230,7 +231,7 @@ public class GetCalendarEventsQueryHandlerTests
         StubSuccessfulFetch(user,
             new("evt_already", "Existing", null, "2026-05-01", null, null, false, null, []),
             new("evt_new", "New", null, "2026-05-01", null, null, false, null, []));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Week)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             user.Id, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
             DueDate: new DateOnly(2026, 5, 1), GoogleEventId: "evt_already")).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
@@ -254,11 +255,11 @@ public class GetCalendarEventsQueryHandlerTests
         StubSuccessfulFetch(user,
             new("evt_deleted", "Deleted", null, "2026-05-01", null, null, false, null, []),
             new("evt_other", "Other", null, "2026-05-01", null, null, false, null, []));
-        var deletedHabit = Habit.Create(new HabitCreateParams(
+        var deletedHabit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Week)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             user.Id, "Deleted", Domain.Enums.FrequencyUnit.Week, 1,
             DueDate: new DateOnly(2026, 5, 1), GoogleEventId: "evt_deleted")).Value;
         deletedHabit.SoftDelete(new DateTime(2026, 5, 2, 0, 0, 0, DateTimeKind.Utc));
-        var otherHabit = Habit.Create(new HabitCreateParams(
+        var otherHabit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Week)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             Guid.NewGuid(), "Other", Domain.Enums.FrequencyUnit.Week, 1,
             DueDate: new DateOnly(2026, 5, 1), GoogleEventId: "evt_other")).Value;
         var habits = new List<Habit> { deletedHabit, otherHabit };
@@ -316,7 +317,7 @@ public class GetCalendarEventsQueryHandlerTests
         unlinkedOptInResult.IsSuccess.Should().BeTrue();
         unlinkedOptInResult.Value.Should().BeEmpty();
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(Domain.Enums.FrequencyUnit.Week)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId, "Tokyo breakfast", Domain.Enums.FrequencyUnit.Week, 1,
             DueDate: new DateOnly(2026, 4, 15), GoogleEventId: "evt_tokyo")).Value;
         _habitRepo.FindAsync(

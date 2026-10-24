@@ -195,8 +195,8 @@ public partial class AgentChatWriteHoldTests
         IHabitEmojiInferenceService Inference, IUnitOfWork Work)> NoChangesToolsAsync(string operationId)
     {
         var today = new DateOnly(2026, 10, 24);
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", FrequencyUnit.Day, 1, today, Emoji: "📚")).Value;
-        var completed = Habit.Create(new HabitCreateParams(_userId, "Finished", null, null, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", FrequencyUnit.Day, 1, today, Emoji: "📚")).Value;
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, _userId, "Finished", null, null, today)).Value;
         completed.Log(today);
         _dbContext.Habits.AddRange(habit, completed);
         await _dbContext.SaveChangesAsync();

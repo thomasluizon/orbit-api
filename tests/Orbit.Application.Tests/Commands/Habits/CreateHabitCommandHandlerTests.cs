@@ -192,8 +192,7 @@ public class CreateHabitCommandHandlerTests
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(habit => habit.Id == result.Value && habit.Schedule == schedule
                 && habit.StartDate == Today && habit.NextDueDate == Today
-                && habit.IsGeneral == (schedule == HabitSchedule.General)
-                && habit.IsFlexible == (schedule == HabitSchedule.Flexible)
+                && habit.Schedule == schedule
                 && habit.FrequencyUnit == command.FrequencyUnit
                 && habit.FrequencyQuantity == command.FrequencyQuantity),
             Arg.Any<CancellationToken>());
@@ -269,8 +268,8 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_ExistingRootHabits_AssignsMaxPositionPlusOne()
     {
-        var existing1 = Habit.Create(new HabitCreateParams(UserId, "A", FrequencyUnit.Day, 1, DueDate: Today, Position: 0)).Value;
-        var existing2 = Habit.Create(new HabitCreateParams(UserId, "B", FrequencyUnit.Day, 1, DueDate: Today, Position: 5)).Value;
+        var existing1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "A", FrequencyUnit.Day, 1, DueDate: Today, Position: 0)).Value;
+        var existing2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "B", FrequencyUnit.Day, 1, DueDate: Today, Position: 5)).Value;
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -471,7 +470,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.IsFlexible),
+            Arg.Is<Habit>(h => (h.Schedule == HabitSchedule.Flexible)),
             Arg.Any<CancellationToken>());
     }
 
@@ -615,7 +614,7 @@ public class CreateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _habitRepo.Received(1).AddAsync(
-            Arg.Is<Habit>(h => h.IsGeneral),
+            Arg.Is<Habit>(h => (h.Schedule == HabitSchedule.General)),
             Arg.Any<CancellationToken>());
     }
 
