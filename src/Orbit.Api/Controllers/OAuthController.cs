@@ -97,6 +97,7 @@ public partial class OAuthController(
 
 #pragma warning disable S6932 // GetProtectedResourceMetadata reads X-Forwarded-Proto and Request.Host to publish the external MCP resource and authorization-server URLs. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpGet("/.well-known/oauth-protected-resource")]
+    [HttpGet("/.well-known/oauth-protected-resource/mcp")]
     public IActionResult GetProtectedResourceMetadata()
     {
         var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;

@@ -1,10 +1,12 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -133,7 +135,7 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Initialize_AdvertisesOrbitMetadataThroughTheRealSdkResponse()
+    public async Task AuthenticatedInitialize_AdvertisesOrbitMetadataThroughTheRealSdkResponse()
     {
         await using var app = await CreateApplication(blockDownstream: false);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -149,6 +151,7 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
         await ((IApplicationBuilder)app).Build()(context);
 
         context.Response.StatusCode.Should().Be(200);
+        context.User.Identity!.IsAuthenticated.Should().BeTrue();
         var body = Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray());
         var data = body.Split('\n').Single(line => line.StartsWith("data: ", StringComparison.Ordinal))[6..];
         output.WriteLine(data);
@@ -207,6 +210,15 @@ public class BrandDiscoveryTests(ITestOutputHelper output)
             options.GlobalLimiter.AttemptAcquire(new DefaultHttpContext()).Dispose();
         });
         builder.Services.AddAuthentication();
+        if (!blockDownstream)
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity([
+                new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test"));
+            var auth = Substitute.For<IAuthenticationService>();
+            auth.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string?>())
+                .Returns(AuthenticateResult.Success(new AuthenticationTicket(principal, "Test")));
+            builder.Services.AddSingleton(auth);
+        }
         builder.Services.AddAuthorization(options =>
         {
             if (blockDownstream)
