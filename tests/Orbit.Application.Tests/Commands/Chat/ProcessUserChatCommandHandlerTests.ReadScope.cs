@@ -8,6 +8,7 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
@@ -41,8 +42,10 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.HabitList.Date.Should().Be(past);
         result.Value.HabitList.Scope.Should().Be("date");
     }
-    [Fact]
-    public async Task MultipleHabitQueries_DoNotBindAnUnqualifiedDirectiveToTheLastRead()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MultipleHabitQueries_DoNotBindAnUnqualifiedDirectiveToTheLastRead(bool hasText)
     {
         SetupUserAndPayGate();
         var tool = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
@@ -55,14 +58,25 @@ public partial class ProcessUserChatCommandHandlerTests
         });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Orbit.Domain.Common.Result.Success(new AiResponse { TextMessage = "[[orbit:habits:today]]" }));
+            .Returns(Orbit.Domain.Common.Result.Success(new AiResponse
+            {
+                TextMessage = hasText ? "Here are the requested days.\n[[orbit:habits:today]]" : "[[orbit:habits:today]]"
+            }));
 
         var result = await CreateHandler(tool).Handle(new(UserId, "Show two past days",
             ClientContext: new AgentClientContext(SupportsHabitListCard: true)), default);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.HabitList.Should().BeNull();
-        result.Value.Operations!.Count(operation => operation.OperationId == "query_habits").Should().Be(2);
+        result.IsSuccess.Should().Be(hasText);
+        if (hasText)
+        {
+            result.Value.AiMessage.Should().Be("Here are the requested days.");
+            result.Value.HabitList.Should().BeNull();
+            result.Value.Operations!.Count(operation => operation.OperationId == "query_habits").Should().Be(2);
+        }
+        else
+            result.ErrorCode.Should().Be(ErrorCodes.AiEmptyResponse);
+        await _operationExecutor.Received(2).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
+            request.OperationId == "query_habits"), Arg.Any<CancellationToken>());
     }
 
     [Fact]

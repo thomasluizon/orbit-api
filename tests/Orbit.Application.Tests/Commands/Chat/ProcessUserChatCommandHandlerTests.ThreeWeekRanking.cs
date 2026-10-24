@@ -30,7 +30,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("en", true, true)]
     [InlineData("pt-BR", false, true)]
     [InlineData("pt-BR", true, true)]
-    public async Task ThreeWeekRanking_SevenDaysOfRecords_ProducesRankingAndOneHistoryLine(
+    public async Task ThreeWeekRanking_SevenDaysOfRecords_ProducesOnlyRankingBlock(
         string language, bool stream, bool emptyContinuation)
     {
         var user = User.Create("Reader", "ranking@example.test").Value;
@@ -81,20 +81,15 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var parts = result.Value.Parts!;
-        parts.Should().HaveCount(2);
+        parts.Should().ContainSingle();
         var ranking = parts[0].Should().BeOfType<ChatBlockPart>().Which.Block
             .Should().BeOfType<HabitRankingCard>().Which.Ranking;
         ranking.Query.DateFrom.Should().Be(Today.AddDays(-20));
         ranking.Query.DateToExclusive.Should().Be(Today.AddDays(1));
         ranking.Rows.Select(row => (row.Name, row.CompletedCount)).Should().Equal(("Read", 7), ("Walk", 4));
-        var notice = parts[1].Should().BeOfType<ChatTextPart>().Which.Text;
-        notice.Should().Be(language == "en" ? "Recorded completions in this window start on 2026-03-28."
-            : "As conclusões registradas neste período começam em 2026-03-28.");
-        result.Value.AiMessage.Should().Be(notice);
+        result.Value.AiMessage.Should().BeNullOrEmpty();
         result.Value.Operations.Should().ContainSingle(operation => operation.OperationId == "get_habit_ranking"
             && operation.Status == AgentOperationStatus.Succeeded);
-        var json = JsonSerializer.Serialize(result.Value);
-        json.Should().NotContain("FirstRecordedDate");
         events.Where(item => item.Type == "delta").Should().BeEmpty();
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request =>
             request.DynamicContext!.Contains("date_from=today-20 days")

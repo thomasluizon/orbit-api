@@ -33,16 +33,6 @@ public static class HabitRankingCardBuilder
         return new HabitRankingCard(response);
     }
 
-    internal static string? HistoryNotice(HabitRankingResponse response, string? language)
-    {
-        if (response.FirstRecordedDate is not { } first || first <= response.Query.DateFrom)
-            return null;
-        var date = first.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        return language?.StartsWith("pt", StringComparison.OrdinalIgnoreCase) == true
-            ? $"As conclusões registradas neste período começam em {date}."
-            : $"Recorded completions in this window start on {date}.";
-    }
-
     public static string Readable(HabitRankingResponse response, string? language)
     {
         var portuguese = language?.StartsWith("pt", StringComparison.OrdinalIgnoreCase) == true;
@@ -57,7 +47,6 @@ public static class HabitRankingCardBuilder
             : portuguese
                 ? $"{response.Offset + 1}-{response.Offset + response.Rows.Count} de {response.TotalCount}."
                 : $"{response.Offset + 1}-{response.Offset + response.Rows.Count} of {response.TotalCount}.";
-        return string.Join('\n', new[] { title }.Concat(rows).Append(status)
-            .Concat(HistoryNotice(response, language) is { } notice ? [notice] : []));
+        return string.Join('\n', new[] { title }.Concat(rows).Append(status));
     }
 }

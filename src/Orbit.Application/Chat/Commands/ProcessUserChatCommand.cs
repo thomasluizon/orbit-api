@@ -325,7 +325,9 @@ public partial class ProcessUserChatCommandHandler(
     private static bool HasDisplayableAnswer(ChatResponse response) =>
         !string.IsNullOrWhiteSpace(response.AiMessage)
         || response.Parts?.Any(part => part is ChatBlockPart || part is ChatTextPart text && !string.IsNullOrWhiteSpace(text.Text)) == true
-        || response.Actions.Count > 0 || response.Operations is { Count: > 0 } || response.PendingOperations is { Count: > 0 }
+        || response.Actions.Count > 0 || response.PendingOperations is { Count: > 0 }
+        || response.Operations?.Any(operation => operation.Status is AgentOperationStatus.Failed
+            or AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy) == true
         || response.HabitList is not null || response.GoalList is not null || response.MetricsCard is not null
         || response.PeriodInsight is not null || response.DaySummary is not null || response.Streak is not null
         || response.Calendar is not null || response.RecordLists is { Count: > 0 } || response.AccountRows is not null;

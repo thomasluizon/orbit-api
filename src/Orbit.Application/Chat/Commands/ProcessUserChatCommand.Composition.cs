@@ -228,8 +228,6 @@ public partial class ProcessUserChatCommandHandler
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
         {
             built.Parts.Add(new ChatBlockPart(PartKinds.HabitRanking, card));
-            if (HabitRankingCardBuilder.HistoryNotice(ranking, language) is { } notice)
-                built.Parts.Add(new ChatTextPart(notice));
         }
         else
         {
