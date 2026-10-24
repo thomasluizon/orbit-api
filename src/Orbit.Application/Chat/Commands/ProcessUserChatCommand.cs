@@ -346,6 +346,9 @@ public partial class ProcessUserChatCommandHandler(
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
+        if (await RecoverExplicitHeadingsAsync(request, context, response, cancellationToken) is { } recoveredHeadings)
+            return recoveredHeadings;
+
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
