@@ -19,7 +19,7 @@ public partial class ChatController
         CancellationToken cancellationToken)
     {
         if (!CanAccessChat()
-            || HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey
+            || HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth
                 && !HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ReadGamification, StringComparer.OrdinalIgnoreCase))
             return Forbid();
 

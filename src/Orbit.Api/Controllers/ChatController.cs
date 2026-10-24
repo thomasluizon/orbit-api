@@ -224,7 +224,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         return (null, BadRequest(new AppError(ErrorCodes.AstraBlockInvalidJson, ErrorCopy.English(ErrorCodes.AstraBlockInvalidJson)).ToErrorBody()));
     }
     private bool CanAccessChat() =>
-        HttpContext.User.GetAgentAuthMethod() != AgentAuthMethod.ApiKey ||
+        HttpContext.User.GetAgentAuthMethod() is not (AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth) ||
         HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ChatInteract, StringComparer.OrdinalIgnoreCase);
 
     private async Task StartEventStreamAsync(CancellationToken cancellationToken)

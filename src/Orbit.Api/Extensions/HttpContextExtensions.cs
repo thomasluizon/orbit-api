@@ -28,9 +28,12 @@ public static class HttpContextExtensions
     public static AgentAuthMethod GetAgentAuthMethod(this ClaimsPrincipal user)
     {
         var authMethod = user.FindFirst("auth_method")?.Value;
-        return string.Equals(authMethod, "api_key", StringComparison.OrdinalIgnoreCase)
-            ? AgentAuthMethod.ApiKey
-            : AgentAuthMethod.Jwt;
+        return authMethod?.ToLowerInvariant() switch
+        {
+            "api_key" => AgentAuthMethod.ApiKey,
+            "oauth" => AgentAuthMethod.OAuth,
+            _ => AgentAuthMethod.Jwt
+        };
     }
 
     public static IReadOnlyList<string> GetGrantedAgentScopes(this ClaimsPrincipal user)

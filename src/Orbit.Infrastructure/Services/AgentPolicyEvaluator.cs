@@ -92,7 +92,7 @@ public class AgentPolicyEvaluator(
         if (featureFlagDenial is not null)
             return featureFlagDenial;
 
-        if (context.AuthMethod == AgentAuthMethod.ApiKey &&
+        if (context.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth &&
             !context.GrantedScopes.Contains(capability.Scope, StringComparer.OrdinalIgnoreCase))
         {
             return new AgentPolicyDecision(

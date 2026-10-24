@@ -41,7 +41,11 @@ public class ChatControllerScopeTests
         var cases = new TheoryData<string, string>();
         foreach (var route in new[] { "chat", "stream", "records", "transcribe" })
             foreach (var credential in credentials)
+            {
                 cases.Add(route, credential);
+                if (credential != "jwt")
+                    cases.Add(route, "oauth:" + credential);
+            }
         return cases;
     }
 
@@ -91,8 +95,9 @@ public class ChatControllerScopeTests
         {
             await _mediator.Received(1).Send(Arg.Is<ProcessUserChatCommand>(command =>
                 command.UserId == UserId &&
-                command.AuthMethod == (credential == "jwt" ? AgentAuthMethod.Jwt : AgentAuthMethod.ApiKey) &&
-                command.IsReadOnlyCredential == (credential == "read_only_chat")), Arg.Any<CancellationToken>());
+                command.AuthMethod == (credential == "jwt" ? AgentAuthMethod.Jwt
+                    : credential.StartsWith("oauth:") ? AgentAuthMethod.OAuth : AgentAuthMethod.ApiKey) &&
+                command.IsReadOnlyCredential == credential.EndsWith("read_only_chat")), Arg.Any<CancellationToken>());
         }
         else if (route == "records")
         {
@@ -136,10 +141,13 @@ public class ChatControllerScopeTests
         }
         else
         {
+            var connector = credential.StartsWith("oauth:");
+            if (connector) credential = credential["oauth:".Length..];
             var scopes = credential == "" ? Array.Empty<string>()
                 : new[] { credential == "read_only_chat" ? AgentScopes.ChatInteract : credential };
             var (key, rawKey) = ApiKey.Create(UserId, "Chat key", scopes,
-                isReadOnly: credential is "read_only_chat" or AgentScopes.ReadHabits).Value;
+                isReadOnly: credential is "read_only_chat" or AgentScopes.ReadHabits,
+                oauthFamilyId: connector ? Guid.NewGuid() : null).Value;
             var repository = Substitute.For<IGenericRepository<ApiKey>>();
             repository.FindTrackedAsync(Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
                 .Returns([key]);

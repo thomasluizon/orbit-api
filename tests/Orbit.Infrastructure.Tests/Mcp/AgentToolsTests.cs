@@ -170,159 +170,112 @@ public class AgentToolsTests
     }
 
     [Fact]
-    public void ConfirmAgentOperation_ThrowsForApiKeyCredentials()
+    public void ConfirmAgentOperation_RefusesApiKeyCredentials()
     {
-        var user = CreateUser(isApiKey: true);
-
-        var act = () => _tools.ConfirmAgentOperation(user, Guid.NewGuid().ToString());
-
-        act.Should().Throw<UnauthorizedAccessException>()
-            .WithMessage("API key credentials cannot confirm pending operations.");
+        var result = _tools.ConfirmAgentOperation(CreateUser(isApiKey: true), Guid.NewGuid().ToString());
+        OAuthConnectorConfirmationTests.AssertError(result, "interactive_confirmation_required");
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().Confirm(default, default);
     }
 
     [Fact]
-    public void ConfirmAgentOperation_ThrowsForInvalidGuid()
+    public void ConfirmAgentOperation_RejectsInvalidGuid()
     {
-        var act = () => _tools.ConfirmAgentOperation(CreateUser(), "bad-guid");
-
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*pendingOperationId must be a valid GUID.*");
+        OAuthConnectorConfirmationTests.AssertError(
+            _tools.ConfirmAgentOperation(CreateUser(), "bad-guid"), "invalid_pending_operation_id");
     }
 
     [Fact]
     public void ConfirmAgentOperation_ReturnsStoreResult()
     {
-        var pendingOperationId = Guid.NewGuid();
-        var confirmation = new PendingAgentOperationConfirmation(
-            pendingOperationId,
-            "agc_token",
-            DateTime.UtcNow.AddMinutes(5));
-        _pendingOperationStore.Confirm(UserId, pendingOperationId).Returns(confirmation);
+        var id = Guid.NewGuid();
+        var confirmation = new PendingAgentOperationConfirmation(id, "agc_token", DateTime.UtcNow.AddMinutes(5));
+        _pendingOperationStore.Confirm(UserId, id).Returns(confirmation);
 
-        var result = _tools.ConfirmAgentOperation(CreateUser(), pendingOperationId.ToString());
-
-        result.Should().Be(confirmation);
+        OAuthConnectorConfirmationTests.Payload<PendingAgentOperationConfirmation>(
+            _tools.ConfirmAgentOperation(CreateUser(), id.ToString())).Should().Be(confirmation);
     }
 
     [Fact]
-    public async Task StepUpAgentOperation_ThrowsForApiKeyCredentials()
+    public async Task StepUpAgentOperation_RefusesApiKeyCredentials()
     {
-        var act = () => _tools.StepUpAgentOperation(CreateUser(isApiKey: true), Guid.NewGuid().ToString(), cancellationToken: CancellationToken.None);
-
-        var assertions = await act.Should().ThrowAsync<UnauthorizedAccessException>();
-        assertions.WithMessage("API key credentials cannot satisfy step-up authorization.");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _tools.StepUpAgentOperation(CreateUser(isApiKey: true), Guid.NewGuid().ToString()),
+            "interactive_confirmation_required");
+        await _stepUpService.DidNotReceiveWithAnyArgs().IssueChallengeAsync(default, default, "", default);
     }
 
     [Fact]
-    public async Task StepUpAgentOperation_ThrowsForInvalidGuid()
+    public async Task StepUpAgentOperation_RejectsInvalidGuid()
     {
-        var act = () => _tools.StepUpAgentOperation(CreateUser(), "bad-guid", cancellationToken: CancellationToken.None);
-
-        var assertions = await act.Should().ThrowAsync<ArgumentException>();
-        assertions.WithMessage("*pendingOperationId must be a valid GUID.*");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _tools.StepUpAgentOperation(CreateUser(), "bad-guid"), "invalid_pending_operation_id");
     }
 
     [Fact]
     public async Task StepUpAgentOperation_ReturnsChallenge()
     {
-        var pendingOperationId = Guid.NewGuid();
-        var challenge = new AgentStepUpChallenge(Guid.NewGuid(), pendingOperationId, DateTime.UtcNow.AddMinutes(10));
-        _stepUpService.IssueChallengeAsync(UserId, pendingOperationId, "pt-BR", Arg.Any<CancellationToken>())
+        var id = Guid.NewGuid();
+        var challenge = new AgentStepUpChallenge(Guid.NewGuid(), id, DateTime.UtcNow.AddMinutes(10));
+        _stepUpService.IssueChallengeAsync(UserId, id, "pt-BR", Arg.Any<CancellationToken>())
             .Returns(Result.Success(challenge));
 
-        var result = await _tools.StepUpAgentOperation(CreateUser(), pendingOperationId.ToString(), "pt-BR", CancellationToken.None);
-
-        result.Should().Be(challenge);
+        OAuthConnectorConfirmationTests.Payload<AgentStepUpChallenge>(
+            await _tools.StepUpAgentOperation(CreateUser(), id.ToString(), "pt-BR")).Should().Be(challenge);
     }
 
     [Fact]
-    public async Task StepUpAgentOperation_ThrowsWhenChallengeCannotBeIssued()
+    public async Task StepUpAgentOperation_ReportsChallengeFailure()
     {
-        var pendingOperationId = Guid.NewGuid();
-        _stepUpService.IssueChallengeAsync(UserId, pendingOperationId, "en", Arg.Any<CancellationToken>())
+        var id = Guid.NewGuid();
+        _stepUpService.IssueChallengeAsync(UserId, id, "en", Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AgentStepUpChallenge>("issue_failed"));
 
-        var act = () => _tools.StepUpAgentOperation(CreateUser(), pendingOperationId.ToString(), cancellationToken: CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("issue_failed");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _tools.StepUpAgentOperation(CreateUser(), id.ToString()), "step_up_failed");
     }
 
     [Fact]
-    public async Task VerifyStepUpAgentOperation_ThrowsForApiKeyCredentials()
+    public async Task VerifyStepUpAgentOperation_RefusesApiKeyCredentials()
     {
-        var act = () => _tools.VerifyStepUpAgentOperation(
-            CreateUser(isApiKey: true),
-            Guid.NewGuid().ToString(),
-            Guid.NewGuid().ToString(),
-            "123456",
-            CancellationToken.None);
-
-        var assertions = await act.Should().ThrowAsync<UnauthorizedAccessException>();
-        assertions.WithMessage("API key credentials cannot satisfy step-up authorization.");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _tools.VerifyStepUpAgentOperation(CreateUser(isApiKey: true),
+                Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "123456"), "interactive_confirmation_required");
+        await _stepUpService.DidNotReceiveWithAnyArgs().VerifyChallengeAsync(default, default, default, "", default);
     }
 
-    [Fact]
-    public async Task VerifyStepUpAgentOperation_ThrowsForInvalidPendingOperationId()
+    [Theory]
+    [InlineData("bad-guid", "5078c455-de14-4cc7-8044-42ca434cddf0", "invalid_pending_operation_id")]
+    [InlineData("5078c455-de14-4cc7-8044-42ca434cddf0", "bad-guid", "invalid_challenge_id")]
+    public async Task VerifyStepUpAgentOperation_RejectsInvalidIds(string pendingId, string challengeId, string code)
     {
-        var act = () => _tools.VerifyStepUpAgentOperation(CreateUser(), "bad-guid", Guid.NewGuid().ToString(), "123456", CancellationToken.None);
-
-        var assertions = await act.Should().ThrowAsync<ArgumentException>();
-        assertions.WithMessage("*pendingOperationId must be a valid GUID.*");
-    }
-
-    [Fact]
-    public async Task VerifyStepUpAgentOperation_ThrowsForInvalidChallengeId()
-    {
-        var act = () => _tools.VerifyStepUpAgentOperation(CreateUser(), Guid.NewGuid().ToString(), "bad-guid", "123456", CancellationToken.None);
-
-        var assertions = await act.Should().ThrowAsync<ArgumentException>();
-        assertions.WithMessage("*challengeId must be a valid GUID.*");
+        OAuthConnectorConfirmationTests.AssertError(
+            await _tools.VerifyStepUpAgentOperation(CreateUser(), pendingId, challengeId, "123456"), code);
     }
 
     [Fact]
     public async Task VerifyStepUpAgentOperation_ReturnsPendingOperation()
     {
-        var pendingOperationId = Guid.NewGuid();
+        var id = Guid.NewGuid();
         var challengeId = Guid.NewGuid();
-        var pendingOperation = new PendingAgentOperation(
-            pendingOperationId,
-            AgentCapabilityIds.HabitsDelete,
-            "Delete habit",
-            "Delete a habit",
-            AgentRiskClass.High,
-            AgentConfirmationRequirement.StepUp,
-            DateTime.UtcNow.AddMinutes(10));
-        _stepUpService.VerifyChallengeAsync(UserId, pendingOperationId, challengeId, "123456", Arg.Any<CancellationToken>())
-            .Returns(Result.Success(pendingOperation));
+        var pending = new PendingAgentOperation(id, AgentCapabilityIds.HabitsDelete, "Delete habit", "Delete a habit",
+            AgentRiskClass.High, AgentConfirmationRequirement.StepUp, DateTime.UtcNow.AddMinutes(10));
+        _stepUpService.VerifyChallengeAsync(UserId, id, challengeId, "123456", Arg.Any<CancellationToken>())
+            .Returns(Result.Success(pending));
 
-        var result = await _tools.VerifyStepUpAgentOperation(
-            CreateUser(),
-            pendingOperationId.ToString(),
-            challengeId.ToString(),
-            "123456",
-            CancellationToken.None);
-
-        result.Should().Be(pendingOperation);
+        OAuthConnectorConfirmationTests.Payload<PendingAgentOperation>(await _tools.VerifyStepUpAgentOperation(
+            CreateUser(), id.ToString(), challengeId.ToString(), "123456")).Should().Be(pending);
     }
 
     [Fact]
-    public async Task VerifyStepUpAgentOperation_ThrowsWhenVerificationFails()
+    public async Task VerifyStepUpAgentOperation_ReportsVerificationFailure()
     {
-        var pendingOperationId = Guid.NewGuid();
+        var id = Guid.NewGuid();
         var challengeId = Guid.NewGuid();
-        _stepUpService.VerifyChallengeAsync(UserId, pendingOperationId, challengeId, "123456", Arg.Any<CancellationToken>())
+        _stepUpService.VerifyChallengeAsync(UserId, id, challengeId, "123456", Arg.Any<CancellationToken>())
             .Returns(Result.Failure<PendingAgentOperation>("verify_failed"));
 
-        var act = () => _tools.VerifyStepUpAgentOperation(
-            CreateUser(),
-            pendingOperationId.ToString(),
-            challengeId.ToString(),
-            "123456",
-            CancellationToken.None);
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("verify_failed");
+        OAuthConnectorConfirmationTests.AssertError(await _tools.VerifyStepUpAgentOperation(
+            CreateUser(), id.ToString(), challengeId.ToString(), "123456"), "step_up_failed");
     }
 
     private static ClaimsPrincipal CreateUser(bool isApiKey = false)

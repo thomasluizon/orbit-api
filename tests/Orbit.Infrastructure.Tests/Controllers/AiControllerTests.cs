@@ -190,20 +190,24 @@ public class AiControllerTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task ConfirmPendingOperation_ForApiKeyUser_ReturnsForbid()
+    [Theory]
+    [InlineData("api_key")]
+    [InlineData("oauth")]
+    public async Task ConfirmPendingOperation_ForApiKeyUser_ReturnsForbid(string authMethod)
     {
-        SetUser(isApiKey: true);
+        SetUser(isApiKey: true, authMethod: authMethod);
 
         var result = await _controller.ConfirmPendingOperation(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<ForbidResult>();
     }
 
-    [Fact]
-    public async Task RefreshPendingOperationPreview_ForApiKeyUser_ReturnsForbid()
+    [Theory]
+    [InlineData("api_key")]
+    [InlineData("oauth")]
+    public async Task RefreshPendingOperationPreview_ForApiKeyUser_ReturnsForbid(string authMethod)
     {
-        SetUser(isApiKey: true);
+        SetUser(isApiKey: true, authMethod: authMethod);
 
         var result = await _controller.RefreshPendingOperationPreview(Guid.NewGuid(), CancellationToken.None);
 
@@ -397,10 +401,12 @@ public class AiControllerTests
         return (controller, id);
     }
 
-    [Fact]
-    public async Task MarkPendingOperationStepUp_ForApiKeyUser_ReturnsForbid()
+    [Theory]
+    [InlineData("api_key")]
+    [InlineData("oauth")]
+    public async Task MarkPendingOperationStepUp_ForApiKeyUser_ReturnsForbid(string authMethod)
     {
-        SetUser(isApiKey: true);
+        SetUser(isApiKey: true, authMethod: authMethod);
 
         var result = await _controller.MarkPendingOperationStepUp(Guid.NewGuid(), new AiController.StepUpChallengeRequest(), CancellationToken.None);
 
@@ -442,10 +448,12 @@ public class AiControllerTests
         ok.Value.Should().Be(challenge);
     }
 
-    [Fact]
-    public async Task VerifyPendingOperationStepUp_ForApiKeyUser_ReturnsForbid()
+    [Theory]
+    [InlineData("api_key")]
+    [InlineData("oauth")]
+    public async Task VerifyPendingOperationStepUp_ForApiKeyUser_ReturnsForbid(string authMethod)
     {
-        SetUser(isApiKey: true);
+        SetUser(isApiKey: true, authMethod: authMethod);
 
         var result = await _controller.VerifyPendingOperationStepUp(
             Guid.NewGuid(),
@@ -583,10 +591,12 @@ public class AiControllerTests
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
     }
 
-    [Fact]
-    public async Task ExecutePendingOperation_ForApiKeyUser_ReturnsForbid()
+    [Theory]
+    [InlineData("api_key")]
+    [InlineData("oauth")]
+    public async Task ExecutePendingOperation_ForApiKeyUser_ReturnsForbid(string authMethod)
     {
-        SetUser(isApiKey: true);
+        SetUser(isApiKey: true, authMethod: authMethod);
 
         var result = await _controller.ExecutePendingOperation(
             Guid.NewGuid(),
@@ -596,10 +606,12 @@ public class AiControllerTests
         result.Should().BeOfType<ForbidResult>();
     }
 
-    [Fact]
-    public async Task ResolveClarification_ForApiKeyUser_ReturnsForbid()
+    [Theory]
+    [InlineData("api_key")]
+    [InlineData("oauth")]
+    public async Task ResolveClarification_ForApiKeyUser_ReturnsForbid(string authMethod)
     {
-        SetUser(isApiKey: true);
+        SetUser(isApiKey: true, authMethod: authMethod);
 
         var result = await _controller.ResolveClarification(
             Guid.NewGuid(),
@@ -798,11 +810,11 @@ public class AiControllerTests
             .Returns(data);
     }
 
-    private void SetUser(bool isApiKey = false)
+    private void SetUser(bool isApiKey = false, string authMethod = "api_key")
     {
         var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, UserId.ToString()) };
         if (isApiKey)
-            claims.Add(new Claim("auth_method", "api_key"));
+            claims.Add(new Claim("auth_method", authMethod));
 
         _controller.ControllerContext = new ControllerContext
         {

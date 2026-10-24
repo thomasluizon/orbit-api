@@ -18,12 +18,12 @@ namespace Orbit.Infrastructure.Tests.Authentication;
 
 public class ApiKeyAuthenticationHandlerTests
 {
-    private sealed record HandlerRun(
+    internal sealed record HandlerRun(
         AuthenticateResult Result,
         IGenericRepository<ApiKey> ApiKeyRepo,
         IUnitOfWork UnitOfWork);
 
-    private static async Task<HandlerRun> RunHandler(
+    internal static async Task<HandlerRun> RunHandler(
         string? authorizationHeader,
         string path = "/mcp",
         IReadOnlyList<ApiKey>? candidates = null,
@@ -36,7 +36,7 @@ public class ApiKeyAuthenticationHandlerTests
             .Returns(Task.FromResult(payGateResult ?? Result.Success()));
         apiKeyRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<ApiKey, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(candidates ?? []);
+            .Returns(call => (candidates ?? []).Where(call.Arg<Expression<Func<ApiKey, bool>>>().Compile()).ToList());
 
         var services = new ServiceCollection();
         services.AddSingleton(apiKeyRepo);
