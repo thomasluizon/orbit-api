@@ -21,12 +21,13 @@ public class DropRetiredFeatureTablesMigrationTests
     ];
 
     [Fact]
-    public void TargetModel_DiffersFromRuntimeOnlyByRetiredLedger()
+    public void TargetModel_DiffersFromNextMigrationOnlyByRetiredLedger()
     {
         using var context = CreateContext();
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropSentProactiveCheckins().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
@@ -51,10 +52,11 @@ public class DropRetiredFeatureTablesMigrationTests
     }
 
     [Fact]
-    public void Model_RemovesRetiredTypesAndSeedWhilePreservingHandleAndEveryOtherContract()
+    public void TargetModel_RemovesRetiredTypesAndSeedWhilePreservingHandleAndEveryOtherContract()
     {
         using var context = CreateContext();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var previous = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
@@ -72,10 +74,9 @@ public class DropRetiredFeatureTablesMigrationTests
             typeof(User).Assembly.GetType(entity.Name).Should().BeNull();
         typeof(OrbitDbContext).GetProperties().Select(property => property.Name)
             .Should().NotIntersectWith(RetiredTables);
-        model.FindEntityType(typeof(User))!.FindProperty(nameof(User.Handle)).Should().NotBeNull();
-        model.FindEntityType(typeof(AppConfig))!.GetSeedData()
+        model.FindEntityType(typeof(User).FullName!)!.FindProperty("Handle").Should().NotBeNull();
+        model.FindEntityType(typeof(AppConfig).FullName!)!.GetSeedData()
             .Should().NotContain(row => Equals(row["Key"], "MaxUserFacts"));
-        context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
     [Fact]

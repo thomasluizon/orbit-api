@@ -66,8 +66,6 @@ public partial class User : Entity
     public int ReminderPreferencesVersion { get; private set; }
     public string? ReferralCode { get; private set; }
     public Guid? ReferredByUserId { get; private set; }
-    /// <summary>Compatibility-only storage with no runtime caller or mapped writes, retained until https://github.com/thomasluizon/orbit-tickets/issues/1654 contracts the schema.</summary>
-    public string? Handle { get; private set; }
     public bool SocialOptIn { get; private set; }
     public bool IsAdmin { get; private set; }
     public bool? MarketingEmailConsent { get; private set; }
