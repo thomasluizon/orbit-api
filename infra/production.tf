@@ -47,12 +47,14 @@ resource "render_postgres" "production" {
 }
 
 resource "render_web_service" "production_web" {
-  environment_id    = render_project.orbit.environments["Production"].id
-  name              = "orbit-web"
-  plan              = "0.5c-512mb"
-  region            = "ohio"
-  health_check_path = var.web_health_check_path
-  custom_domains    = length(var.web_custom_domains) > 0 ? [for domain in var.web_custom_domains : { name = domain }] : null
+  # The web release drain needs a 300 second allowance before Render kills the process.
+  max_shutdown_delay_seconds = 300
+  environment_id             = render_project.orbit.environments["Production"].id
+  name                       = "orbit-web"
+  plan                       = "0.5c-512mb"
+  region                     = "ohio"
+  health_check_path          = var.web_health_check_path
+  custom_domains             = length(var.web_custom_domains) > 0 ? [for domain in var.web_custom_domains : { name = domain }] : null
 
   lifecycle {
     ignore_changes = [runtime_source.image.digest]

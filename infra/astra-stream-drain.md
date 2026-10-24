@@ -6,9 +6,14 @@ retain their client disconnect token and have up to 240 seconds to finish. The d
 runs in the host's `StoppingAsync` phase, before Kestrel and other hosted services stop.
 It tracks the entire HTTP pipeline, including the controller's terminal event flush.
 
-The host shutdown allowance is 270 seconds. Both API Render services have
+The API host shutdown allowance is 270 seconds. The production API Render service has
 `max_shutdown_delay_seconds = 300`, leaving 30 seconds after the request drain for
-hosted service cleanup and another 30 seconds before Render's process kill. The Render
+hosted service cleanup and another 30 seconds before Render's process kill. The
+production web service also has `max_shutdown_delay_seconds = 300` for the web release
+drain. Terraform owns both settings; the web release workflow must only read back and
+verify the allowance, rather than set it. The free staging API and web services keep
+Render's default shutdown delay; they have no configurable shutdown delay setting
+and do not carry the production drain allowance. The Render
 provider [schema](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/schema.go)
 declares the setting, and its
 [update implementation](https://github.com/render-oss/terraform-provider-render/blob/v1.9.1/internal/provider/webservice/resource/internal/update.go)
@@ -18,24 +23,30 @@ sends it to the service API. Render documents the
 ## Apply before releasing
 
 Use the existing infrastructure credentials and local variable file. Review a plan
-targeting only the two API services, then apply that saved plan:
+targeting only the production API and production web services, then apply that saved plan:
 
 ```sh
 terraform -chdir=infra init
 terraform -chdir=infra plan -var-file=local.tfvars \
   -target=render_web_service.production_api \
-  -target=render_web_service.staging_api \
+  -target=render_web_service.production_web \
   -out=local.astra-drain.tfplan
 terraform -chdir=infra show -json local.astra-drain.tfplan | node infra/check-web-plan.mjs
 terraform -chdir=infra apply local.astra-drain.tfplan
 terraform -chdir=infra state show render_web_service.production_api
-terraform -chdir=infra state show render_web_service.staging_api
+terraform -chdir=infra state show render_web_service.production_web
 ```
 
-In each resource readback, verify `max_shutdown_delay_seconds = 300`. The plan must
-preserve both API identities, domains and runtime configuration, and must not update
-either web service. Follow the infrastructure README's deploy handling instructions
-if the API settings update triggers a release of its tracked branch. Release the
+In both production resource readbacks, verify `max_shutdown_delay_seconds = 300`.
+The plan must preserve both service identities, domains and runtime configuration,
+and must not update either staging service. The web plan guard deliberately blocks
+the production web settings update. Review its changed attributes and apply only the
+saved plan as the deliberate settings exception described in the infrastructure
+README. Immediately redeploy the approved production web digest through
+`orbit-ui-mobile`'s manual `release.yml` workflow with `environment=production`, and
+verify the live `imagePath` against that digest before another apply. Follow the
+README's deploy handling instructions if the API settings update triggers a release
+of its tracked branch. Release the
 approved API commit through the existing release workflow. The host behavior protects
 replacement of instances already running this code; it cannot change shutdown logic
 inside an older instance during the first rollout.

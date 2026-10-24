@@ -1,11 +1,11 @@
 resource "render_web_service" "staging_api" {
-  environment_id             = render_project.orbit.environments["Staging"].id
-  name                       = "orbit-api-staging"
-  plan                       = "free"
-  region                     = "ohio"
-  health_check_path          = "/health"
-  max_shutdown_delay_seconds = 300
-  custom_domains             = length(var.staging_api_custom_domains) > 0 ? [for domain in var.staging_api_custom_domains : { name = domain }] : null
+  # Free Render services have no shutdown delay setting; the drain allowance is production only.
+  environment_id    = render_project.orbit.environments["Staging"].id
+  name              = "orbit-api-staging"
+  plan              = "free"
+  region            = "ohio"
+  health_check_path = "/health"
+  custom_domains    = length(var.staging_api_custom_domains) > 0 ? [for domain in var.staging_api_custom_domains : { name = domain }] : null
 
   lifecycle {
     ignore_changes = [runtime_source.docker.branch]
