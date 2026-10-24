@@ -1022,6 +1022,8 @@ public partial class AgentCatalogService
                     "AuthController.AppleStart",
                     "AuthController.AppleCallback",
                     "AuthController.AppleHandoff",
+                    "AuthController.CreateDesktopHandoff",
+                    "AuthController.ExchangeDesktopHandoff",
                     "AuthController.Refresh",
                     "AuthController.RefreshOperation",
                     "AuthController.Logout",

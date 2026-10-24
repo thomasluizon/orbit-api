@@ -21,12 +21,13 @@ public class DropRetiredFeatureTablesMigrationTests
     ];
 
     [Fact]
-    public void TargetModel_DiffersFromRuntimeOnlyByRetiredLedger()
+    public void TargetModel_DiffersFromNextContractionOnlyByRetiredLedger()
     {
         using var context = CreateContext();
         var target = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var current = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropSentProactiveCheckins().TargetModel, designTime: true);
 
         var differences = context.GetService<IMigrationsModelDiffer>()
             .GetDifferences(target.GetRelationalModel(), current.GetRelationalModel());
@@ -54,7 +55,8 @@ public class DropRetiredFeatureTablesMigrationTests
     public void Model_RemovesRetiredTypesAndSeedWhilePreservingHandleAndEveryOtherContract()
     {
         using var context = CreateContext();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
         var previous = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new PreserveProviderPaidCoverage().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()

@@ -12,7 +12,7 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class DropSentProactiveCheckinsMigrationTests
 {
     [Fact]
-    public void Migration_IsLastAndFollowsRetiredFeatureContraction()
+    public void Migration_FollowsRetiredFeatureContraction()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -21,7 +21,6 @@ public class DropSentProactiveCheckinsMigrationTests
         var retiredLedger = migrations.Single(pair => pair.Value.AsType() == typeof(DropSentProactiveCheckins)).Key;
 
         migrations.Keys.Should().ContainInOrder(retiredFeatures, retiredLedger);
-        migrations.Keys.Last().Should().Be(retiredLedger);
     }
 
     [Fact]
@@ -55,7 +54,6 @@ public class DropSentProactiveCheckinsMigrationTests
         var changes = differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel());
         changes.Should().ContainSingle();
         AssertRetiredLedgerDrop(changes);
-        differ.GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
         context.Database.HasPendingModelChanges().Should().BeFalse();
 
         var sql = context.GetService<IMigrationsSqlGenerator>().Generate(migration.UpOperations, current);

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Models;
 using Orbit.Application.Auth.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Tests.Validators;
@@ -12,6 +13,22 @@ public class DesktopHandoffValidatorTests
     private const string Redirect = "org.useorbit.desktop://auth/callback";
     private const string StagingRedirect = "org.useorbit.desktop.staging://auth/callback";
     private const string Challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+    [Fact]
+    public void DesktopValidators_UseOneCatalogCodeForEveryInvalidBinding()
+    {
+        var create = new CreateDesktopHandoffCommandValidator(Options.Create(new DesktopAuthOptions()))
+            .Validate(new CreateDesktopHandoffCommand(Guid.NewGuid(), "", Challenge, "S256", Redirect));
+        var exchange = new ExchangeDesktopHandoffCommandValidator()
+            .Validate(new ExchangeDesktopHandoffCommand("", "state", new string('a', 43), Redirect));
+
+        foreach (var result in new[] { create, exchange })
+            result.Errors.Should().ContainSingle().Which.ErrorCode.Should().Be("VALIDATION_DESKTOP_HANDOFF_INVALID");
+        ErrorCopy.TryResolve("VALIDATION_DESKTOP_HANDOFF_INVALID", false, [], out var english).Should().BeTrue();
+        english.Should().Be(DesktopHandoff.InvalidHandoff);
+        ErrorCopy.TryResolve("VALIDATION_DESKTOP_HANDOFF_INVALID", true, [], out var portuguese).Should().BeTrue();
+        portuguese.Should().NotBeNullOrWhiteSpace().And.NotBe(english);
+    }
 
     [Theory]
     [InlineData(Redirect, Redirect, true)]

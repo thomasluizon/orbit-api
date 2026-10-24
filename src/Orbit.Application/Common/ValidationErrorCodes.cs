@@ -10,6 +10,7 @@ public static class ValidationErrorCodes
     public const string ApiKeyExpiryFuture = "VALIDATION_API_KEY_EXPIRY_FUTURE";
     public const string LanguageSupported = "VALIDATION_LANGUAGE_SUPPORTED";
     public const string RefreshTokenFormat = "VALIDATION_REFRESH_TOKEN_FORMAT";
+    public const string DesktopHandoffInvalid = "VALIDATION_DESKTOP_HANDOFF_INVALID";
     public const string CalendarSelectionLimit = "VALIDATION_CALENDAR_SELECTION_LIMIT";
     public const string CalendarIdsRequired = "VALIDATION_CALENDAR_IDS_REQUIRED";
     public const string ChatMessageRequired = "VALIDATION_CHAT_MESSAGE_REQUIRED";

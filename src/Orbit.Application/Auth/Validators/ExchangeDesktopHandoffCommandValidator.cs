@@ -1,5 +1,6 @@
 using FluentValidation;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Auth.Validators;
@@ -12,6 +13,6 @@ public sealed class ExchangeDesktopHandoffCommandValidator : AbstractValidator<E
             && DesktopHandoff.IsValidState(request.State)
             && DesktopHandoff.IsValidVerifier(request.CodeVerifier)
             && !string.IsNullOrWhiteSpace(request.RedirectUri) && request.RedirectUri.Length <= 2048)
-            .WithMessage(DesktopHandoff.InvalidHandoff);
+            .WithCopy(ValidationErrorCodes.DesktopHandoffInvalid);
     }
 }
