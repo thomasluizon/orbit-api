@@ -66,7 +66,6 @@ public class AppStoreMigrationTests
         migrations.Keys.Should().ContainInOrder(
             migrations.Single(pair => pair.Value.AsType() == typeof(DropRetiredFeatureTables)).Key,
             migrations.Single(pair => pair.Value.AsType() == typeof(DropSentProactiveCheckins)).Key);
-        migrations.Keys.Last().Should().EndWith("_DropSentProactiveCheckins");
 
         foreach (var apple in appleMigrations)
         {
@@ -83,9 +82,10 @@ public class AppStoreMigrationTests
             .GetDifferences(preceding.GetRelationalModel(), latest.GetRelationalModel())).Should().BeEmpty();
         var contracted = context.GetService<IModelRuntimeInitializer>()
             .Initialize(new DropRetiredFeatureTables().TargetModel, designTime: true);
-        var current = context.GetService<IDesignTimeModel>().Model;
+        var retiredLedger = context.GetService<IModelRuntimeInitializer>()
+            .Initialize(new DropSentProactiveCheckins().TargetModel, designTime: true);
         var differences = context.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(contracted.GetRelationalModel(), current.GetRelationalModel());
+            .GetDifferences(contracted.GetRelationalModel(), retiredLedger.GetRelationalModel());
         differences.Should().ContainSingle();
         DropSentProactiveCheckinsMigrationTests.AssertRetiredLedgerDrop(differences);
         context.Database.HasPendingModelChanges().Should().BeFalse();

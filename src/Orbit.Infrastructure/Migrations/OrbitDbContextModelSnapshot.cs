@@ -2217,10 +2217,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("GoogleRefreshToken")
                         .HasColumnType("text");
 
-                    b.Property<string>("Handle")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
                     b.Property<bool>("HasCompletedOnboarding")
                         .HasColumnType("boolean");
 
