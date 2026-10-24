@@ -43,7 +43,7 @@ public class GetRescheduleSuggestionQueryHandlerTests
     private static User CreateTestUser() => User.Create("Test User", "test@example.com").Value;
 
     private static Habit CreateOverdueHabit() =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Read", FrequencyUnit: null, FrequencyQuantity: null,
             DueDate: Today.AddDays(-3))).Value;
 
@@ -142,7 +142,7 @@ public class GetRescheduleSuggestionQueryHandlerTests
     {
         _payGate.CanUseSmartReschedule(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateTestUser());
-        var dueTodayTask = Habit.Create(new HabitCreateParams(
+        var dueTodayTask = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Read", FrequencyUnit: null, FrequencyQuantity: null, DueDate: Today)).Value;
         StubHabit(dueTodayTask);
 

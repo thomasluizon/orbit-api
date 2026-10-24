@@ -6,14 +6,14 @@ namespace Orbit.Domain.Tests.Entities;
 
 public class HabitParentGuardsTests
 {
-    private static Habit Create() => Habit.Create(new HabitCreateParams(
+    private static Habit Create() => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
         Guid.NewGuid(), "Habit", FrequencyUnit.Day, 1, new DateOnly(2026, 3, 20))).Value;
 
     [Fact]
     public void SetParentHabitId_PreservesCadenceAnchorLogsAndCheckedChecklist()
     {
         var start = new DateOnly(2026, 1, 31);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Monthly", FrequencyUnit.Month, 1, start,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Monthly", FrequencyUnit.Month, 1, start,
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true, ReminderTimes: [15],
             ChecklistItems: [new("Same", true), new("Same", false)])).Value;
         habit.Log(start).IsSuccess.Should().BeTrue();

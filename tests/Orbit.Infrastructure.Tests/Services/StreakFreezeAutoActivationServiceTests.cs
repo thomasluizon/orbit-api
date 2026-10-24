@@ -134,9 +134,9 @@ public class StreakFreezeAutoActivationServiceTests
         var userDateService = Substitute.For<IUserDateService>();
         ConfigureToday(userDateService, Today);
         var user = await SeedEligibleUserAsync(dbContext, Today);
-        var flexible = Habit.Create(new HabitCreateParams(
+        var flexible = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible", FrequencyUnit.Week, 3,
-            DueDate: Today.AddDays(-6), IsFlexible: true)).Value;
+            DueDate: Today.AddDays(-6))).Value;
         flexible.Log(Today.AddDays(-2), advanceDueDate: false);
         flexible.Log(Today.AddDays(-2), advanceDueDate: false);
         flexible.Log(Today.AddDays(-1), advanceDueDate: false);
@@ -230,7 +230,7 @@ public class StreakFreezeAutoActivationServiceTests
         ConfigureToday(userDateService, Today);
         var user = CreateEligibleProUser();
         user.SetStreakState(1, 10, Today);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Run",
             FrequencyUnit.Day,
@@ -415,7 +415,7 @@ public class StreakFreezeAutoActivationServiceTests
 
     private static Habit CreateDailyHabit(Guid userId, DateOnly dueDate)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId,
             "Run",
             FrequencyUnit.Day,

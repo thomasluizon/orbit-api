@@ -28,7 +28,7 @@ public class GoalProgressReadSyncerTests
         var goal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", target, "days", Type: GoalType.Streak)).Value;
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Doom scrolling", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(-1))).Value;
 
@@ -101,8 +101,8 @@ public class GoalProgressReadSyncerTests
     public async Task ComputeFreshValuesAsync_LinkedStandardGoal_ReturnsCompletionsSinceGoalStarted()
     {
         var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         habit.Log(Today);
         habit.Log(Today);
         goal.AddHabit(habit);
@@ -120,8 +120,8 @@ public class GoalProgressReadSyncerTests
     {
         var logDate = new DateOnly(2026, 3, 20);
         var goalStartedAtUtc = logDate.ToDateTime(new TimeOnly(10, 0), DateTimeKind.Utc);
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: logDate, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: logDate)).Value;
         var beforeGoalLog = habit.Log(logDate).Value;
         var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
         goal.AddHabit(habit);
@@ -140,8 +140,8 @@ public class GoalProgressReadSyncerTests
     public void CalculateStandardCompletions_ExcludesSoftDeletedLinkedHabits()
     {
         var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         goal.AddHabit(habit);
         habit.Log(Today);
         habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));

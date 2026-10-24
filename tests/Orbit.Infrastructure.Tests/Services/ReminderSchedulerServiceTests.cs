@@ -278,7 +278,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var secondReminderTime = new TimeOnly(0, secondReminderMinute, secondReminderSecond);
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Drink water", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday,
@@ -312,7 +312,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var dueTomorrow = UtcToday.AddDays(1);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             user.Id, "Submit report", null, null,
             ReminderEnabled: true,
             DueDate: dueTomorrow,
@@ -344,7 +344,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var reminderTime = new TimeOnly(0, 0);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             user.Id, "Submit report", null, null,
             ReminderEnabled: true,
             DueDate: UtcToday,
@@ -377,7 +377,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var reminderTime = new TimeOnly(0, 0);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Drink water", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday,
@@ -412,7 +412,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var reminderTime = new TimeOnly(0, 0);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Drink water", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday,
@@ -441,7 +441,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday,
@@ -483,7 +483,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId).IsSuccess.Should().BeTrue();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: dueDate,
@@ -523,7 +523,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var clock = new MutableTimeProvider(DateTimeOffset.Parse(instant).AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId).IsSuccess.Should().BeTrue();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             DueDate: DateOnly.Parse(dueDateText),
             DueTime: new TimeOnly(dueHour, dueMinute),
@@ -563,7 +563,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var instant = new DateTimeOffset(2027, 9, 26, 8, 45, 0, TimeSpan.Zero);
         var clock = new MutableTimeProvider(instant.AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2027, 9, 26),
             DueTime: new TimeOnly(9, 0),
@@ -600,7 +600,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var clock = new MutableTimeProvider(reminderInstant.AddMinutes(-1));
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId).IsSuccess.Should().BeTrue();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             DueDate: DateOnly.Parse(dueDateText),
             DueTime: new TimeOnly(dueHour, dueMinute),
@@ -638,7 +638,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 26, 9, 0, 0, TimeSpan.Zero));
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             user.Id, "Report", null, null,
             ReminderEnabled: true,
             DueDate: dueDate,
@@ -666,7 +666,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var clock = new MutableTimeProvider(new DateTimeOffset(2027, 9, 25, 9, 0, 0, TimeSpan.Zero));
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: dueDate,
@@ -693,7 +693,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday,
@@ -728,7 +728,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday.AddDays(-1),
@@ -763,7 +763,7 @@ public class ReminderSchedulerServiceTests : IDisposable
 
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetTimeZone(timeZoneId);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday.AddDays(-1),
@@ -790,7 +790,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true,
             DueDate: UtcToday.AddDays(-1),
@@ -865,7 +865,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         var pushService = Substitute.For<IPushNotificationService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
             ReminderTimes: ReminderTimes)).Value;
@@ -896,12 +896,12 @@ public class ReminderSchedulerServiceTests : IDisposable
     public async Task CheckAndSendReminders_OneHabitRecordFails_StillDeliversRemainingHabits()
     {
         var throwingUser = User.Create("Alice", "alice@test.com").Value;
-        var throwingHabit = Habit.Create(new HabitCreateParams(
+        var throwingHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             throwingUser.Id, "Alice workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
             ReminderTimes: ReminderTimes)).Value;
         var healthyUser = User.Create("Bob", "bob@test.com").Value;
-        var healthyHabit = Habit.Create(new HabitCreateParams(
+        var healthyHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             healthyUser.Id, "Bob workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
             ReminderTimes: ReminderTimes)).Value;
@@ -934,7 +934,7 @@ public class ReminderSchedulerServiceTests : IDisposable
         for (var index = 0; index < count; index++)
         {
             var user = User.Create($"User{index}", $"user{index}@test.com").Value;
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 user.Id, $"Workout {index}", FrequencyUnit.Day, 1,
                 ReminderEnabled: true,
                 DueDate: UtcToday,

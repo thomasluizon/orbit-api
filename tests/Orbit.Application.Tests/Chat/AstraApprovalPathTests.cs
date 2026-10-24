@@ -190,7 +190,7 @@ public sealed class AstraApprovalPathTests : IDisposable
 
     private Habit AddHabit(string title)
     {
-        var habit = Habit.Create(new(_userId, title, FrequencyUnit.Day, 1, _today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, title, FrequencyUnit.Day, 1, _today)).Value;
         _db.Habits.Add(habit);
         _db.SaveChanges();
         return habit;

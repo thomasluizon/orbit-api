@@ -186,7 +186,7 @@ public class RetiredTableCallerTests
         var user = User.Create("Target", "target@example.com").Value;
         var other = User.Create("Other", "other@example.com").Value;
         db.Users.AddRange(user, other);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Live habit", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Live habit", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 6, 15))).Value;
         db.Habits.Add(habit);
         await db.SaveChangesAsync();

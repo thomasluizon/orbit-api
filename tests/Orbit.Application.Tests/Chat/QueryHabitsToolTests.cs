@@ -70,13 +70,13 @@ public class QueryHabitsToolTests
     [InlineData("Tags: Health")]
     public async Task EditableFields_AppearOnParentAndChild(string expected)
     {
-        var parent = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, Today,
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Water", FrequencyUnit.Day, 1, Today,
             Description: "Two litres", Days: [DayOfWeek.Monday, DayOfWeek.Wednesday],
             DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(15, 0), IntervalWeeks: 2,
             ReminderEnabled: true, ReminderTimes: [10, 20], SlipAlertEnabled: true,
             ChecklistItems: [new("Fill bottle", true)], EndDate: Today.AddDays(30),
             RelativeReminders: [new(MinutesBefore: 30), new(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(18, 0))])).Value;
-        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1, Today,
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Child", FrequencyUnit.Day, 1, Today,
             Description: parent.Description, Days: parent.Days.ToList(), DueTime: parent.DueTime,
             DueEndTime: parent.DueEndTime, IntervalWeeks: parent.IntervalWeeks,
             ReminderEnabled: true, ReminderTimes: parent.ReminderTimes, SlipAlertEnabled: true,
@@ -99,10 +99,8 @@ public class QueryHabitsToolTests
     [InlineData(true, "Flexible: true")]
     public async Task EditableScheduleFields_AppearOnParentAndChild(bool flexible, string expected)
     {
-        var parent = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Week, 3, Today,
-            IsFlexible: flexible, ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
-        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Week, 3, Today,
-            IsFlexible: flexible, ScheduledReminders: parent.ScheduledReminders, ParentHabitId: parent.Id)).Value;
+        var parent = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring, UserId, "Water", FrequencyUnit.Week, 3, Today, ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
+        var child = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring, UserId, "Child", FrequencyUnit.Week, 3, Today, ScheduledReminders: parent.ScheduledReminders, ParentHabitId: parent.Id)).Value;
         SetupHabits(parent, child);
         var result = await Execute("{}");
         result.EntityName!.Split('\n').Single(line => line.Contains($"ID: {parent.Id}")).Should().Contain(expected);
@@ -351,7 +349,7 @@ public class QueryHabitsToolTests
         var pending = CreateHabit("Read a book", null, null, dueDate: Today);
         var completedEarlier = CreateHabit("Old task", null, null, dueDate: Today.AddDays(-1));
         completedEarlier.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
-        var otherUser = Habit.Create(new HabitCreateParams(
+        var otherUser = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             Guid.NewGuid(), "Other user task", null, null, DueDate: Today)).Value;
         SetupHabits(done, pending, completedEarlier, otherUser);
         var dateValue = date == "today" ? date : Today.ToString("yyyy-MM-dd");
@@ -771,8 +769,8 @@ public class QueryHabitsToolTests
         Guid? parentId = null,
         string? emoji = null)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, title, freq, qty,
-            DueDate: dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow), IsBadHabit: isBadHabit, IsGeneral: isGeneral,
+        var habit = Habit.Create(new HabitCreateParams(isGeneral ? HabitSchedule.General : ((FrequencyUnit?)(freq)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, title, freq, qty,
+            DueDate: dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow), IsBadHabit: isBadHabit,
             ParentHabitId: parentId, Emoji: emoji)).Value;
         if (position.HasValue) habit.SetPosition(position.Value);
         return habit;

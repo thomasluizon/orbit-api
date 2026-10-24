@@ -28,7 +28,7 @@ public class EditableHabitStartDatePersistenceTests
         using var factory = new SqliteOrbitDbContextFactory();
         var seed = factory.Context;
         var user = User.Create("Alex", "anchor@example.test").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1,
             Today.AddDays(-10), EndDate: terminal ? Today : null)).Value;
         habit.Log(Today.AddDays(-10), "History").IsSuccess.Should().BeTrue();
         habit.Log(Today).IsSuccess.Should().BeTrue();
@@ -73,7 +73,7 @@ public class EditableHabitStartDatePersistenceTests
         using var factory = new SqliteOrbitDbContextFactory();
         var seed = factory.Context;
         var user = User.Create("Alex", "reactivation@example.test").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Week, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Week, 1,
             Today, EndDate: Today.AddDays(3))).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         habit.IsCompleted.Should().BeTrue();

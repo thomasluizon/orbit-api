@@ -53,7 +53,7 @@ public class PayGateServiceTests
     private static Habit CreateCompletedOneTimeTask(int index)
     {
         var dueDate = new DateOnly(2026, 8, 5);
-        var task = Habit.Create(new HabitCreateParams(
+        var task = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, $"Finished task {index}", null, null, dueDate)).Value;
         task.Log(dueDate).IsSuccess.Should().BeTrue();
         return task;
@@ -62,7 +62,7 @@ public class PayGateServiceTests
     private static Habit CreateCompletedRecurringHabit(int index)
     {
         var dueDate = new DateOnly(2026, 8, 5);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             $"Finished recurring habit {index}",
             FrequencyUnit.Day,
@@ -178,7 +178,7 @@ public class PayGateServiceTests
     [Fact]
     public void UnlogCompletedRoot_RequiresLiveRootAllowance()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Finished task", null, null, ReactivationToday)).Value;
         habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
 
@@ -190,7 +190,7 @@ public class PayGateServiceTests
     [InlineData(false)]
     public void EndDateReactivation_RequiresLiveRootAllowance(bool clearEndDate)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Finished recurring habit",
             FrequencyUnit.Day,
@@ -199,7 +199,7 @@ public class PayGateServiceTests
             EndDate: ReactivationToday)).Value;
         habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
         DateOnly? endDate = clearEndDate ? null : ReactivationToday.AddDays(7);
-        var update = new HabitUpdateParams(
+        var update = new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Changed title",
             null,
             FrequencyUnit.Day,

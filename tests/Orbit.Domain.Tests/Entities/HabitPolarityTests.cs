@@ -17,7 +17,7 @@ public class HabitPolarityTests
     [InlineData("Avoid soda")]
     public void NegatedName_CannotUseAvoidType(string title)
     {
-        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), title, FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), title, FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 27), IsBadHabit: true));
 
         result.IsFailure.Should().BeTrue();
@@ -28,9 +28,9 @@ public class HabitPolarityTests
     [InlineData("Smoking", "Don't smoke")]
     public void Update_RejectsMixedFormWithoutMutating(string behavior, string negation)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), behavior, FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), behavior, FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 27), IsBadHabit: true)).Value;
-        var result = habit.Update(new HabitUpdateParams(negation, null, FrequencyUnit.Day, 1,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, negation, null, FrequencyUnit.Day, 1,
             null, true, null));
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("BAD_HABIT_NEGATED_NAME");
@@ -47,7 +47,7 @@ public class HabitPolarityTests
     public void LegacyAvoidName_UnrelatedUpdatePreservesTitleAndPolarity(string title, bool reminderOnly)
     {
         var habit = HydrateLegacyAvoidHabit(title);
-        var update = new HabitUpdateParams(habit.Title, reminderOnly ? habit.Description : "Updated description",
+        var update = new HabitUpdateParams(habit.Schedule, habit.Title, reminderOnly ? habit.Description : "Updated description",
             habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), habit.IsBadHabit, habit.NextDueDate,
             ReminderEnabled: reminderOnly ? true : null, ReminderTimes: reminderOnly ? [30] : null);
 
@@ -66,7 +66,7 @@ public class HabitPolarityTests
     {
         var habit = HydrateLegacyAvoidHabit("No caffeine");
 
-        var result = habit.Update(new HabitUpdateParams("Avoid caffeine", habit.Description,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule, "Avoid caffeine", habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), true, habit.NextDueDate));
 
         result.ErrorCode.Should().Be("BAD_HABIT_NEGATED_NAME");
@@ -76,10 +76,10 @@ public class HabitPolarityTests
     [Fact]
     public void Commitment_ChangingOnlyPolarityToAvoidStillFails()
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "No caffeine", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "No caffeine", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 27))).Value;
 
-        var result = habit.Update(new HabitUpdateParams(habit.Title, habit.Description,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity, habit.Days.ToList(), true, habit.NextDueDate));
 
         result.ErrorCode.Should().Be("BAD_HABIT_NEGATED_NAME");
@@ -88,7 +88,7 @@ public class HabitPolarityTests
 
     private static Habit HydrateLegacyAvoidHabit(string title)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Caffeine", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Caffeine", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 27), Description: "Original description", IsBadHabit: true)).Value;
         typeof(Habit).GetProperty(nameof(Habit.Title))!.SetValue(habit, title);
         return habit;
@@ -101,7 +101,7 @@ public class HabitPolarityTests
     [InlineData("Smoking", true)]
     public void ValidCommitmentAndAvoidForms_AreAccepted(string title, bool avoid)
     {
-        Habit.Create(new HabitCreateParams(Guid.NewGuid(), title, FrequencyUnit.Day, 1,
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), title, FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 27), IsBadHabit: avoid)).IsSuccess.Should().BeTrue();
     }
 }

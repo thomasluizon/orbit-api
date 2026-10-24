@@ -173,11 +173,11 @@ public class AiRescheduleSuggestionServiceTests
     }
 
     private static Habit CreateRecurring(string title, FrequencyUnit unit, int quantity = 1, DateOnly? dueDate = null) =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, title, unit, quantity, DueDate: dueDate ?? Today)).Value;
 
     private static Habit CreateOneTimeTask(string title, DateOnly dueDate) =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId, title, null, null, DueDate: dueDate)).Value;
 
     private static string InvokeBuildPrompt(Habit habit, DateOnly userToday, string language)

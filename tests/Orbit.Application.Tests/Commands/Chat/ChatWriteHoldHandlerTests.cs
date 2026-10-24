@@ -304,7 +304,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
 
     private Habit[] SetupUpdateHabits()
     {
-        var habits = new[] { "A", "B", "C" }.Select(title => Habit.Create(new HabitCreateParams(
+        var habits = new[] { "A", "B", "C" }.Select(title => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             _userId, title, null, null, Today)).Value).ToArray();
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
@@ -340,7 +340,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
     [Fact]
     public async Task Handle_InferredEmojis_PreviewsFullSetAndApprovalAppliesExactlyThoseValues()
     {
-        var habits = Enumerable.Range(1, 251).Select(index => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(1, 251).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _userId, $"Habit {index}", FrequencyUnit.Day, 1, Today)).Value).ToArray();
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
@@ -421,7 +421,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
     public async Task Handle_LogAndUnlog_HoldTheSameApprovalPreviewWithoutChangingHabit(
         string operationId, bool logged)
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1, Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber água", FrequencyUnit.Day, 1, Today)).Value;
         if (logged)
             habit.Log(Today).IsSuccess.Should().BeTrue();
         var logIds = habit.Logs.Select(log => log.Id).ToArray();

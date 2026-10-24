@@ -664,7 +664,7 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
         TimeOnly? dueTime,
         string? googleEventId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             title,
             FrequencyUnit.Day,

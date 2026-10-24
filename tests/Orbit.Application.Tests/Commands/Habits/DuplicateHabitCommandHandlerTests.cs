@@ -44,7 +44,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_ValidHabit_DuplicatesSuccessfully()
     {
-        var original = Habit.Create(new HabitCreateParams(
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1,
             Description: "Morning workout",
             DueDate: new DateOnly(2026, 3, 20))).Value;
@@ -83,7 +83,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
     {
-        var original = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         SetupAllHabitsForUser(new List<Habit> { original });
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -100,15 +100,13 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_DuplicatesAllProperties()
     {
-        var original = Habit.Create(new HabitCreateParams(
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Complex Habit", FrequencyUnit.Day, 1,
             Description: "Daily check",
             Days: new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Friday },
             DueDate: new DateOnly(2026, 3, 20),
             DueTime: new TimeOnly(9, 0),
-            DueEndTime: new TimeOnly(10, 0),
-            IsGeneral: false,
-            IsFlexible: false)).Value;
+            DueEndTime: new TimeOnly(10, 0))).Value;
 
         SetupAllHabitsForUser(new List<Habit> { original });
 
@@ -129,9 +127,9 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WithChildren_DuplicatesChildHabits()
     {
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Morning Routine", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Brush teeth", FrequencyUnit.Day, 1,
             ParentHabitId: parent.Id, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
@@ -148,7 +146,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var original = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         SetupAllHabitsForUser(new List<Habit> { original });
 
         var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
@@ -164,7 +162,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedOneTimeTask_PreservesCompletionOnDuplicate()
     {
-        var original = Habit.Create(new HabitCreateParams(
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Buy hiking boots", null, null,
             DueDate: new DateOnly(2026, 6, 1))).Value;
         original.Log(new DateOnly(2026, 6, 2), "found them on sale").IsSuccess.Should().BeTrue();
@@ -186,9 +184,9 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedOneTimeChild_PreservesCompletionOnDuplicatedChild()
     {
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Plan trip", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Book hotel", null, null,
             ParentHabitId: parent.Id, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         child.Log(new DateOnly(2026, 6, 3)).IsSuccess.Should().BeTrue();
@@ -211,7 +209,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_UncompletedOneTimeTask_StaysUncompleted()
     {
-        var original = Habit.Create(new HabitCreateParams(UserId, "Renew passport", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Renew passport", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         SetupAllHabitsForUser(new List<Habit> { original });
         var added = CaptureAddedHabits();
@@ -226,7 +224,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_RecurringHabitWithLogs_DoesNotCopyLogs()
     {
-        var original = Habit.Create(new HabitCreateParams(
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Run", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 6, 1))).Value;
         original.Log(new DateOnly(2026, 6, 1)).IsSuccess.Should().BeTrue();
@@ -247,7 +245,7 @@ public class DuplicateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_CompletionLogReadFilter_ExcludesLogsFromHabitsTheUserDoesNotOwn()
     {
-        var original = Habit.Create(new HabitCreateParams(
+        var original = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Buy hiking boots", null, null,
             DueDate: new DateOnly(2026, 6, 1))).Value;
         original.Log(new DateOnly(2026, 6, 2)).IsSuccess.Should().BeTrue();

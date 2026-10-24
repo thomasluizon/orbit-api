@@ -112,7 +112,7 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue();
         saved.Should().ContainSingle().Which.Should().Match<Habit>(habit =>
             habit.FrequencyUnit.ToString() == unit && habit.FrequencyQuantity == quantity
-            && habit.IsFlexible == flexible && habit.NextDueDate == new DateOnly(2026, 10, 23));
+            && (habit.Schedule == HabitSchedule.Flexible) == flexible && habit.NextDueDate == new DateOnly(2026, 10, 23));
     }
 
     [Theory]

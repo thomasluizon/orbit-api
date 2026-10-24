@@ -65,7 +65,7 @@ public class SkipHabitToolTests
     [Fact]
     public async Task OneTimeTask_PostponesToTomorrow()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Buy milk", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Buy milk", null, null, DueDate: Today)).Value;
         SetupHabitFound(habit);
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
@@ -89,7 +89,7 @@ public class SkipHabitToolTests
     [Fact]
     public async Task CompletedHabit_ReturnsError()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         habit.Log(Today); SetupHabitFound(habit);
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
@@ -146,9 +146,9 @@ public class SkipHabitToolTests
     [Fact]
     public async Task FlexibleHabit_SkipsAndCreatesLog()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Exercise", FrequencyUnit.Week, 3,
-            DueDate: Today, IsFlexible: true)).Value;
+            DueDate: Today)).Value;
         SetupHabitFound(habit);
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
@@ -211,7 +211,7 @@ public class SkipHabitToolTests
 
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty, DateOnly dueDate)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: dueDate)).Value;
+        return Habit.Create(new HabitCreateParams(((FrequencyUnit?)(freq)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, title, freq, qty, DueDate: dueDate)).Value;
     }
 
     private void SetupHabitFound(Habit habit)

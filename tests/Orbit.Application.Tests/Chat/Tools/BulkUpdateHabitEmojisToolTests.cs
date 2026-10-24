@@ -198,7 +198,7 @@ public class BulkUpdateHabitEmojisToolTests
     public async Task Default_ExcludesCompletedHabits()
     {
         var active = CreateHabit("Run");
-        var completed = Habit.Create(new HabitCreateParams(UserId, "Old task", null, null, DueDate: Today)).Value;
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Old task", null, null, DueDate: Today)).Value;
         completed.Log(Today);
         SetupHabits(active, completed);
 
@@ -383,7 +383,7 @@ public class BulkUpdateHabitEmojisToolTests
 
     private static Habit CreateHabit(string title, string? emoji = null)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today, Emoji: emoji)).Value;
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, DueDate: Today, Emoji: emoji)).Value;
     }
 
     private void SetupHabits(params Habit[] habits)

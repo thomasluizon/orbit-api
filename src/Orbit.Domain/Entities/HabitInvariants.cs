@@ -13,15 +13,18 @@ namespace Orbit.Domain.Entities;
 internal static class HabitInvariants
 {
     public static AppError? ValidateScheduleOptions(
-        bool isGeneral, bool isFlexible, bool isBadHabit,
+        HabitSchedule schedule, bool isBadHabit,
         FrequencyUnit? frequencyUnit, int? frequencyQuantity,
         IReadOnlyList<System.DayOfWeek>? days,
         int? intervalWeeks)
     {
-        if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
+        if (!HasCompatibleFrequency(schedule, frequencyUnit))
+            return DomainErrors.RecurrenceScheduleUnsatisfiable;
+
+        if (schedule == HabitSchedule.General && (frequencyUnit is not null || frequencyQuantity is not null))
             return DomainErrors.GeneralHabitHasFrequency;
 
-        if (isGeneral && isBadHabit)
+        if (schedule == HabitSchedule.General && isBadHabit)
             return DomainErrors.GeneralHabitIsBadHabit;
 
         if (frequencyUnit is not null && frequencyQuantity is null)
@@ -33,17 +36,25 @@ internal static class HabitInvariants
         if (intervalWeeks is < 1 or > DomainConstants.MaxIntervalWeeks)
             return DomainErrors.IntervalWeeksInvalid;
 
-        if (isFlexible && frequencyUnit is null)
+        if (schedule == HabitSchedule.Flexible && frequencyUnit is null)
             return DomainErrors.FlexibleNeedsFrequencyUnit;
 
-        if (isFlexible && days?.Count > 0)
+        if (schedule == HabitSchedule.Flexible && days?.Count > 0)
             return DomainErrors.FlexibleHasDays;
 
-        if (!isFlexible && days?.Count > 0 && (frequencyQuantity != 1 || frequencyUnit != Enums.FrequencyUnit.Day))
+        if (schedule != HabitSchedule.Flexible && days?.Count > 0 && (frequencyQuantity != 1 || frequencyUnit != Enums.FrequencyUnit.Day))
             return DomainErrors.DaysRequireQuantityOne;
 
         return null;
     }
+
+    private static bool HasCompatibleFrequency(HabitSchedule schedule, FrequencyUnit? frequencyUnit) => schedule switch
+    {
+        HabitSchedule.OneTime => frequencyUnit is null,
+        HabitSchedule.Recurring => frequencyUnit is not null,
+        HabitSchedule.Flexible or HabitSchedule.General => true,
+        _ => false
+    };
 
     public static AppError? ValidateStartDate(DateOnly? startDate, bool isGeneral,
         FrequencyUnit? frequencyUnit, DateOnly? endDate)

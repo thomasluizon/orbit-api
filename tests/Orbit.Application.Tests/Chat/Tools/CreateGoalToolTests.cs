@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -148,7 +149,7 @@ public class CreateGoalToolTests
     private List<Habit> SetUpHabits(int count)
     {
         var habits = Enumerable.Range(0, count)
-            .Select(index => Habit.Create(new HabitCreateParams(
+            .Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
                 UserId, $"Read habit {index}", null, null, new DateOnly(2026, 4, 3))).Value)
             .ToList();
         _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())

@@ -37,7 +37,7 @@ public class RepairStreakGapConcurrencyTests
     [Fact]
     public async Task ConcurrentHabitDelete_CannotCommitBetweenTheRepairsEligibilityReadAndItsSpend()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             _user.Id, "Walk", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         var stagedFreeze = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseRepair = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

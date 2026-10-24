@@ -56,12 +56,12 @@ internal sealed class HeldWriteTestContext : IDisposable
     {
         var user = User.Create("Reader", "reader@example.com").Value;
         UserId = user.Id;
-        Habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+        Habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1,
             Today.AddDays(-4))).Value;
         Goal = Goal.Create(UserId, "Books", 20m, "books").Value;
         Tag = Tag.Create(UserId, "Study", "#7c3aed").Value;
         var foreignUser = Guid.NewGuid();
-        ForeignHabit = Habit.Create(new HabitCreateParams(foreignUser, "Foreign", FrequencyUnit.Day, 1, Today)).Value;
+        ForeignHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, foreignUser, "Foreign", FrequencyUnit.Day, 1, Today)).Value;
         ForeignGoal = Goal.Create(foreignUser, "Foreign", 20m, "books").Value;
         Records.AddRange([Habit, Goal, Tag, user, ForeignHabit, ForeignGoal]);
         Dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);

@@ -13,7 +13,7 @@ public class HabitTests
     {
         var createdAtUtc = DateTime.UtcNow.AddDays(-30);
 
-        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Historical habit", FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Historical habit", FrequencyUnit.Day, 1,
             DateOnly.FromDateTime(createdAtUtc), CreatedAtUtc: createdAtUtc));
 
         result.IsSuccess.Should().BeTrue();
@@ -27,7 +27,7 @@ public class HabitTests
     {
         var createdAtUtc = DateTime.SpecifyKind(DateTime.UtcNow.AddDays(-1), kind);
 
-        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Historical habit", FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Historical habit", FrequencyUnit.Day, 1,
             DateOnly.FromDateTime(createdAtUtc), CreatedAtUtc: createdAtUtc));
 
         result.IsFailure.Should().BeTrue();
@@ -39,7 +39,7 @@ public class HabitTests
     {
         var createdAtUtc = DateTime.UtcNow.AddDays(1);
 
-        var result = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Future habit", FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Future habit", FrequencyUnit.Day, 1,
             DateOnly.FromDateTime(DateTime.UtcNow), CreatedAtUtc: createdAtUtc));
 
         result.IsFailure.Should().BeTrue();
@@ -62,7 +62,7 @@ public class HabitTests
         IReadOnlyList<DayOfWeek>? days = null,
         Guid? parentHabitId = null)
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(frequencyUnit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             ValidUserId,
             "Exercise",
             frequencyUnit,
@@ -77,7 +77,7 @@ public class HabitTests
 
     private static Habit CreateOneTimeHabit(DateOnly? dueDate = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId,
             "One-time task",
             FrequencyUnit: null,
@@ -87,9 +87,9 @@ public class HabitTests
 
     private static Habit CreateGeneralHabit()
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.General,
             ValidUserId, "Read a book someday", null, null,
-            DueDate: Today, IsGeneral: true)).Value;
+            DueDate: Today)).Value;
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class HabitTests
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Exercise");
@@ -141,7 +141,7 @@ public class HabitTests
     [Fact]
     public void Create_EmptyUserId_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(Guid.Empty, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.Empty, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User ID is required");
@@ -150,7 +150,7 @@ public class HabitTests
     [Fact]
     public void Create_EmptyTitle_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Title is required");
@@ -159,7 +159,7 @@ public class HabitTests
     [Fact]
     public void Create_NegativeFrequencyQty_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, -1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, -1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Frequency quantity must be greater than 0");
@@ -168,7 +168,7 @@ public class HabitTests
     [Fact]
     public void Create_ZeroFrequencyQty_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 0, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 0, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Frequency quantity must be greater than 0");
@@ -179,7 +179,7 @@ public class HabitTests
     {
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Week, 2, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Week, 2, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("frequency unit Day").And.Contain("frequency quantity 1");
@@ -190,7 +190,7 @@ public class HabitTests
     {
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Week, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Week, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("frequency unit Day").And.Contain("frequency quantity 1");
@@ -201,7 +201,7 @@ public class HabitTests
     {
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), Days: days));
 
         result.IsSuccess.Should().BeTrue();
     }
@@ -209,7 +209,7 @@ public class HabitTests
     [Fact]
     public void Create_TrimsTitle()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "  Exercise  ", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "  Exercise  ", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.Value.Title.Should().Be("Exercise");
     }
@@ -330,7 +330,7 @@ public class HabitTests
     [Fact]
     public void Control_RecurringHabit_UnlogsFineOnTheDayItWasLogged()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Yesterday)).Value;
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
 
@@ -370,11 +370,11 @@ public class HabitTests
         var habit = CreateOneTimeHabit(dueDate: Yesterday);
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
 
-        var result = habit.Update(new HabitUpdateParams(
-            "Read a book someday", null, null, null, null, false, Today, IsGeneral: true));
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.General,
+            "Read a book someday", null, null, null, null, false, Today));
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsGeneral.Should().BeTrue();
+        habit.Schedule.Should().Be(HabitSchedule.General);
         habit.IsCompleted.Should().BeFalse();
         habit.Log(Today).IsSuccess.Should().BeTrue();
     }
@@ -506,7 +506,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Running",
             "Morning jog",
             FrequencyUnit.Week,
@@ -526,7 +526,7 @@ public class HabitTests
     [Fact]
     public void Update_MonthlyHabit_ChangingDueDateRefreshesOriginalDayOfMonth()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId: Guid.NewGuid(),
             Title: "Monthly Bills",
             FrequencyUnit: FrequencyUnit.Month,
@@ -534,7 +534,7 @@ public class HabitTests
             DueDate: new DateOnly(2025, 1, 31))).Value;
         habit.OriginalDayOfMonth.Should().Be(31);
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Monthly Bills",
             null,
             FrequencyUnit.Month,
@@ -549,7 +549,7 @@ public class HabitTests
     [Fact]
     public void Update_DailyToMonthly_SeedsOriginalDayOfMonth()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId: Guid.NewGuid(),
             Title: "Daily Stretch",
             FrequencyUnit: FrequencyUnit.Day,
@@ -557,7 +557,7 @@ public class HabitTests
             DueDate: new DateOnly(2025, 3, 10))).Value;
         habit.OriginalDayOfMonth.Should().BeNull();
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Daily Stretch",
             null,
             FrequencyUnit.Month,
@@ -572,7 +572,7 @@ public class HabitTests
     [Fact]
     public void Update_MonthlyToDaily_ClearsOriginalDayOfMonth()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId: Guid.NewGuid(),
             Title: "Monthly Review",
             FrequencyUnit: FrequencyUnit.Month,
@@ -580,7 +580,7 @@ public class HabitTests
             DueDate: new DateOnly(2025, 1, 20))).Value;
         habit.OriginalDayOfMonth.Should().Be(20);
 
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Monthly Review",
             null,
             FrequencyUnit.Day,
@@ -597,7 +597,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams("", null, FrequencyUnit.Day, 1, null, false, null));
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "", null, FrequencyUnit.Day, 1, null, false, null));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Title is required");
@@ -608,7 +608,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, -5, null, false, null));
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, -5, null, false, null));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Frequency quantity must be greater than 0");
@@ -652,7 +652,7 @@ public class HabitTests
     [Fact]
     public void Create_EndDateOnOneTime_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Task", FrequencyUnit: null, FrequencyQuantity: null,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, ValidUserId, "Task", FrequencyUnit: null, FrequencyQuantity: null,
             DueDate: new DateOnly(2026, 1, 1), EndDate: new DateOnly(2026, 6, 30)));
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("One-time tasks cannot have an end date");
@@ -661,7 +661,7 @@ public class HabitTests
     [Fact]
     public void Create_EndDateBeforeDueDate_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 6, 1), EndDate: new DateOnly(2026, 1, 1)));
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("End date must be on or after the start date");
@@ -670,7 +670,7 @@ public class HabitTests
     [Fact]
     public void Create_ValidEndDate_Success()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 1), EndDate: new DateOnly(2026, 6, 30)));
         result.IsSuccess.Should().BeTrue();
         result.Value.EndDate.Should().Be(new DateOnly(2026, 6, 30));
@@ -679,7 +679,7 @@ public class HabitTests
     [Fact]
     public void AdvanceDueDate_PastEndDate_MarksCompleted()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 29), EndDate: new DateOnly(2026, 1, 31))).Value;
         habit.AdvanceDueDate(new DateOnly(2026, 1, 31));
         habit.IsCompleted.Should().BeTrue();
@@ -688,7 +688,7 @@ public class HabitTests
     [Fact]
     public void AdvanceDueDate_NotPastEndDate_StaysActive()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 1), EndDate: new DateOnly(2026, 12, 31))).Value;
         habit.AdvanceDueDate(new DateOnly(2026, 1, 1));
         habit.IsCompleted.Should().BeFalse();
@@ -697,27 +697,27 @@ public class HabitTests
     [Fact]
     public void Update_ClearEndDate_SetsNull()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 1), EndDate: new DateOnly(2026, 6, 30))).Value;
-        habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null, ClearEndDate: true));
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null, ClearEndDate: true));
         habit.EndDate.Should().BeNull();
     }
 
     [Fact]
     public void Update_SetEndDate()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 1))).Value;
-        habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null, EndDate: new DateOnly(2026, 12, 31)));
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null, EndDate: new DateOnly(2026, 12, 31)));
         habit.EndDate.Should().Be(new DateOnly(2026, 12, 31));
     }
 
     [Fact]
     public void Update_EndDateBeforeDueDate_ReturnsFailure()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 6, 1))).Value;
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null, EndDate: new DateOnly(2026, 1, 1)));
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null, EndDate: new DateOnly(2026, 1, 1)));
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("End date must be on or after the start date");
     }
@@ -726,7 +726,7 @@ public class HabitTests
     public void Update_OneTimeTaskWithEndDate_ReturnsFailure()
     {
         var habit = CreateOneTimeHabit(dueDate: new DateOnly(2026, 1, 1));
-        var result = habit.Update(new HabitUpdateParams("Task", null, FrequencyUnit: null, FrequencyQuantity: null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Task", null, FrequencyUnit: null, FrequencyQuantity: null,
             null, false, new DateOnly(2026, 1, 1), EndDate: new DateOnly(2026, 6, 30)));
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("One-time tasks cannot have an end date");
@@ -735,10 +735,10 @@ public class HabitTests
     [Fact]
     public void Update_ShrinkEndDateBelowDueDate_RejectedByValidation()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 6, 10), EndDate: new DateOnly(2026, 12, 31))).Value;
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false,
             new DateOnly(2026, 6, 10), EndDate: new DateOnly(2026, 6, 5)));
 
         result.IsFailure.Should().BeTrue();
@@ -748,12 +748,12 @@ public class HabitTests
     [Fact]
     public void Update_ExtendEndDatePastDueDate_Reopens()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 29), EndDate: new DateOnly(2026, 1, 31))).Value;
         habit.AdvanceDueDate(new DateOnly(2026, 1, 31));
         habit.IsCompleted.Should().BeTrue();
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false,
             null, EndDate: new DateOnly(2026, 12, 31)));
 
         result.IsSuccess.Should().BeTrue();
@@ -763,12 +763,12 @@ public class HabitTests
     [Fact]
     public void Update_ClearEndDate_ReopensAutoCompletedHabit()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 29), EndDate: new DateOnly(2026, 1, 31))).Value;
         habit.AdvanceDueDate(new DateOnly(2026, 1, 31));
         habit.IsCompleted.Should().BeTrue();
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false,
             null, ClearEndDate: true));
 
         result.IsSuccess.Should().BeTrue();
@@ -778,7 +778,7 @@ public class HabitTests
     [Fact]
     public void Unlog_RecurringAutoCompletedByEndDate_Reopens()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 31), EndDate: new DateOnly(2026, 1, 31))).Value;
         habit.Log(new DateOnly(2026, 1, 31));
         habit.IsCompleted.Should().BeTrue();
@@ -793,16 +793,15 @@ public class HabitTests
     [Fact]
     public void Create_Flexible_WithFrequency_ReturnsSuccess()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit.Week,
             3,
-            DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
-            IsFlexible: true));
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.IsFlexible.Should().BeTrue();
+        result.Value.Schedule.Should().Be(HabitSchedule.Flexible);
         result.Value.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         result.Value.FrequencyQuantity.Should().Be(3);
     }
@@ -810,13 +809,12 @@ public class HabitTests
     [Fact]
     public void Create_Flexible_WithoutFrequencyUnit_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit: null,
             FrequencyQuantity: null,
-            DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
-            IsFlexible: true));
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Flexible habits must have a frequency unit");
@@ -827,14 +825,13 @@ public class HabitTests
     {
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
 
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit.Week,
             3,
             DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
-            Days: days,
-            IsFlexible: true));
+            Days: days));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Flexible habits cannot have specific days set");
@@ -843,23 +840,22 @@ public class HabitTests
     [Fact]
     public void Create_Flexible_DefaultsFalse()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.IsFlexible.Should().BeFalse();
+        result.Value.Schedule.Should().NotBe(HabitSchedule.Flexible);
     }
 
     [Fact]
     public void Log_FlexibleHabit_AllowsMultipleLogsPerDay()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit.Week,
             3,
-            DueDate: today,
-            IsFlexible: true));
+            DueDate: today));
         var habit = result.Value;
 
         var log1 = habit.Log(today);
@@ -874,13 +870,12 @@ public class HabitTests
     public void Log_FlexibleHabit_DoesNotAdvanceDueDate()
     {
         var startDate = new DateOnly(2025, 1, 6);
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit.Week,
             3,
-            DueDate: startDate,
-            IsFlexible: true));
+            DueDate: startDate));
         var habit = result.Value;
 
         habit.Log(startDate);
@@ -911,42 +906,39 @@ public class HabitTests
             days: days);
         habit.Days.Should().HaveCount(2);
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.Flexible,
             "Exercise",
             null,
             FrequencyUnit.Week,
             3,
             Days: null,
             IsBadHabit: false,
-            DueDate: null,
-            IsFlexible: true));
+            DueDate: null));
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsFlexible.Should().BeTrue();
+        habit.Schedule.Should().Be(HabitSchedule.Flexible);
         habit.Days.Should().BeEmpty();
     }
 
     [Fact]
     public void Update_FlexibleWithDays_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit.Week,
             3,
-            DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
-            IsFlexible: true));
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
         var habit = result.Value;
 
-        var updateResult = habit.Update(new HabitUpdateParams(
+        var updateResult = habit.Update(new HabitUpdateParams(HabitSchedule.Flexible,
             "Exercise",
             null,
             FrequencyUnit.Week,
             3,
             Days: new[] { DayOfWeek.Monday },
             IsBadHabit: false,
-            DueDate: null,
-            IsFlexible: true));
+            DueDate: null));
 
         updateResult.IsFailure.Should().BeTrue();
         updateResult.Error.Should().Contain("Flexible habits cannot have specific days set");
@@ -955,24 +947,22 @@ public class HabitTests
     [Fact]
     public void Update_FlexibleWithoutFrequency_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             ValidUserId,
             "Exercise",
             FrequencyUnit.Week,
             3,
-            DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
-            IsFlexible: true));
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
         var habit = result.Value;
 
-        var updateResult = habit.Update(new HabitUpdateParams(
+        var updateResult = habit.Update(new HabitUpdateParams(HabitSchedule.Flexible,
             "Exercise",
             null,
             FrequencyUnit: null,
             FrequencyQuantity: null,
             Days: null,
             IsBadHabit: false,
-            DueDate: null,
-            IsFlexible: true));
+            DueDate: null));
 
         updateResult.IsFailure.Should().BeTrue();
         updateResult.Error.Should().Contain("Flexible habits must have a frequency unit");
@@ -987,7 +977,7 @@ public class HabitTests
             new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))
         };
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             ScheduledReminders: reminders));
 
         result.IsSuccess.Should().BeTrue();
@@ -997,7 +987,7 @@ public class HabitTests
     [Fact]
     public void Create_WithEmptyScheduledReminders_DefaultsToEmpty()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ScheduledReminders.Should().BeEmpty();
@@ -1010,7 +1000,7 @@ public class HabitTests
             .Select(i => new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8 + i, 0)))
             .ToList();
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             ScheduledReminders: reminders));
 
         result.IsFailure.Should().BeTrue();
@@ -1026,7 +1016,7 @@ public class HabitTests
             new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))
         };
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             ScheduledReminders: reminders));
 
         result.IsFailure.Should().BeTrue();
@@ -1042,7 +1032,7 @@ public class HabitTests
             new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))
         };
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null,
             ScheduledReminders: reminders));
 
         result.IsSuccess.Should().BeTrue();
@@ -1058,7 +1048,7 @@ public class HabitTests
             .Select(i => new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8 + i, 0)))
             .ToList();
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null,
             ScheduledReminders: reminders));
 
         result.IsFailure.Should().BeTrue();
@@ -1072,10 +1062,10 @@ public class HabitTests
         {
             new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))
         };
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             ScheduledReminders: reminders)).Value;
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null,
             ScheduledReminders: null));
 
         result.IsSuccess.Should().BeTrue();
@@ -1087,7 +1077,7 @@ public class HabitTests
     {
         var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes).ToList();
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             ReminderTimes: reminderTimes));
 
         result.IsSuccess.Should().BeTrue();
@@ -1099,7 +1089,7 @@ public class HabitTests
     {
         var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes + 1).ToList();
 
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             ReminderTimes: reminderTimes));
 
         result.IsFailure.Should().BeTrue();
@@ -1112,7 +1102,7 @@ public class HabitTests
         var habit = CreateValidHabit();
         var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes).ToList();
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null,
             ReminderTimes: reminderTimes));
 
         result.IsSuccess.Should().BeTrue();
@@ -1125,7 +1115,7 @@ public class HabitTests
         var habit = CreateValidHabit();
         var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes + 1).ToList();
 
-        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Exercise", null, FrequencyUnit.Day, 1, null, false, null,
             ReminderTimes: reminderTimes));
 
         result.IsFailure.Should().BeTrue();
@@ -1135,7 +1125,7 @@ public class HabitTests
     [Fact]
     public void Create_DueTimeWithScheduledReminders_FoldsEveryClockReminder()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0),
             ReminderTimes: [30],
@@ -1163,7 +1153,7 @@ public class HabitTests
     [Fact]
     public void Create_DueTimeWithRelativeClockReminder_HasNoImplicitOffset()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0),
             RelativeReminders: [new RelativeReminderTime(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(8, 45))])).Value;
@@ -1175,7 +1165,7 @@ public class HabitTests
     [Fact]
     public void Create_InvalidSignedOffset_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0),
             RelativeReminders: [new RelativeReminderTime(MinutesBefore: -1440)]));
@@ -1189,7 +1179,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             RelativeReminders: [new RelativeReminderTime(MinutesBefore: -60)]));
 
@@ -1201,12 +1191,12 @@ public class HabitTests
     public void Update_MixedHabitWithNoReminderFields_FoldsExistingScheduledReminders()
     {
         var habit = CreateValidHabit();
-        var first = habit.Update(new HabitUpdateParams(
+        var first = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             ScheduledReminders: [new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))]));
         first.IsSuccess.Should().BeTrue();
 
-        var second = habit.Update(new HabitUpdateParams(
+        var second = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             DueTime: new TimeOnly(9, 0)));
 
@@ -1219,12 +1209,12 @@ public class HabitTests
     [Fact]
     public void Update_LegacyScheduledEdit_ReplacesRelativeClockReminders()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0),
             ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             DueTime: habit.DueTime,
             ScheduledReminders: [new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))]));
@@ -1238,13 +1228,13 @@ public class HabitTests
     [Fact]
     public void Update_LegacyEmptyScheduledEdit_ClearsClockRulesAndLegacyRead()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderTimes: [30],
             RelativeReminders: [new RelativeReminderTime(When: ScheduledReminderWhen.SameDay, Time: new TimeOnly(8, 45))])).Value;
         habit.GetScheduledRemindersForLegacyClients().Should().ContainSingle();
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             DueTime: habit.DueTime, ScheduledReminders: []));
 
@@ -1258,11 +1248,11 @@ public class HabitTests
     public void Update_LegacyScheduledEditWithExistingClock_KeepsClockRules()
     {
         var clock = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 45));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderTimes: [30], ScheduledReminders: [clock])).Value;
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             DueTime: habit.DueTime, ScheduledReminders: [clock]));
 
@@ -1276,11 +1266,11 @@ public class HabitTests
     {
         var oldClock = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 45));
         var newClock = new RelativeReminderTime(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(20, 0));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ScheduledReminders: [oldClock])).Value;
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title, habit.Description, FrequencyUnit.Day, 1, null, false, null,
             DueTime: habit.DueTime, ScheduledReminders: [oldClock], RelativeReminders: [newClock]));
 
@@ -1294,7 +1284,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Updated Title",
             "New Description",
             FrequencyUnit.Week,
@@ -1307,9 +1297,7 @@ public class HabitTests
             ReminderEnabled: true,
             ReminderTimes: ReminderTimes5And10,
             SlipAlertEnabled: true,
-            ChecklistItems: SingleChecklistItem,
-            IsGeneral: false,
-            IsFlexible: false));
+            ChecklistItems: SingleChecklistItem));
 
         result.IsSuccess.Should().BeTrue();
         habit.Title.Should().Be("Updated Title");
@@ -1334,13 +1322,13 @@ public class HabitTests
     [InlineData(null, 10, true)]
     public void Update_TimeRange_ValidatesResultingValues(int? startHour, int? endHour, bool succeeds)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             Guid.NewGuid(), "Exercise", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(10, 0))).Value;
         TimeOnly? start = startHour.HasValue ? new TimeOnly(startHour.Value, 0) : null;
         TimeOnly? end = endHour.HasValue ? new TimeOnly(endHour.Value, 0) : null;
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title, habit.Description, habit.FrequencyUnit, habit.FrequencyQuantity,
             null, false, null, DueTime: start, DueEndTime: end));
 
@@ -1354,7 +1342,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Exercise", null, FrequencyUnit.Day, 1, null, false, null,
             DueTime: new TimeOnly(10, 0),
             DueEndTime: new TimeOnly(9, 0)));
@@ -1368,12 +1356,11 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
-            "General Habit", null, null, null, null, false, null,
-            IsGeneral: true));
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.General,
+            "General Habit", null, null, null, null, false, null));
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsGeneral.Should().BeTrue();
+        habit.Schedule.Should().Be(HabitSchedule.General);
         habit.FrequencyUnit.Should().BeNull();
     }
 
@@ -1382,9 +1369,8 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
-            "General Habit", null, FrequencyUnit.Day, 1, null, false, null,
-            IsGeneral: true));
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.General,
+            "General Habit", null, FrequencyUnit.Day, 1, null, false, null));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("General habits cannot have a frequency");
@@ -1395,9 +1381,8 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        var result = habit.Update(new HabitUpdateParams(
-            "General Bad", null, null, null, null, true, null,
-            IsGeneral: true));
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.General,
+            "General Bad", null, null, null, null, true, null));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("General habits cannot be bad habits");
@@ -1408,7 +1393,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        habit.Update(new HabitUpdateParams("  Trimmed  ", null, FrequencyUnit.Day, 1, null, false, null));
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "  Trimmed  ", null, FrequencyUnit.Day, 1, null, false, null));
 
         habit.Title.Should().Be("Trimmed");
     }
@@ -1418,7 +1403,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
 
-        habit.Update(new HabitUpdateParams("Title", "  Trimmed Desc  ", FrequencyUnit.Day, 1, null, false, null));
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Title", "  Trimmed Desc  ", FrequencyUnit.Day, 1, null, false, null));
 
         habit.Description.Should().Be("Trimmed Desc");
     }
@@ -1429,7 +1414,7 @@ public class HabitTests
         var dueDate = new DateOnly(2026, 3, 15);
         var habit = CreateValidHabit(dueDate: dueDate);
 
-        habit.Update(new HabitUpdateParams("Title", null, FrequencyUnit.Day, 1, null, false, null));
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Title", null, FrequencyUnit.Day, 1, null, false, null));
 
         habit.NextDueDate.Should().Be(dueDate);
     }
@@ -1485,7 +1470,7 @@ public class HabitTests
     [Fact]
     public void CatchUpDueDate_WithEndDate_MarksCompletedWhenPastEnd()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2025, 1, 1), EndDate: new DateOnly(2025, 1, 5))).Value;
 
         habit.CatchUpDueDate(new DateOnly(2025, 1, 10));
@@ -1588,7 +1573,7 @@ public class HabitTests
     [InlineData(DomainConstants.MaxIntervalWeeks)]
     public void Create_ValidIntervalWeeks_Succeeds(int? intervalWeeks)
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Day,
@@ -1606,7 +1591,7 @@ public class HabitTests
     [InlineData(DomainConstants.MaxIntervalWeeks + 1)]
     public void Create_InvalidIntervalWeeks_Fails(int intervalWeeks)
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Day,
@@ -1623,7 +1608,7 @@ public class HabitTests
     public void AdvanceDueDate_FixedInterval_SkipsInactiveWeek()
     {
         var tuesday = new DateOnly(2025, 1, 7);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Day,
@@ -1643,7 +1628,7 @@ public class HabitTests
     public void DueDateAdvancement_DisjointRecurrencePhases_ReturnsFailureWithoutChangingDueDate(bool catchUp)
     {
         var anchor = new DateOnly(2025, 1, 6);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Week,
@@ -1671,7 +1656,7 @@ public class HabitTests
     [Fact]
     public void CatchUpDueDate_SundayStartAtDateOnlyMinValue_ReturnsFailureWithoutChangingDueDate()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Day,
@@ -1692,7 +1677,7 @@ public class HabitTests
     {
         var originalDueDate = new DateOnly(2025, 1, 6);
         var currentDueDate = originalDueDate.AddDays(14);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Week,
@@ -1701,7 +1686,7 @@ public class HabitTests
             IntervalWeeks: 2)).Value;
         habit.AdvanceDueDate(originalDueDate, weekStartDay: 1);
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -1722,7 +1707,7 @@ public class HabitTests
     {
         var originalDueDate = new DateOnly(2025, 1, 6);
         var currentDueDate = originalDueDate.AddDays(7);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Week,
@@ -1730,7 +1715,7 @@ public class HabitTests
             originalDueDate)).Value;
         habit.AdvanceDueDate(originalDueDate, weekStartDay: 1);
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title,
             habit.Description,
             FrequencyUnit.Week,
@@ -1755,7 +1740,7 @@ public class HabitTests
     {
         var originalDueDate = new DateOnly(2025, 1, 6);
         var rescheduledDueDate = originalDueDate.AddDays(7);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Week,
@@ -1763,7 +1748,7 @@ public class HabitTests
             originalDueDate,
             IntervalWeeks: 2)).Value;
 
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -1785,14 +1770,14 @@ public class HabitTests
     {
         var originalDueDate = new DateOnly(2025, 1, 6);
         var rescheduledDueDate = originalDueDate.AddDays(7);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Run",
             FrequencyUnit.Week,
             2,
             originalDueDate,
             IntervalWeeks: 2)).Value;
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -1814,7 +1799,7 @@ public class HabitTests
     public void Update_ValidIntervalWeeks_Succeeds(int? intervalWeeks)
     {
         var habit = CreateValidHabit();
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -1834,7 +1819,7 @@ public class HabitTests
     public void Update_InvalidIntervalWeeks_Fails(int intervalWeeks)
     {
         var habit = CreateValidHabit();
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule,
             habit.Title,
             habit.Description,
             habit.FrequencyUnit,
@@ -1852,8 +1837,8 @@ public class HabitTests
     public void SkipFlexible_FlexibleHabit_CreatesSkipLog()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flexible", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            ValidUserId, "Flexible", FrequencyUnit.Week, 3, DueDate: today)).Value;
 
         var result = habit.SkipFlexible(today);
 
@@ -1877,8 +1862,8 @@ public class HabitTests
     public void SkipFlexible_OneTimeTask_ReturnsFailure()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Task", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            ValidUserId, "Task", FrequencyUnit.Week, 3, DueDate: today)).Value;
 
         var result = habit.SkipFlexible(today);
         result.IsSuccess.Should().BeTrue();
@@ -1888,8 +1873,8 @@ public class HabitTests
     public void Log_FlexibleHabit_MultipleLogsOnSameDay_AllSucceed()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flex", FrequencyUnit.Week, 5, DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            ValidUserId, "Flex", FrequencyUnit.Week, 5, DueDate: today)).Value;
 
         for (int i = 0; i < 5; i++)
         {
@@ -1910,7 +1895,7 @@ public class HabitTests
             new("Step 1", true),
             new("Step 2", true)
         };
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Routine", FrequencyUnit.Day, 1, DueDate: today,
             ChecklistItems: checklist)).Value;
 
@@ -1924,8 +1909,8 @@ public class HabitTests
     [InlineData(false, false)]
     public void Log_RecurringChecklist_ResetsForFlexibleAndWithoutAdvance(bool isFlexible, bool advanceDueDate)
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
-            DueDate: Today, IsFlexible: isFlexible,
+        var habit = Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : HabitSchedule.Recurring, ValidUserId, "Routine", FrequencyUnit.Day, 1,
+            DueDate: Today,
             ChecklistItems: [new ChecklistItem("Step", true)])).Value;
 
         habit.Log(Today, advanceDueDate: advanceDueDate).IsSuccess.Should().BeTrue();
@@ -1936,7 +1921,7 @@ public class HabitTests
     [Fact]
     public void Log_OneTimeChecklist_KeepsChecks()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Task", null, null,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, ValidUserId, "Task", null, null,
             DueDate: Today, ChecklistItems: [new ChecklistItem("Step", true)])).Value;
 
         habit.Log(Today).IsSuccess.Should().BeTrue();
@@ -1947,8 +1932,8 @@ public class HabitTests
     [Fact]
     public void Create_GeneralWithEndDate_Fails()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "General", null, null,
-            DueDate: Today, IsGeneral: true, EndDate: Today.AddDays(1)));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.General, ValidUserId, "General", null, null,
+            DueDate: Today, EndDate: Today.AddDays(1)));
 
         result.IsFailure.Should().BeTrue();
     }
@@ -1958,8 +1943,8 @@ public class HabitTests
     {
         var habit = CreateGeneralHabit();
 
-        var result = habit.Update(new HabitUpdateParams("General", null, null, null, null, false,
-            Today, IsGeneral: true, EndDate: Today.AddDays(1)));
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.General, "General", null, null, null, null, false,
+            Today, EndDate: Today.AddDays(1)));
 
         result.IsFailure.Should().BeTrue();
         habit.EndDate.Should().BeNull();
@@ -1973,8 +1958,8 @@ public class HabitTests
             ?? throw new InvalidOperationException("Habit.EndDate was not found");
         endDateProperty.SetValue(habit, Today.AddDays(1));
 
-        var result = habit.Update(new HabitUpdateParams("General", null, null, null, null, false,
-            Today, IsGeneral: true));
+        var result = habit.Update(new HabitUpdateParams(HabitSchedule.General, "General", null, null, null, null, false,
+            Today));
 
         result.IsSuccess.Should().BeTrue();
         habit.EndDate.Should().BeNull();
@@ -1983,7 +1968,7 @@ public class HabitTests
     [Fact]
     public void Create_RecurringWithEndDate_Succeeds()
     {
-        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Routine", FrequencyUnit.Day, 1,
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Routine", FrequencyUnit.Day, 1,
             DueDate: Today, EndDate: Today.AddDays(1)));
 
         result.IsSuccess.Should().BeTrue();
@@ -2094,18 +2079,18 @@ public class HabitTests
     [Fact]
     public void Create_GeneralHabit_Success()
     {
-        var result = Habit.Create(new HabitCreateParams(
-            ValidUserId, "General", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), IsGeneral: true));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            ValidUserId, "General", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.IsGeneral.Should().BeTrue();
+        result.Value.Schedule.Should().Be(HabitSchedule.General);
     }
 
     [Fact]
     public void Create_GeneralWithFrequency_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
-            ValidUserId, "General", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), IsGeneral: true));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            ValidUserId, "General", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("General habits cannot have a frequency");
@@ -2114,8 +2099,8 @@ public class HabitTests
     [Fact]
     public void Create_GeneralBadHabit_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
-            ValidUserId, "General Bad", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), IsGeneral: true, IsBadHabit: true));
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            ValidUserId, "General Bad", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), IsBadHabit: true));
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("General habits cannot be bad habits");
@@ -2124,7 +2109,7 @@ public class HabitTests
     [Fact]
     public void Create_DueEndTimeBeforeDueTime_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             DueTime: new TimeOnly(10, 0), DueEndTime: new TimeOnly(9, 0)));
@@ -2136,7 +2121,7 @@ public class HabitTests
     [Fact]
     public void Create_WithAllOptions_Success()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Full Habit", FrequencyUnit.Day, 1,
             Description: "Full description",
             DueDate: new DateOnly(2026, 1, 1),
@@ -2160,8 +2145,8 @@ public class HabitTests
     public void Unlog_FlexibleHabit_SoftDeletesLogButDoesNotResetDueDate()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flex", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            ValidUserId, "Flex", FrequencyUnit.Week, 3, DueDate: today)).Value;
         habit.Log(today);
         var originalDueDate = habit.NextDueDate;
 
@@ -2179,7 +2164,7 @@ public class HabitTests
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
         var userToday = utcToday.AddDays(1);
 
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Meditate", FrequencyUnit.Day, 1, DueDate: userToday));
 
         result.IsSuccess.Should().BeTrue();
@@ -2192,7 +2177,7 @@ public class HabitTests
     {
         var providedDueDate = new DateOnly(2026, 1, 31);
 
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId, "Pay rent", FrequencyUnit.Month, 1, DueDate: providedDueDate));
 
         result.IsSuccess.Should().BeTrue();
@@ -2203,7 +2188,7 @@ public class HabitTests
     [Fact]
     public void Create_RecurringUnitWithoutQuantity_ReturnsFailure()
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             "Invalid recurrence",
             FrequencyUnit.Day,
@@ -2218,7 +2203,7 @@ public class HabitTests
     public void Update_RecurringHabitWithNullQuantity_ReturnsFailureWithoutMutation()
     {
         var habit = CreateValidHabit();
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title,
             habit.Description,
             FrequencyUnit.Day,
@@ -2236,7 +2221,7 @@ public class HabitTests
     public void Update_OneTimeHabitWithRecurringUnitAndNoQuantity_ReturnsFailureWithoutMutation()
     {
         var habit = CreateOneTimeHabit(Today);
-        var result = habit.Update(new HabitUpdateParams(
+        var result = habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             habit.Title,
             habit.Description,
             FrequencyUnit.Day,

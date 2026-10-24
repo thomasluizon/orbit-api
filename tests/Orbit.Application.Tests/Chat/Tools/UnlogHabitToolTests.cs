@@ -153,7 +153,7 @@ public sealed class UnlogHabitToolTests
     }
 
     private static Habit CreateHabit(bool oneTime = false, Guid? userId = null) =>
-        Habit.Create(new HabitCreateParams(userId ?? UserId, "Beber água", oneTime ? null : FrequencyUnit.Day,
+        Habit.Create(new HabitCreateParams(((FrequencyUnit?)(oneTime ? null : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, userId ?? UserId, "Beber água", oneTime ? null : FrequencyUnit.Day,
             oneTime ? null : 1, Today)).Value;
 
     private static JsonElement Args(Guid habitId, DateOnly? date = null) => date is { } value

@@ -57,7 +57,7 @@ public class RestoreHabitCommandHandlerTests
 
     private static Habit CreateHabit(Guid? parentId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: parentId)).Value;
     }
 
@@ -177,7 +177,7 @@ public class RestoreHabitCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedRootRestore_DoesNotConsumeLiveRootAllowance()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Completed", null, null, DueDate: Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));

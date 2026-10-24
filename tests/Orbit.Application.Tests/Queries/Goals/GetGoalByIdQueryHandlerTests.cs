@@ -164,7 +164,7 @@ public class GetGoalByIdQueryHandlerTests
         var goal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Doom scrolling", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(-1))).Value;
 
@@ -183,8 +183,8 @@ public class GetGoalByIdQueryHandlerTests
     public async Task Handle_LinkedStandardAtTarget_RefreshesValueAndLeavesCompletionForHostedSweep()
     {
         var goal = Goal.Create(UserId, "Exercise twice", 2, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         habit.Log(Today);
         habit.Log(Today);
         goal.AddHabit(habit);

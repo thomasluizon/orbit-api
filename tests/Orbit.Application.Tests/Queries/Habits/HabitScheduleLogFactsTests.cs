@@ -12,9 +12,8 @@ public class HabitScheduleLogFactsTests
     private static readonly DateOnly DueDate = new(2026, 6, 1);
 
     private static Habit CreateHabit(bool isFlexible = true, int quantity = 3, int? intervalWeeks = null) =>
-        Habit.Create(new HabitCreateParams(
-            UserId, "Weekly habit", FrequencyUnit.Week, quantity, DueDate,
-            IsFlexible: isFlexible, IntervalWeeks: intervalWeeks)).Value;
+        Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : HabitSchedule.Recurring,
+            UserId, "Weekly habit", FrequencyUnit.Week, quantity, DueDate, IntervalWeeks: intervalWeeks)).Value;
 
     [Fact]
     public void ResolvedDates_ContainsCompletedAndSkippedDaysOnlyForTheRequestedHabit()
@@ -160,11 +159,11 @@ public class HabitScheduleLogFactsTests
         bool flexible, string logKind, bool visible)
     {
         var selectedDate = DueDate.AddDays(1);
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Parent", null, null, DueDate.AddDays(10))).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Week, 3, selectedDate.AddDays(1),
-            ParentHabitId: parent.Id, IsFlexible: flexible)).Value;
+            ParentHabitId: parent.Id)).Value;
         if (logKind == "skip")
             child.SkipFlexible(selectedDate).IsSuccess.Should().BeTrue();
         if (logKind is "completion" or "deleted-completion")

@@ -40,7 +40,7 @@ public class CheckReferralCompletionCommandHandlerTests : IDisposable
         _referral = Referral.Create(_referrer.Id, _referred.Id);
         SetCreated(_referred, _nowAtUtc.AddDays(-3));
         SetCreated(_referral, _nowAtUtc.AddDays(-3));
-        _habit = Habit.Create(new HabitCreateParams(_referred.Id, "Habit", FrequencyUnit.Day, 1,
+        _habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _referred.Id, "Habit", FrequencyUnit.Day, 1,
             DueDate: DateOnly.FromDateTime(_nowAtUtc))).Value;
         _db.AddRange(_referrer, _referred, _referral, _habit);
         _db.SaveChanges();

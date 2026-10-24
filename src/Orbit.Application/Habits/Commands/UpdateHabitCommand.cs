@@ -88,7 +88,7 @@ public class UpdateHabitCommandHandler(
         Guid habitId,
         IReadOnlyList<Guid>? goalIds,
         IReadOnlyList<Guid>? tagIds,
-        Func<Habit, DateOnly, HabitUpdateParams> resolveUpdate,
+        Func<Habit, DateOnly, Result<HabitUpdateParams>> resolveUpdate,
         bool validateFields,
         Guid? requestedParentId,
         bool? clearParent,
@@ -113,7 +113,10 @@ public class UpdateHabitCommandHandler(
         if (habit.IsDeleted)
             return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var update = resolveUpdate(habit, today);
+        var resolvedUpdate = resolveUpdate(habit, today);
+        if (resolvedUpdate.IsFailure)
+            return resolvedUpdate.PropagateError<UpdateState>();
+        var update = resolvedUpdate.Value;
         if (habit.RequiresScheduleReanchor(update))
         {
             update = update with { WeekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken) };
@@ -164,7 +167,7 @@ public class UpdateHabitCommandHandler(
         if (clearParent == true && requestedParentId.HasValue)
             return Result.Failure<Guid?>(new AppError(ErrorCodes.ValidationError, ErrorCopy.English(ErrorCodes.ValidationError)));
         var finalParentId = clearParent == true ? null : requestedParentId ?? habit.ParentHabitId;
-        var finalIsGeneral = update.IsGeneral ?? habit.Schedule == HabitSchedule.General;
+        var finalIsGeneral = update.Schedule == HabitSchedule.General;
 
         if (requestedParentId.HasValue)
         {
@@ -177,7 +180,7 @@ public class UpdateHabitCommandHandler(
                 return moveValidation.PropagateError<Guid?>();
         }
 
-        if (!validateFields && (update.IsGeneral.HasValue || requestedParentId.HasValue || clearParent == true))
+        if (!validateFields && (update.Schedule != habit.Schedule || update.ResetCompletion || requestedParentId.HasValue || clearParent == true))
         {
             var related = await HabitUpdateValidation.LoadRelatedAsync([habit], userId, habitRepository, cancellationToken);
             var generalMismatch = HabitUpdateValidation.ValidateGeneral(habit, finalIsGeneral, related, finalParentId);
@@ -208,10 +211,15 @@ public class UpdateHabitCommandHandler(
             : Result.Success<TagLinks?>(new TagLinks(tags, maxTags));
     }
 
-    private static HabitUpdateParams ResolveUpdate(UpdateHabitCommand request, Habit habit, DateOnly today)
+    private static Result<HabitUpdateParams> ResolveUpdate(UpdateHabitCommand request, Habit habit, DateOnly today)
     {
         var opts = request.Options ?? new UpdateHabitCommandOptions();
-        return new HabitUpdateParams(
+        var schedule = LegacyHabitSchedule.Resolve(request.IsGeneral ?? habit.Schedule == HabitSchedule.General,
+            opts.IsFlexible ?? habit.Schedule == HabitSchedule.Flexible, request.FrequencyUnit,
+            request.FrequencyQuantity, request.IsBadHabit, opts.Days, request.IntervalWeeks ?? habit.IntervalWeeks);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<HabitUpdateParams>();
+        return Result.Success(new HabitUpdateParams(schedule.Value,
             request.Title,
             request.Description,
             request.FrequencyUnit,
@@ -225,8 +233,6 @@ public class UpdateHabitCommandHandler(
             ReminderTimes: opts.ReminderTimes,
             SlipAlertEnabled: opts.SlipAlertEnabled,
             ChecklistItems: opts.ChecklistItems,
-            IsGeneral: request.IsGeneral,
-            IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ClearEndDate: request.ClearEndDate,
             ScheduledReminders: opts.ScheduledReminders,
@@ -234,7 +240,8 @@ public class UpdateHabitCommandHandler(
             Emoji: request.Emoji,
             UserToday: today,
             IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks,
-            StartDate: request.StartDate);
+            StartDate: request.StartDate,
+            ResetCompletion: request.IsGeneral == true));
 
     }
 

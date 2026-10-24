@@ -98,7 +98,7 @@ public class GetGoalMetricsQueryHandlerTests
             "days",
             Type: GoalType.Streak)).Value;
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Doom scrolling",
             FrequencyUnit.Day,
@@ -123,7 +123,7 @@ public class GetGoalMetricsQueryHandlerTests
     public async Task Handle_LinkedStandardGoal_CalculatesMetricsFromFreshValueWithoutCompleting()
     {
         var goal = Goal.Create(UserId, "Read books", 10, "books").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Read",
             FrequencyUnit.Day,

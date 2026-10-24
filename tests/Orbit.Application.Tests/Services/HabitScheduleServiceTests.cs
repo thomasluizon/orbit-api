@@ -53,14 +53,13 @@ public class HabitScheduleServiceTests
         bool isFlexible = false,
         int? intervalWeeks = null)
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : HabitSchedule.Recurring,
             UserId,
             "Test Habit",
             unit,
             qty,
             DueDate: dueDate ?? Anchor,
             Days: days,
-            IsFlexible: isFlexible,
             IntervalWeeks: intervalWeeks));
 
         return result.Value;
@@ -366,7 +365,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_AfterEndDate_False()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Anchor, EndDate: new DateOnly(2025, 1, 10))).Value;
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 11)).Should().BeFalse();
     }
@@ -374,7 +373,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_OnEndDate_True()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Anchor, EndDate: new DateOnly(2025, 1, 10))).Value;
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 10)).Should().BeTrue();
     }
@@ -382,7 +381,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_BeforeEndDate_True()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Anchor, EndDate: new DateOnly(2025, 1, 10))).Value;
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 8)).Should().BeTrue();
     }
@@ -390,7 +389,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void GetScheduledDates_RespectsEndDate()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Anchor, EndDate: new DateOnly(2025, 1, 8))).Value;
         var dates = HabitScheduleService.GetScheduledDates(habit, new DateOnly(2025, 1, 6), new DateOnly(2025, 1, 10));
         dates.Should().HaveCount(3);
@@ -714,7 +713,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_MonthlyQty1_AnchorDay31_ShortMonth_ClampsToLastDay()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Month, 1, DueDate: new DateOnly(2025, 1, 31))).Value;
 
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 28)).Should().BeTrue();
@@ -742,7 +741,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_Yearly_LeapDayAnchor_NonLeapYear_FallsBackToFeb28()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Year, 1, DueDate: new DateOnly(2024, 2, 29))).Value;
 
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 28)).Should().BeTrue();
@@ -771,7 +770,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void HasMissedPastOccurrence_BadHabit_ReturnsFalse()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Anchor)).Value;
 
         HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(5), weekStartDay: 1).Should().BeFalse();
@@ -830,8 +829,8 @@ public class HabitScheduleServiceTests
     [Fact]
     public void HasMissedPastOccurrence_FlexibleHabit_ReturnsFalse()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flex", FrequencyUnit.Week, 3, IsFlexible: true, DueDate: Anchor)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flex", FrequencyUnit.Week, 3, DueDate: Anchor)).Value;
 
         HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(10), weekStartDay: 1).Should().BeFalse();
     }
@@ -848,7 +847,7 @@ public class HabitScheduleServiceTests
     public void HasMissedPastOccurrence_AncientEndedHabitWithoutActiveOccurrence_ReturnsFalse()
     {
         var anchor = new DateOnly(100, 1, 4);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Ancient", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
@@ -979,7 +978,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void GetInstances_CompletedHabit_ReturnsEmpty()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Test", null, null, DueDate: Anchor)).Value;
         habit.Log(Anchor);
         var instances = HabitScheduleService.GetInstances(habit, Anchor, Anchor.AddDays(7), Anchor);
@@ -1000,7 +999,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void GetInstances_OneTimeTask_InRange_ReturnsSingleInstance()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Test", null, null, DueDate: Anchor)).Value;
 
         var instances = HabitScheduleService.GetInstances(
@@ -1013,7 +1012,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void GetInstances_OneTimeTask_OutOfRange_ReturnsEmpty()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Test", null, null, DueDate: Anchor)).Value;
 
         var instances = HabitScheduleService.GetInstances(
@@ -1212,7 +1211,7 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsOverdueOnDate_BadHabit_ReturnsFalse()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Anchor)).Value;
 
         HabitScheduleService.IsOverdueOnDate(habit, Anchor.AddDays(5)).Should().BeFalse();
@@ -1222,7 +1221,7 @@ public class HabitScheduleServiceTests
     public async Task AdvanceStaleBadHabitDueDates_StaleDailyBadHabit_LandsOnTodayAndStaysDue()
     {
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: today.AddDays(-1))).Value;
         var (repo, unitOfWork) = SetupRepositoryReturning(habit);
 
@@ -1237,7 +1236,7 @@ public class HabitScheduleServiceTests
     public async Task AdvanceStaleBadHabitDueDates_AlreadyDueToday_DoesNotOvershoot()
     {
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: today)).Value;
         var (repo, unitOfWork) = SetupRepositoryReturning(habit);
 
@@ -1254,7 +1253,7 @@ public class HabitScheduleServiceTests
         {
             if (habit.EndDate.HasValue && target > habit.EndDate.Value)
                 continue;
-            if (habit.IsFlexible)
+            if ((habit.Schedule == HabitSchedule.Flexible))
             {
                 if (habit.FrequencyUnit is not null && target >= habit.NextDueDate)
                     dates.Add(target);

@@ -11,7 +11,7 @@ public class SiblingTitleDisambiguatorTests
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     private static Habit CreateHabit(string title) =>
-        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
     [Fact]
     public void EmptyInput_ReturnsEmpty()

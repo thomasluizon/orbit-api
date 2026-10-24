@@ -6,6 +6,7 @@ using Orbit.Domain.Models;
 namespace Orbit.Domain.Entities;
 
 public record HabitCreateParams(
+    HabitSchedule Schedule,
     Guid UserId,
     string Title,
     FrequencyUnit? FrequencyUnit,
@@ -21,8 +22,6 @@ public record HabitCreateParams(
     IReadOnlyList<int>? ReminderTimes = null,
     bool SlipAlertEnabled = false,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    bool IsGeneral = false,
-    bool IsFlexible = false,
     DateOnly? EndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     int? Position = null,
@@ -35,6 +34,7 @@ public record HabitCreateParams(
     int WeekStartDay = 1);
 
 public record HabitUpdateParams(
+    HabitSchedule Schedule,
     string Title,
     string? Description,
     FrequencyUnit? FrequencyUnit,
@@ -48,8 +48,7 @@ public record HabitUpdateParams(
     IReadOnlyList<int>? ReminderTimes = null,
     bool? SlipAlertEnabled = null,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    bool? IsGeneral = null,
-    bool? IsFlexible = null,
+    bool ResetCompletion = false,
     DateOnly? EndDate = null,
     bool? ClearEndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
@@ -94,8 +93,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public TimeOnly? DueEndTime { get; private set; }
     public bool ReminderEnabled { get; private set; }
     public IReadOnlyList<int> ReminderTimes { get; private set; } = [15];
-    public bool IsGeneral { get; private set; }
-    public bool IsFlexible { get; private set; }
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; private set; } = [];
@@ -175,8 +172,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         IsDeleted = snapshot.IsDeleted,
         IsBadHabit = snapshot.IsBadHabit,
         IsCompleted = snapshot.IsCompleted,
-        IsGeneral = snapshot.IsGeneral,
-        IsFlexible = snapshot.IsFlexible,
         Days = snapshot.Days.ToList(),
         Title = string.Empty
     };
@@ -209,8 +204,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         IsDeleted = candidate.IsDeleted;
         IsBadHabit = candidate.IsBadHabit;
         IsCompleted = candidate.IsCompleted;
-        IsGeneral = candidate.IsGeneral;
-        IsFlexible = candidate.IsFlexible;
         Days = candidate.Days.ToList();
     }
 
@@ -231,16 +224,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return Result.Failure<Habit>(emojiValidation);
 
         var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
-            p.IsGeneral, p.IsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
+            p.Schedule, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
         if (scheduleValidation is not null)
             return Result.Failure<Habit>(scheduleValidation);
 
-        var startValidation = HabitInvariants.ValidateStartDate(p.StartDate, p.IsGeneral, p.FrequencyUnit, p.EndDate);
+        var startValidation = HabitInvariants.ValidateStartDate(p.StartDate, p.Schedule == HabitSchedule.General, p.FrequencyUnit, p.EndDate);
         if (startValidation is not null)
             return Result.Failure<Habit>(startValidation);
 
         var dateValidation = HabitInvariants.ValidateDateOptions(
-            p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.IsGeneral, p.DueDate, p.CreatedAtUtc);
+            p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.Schedule == HabitSchedule.General, p.DueDate, p.CreatedAtUtc);
         if (dateValidation is not null)
             return Result.Failure<Habit>(dateValidation);
 
@@ -275,7 +268,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private static Habit CreateValidated(HabitCreateParams p)
     {
         var startDate = p.StartDate ?? p.DueDate;
-        var schedule = ResolveSchedule(p.IsGeneral, p.IsFlexible, p.FrequencyUnit);
+        var schedule = p.Schedule;
         return new Habit
         {
             UserId = p.UserId,
@@ -287,8 +280,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IntervalWeeks = p.IntervalWeeks,
             Days = schedule == HabitSchedule.Flexible ? [] : (p.Days?.ToList() ?? []),
             IsBadHabit = p.IsBadHabit,
-            IsGeneral = schedule == HabitSchedule.General,
-            IsFlexible = schedule == HabitSchedule.Flexible,
             NextDueDate = p.DueDate,
             StartDate = startDate,
             Schedule = schedule,
@@ -313,12 +304,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             CreatedAtUtc = ResolveCreatedAtUtc(p.CreatedAtUtc)
         };
     }
-
-    private static HabitSchedule ResolveSchedule(bool isGeneral, bool isFlexible, FrequencyUnit? frequencyUnit) =>
-        isGeneral ? HabitSchedule.General
-        : isFlexible ? HabitSchedule.Flexible
-        : frequencyUnit is null ? HabitSchedule.OneTime
-        : HabitSchedule.Recurring;
 
     private static DateTime ResolveCreatedAtUtc(DateTime? createdAtUtc) => createdAtUtc ?? DateTime.UtcNow;
 
@@ -778,11 +763,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private AppError? ValidateUpdateParams(HabitUpdateParams p)
     {
-        var effectiveIsGeneral = p.IsGeneral ?? Schedule == HabitSchedule.General;
-        var effectiveIsFlexible = p.IsFlexible ?? Schedule == HabitSchedule.Flexible;
+        var schedule = p.Schedule;
+        var effectiveIsGeneral = schedule == HabitSchedule.General;
 
         var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
-            effectiveIsGeneral, effectiveIsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
+            schedule, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks);
         if (scheduleValidation is not null)
             return scheduleValidation;
 
@@ -839,13 +824,13 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         FrequencyUnit != p.FrequencyUnit
         || FrequencyQuantity != p.FrequencyQuantity
         || IntervalWeeks != p.IntervalWeeks
-        || (Schedule == HabitSchedule.Flexible) != (p.IsFlexible ?? Schedule == HabitSchedule.Flexible)
-        || !Days.ToHashSet().SetEquals((p.IsFlexible ?? Schedule == HabitSchedule.Flexible) ? [] : p.Days ?? []);
+        || (Schedule == HabitSchedule.Flexible) != (p.Schedule == HabitSchedule.Flexible)
+        || !Days.ToHashSet().SetEquals(p.Schedule == HabitSchedule.Flexible ? [] : p.Days ?? []);
 
     private Result ApplyRequiredUpdates(HabitUpdateParams p)
     {
-        var schedule = ResolveSchedule(p.IsGeneral ?? Schedule == HabitSchedule.General,
-            p.IsFlexible ?? Schedule == HabitSchedule.Flexible, p.FrequencyUnit);
+        var schedule = p.Schedule;
+        var enteringGeneral = schedule == HabitSchedule.General && Schedule != schedule;
         var effectiveIsFlexible = schedule == HabitSchedule.Flexible;
         var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
         var effectiveDueDate = p.StartDate.HasValue ? NextDueDate : p.DueDate ?? NextDueDate;
@@ -857,6 +842,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         Description = p.Description?.Trim();
         Emoji = HabitInvariants.NormalizeEmoji(p.Emoji);
         Schedule = schedule;
+        if (enteringGeneral)
+            IsCompleted = false;
         FrequencyUnit = p.FrequencyUnit;
         FrequencyQuantity = p.FrequencyQuantity;
         IntervalWeeks = p.IntervalWeeks;
@@ -938,8 +925,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         Description = candidate.Description;
         Emoji = candidate.Emoji;
         Schedule = candidate.Schedule;
-        IsGeneral = Schedule == HabitSchedule.General;
-        IsFlexible = Schedule == HabitSchedule.Flexible;
         FrequencyUnit = candidate.FrequencyUnit;
         FrequencyQuantity = candidate.FrequencyQuantity;
         IntervalWeeks = candidate.IntervalWeeks;
@@ -956,7 +941,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     private void ApplyOptionalUpdates(HabitUpdateParams p)
     {
-        if (p.IsGeneral == true)
+        if (p.ResetCompletion)
             IsCompleted = false;
         if (p.ReminderEnabled.HasValue)
             ReminderEnabled = p.ReminderEnabled.Value;

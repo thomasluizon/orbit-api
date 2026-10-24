@@ -74,6 +74,6 @@ public class HabitScheduleReadTests
     }
 
     private static Habit CreateHabit(Guid userId) =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Habit", FrequencyUnit.Day, 1, DueDate)).Value;
 }

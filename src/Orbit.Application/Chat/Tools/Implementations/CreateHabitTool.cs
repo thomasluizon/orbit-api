@@ -1,3 +1,4 @@
+using Orbit.Application.Habits.Commands;
 using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using MediatR;
@@ -190,7 +191,12 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var reminderTimes = JsonArgumentParser.ParseIntArray(args, "reminder_times");
         var scheduledReminders = JsonArgumentParser.ParseScheduledReminders(args);
 
-        return Domain.Common.Result.Success(new HabitCreateParams(
+        var schedule = LegacyHabitSchedule.Resolve(JsonArgumentParser.GetOptionalBool(args, "is_general") ?? false, isFlexible,
+            frequencyUnit, frequencyQuantity, isBadHabit, days, intervalWeeks);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<HabitCreateParams>();
+
+        return Domain.Common.Result.Success(new HabitCreateParams(schedule.Value,
             userId, title, frequencyUnit, frequencyQuantity,
             HabitScheduleService.InitialDueDate(today, dueDate, JsonArgumentParser.ParseDateOnly(args, StartDate), days),
             JsonArgumentParser.GetOptionalString(args, "description"),
@@ -202,12 +208,10 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             ReminderTimes: reminderTimes,
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(args, "slip_alert_enabled") ?? isBadHabit,
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
-            IsFlexible: isFlexible,
             EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date"),
             ScheduledReminders: scheduledReminders,
             Emoji: JsonArgumentParser.GetOptionalString(args, "emoji"),
             IntervalWeeks: intervalWeeks,
-            IsGeneral: JsonArgumentParser.GetOptionalBool(args, "is_general") ?? false,
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
             StartDate: JsonArgumentParser.ParseDateOnly(args, StartDate)));
     }
@@ -247,10 +251,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var subDays = JsonArgumentParser.ParseDays(sub);
         var subDueDate = JsonArgumentParser.ParseDateOnly(sub, DueDate);
         var isOneTime = JsonArgumentParser.GetOptionalString(sub, "frequency_unit") == "OneTime";
-        var hasExplicitCadence = isOneTime || subFrequencyUnit is not null
-            || subFrequencyQuantity is not null
-            || subIntervalWeeks is not null
-            || subDays is not null;
+        var hasExplicitCadence = isOneTime || HasExplicitCadence(subFrequencyUnit, subFrequencyQuantity, subIntervalWeeks, subDays);
         var frequencyUnit = isOneTime ? null : subFrequencyUnit ?? parent.FrequencyUnit;
         var frequencyQuantity = isOneTime ? null : subFrequencyQuantity ?? (subFrequencyUnit is not null ? 1 : parent.FrequencyQuantity);
         if (isOneTime)
@@ -260,7 +261,12 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         if (subDays is null && subDueDate is null && frequencyUnit == FrequencyUnit.Day && frequencyQuantity == 1)
             subDays = parent.Days.ToList();
 
-        return Domain.Common.Result.Success(new HabitCreateParams(
+        var schedule = LegacyHabitSchedule.Resolve(parent.Schedule == HabitSchedule.General, isFlexible, frequencyUnit,
+            frequencyQuantity, JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false, subDays);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<HabitCreateParams>();
+
+        return Domain.Common.Result.Success(new HabitCreateParams(schedule.Value,
             userId,
             JsonArgumentParser.GetOptionalString(sub, TitleProperty) ?? "Untitled",
             frequencyUnit,
@@ -275,8 +281,6 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(sub, "reminder_enabled") ?? false,
             ReminderTimes: JsonArgumentParser.ParseIntArray(sub, "reminder_times"),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(sub, "slip_alert_enabled") ?? false,
-            IsFlexible: isFlexible,
-            IsGeneral: parent.Schedule == HabitSchedule.General,
             EndDate: JsonArgumentParser.ParseDateOnly(sub, "end_date"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(sub),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(sub),
@@ -284,6 +288,9 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
             IntervalWeeks: isOneTime ? null : subIntervalWeeks ?? (hasExplicitCadence ? null : parent.IntervalWeeks)));
     }
+
+    private static bool HasExplicitCadence(FrequencyUnit? unit, int? quantity, int? interval, IReadOnlyList<DayOfWeek>? days) =>
+        unit is not null || quantity is not null || interval is not null || days is not null;
 
     private static FrequencyUnit? NormalizeWeekdayUnit(
         FrequencyUnit? unit, int? quantity, IReadOnlyList<DayOfWeek>? days, bool isFlexible = false) =>

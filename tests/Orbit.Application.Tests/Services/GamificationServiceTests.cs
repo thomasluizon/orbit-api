@@ -86,7 +86,7 @@ public class GamificationServiceTests
 
     private static Habit CreateTestHabit(Guid? userId = null, bool isBadHabit = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: Today, IsBadHabit: isBadHabit)).Value;
 
@@ -102,7 +102,7 @@ public class GamificationServiceTests
     private static Habit CreateDailyHabitWithStreak(int streakDays)
     {
         var startDate = Today.AddDays(-(streakDays - 1));
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Daily", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Daily", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
 
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
 
@@ -117,7 +117,7 @@ public class GamificationServiceTests
     private static Habit CreateHabitWithNLogs(int logCount)
     {
         var startDate = Today.AddDays(-(logCount + 5));
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit with logs", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit with logs", FrequencyUnit.Day, 1,
             DueDate: startDate)).Value;
 
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
@@ -770,7 +770,7 @@ public class GamificationServiceTests
             AchievementDefinitions.BadHabitBreaker);
 
         var anchor = new DateOnly(2026, 3, 1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Biweekly Friday",
             FrequencyUnit.Day,
@@ -832,7 +832,7 @@ public class GamificationServiceTests
         SetupNoEarnedAchievements();
 
         var startDate = Today.AddDays(-30);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: startDate, IsBadHabit: true)).Value;
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
         SetupHabitWithLogs(habit);
@@ -862,7 +862,7 @@ public class GamificationServiceTests
         SetupNoEarnedAchievements();
 
         var startDate = Today.AddDays(-30);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: startDate, IsBadHabit: true)).Value;
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
         SetupHabitWithLogs(habit);

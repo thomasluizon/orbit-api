@@ -18,7 +18,7 @@ public sealed record HabitFieldSummary
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; init; } = [];
     public IReadOnlyList<RelativeReminderTime> RelativeReminders { get; init; } = [];
     public bool SlipAlertEnabled { get; init; }
-    public bool IsFlexible { get; init; }
+    public HabitSchedule Schedule { get; init; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; init; } = [];
 
     public static HabitFieldSummary From(Habit habit) => new()
@@ -34,7 +34,7 @@ public sealed record HabitFieldSummary
         ScheduledReminders = habit.ScheduledReminders,
         RelativeReminders = habit.RelativeReminders,
         SlipAlertEnabled = habit.SlipAlertEnabled,
-        IsFlexible = habit.Schedule == HabitSchedule.Flexible,
+        Schedule = habit.Schedule,
         ChecklistItems = habit.ChecklistItems
     };
 
@@ -54,7 +54,7 @@ public sealed record HabitFieldSummary
         if (RelativeReminders.Count > 0)
             fields.Add($"Relative reminders: {string.Join(", ", RelativeReminders.Select(FormatRelative))}");
         if (SlipAlertEnabled) fields.Add("Slip alerts: enabled");
-        if (IsFlexible) fields.Add("Flexible: true");
+        if (Schedule == HabitSchedule.Flexible) fields.Add("Flexible: true");
         if (ChecklistItems.Count > 0)
             fields.Add($"Checklist items: {string.Join(", ", ChecklistItems.Select(FormatChecklistItem))}");
         if (dueDate is { } due) fields.Add($"Due: {due.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");

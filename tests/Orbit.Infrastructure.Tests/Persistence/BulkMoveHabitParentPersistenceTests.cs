@@ -75,7 +75,7 @@ public class BulkMoveHabitParentPersistenceTests
         (await context.Habits.ToListAsync()).Should().OnlyContain(h => h.ParentHabitId == null);
     }
 
-    private static Habit Create(Guid userId, Guid? parent = null) => Habit.Create(new HabitCreateParams(
+    private static Habit Create(Guid userId, Guid? parent = null) => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
         userId, "Habit", FrequencyUnit.Day, 1, new DateOnly(2026, 3, 20), ParentHabitId: parent)).Value;
 
     private static BulkMoveHabitParentCommandHandler CreateHandler(

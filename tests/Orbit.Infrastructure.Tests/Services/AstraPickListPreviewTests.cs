@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
@@ -41,7 +42,7 @@ public class AstraPickListPreviewTests
         user.GrantLifetimePro();
         db.Users.Add(user);
         var today = new DateOnly(2026, 4, 3);
-        var habits = Enumerable.Range(0, 4).Select(i => Habit.Create(new HabitCreateParams(user.Id, "Habit " + i, null, null, today)).Value).ToArray();
+        var habits = Enumerable.Range(0, 4).Select(i => Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Habit " + i, null, null, today)).Value).ToArray();
         db.Habits.AddRange(habits);
         await db.SaveChangesAsync();
         var dates = Substitute.For<IUserDateService>();

@@ -38,8 +38,8 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_ValidLink_LinksHabitsToGoal()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _goalRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -99,7 +99,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_EmptyHabitList_ClearsExistingLinks()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var existingHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Existing", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(existingHabit);
 
         _goalRepo.FindOneTrackedAsync(
@@ -126,8 +126,8 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_ReplacesExistingLinks()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var oldHabit = Habit.Create(new HabitCreateParams(UserId, "Old", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var newHabit = Habit.Create(new HabitCreateParams(UserId, "New", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var oldHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Old", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var newHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "New", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(oldHabit);
 
         _goalRepo.FindOneTrackedAsync(
@@ -156,7 +156,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_ForeignOrMissingHabitId_ReturnsFailureWithoutClearing()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var existingHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Existing", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(existingHabit);
 
         _goalRepo.FindOneTrackedAsync(
@@ -187,7 +187,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_LinkingHabitToStandardGoal_DerivesExistingCompletionCount()
     {
         var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         habit.Log(Today);
 
@@ -218,7 +218,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_LinkingHabitToStandardGoalAtTarget_CompletesAndProcessesGamification()
     {
         var goal = Goal.Create(UserId, "Exercise once", 1, "session").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         habit.Log(Today);
 
@@ -248,7 +248,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_UnlinkingFinalHabit_ClearsDerivedValueAndRestoresManualProgress()
     {
         var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         goal.AddHabit(habit);
         goal.SyncStandardProgress(3);

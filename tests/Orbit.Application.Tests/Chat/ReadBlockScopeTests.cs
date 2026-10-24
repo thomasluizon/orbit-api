@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -52,7 +53,7 @@ public sealed class ReadBlockScopeTests
         var user = User.Create("Test", "test@example.com").Value;
         user.SetLanguage("en");
         _users.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1, _day)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1, _day)).Value;
         habit.Log(_day);
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -130,7 +131,7 @@ public sealed class ReadBlockScopeTests
     [Fact]
     public async Task HistoryPagesUseActualDatedLogsAndRejectDeletedSourceCursor()
     {
-        var habit = Habit.Create(new(_userId, "Read", null, null, _day)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, _userId, "Read", null, null, _day)).Value;
         var rows = Enumerable.Range(0, 3).Select(i => HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id,
             _day.AddDays(i), 1, 1, DateTime.UnixEpoch)).ToList();
         var repo = Substitute.For<IGenericRepository<Habit>>();
@@ -257,7 +258,7 @@ public sealed class ReadBlockScopeTests
     [Fact]
     public async Task MetricsRefreshPinsLegacyRollingRatesAndTracksAccountSettings()
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1, _day)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", Orbit.Domain.Enums.FrequencyUnit.Day, 1, _day)).Value;
         habit.Log(_day);
         var habits = Substitute.For<IGenericRepository<Habit>>();
         habits.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),

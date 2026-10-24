@@ -785,6 +785,8 @@ public class OrbitDbContext : DbContext
 
             entity.Property(h => h.GoogleEventId).HasMaxLength(1024);
             entity.Property(h => h.IntervalWeeks).HasColumnType("integer");
+            entity.Property<bool>("IsGeneral");
+            entity.Property<bool>("IsFlexible");
             entity.Property(h => h.Schedule).HasConversion<int>().HasDefaultValue(HabitSchedule.OneTime);
             entity.Property(h => h.StartDate).HasDefaultValueSql("'0001-01-01'");
             entity.Property(h => h.NextDueDate).HasDefaultValueSql("'0001-01-01'");
@@ -949,6 +951,7 @@ public class OrbitDbContext : DbContext
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        SynchronizeLegacyHabitSchedules();
         var modifiedHabits = ChangeTracker.Entries<Habit>()
             .Where(entry => entry.State == EntityState.Modified).ToArray();
         if (modifiedHabits.Length == 0 || !Database.IsRelational())
@@ -979,6 +982,7 @@ public class OrbitDbContext : DbContext
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
+        SynchronizeLegacyHabitSchedules();
         var now = DateTime.UtcNow;
         foreach (var entry in ChangeTracker.Entries<ITimestamped>()
             .Where(e => e.State is EntityState.Modified or EntityState.Added))
@@ -1011,6 +1015,17 @@ public class OrbitDbContext : DbContext
                 ChangeTracker.AcceptAllChanges();
             return saved;
         });
+    }
+
+    // https://github.com/thomasluizon/orbit-tickets/issues/227: overlapping API versions and the expand trigger still consume these columns. Only Schedule owns their values.
+    private void SynchronizeLegacyHabitSchedules()
+    {
+        foreach (var entry in ChangeTracker.Entries<Habit>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified))
+        {
+            entry.Property<bool>("IsGeneral").CurrentValue = entry.Entity.Schedule == HabitSchedule.General;
+            entry.Property<bool>("IsFlexible").CurrentValue = entry.Entity.Schedule == HabitSchedule.Flexible;
+        }
     }
 
     private int SaveHabitChanges(bool acceptAllChangesOnSuccess, Guid[] habitIds)

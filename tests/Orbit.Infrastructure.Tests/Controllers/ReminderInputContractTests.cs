@@ -131,7 +131,7 @@ public partial class ReminderInputContractTests
         var command = new CreateHabitCommand(Guid.NewGuid(), request.Title, null, null, null,
             Options: new HabitCommandOptions(DueTime: request.DueTime, RelativeReminders: request.RelativeReminders));
         new CreateHabitCommandValidator().Validate(command).IsValid.Should().BeFalse();
-        Habit.Create(new HabitCreateParams(command.UserId, command.Title, null, null, new DateOnly(2026, 4, 3),
+        Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, command.UserId, command.Title, null, null, new DateOnly(2026, 4, 3),
             DueTime: request.DueTime, RelativeReminders: request.RelativeReminders)).IsFailure.Should().BeTrue();
     }
 

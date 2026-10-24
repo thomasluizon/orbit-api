@@ -124,10 +124,10 @@ public class SoftDeleteLeakTests
     {
         await using var context = CreateInMemoryDbContext();
         var deletedAt = DateTime.UtcNow;
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Parent", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         parent.SoftDelete(deletedAt);
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: parent.Id)).Value;
         child.Log(Today);
         child.SoftDelete(deletedAt);
@@ -164,7 +164,7 @@ public class SoftDeleteLeakTests
 
     private static Habit MakeHabitWithLog(bool softDeleted, bool isBadHabit = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, isBadHabit ? "Bad" : "Habit", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: isBadHabit)).Value;
         habit.Log(Today);
         if (softDeleted)

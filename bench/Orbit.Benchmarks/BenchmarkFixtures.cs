@@ -15,7 +15,7 @@ internal static class BenchmarkFixtures
 
     internal static Habit DailyHabitWithHistory(DateOnly start, DateOnly today, int completeEveryNthDay)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             OwnerId, "Benchmark habit", FrequencyUnit.Day, 1, DueDate: start)).Value;
         BackdateCreation(habit, start);
 

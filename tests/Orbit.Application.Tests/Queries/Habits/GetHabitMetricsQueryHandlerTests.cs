@@ -28,7 +28,7 @@ public class GetHabitMetricsQueryHandlerTests
 
     private static Habit CreateTestHabit()
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }

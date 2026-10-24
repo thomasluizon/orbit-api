@@ -18,7 +18,7 @@ public class GoalStreakSyncServiceTests
 
     private static Habit CreateDailyHabit(string title, DateOnly createdOn, bool isBadHabit = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1, IsBadHabit: isBadHabit, DueDate: createdOn)).Value;
         SetCreatedAtUtc(habit, createdOn);
         return habit;
@@ -147,7 +147,7 @@ public class GoalStreakSyncServiceTests
     public void CalculateCurrentStreak_FutureBadHabit_ReturnsZero()
     {
         var goal = CreateStreakGoal(30);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Drink caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
         goal.AddHabit(habit);

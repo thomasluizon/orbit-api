@@ -87,9 +87,9 @@ public class BulkSubtreePersistenceTests
         leaf.FrequencyUnit.Should().Be(FrequencyUnit.Week);
         leaf.FrequencyQuantity.Should().Be(2);
         leaf.IntervalWeeks.Should().BeNull();
-        leaf.IsFlexible.Should().BeTrue();
+        leaf.Schedule.Should().Be(HabitSchedule.Flexible);
         leaf.IsBadHabit.Should().BeTrue();
-        leaf.IsGeneral.Should().BeFalse();
+        leaf.Schedule.Should().NotBe(HabitSchedule.General);
         leaf.NextDueDate.Should().Be(new DateOnly(2026, 4, 7));
         leaf.DueTime.Should().Be(timed ? new TimeOnly(9, 0) : null);
         leaf.DueEndTime.Should().Be(new TimeOnly(10, 0));

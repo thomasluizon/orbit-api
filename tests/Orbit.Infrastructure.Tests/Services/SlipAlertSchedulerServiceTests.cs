@@ -31,7 +31,14 @@ public class SlipAlertSchedulerServiceTests
     private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DateTime.UtcNow);
 
     [Theory]
-    [InlineData(10, 8)]    [InlineData(12, 10)]    [InlineData(20, 18)]    [InlineData(23, 21)]    [InlineData(9, 8)]    [InlineData(8, 8)]    [InlineData(5, 8)]    public void CalculateAlertTime_WithPeakHour_ReturnsClamped(int peakHour, int expectedHour)
+    [InlineData(10, 8)]
+    [InlineData(12, 10)]
+    [InlineData(20, 18)]
+    [InlineData(23, 21)]
+    [InlineData(9, 8)]
+    [InlineData(8, 8)]
+    [InlineData(5, 8)]
+    public void CalculateAlertTime_WithPeakHour_ReturnsClamped(int peakHour, int expectedHour)
     {
         var result = InvokeCalculateAlertTime(peakHour);
 
@@ -57,7 +64,11 @@ public class SlipAlertSchedulerServiceTests
     }
 
     [Theory]
-    [InlineData(0, 8)]    [InlineData(1, 8)]    [InlineData(2, 8)]    [InlineData(3, 8)]    public void CalculateAlertTime_VeryEarlyPeakHour_ClampsToMorning(int peakHour, int expectedHour)
+    [InlineData(0, 8)]
+    [InlineData(1, 8)]
+    [InlineData(2, 8)]
+    [InlineData(3, 8)]
+    public void CalculateAlertTime_VeryEarlyPeakHour_ClampsToMorning(int peakHour, int expectedHour)
     {
         var result = InvokeCalculateAlertTime(peakHour);
         result.Hour.Should().Be(expectedHour);
@@ -200,9 +211,9 @@ public class SlipAlertSchedulerServiceTests
         var messageService = Substitute.For<ISlipAlertMessageService>();
 
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             user.Id, "Doom scrolling", FrequencyUnit.Day, 1,
-            IsBadHabit: true, IsFlexible: true, SlipAlertEnabled: true,
+            IsBadHabit: true, SlipAlertEnabled: true,
             DueDate: UtcToday)).Value;
 
         var todayWeekday = DateTime.UtcNow;
@@ -407,7 +418,7 @@ public class SlipAlertSchedulerServiceTests
     }
 
     private static Habit CreateSlipAlertBadHabit(Guid userId) =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true,
             SlipAlertEnabled: true, DueDate: UtcToday)).Value;
 
@@ -433,7 +444,7 @@ public class SlipAlertSchedulerServiceTests
         var user = User.Create(name, email).Value;
         user.SetTimeZone(timeZoneId);
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, habitTitle, FrequencyUnit.Day, 1, IsBadHabit: true,
             SlipAlertEnabled: true, DueDate: userToday)).Value;
 

@@ -150,8 +150,8 @@ public class HabitScheduleCharacterizationTests
     [Fact]
     public void FlexibleLogAndUndo_KeepCompletionOrdinalsAndWindowTarget()
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Habit",
-            FrequencyUnit.Week, 2, Start, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, Guid.NewGuid(), "Habit",
+            FrequencyUnit.Week, 2, Start)).Value;
 
         habit.Log(Start).IsSuccess.Should().BeTrue();
         habit.Log(Start).IsSuccess.Should().BeTrue();
@@ -165,8 +165,7 @@ public class HabitScheduleCharacterizationTests
         habit.StartDate.Should().Be(Start);
     }
 
-    private static Habit Create(int type) => Habit.Create(new HabitCreateParams(
+    private static Habit Create(int type) => Habit.Create(new HabitCreateParams((HabitSchedule)type,
         Guid.NewGuid(), "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
-        type is 1 or 2 ? 1 : null, Start,
-        IsFlexible: type == 2, IsGeneral: type == 3)).Value;
+        type is 1 or 2 ? 1 : null, Start)).Value;
 }

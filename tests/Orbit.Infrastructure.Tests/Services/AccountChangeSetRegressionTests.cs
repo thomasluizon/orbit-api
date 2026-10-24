@@ -59,7 +59,7 @@ public class AccountChangeSetRegressionTests
     public async Task ReusedHabit_PreviewsReplacedAssociationsBeforeUpdating()
     {
         var userId = Guid.NewGuid();
-        var habit = Habit.Create(new HabitCreateParams(userId, "Run", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Run", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
         var oldTag = Tag.Create(userId, "Old", "#7c3aed").Value;
         var newTag = Tag.Create(userId, "New", "#7c3aed").Value;
         habit.AddTag(oldTag);

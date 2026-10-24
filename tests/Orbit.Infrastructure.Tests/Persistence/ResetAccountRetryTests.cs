@@ -33,7 +33,7 @@ public class ResetAccountRetryTests
         user.SetGoogleTokens("access-token", "refresh-token");
         user.EnableCalendarAutoSync().IsSuccess.Should().BeTrue();
         context.Users.Add(user);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Habit", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Habit", FrequencyUnit.Day, 1, today)).Value;
         context.Habits.Add(habit);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();

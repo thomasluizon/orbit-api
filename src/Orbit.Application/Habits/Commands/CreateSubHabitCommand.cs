@@ -126,7 +126,11 @@ public class CreateSubHabitCommandHandler(
                 intervalWeeks = parent.IntervalWeeks;
         }
 
-        return Habit.Create(new HabitCreateParams(
+        var schedule = LegacyHabitSchedule.Resolve(parent.Schedule == HabitSchedule.General, opts.IsFlexible, frequencyUnit, frequencyQuantity, request.IsBadHabit, days, intervalWeeks);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<Habit>();
+
+        return Habit.Create(new HabitCreateParams(schedule.Value,
             request.UserId,
             request.Title,
             frequencyUnit,
@@ -143,8 +147,6 @@ public class CreateSubHabitCommandHandler(
             ReminderTimes: opts.ReminderTimes,
             SlipAlertEnabled: opts.SlipAlertEnabled,
             ChecklistItems: opts.ChecklistItems,
-            IsGeneral: parent.Schedule == HabitSchedule.General,
-            IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,

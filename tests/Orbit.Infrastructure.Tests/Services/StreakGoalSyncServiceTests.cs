@@ -81,8 +81,8 @@ public class StreakGoalSyncServiceTests
         var dbContext = factory.Context;
         var user = User.Create("Alex", "alex@test.com").Value;
         user.GrantLifetimePro();
-        var habit = Habit.Create(new HabitCreateParams(
-            user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         var goal = Goal.Create(user.Id, "Exercise twice", 2, "sessions").Value;
         goal.AddHabit(habit);
         habit.Log(Today);
@@ -124,8 +124,8 @@ public class StreakGoalSyncServiceTests
         using var factory = new SqliteOrbitDbContextFactory();
         var dbContext = factory.Context;
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
-            user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
         var goal = Goal.Create(user.Id, "Exercise twice", 2, "sessions").Value;
         goal.AddHabit(habit);
         habit.Log(Today);
@@ -317,7 +317,7 @@ public class StreakGoalSyncServiceTests
     private static Habit CreateDailyHabitLoggedLastDays(Guid userId, int days)
     {
         var startDate = Today.AddDays(-(days - 1));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Meditate", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
         SetCreatedAtUtc(habit, startDate);
         for (var offset = days - 1; offset >= 0; offset--)
@@ -330,8 +330,8 @@ public class StreakGoalSyncServiceTests
             userId, "Daily streak", target, "days", Type: GoalType.Streak)).Value;
 
     private static Habit CreateStandardHabit(Guid userId) =>
-        Habit.Create(new HabitCreateParams(
-            userId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            userId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today)).Value;
 
     private static async Task<int> CountSweepQueriesAsync(int candidateCount)
     {

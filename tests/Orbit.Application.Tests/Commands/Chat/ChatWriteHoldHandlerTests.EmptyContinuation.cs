@@ -98,7 +98,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         var parents = ParentAccount(language);
         var extraParents = new[] { "Morning Routine", "Workout" }.Select(title => Habit.Create(
-            new HabitCreateParams(_userId, title, FrequencyUnit.Day, 1, Today)).Value).ToArray();
+            new HabitCreateParams(HabitSchedule.Recurring, _userId, title, FrequencyUnit.Day, 1, Today)).Value).ToArray();
         var account = parents.Concat(extraParents).ToArray();
         UseParentHabits(account);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
