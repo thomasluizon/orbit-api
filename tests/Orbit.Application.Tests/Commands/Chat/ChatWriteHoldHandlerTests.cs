@@ -83,6 +83,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
         var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
         _toolRegistry = new AiToolRegistry([
+            new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader),
             _createHabitTool,
             new BulkCreateHabitsTool(_mediator),
             new CreateSubHabitTool(_mediator),

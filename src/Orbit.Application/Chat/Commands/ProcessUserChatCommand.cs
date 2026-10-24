@@ -346,7 +346,7 @@ public partial class ProcessUserChatCommandHandler(
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
-        if (await RecoverExplicitHeadingsAsync(request, context, response, cancellationToken) is { } recoveredHeadings)
+        if (await RecoverExplicitHeadingsAsync(request, context, response, null, cancellationToken) is { } recoveredHeadings)
             return recoveredHeadings;
 
         if (response.IsFailure)
@@ -374,18 +374,11 @@ public partial class ProcessUserChatCommandHandler(
             aiStreamSink,
             cancellationToken);
         await CombinePendingChangesAsync(request, executionResults, cancellationToken);
+        toolLoopResult = RecoverExecutedContinuation(request, executionResults, toolLoopResult);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))
-        {
-            if (CanCompleteComposition(request, context, executionResults))
-                return Result.Success(CompleteCompositionWithoutNarrative(request, context, executionResults));
-            if (request.BlockAnswer is null && HasOnlySuccessfulRankingReads(executionResults))
-                return Result.Success(CompleteRankingWithoutNarrative(request, context, executionResults));
-            if (request.BlockAnswer is null && HasOnlySuccessfulFocusedReads(executionResults))
-                return Result.Success(CompleteFocusedReadsWithoutNarrative(request, context, executionResults));
-            return Result.Failure<ChatResponse>(toolLoopResult.ProviderError ?? ErrorMessages.AiUnavailable);
-        }
+            return await CompleteFailedToolTurnAsync(request, context, executionResults, toolLoopResult, cancellationToken);
         if (toolLoopResult.HadToolFailure)
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)

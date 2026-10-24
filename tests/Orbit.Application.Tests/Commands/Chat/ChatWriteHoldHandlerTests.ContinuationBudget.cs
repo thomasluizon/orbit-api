@@ -246,17 +246,22 @@ public sealed partial class ChatWriteHoldHandlerTests
     [Theory]
     [InlineData("Connection lost")]
     [InlineData("AI_DAILY_BUDGET_EXCEEDED")]
-    public async Task ContinuationBudget_UntypedFailureAfterPreview_RemainsExplicitFailure(string message)
+    public async Task ContinuationBudget_UntypedFailureAfterPreview_PreservesHeldWork(string message)
     {
-        await SetupContinuationIconsAsync();
+        var habits = await SetupContinuationIconsAsync();
+        var before = HabitSnapshot(habits);
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>(message));
 
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(_userId, "Put icons in all habits"), default);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(message);
+        result.IsSuccess.Should().BeTrue();
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
+        preview.Items.Should().HaveCount(habits.Length);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, preview.Id).Should().BeTrue();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        HabitSnapshot(habits).Should().Be(before);
         await AssertOneBudgetContinuationAsync();
     }
 
