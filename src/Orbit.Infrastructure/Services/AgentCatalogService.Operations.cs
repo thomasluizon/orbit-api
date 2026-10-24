@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat;
 using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
@@ -57,6 +58,9 @@ public partial class AgentCatalogService
                     CloneJson(tool.GetParameterSchema()),
                     responseSchema);
             })
+            .Append(new AgentOperation(AccountChangeSet.OperationId, "Account changes", "Apply the approved account changes.",
+                AccountChangeSet.CapabilityId, AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, true, true,
+                CloneJson(new { type = SchemaObject }), responseSchema))
             .Concat(BuildDirectFlowOperations())
             .OrderBy(operation => operation.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();

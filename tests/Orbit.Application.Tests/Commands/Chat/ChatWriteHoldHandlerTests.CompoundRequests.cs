@@ -3,7 +3,12 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Domain.Common;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
+using Orbit.Application.Tests.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Application.Goals.Services;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
@@ -30,4 +35,44 @@ public sealed partial class ChatWriteHoldHandlerTests
         result.Value.AiMessage.Should().BeNull();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+    [Fact]
+    public async Task CompoundActions_RenameAndNewChildShareOneApproval()
+    {
+        var parents = ParentAccount("en");
+        _unitOfWork.PassThroughTransactions<Result<string>>();
+        var update = new UpdateHabitCommandHandler(_habitRepo, Substitute.For<IGenericRepository<SentReminder>>(),
+            _goalRepo, _payGate, Substitute.For<IGoalCompletionService>(), _userDateService, _unitOfWork, _flagCache, _tagRepo,
+            Substitute.For<IAppConfigService>());
+        _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => update.Handle(call.Arg<UpdateHabitFieldsCommand>(), call.Arg<CancellationToken>()));
+        ScriptToolCall("{}", "update_habit");
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ToolCalls = [
+                    new("update_habit", "rename", JsonSerializer.SerializeToElement(new { habit_id = parents[0].Id, title = "After Lunch" })),
+                    new("create_sub_habit", "child", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[1].Id, title = "Take magnesium", frequency_unit = "Day" }))
+                ],
+                ConversationContext = new()
+            }));
+        var result = await CreateHandler().Handle(new(_userId, "Rename Post Lunch to After Lunch and add Take magnesium under Before Bed"), default);
+        result.IsSuccess.Should().BeTrue();
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
+        preview.Items.Should().HaveCount(2);
+        result.Value.AiMessage.Should().BeNull();
+        parents[0].Title.Should().Be("Post Lunch");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        var stored = _pendingOperationStore.GetExecution(_userId, preview.Id)!;
+        var confirmation = _pendingOperationStore.Confirm(_userId, preview.Id)!;
+        var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, approved.Operation.PolicyReason);
+        parents[0].Title.Should().Be("After Lunch");
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == "Take magnesium"
+            && habit.ParentHabitId == parents[1].Id), Arg.Any<CancellationToken>());
+        var replay = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        replay.Operation.Status.Should().NotBe(AgentOperationStatus.Succeeded);
+    }
+
 }

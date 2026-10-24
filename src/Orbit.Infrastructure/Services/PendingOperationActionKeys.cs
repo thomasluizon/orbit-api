@@ -9,6 +9,7 @@ public static class PendingOperationActionKeys
         var action = GetAction(argumentsJson);
         return operationId switch
         {
+            "apply_account_changes" => "applyAccountChanges",
             "delete_habit" => "deleteHabit",
             "bulk_update_habits" => "updateHabits",
             "bulk_reschedule_habits" => "rescheduleHabits",

@@ -45,6 +45,7 @@ public partial class AgentOperationExecutor(
         var escalatedRequirement = await stepUpAuthorizationBridge.GetRequiredConfirmationAsync(
             declaredCapability.Id,
             cancellationToken);
+        escalatedRequirement = await ChangeSetConfirmationAsync(request, arguments, escalatedRequirement, cancellationToken);
         var tool = toolRegistry.GetTool(operation.Id);
         if (AgentChatWriteHold.Applies(
                 request.Surface,
@@ -302,7 +303,7 @@ public partial class AgentOperationExecutor(
 
         try
         {
-            if (tool is not ITransactionalAiTool)
+            if (tool is not ITransactionalAiTool && execution.Operation.Id != AccountChangeSet.OperationId)
                 return await ExecutePolicyAndToolAsync(execution, tool, policyState, cancellationToken);
             return unitOfWork.HasActiveTransaction
                 ? await unitOfWork.ExecuteInSavepointAsync(
@@ -367,6 +368,15 @@ public partial class AgentOperationExecutor(
                     AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error), cancellationToken);
         }
 
+        IReadOnlyList<OperationExecutionContext>? changeSetMembers = null;
+        if (execution.Operation.Id == AccountChangeSet.OperationId)
+        {
+            var prepared = await PrepareChangeSetAsync(execution, cancellationToken);
+            if (prepared.Error is { } error)
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, execution.Capability, error), cancellationToken);
+            changeSetMembers = prepared.Members;
+        }
+
         var policyDecision = EvaluatePolicy(execution);
         policyState.Decision = policyDecision;
 
@@ -379,6 +389,15 @@ public partial class AgentOperationExecutor(
         if (execution.Request.PreviewOnly)
             return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"), cancellationToken);
+
+        if (changeSetMembers is not null)
+        {
+            if (!policyDecision.ConsumedConfirmation)
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"), cancellationToken);
+            var applied = await ExecuteChangeSetAsync(execution, changeSetMembers, cancellationToken);
+            if (!applied.Success) throw new ToolOutcomeRollbackException(policyDecision, applied);
+            return await BuildToolOutcomeResponseAsync(execution, policyDecision, applied, cancellationToken);
+        }
 
         if (tool is null)
             return AgentOperationResponseFactory.MissingTool(

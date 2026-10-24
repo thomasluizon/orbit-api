@@ -373,6 +373,7 @@ public partial class ProcessUserChatCommandHandler(
             userLanguage,
             aiStreamSink,
             cancellationToken);
+        await CombinePendingChangesAsync(request, executionResults, cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))

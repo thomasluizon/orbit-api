@@ -53,6 +53,8 @@ public sealed class PendingOperationChangePreviewer(
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
+        if (operationId == AccountChangeSet.OperationId)
+            return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken));
         if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
             arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
         if (RequiresEmojiInference(operationId, arguments))

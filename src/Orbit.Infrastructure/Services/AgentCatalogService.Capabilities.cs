@@ -1,4 +1,5 @@
 using Orbit.Application.FeatureFlags;
+using Orbit.Application.Chat;
 using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
@@ -18,6 +19,9 @@ public partial class AgentCatalogService
         return
         [
             .. ChatCapabilities(),
+            new AgentCapability(AccountChangeSet.CapabilityId, "Account changes", "Approves a complete set of held account changes.",
+                "chat", AgentScopes.ChatInteract, AgentRiskClass.Low, IsMutation: true, IsPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.FreshConfirmation),
             .. CatalogCapabilities(),
             .. ConfigCapabilities(),
             new AgentCapability(FeatureFlagActions.CapabilityId,
