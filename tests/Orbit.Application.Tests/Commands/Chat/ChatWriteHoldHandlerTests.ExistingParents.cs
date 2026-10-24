@@ -30,6 +30,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var held = await CreateHandler().Handle(new(_userId, "Post lunch: take vitamin D (once a week)"), default);
         var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
         pending.Items!.Single().Fields.Should().Contain(field => field.Field == "parent_habit_id" && field.NewValue == "Post Lunch");
+        pending.Items!.Single().FieldOptions.Should().BeNull();
 
         var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
         var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
@@ -207,7 +208,10 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         var parents = ParentAccount("en");
         var duplicate = Habit.Create(new HabitCreateParams(_userId, "Post Lunch", FrequencyUnit.Day, 1, Today)).Value;
-        UseParentHabits([.. parents, duplicate]);
+        var unrelated = Enumerable.Range(0, 40).Select(index => Habit.Create(new HabitCreateParams(
+            _userId, $"Other routine {index}", FrequencyUnit.Day, 1, Today)).Value).ToArray();
+        var account = parents.Concat([duplicate]).Concat(unrelated).ToArray();
+        UseParentHabits(account);
         ScriptToolCall("""{"habits":[{"title":"Take vitamin D","frequency_unit":"Week","frequency_quantity":1}]}""", "bulk_create_habits");
         var held = await CreateHandler().Handle(new(_userId, "Post lunch: take vitamin D (once a week)"), default);
         var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
@@ -219,15 +223,22 @@ public sealed partial class ChatWriteHoldHandlerTests
         choices.GetProperty("options").EnumerateArray().Select(option => option.GetProperty("value").ToString())
             .Should().BeEquivalentTo(parents[0].Id.ToString(), duplicate.Id.ToString(), "");
         var service = ParentRevisionService();
+        _habitRepo.ClearReceivedCalls();
         (await service.CanApproveAsync(_userId, _pendingOperationStore.GetExecution(_userId, pending.Id)!, default)).Should().BeFalse();
+        var queries = _habitRepo.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "FindAsync").ToArray();
+        queries.Should().ContainSingle();
+        var predicate = (Expression<Func<Habit, bool>>)queries[0].GetArguments()[0]!;
+        account.Where(predicate.Compile()).Select(habit => habit.Id).Should().BeEquivalentTo([parents[0].Id, duplicate.Id]);
         var rejected = await service.ReviseAsync(_userId, pending.Id, new(pending.PreviewFingerprint!,
             [new(item.ItemId, JsonSerializer.SerializeToElement(new { parent_habit_id = parents[1].Id }))]), default);
         rejected.IsSuccess.Should().BeFalse();
+        rejected.Error.Should().Be("option_not_offered");
 
         var accepted = await service.ReviseAsync(_userId, pending.Id, new(pending.PreviewFingerprint!,
             [new(item.ItemId, JsonSerializer.SerializeToElement(new { parent_habit_id = noParent ? null : (string?)duplicate.Id.ToString() }))]), default);
 
         accepted.IsSuccess.Should().BeTrue();
+        accepted.Preview!.Items!.Single().FieldOptions.Should().BeNull();
         (await service.CanApproveAsync(_userId, _pendingOperationStore.GetExecution(_userId, pending.Id)!, default)).Should().BeTrue();
         accepted.Preview!.Items!.Single().Fields.Should().Contain(field => field.Field == "parent_habit_id"
             && field.NewValue == (noParent ? "No parent" : "Post Lunch"));
@@ -240,6 +251,34 @@ public sealed partial class ChatWriteHoldHandlerTests
             approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
             await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.ParentHabitId == duplicate.Id), Arg.Any<CancellationToken>());
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExistingParents_FreshnessTracksOnlyBoundOrCandidateParents(bool ambiguous)
+    {
+        var parents = ParentAccount("en");
+        var candidate = Habit.Create(new HabitCreateParams(_userId,
+            ambiguous ? "Post Lunch" : "Another routine", FrequencyUnit.Day, 1, Today)).Value;
+        UseParentHabits([.. parents, candidate]);
+        ScriptToolCall("""{"habits":[{"title":"Take vitamin D","frequency_unit":"Week","frequency_quantity":1}]}""", "bulk_create_habits");
+        var held = await CreateHandler().Handle(new(_userId, "Post lunch: take vitamin D (once a week)"), default);
+        var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var service = ParentRevisionService();
+        (await service.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
+
+        parents[1].Update(new HabitUpdateParams("Unrelated routine renamed", parents[1].Description,
+            parents[1].FrequencyUnit, parents[1].FrequencyQuantity, parents[1].Days.ToArray(), parents[1].IsBadHabit, parents[1].NextDueDate))
+            .IsSuccess.Should().BeTrue();
+        (await service.IsCurrentAsync(_userId, execution, default)).Should().BeTrue();
+
+        var dependency = ambiguous ? candidate : parents[0];
+        dependency.Update(new HabitUpdateParams(dependency.Title, "Changed parent description",
+            dependency.FrequencyUnit, dependency.FrequencyQuantity, dependency.Days.ToArray(), dependency.IsBadHabit, dependency.NextDueDate))
+            .IsSuccess.Should().BeTrue();
+        (await service.IsCurrentAsync(_userId, execution, default)).Should().BeFalse();
     }
 
     private void ScriptParentBatch() => ScriptToolCall("""

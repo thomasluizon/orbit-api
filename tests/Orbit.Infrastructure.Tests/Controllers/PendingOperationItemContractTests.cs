@@ -42,22 +42,50 @@ public sealed class PendingOperationItemContractTests
         item.Should().BeEquivalentTo(new PendingOperationItem("0", null, "Habit", [], "state"));
         item!.RemovesData.Should().BeNull();
         item.ValidationErrors.Should().BeNull();
+        item.FieldOptions.Should().BeNull();
     }
 
-    [Fact]
-    public void GeneratedOpenApi_AppendsOptionalNullableBooleanAndPreservesExistingSchema()
+    [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
+    public void GeneratedOpenApi_AppendsOptionalNullableBooleanAndPreservesExistingSchema(string artifact)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "../../../../..", "src/Orbit.Api/openapi.json"));
+            "../../../../..", "src/Orbit.Api", artifact));
         using var document = JsonDocument.Parse(File.ReadAllText(path));
-        var schema = document.RootElement.GetProperty("components").GetProperty("schemas")
-            .GetProperty("PendingOperationItem");
+        var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+        var schema = schemas.GetProperty("PendingOperationItem");
 
         schema.GetProperty("required").EnumerateArray().Select(field => field.GetString())
             .Should().BeEquivalentTo("itemId", "entityId", "entityName", "fields", "stateFingerprint");
         var properties = schema.GetProperty("properties");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors");
+            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions");
+        properties.GetProperty("fieldOptions").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("array", "null");
+        properties.GetProperty("fieldOptions").GetProperty("items").GetProperty("$ref").GetString()
+            .Should().Be("#/components/schemas/PendingOperationFieldOptions");
+        properties.GetProperty("fieldOptions").GetProperty("description").GetString().Should().Be(
+            "Only present for a required unresolved parent choice. Options contain exactly the matching parent habits and No parent; resolved or root items omit this field.");
+        var choice = schemas.GetProperty("PendingOperationFieldOptions");
+        choice.GetProperty("required").EnumerateArray().Select(field => field.GetString())
+            .Should().BeEquivalentTo("field", "required", "options");
+        var choiceProperties = choice.GetProperty("properties");
+        choiceProperties.EnumerateObject().Select(property => property.Name).Should().Equal("field", "required", "options");
+        choiceProperties.GetProperty("field").GetProperty("type").GetString().Should().Be("string");
+        choiceProperties.GetProperty("required").GetProperty("type").GetString().Should().Be("boolean");
+        choiceProperties.GetProperty("options").GetProperty("type").GetString().Should().Be("array");
+        choiceProperties.GetProperty("options").GetProperty("items").GetProperty("$ref").GetString()
+            .Should().Be("#/components/schemas/PendingOperationFieldOption");
+        var option = schemas.GetProperty("PendingOperationFieldOption");
+        option.GetProperty("required").EnumerateArray().Select(field => field.GetString())
+            .Should().BeEquivalentTo("value", "label");
+        var optionProperties = option.GetProperty("properties");
+        optionProperties.EnumerateObject().Select(property => property.Name).Should().Equal("value", "label");
+        optionProperties.GetProperty("value").GetProperty("$ref").GetString().Should().Be("#/components/schemas/JsonElement");
+        optionProperties.GetProperty("label").GetProperty("type").GetString().Should().Be("string");
         properties.GetProperty("validationErrors").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("array", "null");
         properties.GetProperty("validationErrors").GetProperty("items").GetProperty("$ref").GetString()

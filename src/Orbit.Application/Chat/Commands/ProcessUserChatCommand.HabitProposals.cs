@@ -83,7 +83,7 @@ public partial class ProcessUserChatCommandHandler
             if (group.Length < 2 || group.Any(call => !HasEquivalentBulkSemantics(call)))
                 continue;
             var items = group.SelectMany(CreationItems).ToArray();
-            if (items.Any(item => item.EnumerateObject().Any(field =>
+            if (items.Any(item => item.EnumerateObject().Where(field => field.Name != HabitHeadingParents.CandidateIdsField).Any(field =>
                 !AgentArgumentSchema.Accepts(schema, field.Name, field.Value))))
                 continue;
             var first = group[0];

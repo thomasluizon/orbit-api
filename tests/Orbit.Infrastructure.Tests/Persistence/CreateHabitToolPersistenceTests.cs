@@ -57,21 +57,25 @@ public sealed class CreateHabitToolPersistenceTests
             .Should().OnlyContain(date => date.DayOfWeek == weekday).And.HaveCount(3);
     }
 
-    [Fact]
-    public async Task TicketMixedRequest_PersistsSeparateRecurringAndOneTimeClasses()
+    [Theory]
+    [InlineData("Tenho aula toda quarta das 8h25 às 11h15, e no dia 26/08 tenho uma aula extra das 11h15 às 12h05.")]
+    [InlineData("Class every Wednesday from 08:25 to 11:15, plus an extra class on 26/08 from 11:15 to 12:05.")]
+    public async Task TicketMixedRequest_PersistsSeparateRecurringAndOneTimeClasses(string message)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
         var user = await SeedUserAsync(db);
-        var handler = CreateHandler(db, user,
+        var audits = new List<AgentAuditEntry>();
+        var handler = CreateHandler(db, user, audits,
             """{"title":"Aula semanal","frequency_unit":"Week","frequency_quantity":1,"days":["Wednesday"],"due_time":"08:25","due_end_time":"11:15"}""",
             """{"title":"Aula extra","frequency_unit":null,"due_date":"2026-08-26","due_time":"11:15","due_end_time":"12:05"}""");
 
-        var result = await handler.Handle(new(user.Id,
-            "Tenho aula toda quarta das 8h25 às 11h15, e no dia 26/08 tenho uma aula extra das 11h15 às 12h05."), default);
+        var result = await handler.Handle(new(user.Id, message), default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Operations.Should().HaveCount(2).And.OnlyContain(operation => operation.Status == AgentOperationStatus.Succeeded);
+        result.Value.Operations.Should().HaveCount(2).And.OnlyContain(operation => operation.Status == AgentOperationStatus.Succeeded,
+            "operations were {0}; audited arguments were {1}", JsonSerializer.Serialize(result.Value.Operations), JsonSerializer.Serialize(audits));
+        result.Value.Operations.Should().OnlyContain(operation => operation.OperationId == "create_habit");
         result.Value.Actions.Should().HaveCount(2).And.OnlyContain(action => action.Status == ActionStatus.Success);
         db.ChangeTracker.Clear();
         var habits = await db.Habits.AsNoTracking().ToListAsync();
@@ -104,6 +108,9 @@ public sealed class CreateHabitToolPersistenceTests
     }
 
     private static ProcessUserChatCommandHandler CreateHandler(OrbitDbContext db, User user, params string[] arguments)
+        => CreateHandler(db, user, [], arguments);
+
+    private static ProcessUserChatCommandHandler CreateHandler(OrbitDbContext db, User user, List<AgentAuditEntry> audits, params string[] arguments)
     {
         var habits = new GenericRepository<Habit>(db);
         var tags = new GenericRepository<Tag>(db);
@@ -129,7 +136,9 @@ public sealed class CreateHabitToolPersistenceTests
         bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((AgentConfirmationRequirement?)null);
         var pending = Substitute.For<IPendingAgentOperationStore>();
-        var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(), ownership,
+        var audit = Substitute.For<IAgentAuditService>();
+        audit.RecordAsync(Arg.Do<AgentAuditEntry>(audits.Add), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var executor = new AgentOperationExecutor(catalog, policy, audit, ownership,
             bridge, registry, Substitute.For<IPendingOperationChangePreviewer>(), pending, work,
             NullLogger<AgentOperationExecutor>.Instance);
         var ai = Substitute.For<IAiIntentService>();

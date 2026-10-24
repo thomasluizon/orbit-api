@@ -339,8 +339,12 @@ public sealed class PendingOperationRevisionService(
             if (!ApplyEdits(copy, item.Edits))
                 return false;
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
-                && edits.TryGetProperty("parent_habit_id", out var parent) && parent.ValueKind == JsonValueKind.Null)
-                copy.Remove("parent_habit_id");
+                && edits.TryGetProperty("parent_habit_id", out var parent))
+            {
+                copy.Remove(HabitHeadingParents.CandidateIdsField);
+                if (parent.ValueKind == JsonValueKind.Null)
+                    copy.Remove("parent_habit_id");
+            }
             copy["preview_item_id"] = item.ItemId;
             revisedHabits.Add(copy);
         }

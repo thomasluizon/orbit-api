@@ -639,16 +639,18 @@ public class AgentChatWriteHoldTests : IDisposable
         var childJson = JsonSerializer.Serialize(new { parent_habit_id = parentId, habits = new[] { new { title = "Treino" } } });
         var root = _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", rootJson, "Create",
             AgentOperationFingerprint.Compute("bulk_create_habits", rootJson), AgentExecutionSurface.Chat);
-        _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", childJson, "Create children",
+        var child = _pendingOperationStore.Create(_userId, capability, "bulk_create_habits", childJson, "Create children",
             AgentOperationFingerprint.Compute("bulk_create_habits", childJson), AgentExecutionSurface.Chat);
         _pendingOperationStore.Create(Guid.NewGuid(), capability, "bulk_create_habits", rootJson, "Other user",
             AgentOperationFingerprint.Compute("bulk_create_habits", rootJson), AgentExecutionSurface.Chat);
 
         _pendingOperationStore.GetPendingHabitCreations(_userId).Should().BeEquivalentTo(
-            [new PendingHabitCreation("Novo"), new PendingHabitCreation("Treino", parentId)]);
+            [new PendingHabitCreation("Novo", PendingOperationId: root.Id, ExpiresAtUtc: root.ExpiresAtUtc, ActionKey: "createHabits"),
+             new PendingHabitCreation("Treino", parentId, child.Id, child.ExpiresAtUtc, "createHabits")]);
         _pendingOperationStore.Cancel(_userId, root.Id,
             AgentOperationFingerprint.Compute("bulk_create_habits", rootJson)).Should().BeTrue();
-        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().Equal(new PendingHabitCreation("Treino", parentId));
+        _pendingOperationStore.GetPendingHabitCreations(_userId).Should().Equal(
+            new PendingHabitCreation("Treino", parentId, child.Id, child.ExpiresAtUtc, "createHabits"));
     }
 
     [Fact]

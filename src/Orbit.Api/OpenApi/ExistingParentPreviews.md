@@ -6,7 +6,10 @@ case belongs to thomasluizon/orbit-tickets#1674.
 
 Pending operation items append optional `fieldOptions`. Each entry names an editable
 field, whether a choice is required, and its offered JSON values with display labels.
-An ambiguous parent offers only matching owned habits and an explicit null choice.
+It appears only on an item with an unresolved parent choice, with `required: true`.
+An ambiguous parent offers exactly its matching owned habits and an explicit null
+choice. Resolved children and root items omit `fieldOptions` entirely. The size of
+the account never adds options to an item.
 For example, two different habits named Post Lunch produce:
 
 ```json
@@ -57,9 +60,11 @@ remain in the batch. For a one-item preview with item ID `0`, the request shape 
 Use `"parent_habit_id": null` for No parent. An unoffered value returns
 `option_not_offered`. The revision returns the updated preview and fingerprint;
 then use the existing confirm and execute routes. A root item with an unmatched
-heading displays `newValue: "No parent"`, `proposedValue: null` and an optional
-choice (`required: false`). It can be approved immediately or changed to an offered
-owned parent. An older client can reject any preview using its existing controls;
+heading displays `newValue: "No parent"`, `proposedValue: null` and omits
+`fieldOptions`. It can be approved immediately. Items without options retain their
+existing editable-field and owned-parent validation. When options are present,
+`parent_habit_id` can only be revised to one of the values offered on that item.
+An older client can reject any preview using its existing controls;
 it cannot approve an ambiguous parent by ignoring the new field.
 
 Parent confirmation questions return only the stored operation's preview. A parent
@@ -71,6 +76,15 @@ or user history, an explicitly named unique parent, or the already bound parent.
 It returns `parent_resolution_required` when none supplies the intended mapping.
 Multiple pending creation batches return `pending_preview_ambiguous` rather than
 selecting one without evidence.
+
+The heading resolver retains only the candidate IDs for each unresolved item.
+Preview creation, approval and revision load the referenced parent IDs and those
+candidate IDs together. Stored previews without candidate metadata use a query
+filtered by the unresolved title. Root-only batches do not load account habits.
+Fingerprints bind item arguments and the state of their resolved or candidate
+parents. Editing an unrelated habit does not invalidate a preview; editing a
+bound or candidate parent does. Selecting a parent or No parent removes the
+choice options from the revised item.
 
 These turns return `pendingOperations` with no `aiMessage`, text parts, follow-ups
 or streamed text deltas. Preview grounding is enforced independently of the global

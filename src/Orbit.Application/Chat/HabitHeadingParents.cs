@@ -6,6 +6,8 @@ namespace Orbit.Application.Chat;
 
 internal static partial class HabitHeadingParents
 {
+    internal const string CandidateIdsField = "preview_parent_candidate_ids";
+
     internal sealed record Heading(string Name, string Body, IReadOnlyList<Habit> Candidates);
 
     public static IReadOnlyList<Heading> Read(string message, IReadOnlyList<Habit> habits)
@@ -30,11 +32,15 @@ internal static partial class HabitHeadingParents
 
     public static bool Bind(JsonObject item, Heading heading, bool removeInventedDescription)
     {
+        item.Remove(CandidateIdsField);
         if (heading.Candidates.Count == 0)
             item.Remove("parent_habit_id");
         else
             item["parent_habit_id"] = heading.Candidates.Count == 1
                 ? heading.Candidates[0].Id.ToString() : heading.Name;
+        if (heading.Candidates.Count > 1)
+            item[CandidateIdsField] = new JsonArray(heading.Candidates.OrderBy(candidate => candidate.Id)
+                .Select(candidate => (JsonNode?)JsonValue.Create(candidate.Id.ToString())).ToArray());
         if (removeInventedDescription && item["description"] is { } description
             && !HabitNameMatcher.Normalize(heading.Body).Contains(HabitNameMatcher.Normalize(description.ToString()), StringComparison.Ordinal))
             item.Remove("description");
@@ -64,6 +70,6 @@ internal static partial class HabitHeadingParents
         return previous[b.Length] <= 1;
     }
 
-    [GeneratedRegex(@"(?<heading>[\p{L}\p{N}][\p{L}\p{N} \t]*?)\s*(?:[:=|>/\u2192\uFF1A]+|[\-\u2013\u2014]+(?:>+|(?=\s)))\s*", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<heading>[\p{L}\p{N}][\p{L}\p{N} \t]*?)\s*(?!(?<=\p{N})[:/](?=\p{N}))(?:[:=|>/\u2192\uFF1A]+|[\-\u2013\u2014]+(?:>+|(?=\s)))\s*", RegexOptions.CultureInvariant)]
     private static partial Regex Separator();
 }

@@ -72,6 +72,7 @@ public partial class ProcessUserChatCommandHandlerTests
             pending.Items![index].Fields.Should().ContainSingle(field => field.Field == "parent_habit_id")
                 .Which.NewValue.Should().Be(parents[index].Title);
             pending.Items[index].Fields.Should().NotContain(field => field.Field == "description");
+            pending.Items[index].FieldOptions.Should().BeNull();
             held.Single().Arguments.GetProperty("habits")[index].GetProperty("parent_habit_id").GetGuid().Should().Be(parents[index].Id);
         }
         result.Value.AiMessage.Should().BeNullOrEmpty();
