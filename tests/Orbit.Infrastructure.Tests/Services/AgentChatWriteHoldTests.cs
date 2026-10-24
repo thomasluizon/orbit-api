@@ -735,7 +735,7 @@ public class AgentChatWriteHoldTests : IDisposable
         var (tool, executor, revisions) = CreateIconExecutor(handler);
 
         var held = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
-            Parse("""{"emoji_mode":"infer","filter":{"all":true}}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+            Parse("""{"emoji_mode":"infer","filter":{"all":true},"replace_existing":true}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
 
         held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
         var pending = held.PendingOperation!;
@@ -874,7 +874,7 @@ public class AgentChatWriteHoldTests : IDisposable
         var (tool, executor, _) = CreateIconExecutor(handler, budget, usage, inferenceLogger, preparationLogger);
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, tool.Name,
-            Parse("""{"emoji_mode":"infer","filter":{"all":true}}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+            Parse("""{"emoji_mode":"infer","filter":{"all":true},"replace_existing":true}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
 
         response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
         response.Operation.PolicyReason.Should().Be(budgetExceeded ? "AI_DAILY_BUDGET_EXCEEDED" : "preview_unavailable");

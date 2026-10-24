@@ -131,13 +131,27 @@ public sealed partial class PendingOperationChangePreviewer(
                 actualChangeCount = fields.Count;
             }
 
+            if (operationId == "bulk_update_habit_emojis"
+                && fields.All(field => string.Equals(field.OldValue, field.NewValue, StringComparison.Ordinal)))
+                continue;
+
             items.Add(new PendingOperationItem(habit.Id.ToString(), habit.Id, habit.Title,
                 fields, FingerprintHabit(habit), RemovesData: operationId == "bulk_delete_habits"));
             if (items.Count <= 10)
                 rows.AddRange(fields.Take(actualChangeCount));
         }
 
-        return BuildPreview(operationId, rows, items);
+        var result = BuildPreview(operationId, rows, items);
+        return result is not null && operationId == "bulk_update_habit_emojis"
+            ? result with
+            {
+                ExecutionArguments = JsonSerializer.SerializeToElement(new
+                {
+                    infer_from_title = false,
+                    revised_items = items.Select(item => new { habit_id = item.EntityId, emoji = item.Fields.Single().NewValue }).ToArray()
+                })
+            }
+            : result;
     }
 
     private async Task<JsonElement> ResolveUnlogDateAsync(Guid userId, string operationId,
@@ -169,7 +183,7 @@ public sealed partial class PendingOperationChangePreviewer(
         var preview = await PreviewChangesAsync(userId, emojiTool.Name, prepared.Value, ct);
         return preview is null
             ? Result.Failure<PendingOperationChangePreview?>("preview_unavailable")
-            : Result.Success<PendingOperationChangePreview?>(preview with { ExecutionArguments = prepared.Value });
+            : Result.Success<PendingOperationChangePreview?>(preview);
     }
 
     private async Task<PendingOperationChangePreview?> PreviewOtherAsync(Guid userId, string operationId,
@@ -452,9 +466,9 @@ public sealed partial class PendingOperationChangePreviewer(
                 item.GetProperty(HabitId).GetString() == habit.Id.ToString())
             : default;
         var value = isRevised && revisedItem.TryGetProperty(field, out var revisedValue)
-            ? revisedValue.ToString()
+            ? revisedValue.ValueKind == JsonValueKind.Null ? null : revisedValue.ToString()
             : arguments.TryGetProperty(field == "emoji" ? "emoji" : "date", out var proposed)
-                ? proposed.ToString()
+                ? proposed.ValueKind == JsonValueKind.Null ? null : proposed.ToString()
                 : field == "date" ? today.ToString(DateFormat, CultureInfo.InvariantCulture) : null;
         return new PendingOperationChange(habit.Id, habit.Title, field,
             field == "emoji" ? habit.Emoji : null, value,

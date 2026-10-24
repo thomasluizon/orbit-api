@@ -53,19 +53,52 @@ public class BulkUpdateHabitEmojisToolTests
     [MemberData(nameof(OptionalParameterCases.Fields), typeof(BulkUpdateHabitEmojisTool), "", MemberType = typeof(OptionalParameterCases))]
     public async Task OptionalNull_InfersSameIconsAsAbsent(string field)
     {
-        var habit = CreateHabit("Read", "📝");
+        var habit = CreateHabit("Read");
         SetupHabits(habit);
         var body = field == "habit_ids"
             ? new Dictionary<string, object?> { ["filter"] = new { all = true } }
             : new Dictionary<string, object?> { ["habit_ids"] = new[] { habit.Id } };
         (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
-        var before = OptionalParameterCases.HabitState(habit);
+        var second = CreateHabit("Read");
+        SetupHabits(second);
+        if (field != "habit_ids")
+            body["habit_ids"] = new[] { second.Id };
         body[field] = null;
         (await Execute(JsonSerializer.Serialize(body))).Success.Should().BeTrue();
-        OptionalParameterCases.HabitState(habit).Should().Be(before);
+        second.Emoji.Should().Be(habit.Emoji);
         await _inferenceService.Received(2).InferAsync(UserId,
-            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(inputs => inputs.Count == 1 && inputs[0].HabitId == habit.Id),
+            Arg.Is<IReadOnlyList<HabitEmojiInferenceInput>>(inputs => inputs.Count == 1),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InferFromTitle_PreservesExistingUnlessReplacementRequested(bool replaceExisting)
+    {
+        var missing = CreateHabit("Read");
+        var chosen = CreateHabit("Diet", "🍔");
+        SetupHabits(missing, chosen);
+
+        var result = await Execute(JsonSerializer.Serialize(new { filter = new { all = true }, replace_existing = replaceExisting }));
+
+        result.Success.Should().BeTrue();
+        missing.Emoji.Should().Be("📚");
+        chosen.Emoji.Should().Be(replaceExisting ? "🏃" : "🍔");
+        JsonSerializer.SerializeToElement(result.Payload).GetProperty("applied_count").GetInt32()
+            .Should().Be(replaceExisting ? 2 : 1);
+    }
+
+    [Fact]
+    public async Task ExplicitNoOp_DoesNotWriteOrCountAnUpdate()
+    {
+        SetupHabits(CreateHabit("Read", "📚"));
+
+        var result = await Execute("{\"emoji\":\"📚\"}");
+
+        result.Success.Should().BeTrue();
+        JsonSerializer.SerializeToElement(result.Payload).GetProperty("applied_count").GetInt32().Should().Be(0);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -261,5 +261,31 @@ public sealed class BulkHabitToolArgumentsTests
         filter!.All.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ParseEmojiFilter_IconState_SelectsPersistedEmoji(bool hasEmoji)
+    {
+        var userId = Guid.NewGuid();
+        var missing = Orbit.Domain.Entities.Habit.Create(new(userId, "Read", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var present = Orbit.Domain.Entities.Habit.Create(new(userId, "Diet", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3), Emoji: "🍔")).Value;
+        var (filter, error) = BulkHabitToolArguments.ParseEmojiFilter(
+            JsonSerializer.SerializeToElement(new { filter = new { has_emoji = hasEmoji } }));
+
+        error.Should().BeNull();
+        Orbit.Application.Habits.Commands.BulkHabitSelection.Select([missing, present], filter!)
+            .Should().Equal(hasEmoji ? present : missing);
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("\"false\"")]
+    public void ParseEmojiFilter_InvalidIconState_ReturnsBooleanError(string value)
+    {
+        var (_, error) = BulkHabitToolArguments.ParseEmojiFilter(Parse("{\"filter\":{\"has_emoji\":" + value + "}}"));
+
+        error.Should().Be("filter.has_emoji must be a boolean.");
+    }
+
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
 }

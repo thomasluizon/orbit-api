@@ -22,7 +22,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     public string Name => "bulk_update_habit_emojis";
 
     public string Description =>
-        "Infer distinct habit emojis, set a requested emoji, or clear icons for all matches.";
+        "Infer habit emojis, set a requested emoji, or clear icons for all matches. For without an icon / sem ícone, use filter.has_emoji=false. Inference preserves existing icons unless the user asks to replace them; then set replace_existing=true.";
 
     public object GetParameterSchema() => new
     {
@@ -30,6 +30,11 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         properties = new
         {
             emoji_mode = new { type = new[] { JsonSchemaTypes.String, "null" }, @enum = new[] { "infer", "set", "clear" }, description = "Defaults to infer. Use set with emoji, or clear to remove icons." },
+            replace_existing = new
+            {
+                type = new[] { JsonSchemaTypes.Boolean, "null" },
+                description = "Defaults to false. Set true only when the user asks to replace existing icons, such as change every icon / troca todos os ícones. Applies to inference."
+            },
             filter = BulkHabitToolArguments.FilterSchema(),
             habit_ids = new
             {
@@ -62,7 +67,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var overrides = new Dictionary<Guid, string?>();
         var (filter, error) = args.TryGetProperty("revised_items", out var items)
-            ? ParseRevisedItems(items, overrides) : BulkHabitToolArguments.ParseEmojiFilter(args);
+            ? ParseRevisedItems(items, overrides) : ParseInferenceFilter(args);
         if (error is not null)
             return Result.Failure(error);
         var (hasEmoji, infer, modeError) = ResolveEmojiOperation(args);
@@ -94,7 +99,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     {
         var emojis = new Dictionary<Guid, string?>();
         var (filter, error) = args.TryGetProperty("revised_items", out var items)
-            ? ParseRevisedItems(items, emojis) : BulkHabitToolArguments.ParseEmojiFilter(args);
+            ? ParseRevisedItems(items, emojis) : ParseInferenceFilter(args);
         if (error is not null)
             return Result.Failure<JsonElement>(error);
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
@@ -117,10 +122,13 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             foreach (var input in chunk)
                 emojis[input.HabitId] = inferred.Value[input.HabitId];
         }
+        var changed = habits.Where(habit => !string.Equals(habit.Emoji, emojis[habit.Id], StringComparison.Ordinal)).ToArray();
+        if (changed.Length == 0)
+            return Result.Failure<JsonElement>("No matching emoji changes.");
         return Result.Success(JsonSerializer.SerializeToElement(new
         {
             infer_from_title = false,
-            revised_items = habits.Select(habit => new { habit_id = habit.Id, emoji = emojis[habit.Id] }).ToArray()
+            revised_items = changed.Select(habit => new { habit_id = habit.Id, emoji = emojis[habit.Id] }).ToArray()
         }));
     }
 
@@ -173,7 +181,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         var overrides = new Dictionary<Guid, string?>();
         var (filter, filterError) = args.TryGetProperty("revised_items", out var revisedItems)
             ? ParseRevisedItems(revisedItems, overrides)
-            : BulkHabitToolArguments.ParseEmojiFilter(args);
+            : ParseInferenceFilter(args);
         if (filterError is not null)
             return new ToolResult(false, Error: filterError);
 
@@ -240,6 +248,8 @@ public sealed partial class BulkUpdateHabitEmojisTool(
                             emoji = requestedEmoji;
                         }
 
+                        if (string.Equals(habit.Emoji, emoji, StringComparison.Ordinal))
+                            continue;
                         if (ApplyEmoji(habit, emoji).IsSuccess)
                             attemptApplied++;
                     }
@@ -267,6 +277,20 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             new BulkHabitMutationResult(appliedCount, totalMatched, skippedCount, partial),
             "Updated emojis for",
             includeUpdatedCount: true);
+    }
+
+    private static (BulkHabitFilter? Filter, string? Error) ParseInferenceFilter(JsonElement args)
+    {
+        if (args.TryGetProperty("replace_existing", out var replace)
+            && replace.ValueKind is not (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null))
+            return (null, "replace_existing must be a boolean.");
+        var (filter, error) = BulkHabitToolArguments.ParseEmojiFilter(args);
+        if (error is not null || filter is null || !ResolveEmojiOperation(args).Infer
+            || JsonArgumentParser.GetOptionalBool(args, "replace_existing") == true)
+            return (filter, error);
+        if (filter.HasEmoji == true)
+            return (null, "Set replace_existing to true to infer replacements for existing icons.");
+        return (filter with { HasEmoji = false }, null);
     }
 
     internal static (bool HasEmoji, bool Infer, string? Error) ResolveEmojiOperation(JsonElement args)
