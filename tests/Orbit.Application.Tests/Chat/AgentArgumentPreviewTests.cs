@@ -31,9 +31,9 @@ public sealed class AgentArgumentPreviewTests
         var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
         _tools = new AiToolRegistry([
-            new CreateHabitTool(_habits, _tags, _goals, _dateService, payGate, unitOfWork),
+            new CreateHabitTool(_dateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dateService, payGate, unitOfWork)),
             new UpdateHabitTool(_habits, _dateService, Substitute.For<MediatR.IMediator>()),
-            new UpdateGoalTool(_goals, unitOfWork)
+            new UpdateGoalTool(_goals, Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goals, unitOfWork))
         ]);
         _dateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 9, 25));

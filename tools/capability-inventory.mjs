@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { entities, aliases, actions, parameterRestrictions, payloads, outputAliases, rendered, readChains, deliberateFields } from "./capability-inventory.bindings.mjs"
+import { entities, aliases, actions, parameterRestrictions, payloads, outputAliases, rendered, readChains, deliberateFields, forms } from "./capability-inventory.bindings.mjs"
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const operations = ["create", "read", "update", "delete", "bulk", "filterKeyedBulk"]
@@ -220,6 +220,22 @@ function parameters(text, file, offset, classMap, prefix = "", depth = 0) {
       found.push(...parameters(helper.text, helper.file, helper.offset, classMap, path + suffix, depth + 1))
     }
   }
+  for (const addition of text.matchAll(/properties\["([^"]+)"\]\s*=\s*new\s*\{/g)) {
+    const name = addition[1]
+    if (name === "sub_habits" || found.some(parameter => parameter.name === prefix + name)) continue
+    const start = text.indexOf("{", addition.index)
+    const schema = text.slice(start, balanced(text, start) + 1)
+    found.push({ name: prefix + name, leaf: name, required: false, ...schemaTraits(schema, file, classMap), ...evidence(file, offset + addition.index, addition[0]) })
+  }
+  for (const addition of text.matchAll(/properties\["([^"]+)"\]\s*=\s*(\w+\.\w+Schema\([^;]*);/g)) {
+    const helper = schemaHelper(addition[2], file, classMap)
+    if (!helper) throw new Error(`Missing form schema helper ${addition[2]}`)
+    const name = addition[1]
+    const traits = schemaTraits(helper.text, helper.file, classMap)
+    found.push({ name: prefix + name, leaf: name, required: false, ...traits, ...evidence(file, offset + addition.index, addition[0]) })
+    const suffix = [traits.type].flat().includes("array") ? "[]." : "."
+    found.push(...parameters(helper.text, helper.file, helper.offset, classMap, prefix + name + suffix, depth + 1))
+  }
   if (text.includes('properties["sub_habits"]')) {
     const at = text.indexOf('properties["sub_habits"]')
     const children = found.map(item => ({ ...item, name: prefix + "sub_habits[]." + item.name.slice(prefix.length) }))
@@ -244,6 +260,8 @@ function schemaParameters(type, classMap) {
     if (!composed) return parameters(body, owner.file, owner.start + open, classMap)
     const helper = schemaHelper(body.slice(composed.index + composed[0].indexOf(composed[1])), owner.file, classMap)
     const result = parameters(helper.text, helper.file, helper.offset, classMap)
+    const required = body.match(/schema\["required"\]\s*=\s*new JsonArray\(([^)]+)\)/)?.[1]
+    if (required) for (const parameter of result) if (!parameter.name.includes(".")) parameter.required = required.includes(`"${parameter.name}"`)
     for (const addition of body.matchAll(/schema\["properties"\]!\["([^"]+)"\]\s*=\s*JsonSerializer.SerializeToNode\(/g)) {
       const start = body.indexOf("{", addition.index + addition[0].length)
       const schema = body.slice(start, balanced(body, start) + 1)
@@ -256,11 +274,9 @@ function schemaParameters(type, classMap) {
   if (!expression.startsWith("new")) {
     const call = expression.match(/^(\w+)\.(\w+)\(/)
     if (!call) throw new Error(`Unsupported schema expression ${type.name}`)
-    const helper = classMap.get(call[1])
+    const helper = schemaHelper(expression, owner.file, classMap)
     if (!helper) throw new Error(`Missing helper ${call[1]}`)
-    const methodStart = helper.text.indexOf(`${call[2]}(`)
-    const bodyStart = helper.text.indexOf("{", methodStart)
-    return parameters(helper.text.slice(bodyStart, balanced(helper.text, bodyStart) + 1), helper.file, helper.start + bodyStart, classMap)
+    return parameters(helper.text, helper.file, helper.offset, classMap)
   }
   const open = owner.text.indexOf("{", arrow)
   const end = balanced(owner.text, open)
@@ -588,13 +604,23 @@ export function buildInventory(root = defaultRoot) {
     else if (["Habit", "SubHabit"].includes(gap.entity) || gap.entity === "Goal" && gap.field === "Habits") gap.ticket = "thomasluizon/orbit-tickets#1575"
     else if (gap.entity === "ChecklistTemplate" || gap.entity === "Profile" && gap.field === "Name" || gap.entity === "CalendarSync" && gap.field === "GoogleCalendarSelectedIds") gap.ticket = "thomasluizon/orbit-tickets#1576"
   }
+  const formFields = Object.entries(forms).map(([form, binding]) => ({
+    form,
+    fields: recordFields(files, form).map(field => {
+      const names = (binding.aliases?.[field.name] ?? [field.name]).map(normalize)
+      const routes = registry.chat.filter(tool => binding.tools.includes(tool.name)).flatMap(tool =>
+        tool.parameters.filter(parameter => !parameter.name.includes(".") && names.includes(normalize(parameter.leaf ?? parameter.name)))
+          .map(parameter => ({ tool: tool.name, parameter: parameter.name })))
+      return { name: field.name, status: routes.length ? "covered" : "absent", routes, evidence: field }
+    }),
+  }))
   return {
     schemaVersion: 2,
     scope: "Extension of #318: registered chat and MCP tools, persisted domain fields, direct output projections and MCP operation-gateway routes. No user data is read.",
     semantics: { covered: "A registered tool accepts this parameter or returns the field. Policy, plan, ownership and confirmation checks still apply.", partial: "A summary or count is returned, not the full writable value. This does not satisfy readback.", "advertised-only": "A direct adapter forwards a parameter absent from its backing executor schema. Its signature alone does not establish working coverage.", absent: "No matching registered tool parameter or returned projection in the reviewed bindings. Domain and complete registry evidence accompany the cell.", deliberate: "An explicit reason explains why this operation is not exposed.", delete: "Deletion applies to the entity, not an independent field mutation.", bulk: "Includes repeated explicit-ID operations and filter-keyed operations; filterKeyedBulk is reported separately.", gateway: "MCP can execute non-chat-only IAiTool operations through execute_agent_operation_v2. Direct MCP limitations remain visible in direct arrays.", bindings: "Semantic bindings identify returned DTOs and formatted output members. CI compares capability semantics; evidence identifies source paths and members without pinning source contents or line numbers." },
     registries: { chat: registry.chat.map(publicTool), mcp: registry.mcp.map(publicTool) },
     counts: { registeredChat, chat: registry.chat.length, mcp: registry.mcp.length, capabilities: capabilities.length, entities: rows.length, fields: rows.reduce((sum, row) => sum + row.fields.length, 0) },
-    capabilities, entities: rows, knownGaps, gaps,
+    capabilities, entities: rows, formFields, knownGaps, gaps,
   }
 }
 
@@ -612,6 +638,7 @@ export function semanticSnapshot(inventory) {
   }]))
   return {
     schemaVersion: inventory.schemaVersion,
+    formFields: inventory.formFields.map(({ form, fields }) => ({ form, fields: fields.map(({ name, status, routes }) => ({ name, status, routes })) })),
     registries: Object.fromEntries(Object.entries(inventory.registries).map(([surface, tools]) => [surface, sorted(tools).map(tool => ({ name: tool.name, parameters: parameters(tool.parameters) }))])),
     capabilities: sorted(inventory.capabilities, row => row.capability).map(row => ({ capability: row.capability, surfaces: Object.fromEntries(Object.entries(row.surfaces).map(([surface, cell]) => [surface, { verdict: cell.verdict, direct: routes(cell.direct), viaOperations: routes(cell.viaOperations) }])) })),
     entities: sorted(inventory.entities, row => row.entity).map(row => ({ entity: row.entity, model: row.model, ...(row.deliberate ? { deliberate: row.deliberate } : {}), surfaces: surfaces(row.operations), fields: sorted(row.fields).map(field => ({ name: field.name, type: field.type, ...(field.shadow ? { shadow: true } : {}), surfaces: surfaces(field.surfaces) })) })),

@@ -44,6 +44,7 @@ public partial class ProcessUserChatCommandHandler
         public List<PendingAgentOperation> CommittedPendingOperations { get; } = [];
 
         public ChatBlockPart? AskBlock { get; set; }
+        public bool HasBudgetRecovery { get; set; }
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];

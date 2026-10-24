@@ -97,11 +97,22 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
 
     private async Task<Result?> CheckGoalAsync(object command, CancellationToken ct) => command switch
     {
+        CreateGoalCommand create => await CheckGoalCreationAsync(create, ct),
         LinkHabitsToGoalCommand link => (await ExistsAsync<Goal>(g => g.Id == link.GoalId && g.UserId == link.UserId, ct)) is { IsFailure: true } failure
             ? failure : await CheckHabitIdsAsync(link.UserId, link.HabitIds, ct),
         ReorderGoalsCommand reorder => await CheckGoalPositionsAsync(reorder, ct),
         _ => null
     };
+
+    private async Task<Result> CheckGoalCreationAsync(CreateGoalCommand command, CancellationToken ct)
+    {
+        var result = Goal.Create(new Goal.CreateGoalParams(command.UserId, command.Title, command.TargetValue,
+            command.Unit, command.Description, command.Deadline, Type: command.Type));
+        if (result.IsFailure) return result;
+        var today = await services.GetRequiredService<IUserDateService>().GetUserTodayAsync(command.UserId, ct);
+        if (command.Deadline < today) return Result.Failure(ErrorMessages.DeadlineInPast);
+        return command.HabitIds is { Count: > 0 } ids ? await CheckHabitIdsAsync(command.UserId, ids, ct) : Result.Success();
+    }
 
     private async Task<Result> CheckGoalPositionsAsync(ReorderGoalsCommand command, CancellationToken ct)
     {

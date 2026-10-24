@@ -6,6 +6,8 @@ namespace Orbit.Application.Chat;
 
 internal static partial class HabitHeadingParents
 {
+    internal const string ExistingCandidatesField = "preview_habit_candidate_ids";
+    internal const string SuggestedParentField = "preview_parent_suggested";
     internal const string CandidateIdsField = "preview_parent_candidate_ids";
 
     internal sealed record Heading(string Name, string Body, IReadOnlyList<Habit> Candidates);

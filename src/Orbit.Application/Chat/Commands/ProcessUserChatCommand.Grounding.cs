@@ -50,7 +50,7 @@ public partial class ProcessUserChatCommandHandler
             : TurnFactSet.FromToolResults(results.ToolResults);
         var textViolations = CheckGrounding(message, "Message", facts, request, turn);
         var followUpViolations = CheckGrounding(followUps is null ? null : string.Join("\n", followUps), "FollowUps", facts, request, turn);
-        if (HasHabitCreationPreview(results))
+        if (HasPendingWritePreview(results))
         {
             message = null;
             followUps = null;

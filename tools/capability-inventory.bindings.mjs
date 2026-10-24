@@ -187,3 +187,16 @@ export const deliberateFields = {
   "ApiKey.IsReadOnly": "The access mode is immutable; revoke and create a replacement.",
   "ApiKey.ExpiresAtUtc": "Expiry is immutable; revoke and create a replacement.",
 }
+
+export const forms = {
+  CreateHabitRequest: { tools: ["create_habit"], aliases: { TagIds: ["tag_ids"], SubHabits: ["sub_habits"] } },
+  UpdateHabitRequest: { tools: ["update_habit"], aliases: { ClearEndDate: ["clear_fields"], ParentId: ["parent_habit_id"], ClearParent: ["clear_parent"] } },
+  CreateSubHabitRequest: { tools: ["create_sub_habit"] },
+  UpdateChecklistRequest: { tools: ["update_checklist"] },
+  CreateGoalRequest: { tools: ["create_goal"], aliases: { Type: ["goal_type"] } },
+  UpdateGoalRequest: { tools: ["update_goal"] },
+  UpdateProgressRequest: { tools: ["update_goal_progress"] },
+  UpdateStatusRequest: { tools: ["update_goal_status"] },
+  CreateTagRequest: { tools: ["create_tag"] },
+  UpdateTagRequest: { tools: ["update_tag"] },
+}

@@ -22,7 +22,7 @@ public class UpdateGoalStatusToolTests
 
     public UpdateGoalStatusToolTests()
     {
-        _tool = new UpdateGoalStatusTool(_goalRepository, _goalCompletionService, _unitOfWork);
+        _tool = new UpdateGoalStatusTool(_goalRepository, Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepository, _unitOfWork, completion: _goalCompletionService));
     }
 
     [Fact]
@@ -59,8 +59,7 @@ public class UpdateGoalStatusToolTests
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(callInfo => context.SaveChangesAsync(callInfo.Arg<CancellationToken>()));
-        var tool = new UpdateGoalStatusTool(
-            new GenericRepository<Goal>(context), _goalCompletionService, unitOfWork);
+        var tool = new UpdateGoalStatusTool(new GenericRepository<Goal>(context), Orbit.Tests.Shared.GoalToolCommandMediator.Create(new GenericRepository<Goal>(context), unitOfWork, completion: _goalCompletionService));
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(StatusArgs(goalId, "Abandoned"), attackerId, CancellationToken.None);

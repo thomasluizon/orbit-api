@@ -21,7 +21,7 @@ public class CreateGoalToolTests
 
     public CreateGoalToolTests()
     {
-        _tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        _tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepo, _unitOfWork, habits: _habitRepo));
     }
 
     [Theory]

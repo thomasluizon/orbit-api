@@ -26,7 +26,7 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class BulkCreateAgentOperationTests : IDisposable
+public sealed partial class BulkCreateAgentOperationTests : IDisposable
 {
     private readonly SqliteOrbitDbContextFactory _factory = new();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -378,12 +378,13 @@ public sealed class BulkCreateAgentOperationTests : IDisposable
     private sealed class AfterWriteFailureBehavior : IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>
     {
         public bool Enabled { get; set; }
+        public string? FailOnTitle { get; set; }
 
         public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request,
             RequestHandlerDelegate<Result<BulkCreateResult>> next, CancellationToken cancellationToken)
         {
             var result = await next(cancellationToken);
-            if (Enabled)
+            if (Enabled && (FailOnTitle is null || request.Habits.Any(item => item.Title == FailOnTitle)))
                 throw new InvalidOperationException("Failure after saving habits");
             return result;
         }

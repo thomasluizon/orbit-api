@@ -28,7 +28,7 @@ public partial class CreateHabitToolTests
 
     public CreateHabitToolTests()
     {
-        _tool = new CreateHabitTool(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
+        _tool = new CreateHabitTool(_userDateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork));
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -809,11 +809,13 @@ public partial class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task WithInvalidGoalIds_SkipsGoalLinking()
+    public async Task WithInvalidGoalIds_RejectsBeforeWriting()
     {
         var result = await Execute("""{"title": "Run", "goal_ids": ["not-a-guid"]}""");
 
-        result.Success.Should().BeTrue();
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("goal_ids");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

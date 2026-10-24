@@ -197,6 +197,7 @@ public partial class ProcessUserChatCommandHandler
             return null;
         foreach (var pending in invalidPending)
             results.SupersedePendingOperation(pending.Id);
+        results.HasBudgetRecovery = true;
         return new AiResponse { TextMessage = CommittedWriteMessage(language, hasSavedActions) };
     }
 
@@ -435,6 +436,11 @@ public partial class ProcessUserChatCommandHandler
     /// Executes a single tool call: resolves the tool, runs it, and produces both a result
     /// for the AI and an optional action result for the frontend.
     /// </summary>
+    private static AgentExecuteOperationResponse RevisedPreviewResponse(AiToolCall call, AgentExecuteOperationResponse response) =>
+        call.Name == "revise_pending_changes" && response.Operation.Payload is PendingAgentOperation revised
+            ? response with { Operation = response.Operation with { Status = AgentOperationStatus.PendingConfirmation, PendingOperationId = revised.Id }, PendingOperation = revised }
+            : response;
+
     private async Task<ToolCallOutcome> ExecuteSingleToolCallAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
@@ -465,6 +471,7 @@ public partial class ProcessUserChatCommandHandler
         var executionResponse = correctionRequest is null
             ? await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken)
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
+        executionResponse = RevisedPreviewResponse(call, executionResponse);
         var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation, request.ClientContext);
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);

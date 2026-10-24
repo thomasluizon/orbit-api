@@ -95,8 +95,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var block = RetryChoice();
         _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.PassThroughTransactions<ToolResult>();
-        var createHabit = new Orbit.Application.Chat.Tools.Implementations.CreateHabitTool(
-            _habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork);
+        var createHabit = new Orbit.Application.Chat.Tools.Implementations.CreateHabitTool(_userDateService,
+            Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork));
         IAiTool tool = createHabit;
         if (failure == "serialization")
         {

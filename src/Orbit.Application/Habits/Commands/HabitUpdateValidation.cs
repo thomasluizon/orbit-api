@@ -14,7 +14,7 @@ internal static class HabitUpdateValidation
         new(userId, habitId, update.Title, update.Description,
             update.FrequencyUnit, update.FrequencyQuantity, update.IsBadHabit, update.DueDate,
             IsGeneral: update.IsGeneral, ClearEndDate: update.ClearEndDate, Emoji: update.Emoji,
-            IntervalWeeks: update.IntervalWeeks,
+            IntervalWeeks: update.IntervalWeeks, StartDate: update.StartDate,
             Options: new UpdateHabitCommandOptions(update.Days, update.DueTime, update.DueEndTime,
                 update.ReminderEnabled, update.ReminderTimes, update.SlipAlertEnabled, update.ChecklistItems,
                 update.ScheduledReminders, update.EndDate, update.IsFlexible, update.RelativeReminders));
@@ -102,7 +102,8 @@ internal static class HabitUpdateValidation
         DueEndTime = changes.HasDueEndTime ? changes.DueEndTime : update.DueEndTime,
         IsGeneral = changes.HasIsGeneral ? changes.IsGeneral : null,
         SlipAlertEnabled = changes.HasSlipAlertEnabled ? changes.SlipAlertEnabled : null,
-        RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null
+        RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null,
+        StartDate = changes.HasStartDate ? changes.StartDate : null
     };
 
 }

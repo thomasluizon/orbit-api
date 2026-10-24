@@ -107,7 +107,7 @@ public class AgentToolsTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()).Returns(goal);
         var unitOfWork = Substitute.For<IUnitOfWork>();
-        var executor = SharedToolExecution.Create(new UpdateGoalTool(repository, unitOfWork), unitOfWork);
+        var executor = SharedToolExecution.Create(new UpdateGoalTool(repository, Orbit.Tests.Shared.GoalToolCommandMediator.Create(repository, unitOfWork)), unitOfWork);
         var tools = new AgentTools(_catalogService, executor, _pendingOperationStore, _stepUpService);
         var arguments = JsonSerializer.SerializeToElement(new { goal_id = goal.Id, deadline = (string?)null });
 

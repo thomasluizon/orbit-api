@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MediatR;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
@@ -12,8 +13,11 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateHabitTool(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    IMediator mediator) : IAiTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) =>
+        !arguments.TryGetProperty(ToolArgumentNames.GoalIds, out _);
+
     public string Name => "update_habit";
 
     public string Description =>
@@ -26,6 +30,11 @@ public class UpdateHabitTool(
         {
             clear_fields = OptionalToolArguments.ClearFieldsSchema(OptionalToolArguments.HabitClearFields),
             habit_id = new { type = JsonSchemaTypes.String },
+            start_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD recurrence anchor." },
+            parent_habit_id = new { type = JsonSchemaTypes.String, description = "Existing parent ID." },
+            clear_parent = new { type = JsonSchemaTypes.Boolean },
+            tag_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
+            goal_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
             title = new { type = JsonSchemaTypes.String },
             description = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "New description. Use clear_fields to clear description." },
             emoji = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji used as the habit icon. Use clear_fields to clear." },
@@ -99,15 +108,25 @@ public class UpdateHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
 
-        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(args, allowHabitId: true);
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(FieldArguments(args), allowHabitId: true);
         if (error is not null)
             return new ToolResult(false, Error: error);
-        var result = await mediator.Send(new UpdateHabitFieldsCommand(userId, habitId, changes!), ct);
+        var result = await mediator.Send(new UpdateHabitFieldsCommand(userId, habitId, changes!,
+            GoalIds: JsonArgumentParser.ParseGuidArray(args, "goal_ids"), TagIds: JsonArgumentParser.ParseGuidArray(args, "tag_ids"),
+            ParentId: Guid.TryParse(JsonArgumentParser.GetOptionalString(args, "parent_habit_id"), out var parentId) ? parentId : null,
+            ClearParent: JsonArgumentParser.GetOptionalBool(args, "clear_parent")), ct);
         if (result.IsFailure)
             return result.ErrorCode == ErrorMessages.HabitNotFound.Code
                 ? HabitToolHelpers.HabitNotFoundResult(habitId)
                 : ToolResult.FromFailure(result);
         return new ToolResult(true, EntityId: habitId.ToString(), EntityName: result.Value);
+    }
+
+    private static JsonElement FieldArguments(JsonElement args)
+    {
+        var node = JsonNode.Parse(args.GetRawText())!.AsObject();
+        foreach (var field in new[] { "goal_ids", "tag_ids", "parent_habit_id", "clear_parent" }) node.Remove(field);
+        return JsonSerializer.SerializeToElement(node);
     }
 
     public async Task<Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -117,7 +136,7 @@ public class UpdateHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return Result.Failure("habit_id is required and must be a valid GUID.");
 
-        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(args, allowHabitId: true);
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(FieldArguments(args), allowHabitId: true);
         if (error is not null)
             return Result.Failure(error);
 

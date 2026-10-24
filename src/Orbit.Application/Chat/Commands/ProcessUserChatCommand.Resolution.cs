@@ -1,9 +1,11 @@
+using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
 using Orbit.Domain.Models;
 using Orbit.Domain.Entities;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 
 namespace Orbit.Application.Chat.Commands;
@@ -35,6 +37,7 @@ public partial class ProcessUserChatCommandHandler
 
     private void SeedProposedHabitNames(ProcessUserChatCommand request, ToolExecutionAccumulator results)
     {
+        if (request.History is not { Count: > 0 }) return;
         var proposals = execution.PendingOperationStore.GetPendingHabitCreations(request.UserId);
         var normalizedMessage = HabitNameMatcher.Normalize(request.Message);
         var asksForReplacement = Regex.IsMatch(normalizedMessage,
@@ -64,10 +67,11 @@ public partial class ProcessUserChatCommandHandler
     {
         if (!HasResolutionQuestion(results))
             return cards;
-        var message = AddResolutionQuestion(cards.AiMessage, results, language)!;
+        var message = AddResolutionQuestion(null, results, language)!;
         return cards with
         {
             AiMessage = message,
+            ServerComposedText = true,
             Parts = cards.Parts is null ? null : new ChatResponsePart[] { new ChatTextPart(message) }
                 .Concat(cards.Parts.Where(part => part is not ChatTextPart)).ToArray()
         };
@@ -76,7 +80,7 @@ public partial class ProcessUserChatCommandHandler
     private static AiToolCall? ResolveHabitCall(AiToolCall call, ToolExecutionAccumulator results)
     {
         if (JsonNode.Parse(call.Args.GetRawText()) is not JsonObject arguments
-            || new[] { "habit_id", "parent_habit_id" }.Any(key => arguments[key] is not null
+            || new[] { HabitId, ParentHabitId }.Any(key => arguments[key] is not null
                 && (arguments[key] is not JsonValue value || !value.TryGetValue<string>(out _)))
             || arguments["habit_ids"] is { } ids && (ids is not JsonArray array
                 || array.Any(item => item is not JsonValue value || !value.TryGetValue<string>(out _))))
@@ -85,13 +89,7 @@ public partial class ProcessUserChatCommandHandler
             return null;
         }
 
-        if (arguments["parent_habit_id"] is not null && !results.RequiresExistingParent && results.ParentHeadings.Count == 0
-            && call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
-        {
-            results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
-            return null;
-        }
-        if (call.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
+        if (call.Name is "create_habit" or BulkCreateHabits or "create_sub_habit")
             return ResolveHabitCreation(call, arguments, results);
 
         if (!ResolveHabitIdentifiers(arguments, call.Name, results)
@@ -103,7 +101,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool ResolveSearchFilter(string operationId, JsonObject arguments, ToolExecutionAccumulator results)
     {
-        if (!operationId.StartsWith("bulk_", StringComparison.Ordinal) || operationId == "bulk_create_habits"
+        if (!operationId.StartsWith("bulk_", StringComparison.Ordinal) || operationId == BulkCreateHabits
             || arguments["filter"] is not JsonObject filter || filter["search"] is not JsonValue searchValue
             || !searchValue.TryGetValue<string>(out var search) || string.IsNullOrWhiteSpace(search))
             return true;
@@ -116,7 +114,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool ResolveHabitIdentifiers(JsonObject arguments, string operationId, ToolExecutionAccumulator results)
     {
-        foreach (var key in new[] { "habit_id", "parent_habit_id" })
+        foreach (var key in new[] { HabitId, ParentHabitId })
         {
             if (arguments[key] is not JsonValue value || !value.TryGetValue<string>(out var name)
                 || Guid.TryParse(name, out _))
@@ -151,7 +149,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static AiToolCall? ResolveHabitCreation(AiToolCall call, JsonObject arguments, ToolExecutionAccumulator results)
     {
-        var items = call.Name == "bulk_create_habits" ? arguments["habits"] as JsonArray : new JsonArray(arguments.DeepClone());
+        var items = call.Name == BulkCreateHabits ? arguments[ToolArgumentNames.Habits] as JsonArray : new JsonArray(arguments.DeepClone());
         if (items is null || items.Any(item => item is not JsonObject))
         {
             results.InvalidCalls[call.Id] = "Habits must be an array of objects.";
@@ -160,21 +158,21 @@ public partial class ProcessUserChatCommandHandler
         var allHaveHeadings = items.Count > 0 && items.OfType<JsonObject>()
             .All(item => HabitHeadingParents.ForItem(item, results.ParentHeadings) is not null);
         if (allHaveHeadings)
-            arguments.Remove("parent_habit_id");
+            arguments.Remove(ParentHabitId);
         else if (!ResolveHabitIdentifiers(arguments, call.Name, results))
             return null;
         if (!BindHeadingItems(call, items, results))
             return null;
         if (results.RequiresExistingParent && items.Count == 1 && items[0] is JsonObject root
             && root["title"] is JsonValue titleValue && titleValue.TryGetValue<string>(out var title)
-            && root["sub_habits"] is JsonArray children
+            && root[SubHabits] is JsonArray children
             && ResolveHabitName(results, title) is { } parent)
         {
-            arguments = new JsonObject { ["parent_habit_id"] = parent.Id.ToString(), ["habits"] = children.DeepClone() };
-            call = call with { Name = "bulk_create_habits" };
-            items = arguments["habits"]!.AsArray();
+            arguments = new JsonObject { [ParentHabitId] = parent.Id.ToString(), [ToolArgumentNames.Habits] = children.DeepClone() };
+            call = call with { Name = BulkCreateHabits };
+            items = arguments[ToolArgumentNames.Habits]!.AsArray();
         }
-        else if (arguments["parent_habit_id"] is null && results.RequiresExistingParent && !allHaveHeadings)
+        else if (arguments[ParentHabitId] is null && results.RequiresExistingParent && !allHaveHeadings)
         {
             var name = (items.FirstOrDefault() as JsonObject)?["title"]?.ToString() ?? string.Empty;
             if (!results.AmbiguousHabitNames.ContainsKey(name))
@@ -198,13 +196,10 @@ public partial class ProcessUserChatCommandHandler
         {
             if (HabitHeadingParents.ForItem(item, results.ParentHeadings) is { } heading)
                 HabitHeadingParents.Bind(item, heading, removeInventedDescription: true);
-            else if (item["parent_habit_id"] is not null)
+            else if (item[ParentHabitId] is not null)
             {
                 if (!results.RequiresExistingParent)
-                {
-                    results.InvalidCalls[call.Id] = "Only assign an existing parent when the person asks for children under it.";
-                    return false;
-                }
+                    item[HabitHeadingParents.SuggestedParentField] = true;
                 if (!ResolveHabitIdentifiers(item, call.Name, results)) return false;
             }
         }
@@ -213,60 +208,74 @@ public partial class ProcessUserChatCommandHandler
 
     private static AiToolCall BindCreationOperation(AiToolCall call, JsonObject arguments, JsonArray proposed, bool hasHeadings)
     {
-        if (call.Name == "bulk_create_habits")
-            arguments["habits"] = proposed;
+        if (call.Name == BulkCreateHabits)
+            arguments[ToolArgumentNames.Habits] = proposed;
         else
         {
             arguments = proposed[0]!.AsObject();
-            if (arguments["parent_habit_id"] is not null)
+            if (arguments[ParentHabitId] is not null)
             {
-                if (Guid.TryParse(arguments["parent_habit_id"]!.ToString(), out _))
+                if (Guid.TryParse(arguments[ParentHabitId]!.ToString(), out _))
                     call = call with { Name = "create_sub_habit" };
                 else
                 {
-                    arguments = new JsonObject { ["habits"] = proposed };
-                    call = call with { Name = "bulk_create_habits" };
+                    arguments = new JsonObject { [ToolArgumentNames.Habits] = proposed };
+                    call = call with { Name = BulkCreateHabits };
                 }
             }
             else if (hasHeadings)
             {
-                arguments = new JsonObject { ["habits"] = proposed };
-                call = call with { Name = "bulk_create_habits" };
+                arguments = new JsonObject { [ToolArgumentNames.Habits] = proposed };
+                call = call with { Name = BulkCreateHabits };
             }
+        }
+        if (proposed.OfType<JsonObject>().Any(item => item[HabitId] is not null || item[HabitHeadingParents.SuggestedParentField] is not null))
+        {
+            call = call with { Name = BulkCreateHabits };
+            arguments = new JsonObject { [ToolArgumentNames.Habits] = proposed.DeepClone() };
         }
         return call with { Args = JsonSerializer.SerializeToElement(arguments) };
     }
 
     private static JsonArray? NewHabitItems(JsonArray items, JsonObject arguments, ToolExecutionAccumulator results)
     {
-        if (items.Any(item => item is not JsonObject habit || habit["title"] is not JsonValue value
-            || !value.TryGetValue<string>(out var title) || string.IsNullOrWhiteSpace(title)))
-            return null;
-        Guid? parentId = Guid.TryParse(arguments["parent_habit_id"]?.ToString(), out var parsed) ? parsed : null;
+        if (items.Any(item => !HasHabitTitle(item))) return null;
+        Guid? parentId = Guid.TryParse(arguments[ParentHabitId]?.ToString(), out var parsed) ? parsed : null;
         var proposed = new JsonArray();
         foreach (var item in items.OfType<JsonObject>())
         {
+            if (results.IsTaggingIntent) continue;
             var name = item["title"]!.GetValue<string>();
-            var itemParentId = Guid.TryParse(item["parent_habit_id"]?.ToString(), out var itemParent) ? itemParent : parentId;
-            if (results.IsTaggingIntent)
-                continue;
-            var existing = results.Habits.FirstOrDefault(habit => habit.ParentHabitId == itemParentId
-                && HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name));
-            if (existing is not null)
+            var itemParentId = Guid.TryParse(item[ParentHabitId]?.ToString(), out var itemParent) ? itemParent : parentId;
+            BindExistingHabit(item, name, itemParentId, results);
+            var key = (itemParentId, HabitNameMatcher.Normalize(name));
+            if (!results.ProposedHabitNames.Add(key))
             {
-                results.ExistingDuplicateNames.Add(existing.Title);
+                results.PendingDuplicateNames.Add(results.PendingHabitNames.GetValueOrDefault(key, name));
                 continue;
             }
-            if (results.ProposedHabitNames.Contains((itemParentId, HabitNameMatcher.Normalize(name))))
-            {
-                results.PendingDuplicateNames.Add(results.PendingHabitNames.GetValueOrDefault(
-                    (itemParentId, HabitNameMatcher.Normalize(name)), name));
-                continue;
-            }
-            results.ProposedHabitNames.Add((itemParentId, HabitNameMatcher.Normalize(name)));
             proposed.Add(item.DeepClone());
         }
         return proposed;
+    }
+
+    private static bool HasHabitTitle(JsonNode? item) => item is JsonObject habit
+        && habit["title"] is JsonValue value && value.TryGetValue<string>(out var title) && !string.IsNullOrWhiteSpace(title);
+
+    private static void BindExistingHabit(JsonObject item, string name, Guid? parentId, ToolExecutionAccumulator results)
+    {
+        var matches = results.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)
+            && (parentId is null || habit.ParentHabitId == parentId)).ToArray();
+        if (matches.Length > 1)
+        {
+            item[HabitId] = name;
+            item[HabitHeadingParents.ExistingCandidatesField] = new JsonArray(matches.Select(habit => (JsonNode?)JsonValue.Create(habit.Id.ToString())).ToArray());
+        }
+        if (matches.Length != 1) return;
+        var existing = matches[0];
+        item[HabitId] = existing.Id.ToString();
+        if (item[ParentHabitId] is null && existing.ParentHabitId is { } existingParent)
+            item[ParentHabitId] = existingParent.ToString();
     }
 
     private async Task CoalesceLogCallsAsync(IReadOnlyList<AiToolCall> calls,
@@ -311,7 +320,7 @@ public partial class ProcessUserChatCommandHandler
             .GroupBy(call =>
             {
                 var arguments = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
-                arguments.Remove("habit_id");
+                arguments.Remove(HabitId);
                 arguments.Remove("habit_ids");
                 return Orbit.Domain.Common.AgentOperationFingerprint.Compute("tags", arguments.ToJsonString());
             });
@@ -322,7 +331,7 @@ public partial class ProcessUserChatCommandHandler
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var call in group)
             {
-                if (call.Args.TryGetProperty("habit_id", out var id) && id.ValueKind == JsonValueKind.String)
+                if (call.Args.TryGetProperty(HabitId, out var id) && id.ValueKind == JsonValueKind.String)
                     ids.Add(id.GetString()!);
                 if (call.Args.TryGetProperty("habit_ids", out var values) && values.ValueKind == JsonValueKind.Array)
                     foreach (var value in values.EnumerateArray())
@@ -331,7 +340,7 @@ public partial class ProcessUserChatCommandHandler
             }
             var first = group[0];
             var arguments = JsonNode.Parse(first.Args.GetRawText())!.AsObject();
-            arguments.Remove("habit_id");
+            arguments.Remove(HabitId);
             arguments["habit_ids"] = new JsonArray(ids.Order(StringComparer.Ordinal).Select(id => (JsonNode?)JsonValue.Create(id)).ToArray());
             calls[first.Id] = first with { Args = JsonSerializer.SerializeToElement(arguments) };
             foreach (var call in group.Skip(1))

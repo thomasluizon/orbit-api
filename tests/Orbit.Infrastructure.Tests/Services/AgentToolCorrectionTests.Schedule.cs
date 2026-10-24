@@ -60,7 +60,7 @@ public sealed partial class AgentToolCorrectionTests
         _saved.Should().BeEmpty();
         var stored = _store.GetExecution(_userId, pending.Id)!;
         stored.Arguments.GetProperty("due_time").GetString().Should().Be("21:17");
-        stored.Arguments.GetProperty("due_date").GetString().Should().Be("2026-10-01");
+        stored.Arguments.GetProperty("due_date").GetString().Should().Be("2026-10-05");
         _store.Confirm(Guid.NewGuid(), pending.Id).Should().BeNull();
         var approval = _store.Confirm(_userId, pending.Id)!;
         var approved = request with { Arguments = stored.Arguments, ConfirmationToken = approval.ConfirmationToken };
@@ -75,7 +75,7 @@ public sealed partial class AgentToolCorrectionTests
         habit.FrequencyQuantity.Should().Be(1);
         habit.Days.Should().Equal(DayOfWeek.Monday);
         habit.IntervalWeeks.Should().Be(2);
-        habit.NextDueDate.Should().Be(new DateOnly(2026, 10, 1));
+        habit.NextDueDate.Should().Be(new DateOnly(2026, 10, 5));
         habit.DueTime.Should().Be(new TimeOnly(21, 17));
         _store.GetExecution(_userId, pending.Id).Should().BeNull();
     }
@@ -124,10 +124,14 @@ public sealed partial class AgentToolCorrectionTests
         executed.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         _saved.Should().HaveCount(expected.Length);
         foreach (var actual in _saved)
+        {
+            var ordinary = expected.Single(habit => habit.Title == actual.Title);
+            actual.Position.Should().Be(ordinary.Position + (actual.ParentHabitId is null ? 1 : 0));
             actual.Should().BeEquivalentTo(expected.Single(habit => habit.Title == actual.Title), options => options
                 .ComparingByMembers<Habit>()
                 .Excluding(habit => habit.Id).Excluding(habit => habit.ParentHabitId)
-                .Excluding(habit => habit.CreatedAtUtc).Excluding(habit => habit.UpdatedAtUtc));
+                .Excluding(habit => habit.CreatedAtUtc).Excluding(habit => habit.UpdatedAtUtc).Excluding(habit => habit.Position));
+        }
         var parent = _saved.Single(habit => habit.ParentHabitId is null);
         _saved.Where(habit => habit != parent).Should().OnlyContain(child => child.ParentHabitId == parent.Id);
     }

@@ -195,7 +195,8 @@ public record PendingAgentOperationExecution(
     AgentExecutionSurface Surface,
     AgentConfirmationRequirement ConfirmationRequirement,
     string? PreviewFingerprint = null,
-    int ArgumentSchemaVersion = Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion)
+    int ArgumentSchemaVersion = Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion,
+    DateTime? ExpiresAtUtc = null, string? ActionKey = null)
 {
     public bool RequiresReproposal => ArgumentSchemaVersion != Orbit.Domain.Entities.PendingAgentOperationState.CurrentArgumentSchemaVersion;
 }

@@ -19,7 +19,7 @@ public class UpdateGoalToolTests
 
     public UpdateGoalToolTests()
     {
-        _tool = new UpdateGoalTool(_goalRepository, _unitOfWork);
+        _tool = new UpdateGoalTool(_goalRepository, Orbit.Tests.Shared.GoalToolCommandMediator.Create(_goalRepository, _unitOfWork));
     }
 
     [Theory]
@@ -126,7 +126,7 @@ public class UpdateGoalToolTests
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(callInfo => context.SaveChangesAsync(callInfo.Arg<CancellationToken>()));
-        var tool = new UpdateGoalTool(new GenericRepository<Goal>(context), unitOfWork);
+        var tool = new UpdateGoalTool(new GenericRepository<Goal>(context), Orbit.Tests.Shared.GoalToolCommandMediator.Create(new GenericRepository<Goal>(context), unitOfWork, configureTransactions: false));
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(RenameArgs(goalId, "Hijacked"), attackerId, CancellationToken.None);

@@ -47,10 +47,20 @@ public interface IArgumentCheckTool
 }
 
 /// <summary>
-/// A tool whose writes share the executor's unit of work and have no external side effects.
-/// Confirmation consumption and tool writes commit together; failed outcomes roll both back.
+/// A tool whose database writes share the executor's unit of work.
+/// Atomic bundles additionally require a route that cannot trigger external effects,
+/// including effects dispatched indirectly by application commands.
 /// </summary>
-public interface ITransactionalAiTool;
+public interface ITransactionalAiTool
+{
+    bool SupportsAtomicExecution(JsonElement arguments) => false;
+}
+
+public static class AiToolAtomicity
+{
+    public static bool Supports(IAiTool? tool, JsonElement arguments) =>
+        tool is ITransactionalAiTool transactional && transactional.SupportsAtomicExecution(arguments);
+}
 
 public record ToolResult(
     bool Success,

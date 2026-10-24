@@ -1,4 +1,6 @@
 using System.Text.Json;
+using MediatR;
+using Orbit.Application.Goals.Commands;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
@@ -8,9 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalProgressTool(
     IGenericRepository<Goal> goalRepository,
-    IGenericRepository<GoalProgressLog> progressLogRepository,
-    IGoalCompletionService goalCompletionService,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal_progress";
     public string Description => "Set goal progress by goal_id or fuzzy goal_name.";
@@ -53,16 +53,8 @@ public class UpdateGoalProgressTool(
 
         var goalId = goal.Id;
         var goalTitle = goal.Title;
-        var previousValue = goal.CurrentValue;
-        var result = goal.UpdateProgress(valueEl.GetDecimal());
+        var result = await mediator.Send(new UpdateGoalProgressCommand(userId, goalId, valueEl.GetDecimal(), note), ct);
         if (result.IsFailure) return ToolResult.FromFailure(result);
-
-        var progressLog = GoalProgressLog.Create(goal.Id, previousValue, valueEl.GetDecimal(), note);
-        await progressLogRepository.AddAsync(progressLog, ct);
-        if (result.Value)
-            await goalCompletionService.SaveCompletedGoalAsync(userId, goalId, ct);
-        else
-            await unitOfWork.SaveChangesAsync(ct);
         return new ToolResult(true, EntityId: goalId.ToString(), EntityName: goalTitle);
     }
 
@@ -85,8 +77,10 @@ public class UpdateGoalProgressTool(
             g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Active,
             q => q.Include(g => g.Habits),
             ct);
-        var goal = goals.FirstOrDefault(g => g.Title.Equals(goalName, StringComparison.OrdinalIgnoreCase))
-            ?? goals.FirstOrDefault(g => g.Title.Contains(goalName, StringComparison.OrdinalIgnoreCase));
+        var matches = goals.Where(g => g.Title.Equals(goalName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length == 0) matches = goals.Where(g => g.Title.Contains(goalName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length > 1) return (null, "goal_choice_required");
+        var goal = matches.SingleOrDefault();
 
         return goal is null ? (null, $"No active goal found matching '{goalName}'.") : (goal, null);
     }

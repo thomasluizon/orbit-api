@@ -1,5 +1,947 @@
 {
   "schemaVersion": 2,
+  "formFields": [
+    {
+      "form": "CreateHabitRequest",
+      "fields": [
+        {
+          "name": "Title",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "title"
+            }
+          ]
+        },
+        {
+          "name": "Description",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "description"
+            }
+          ]
+        },
+        {
+          "name": "FrequencyUnit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "frequency_unit"
+            }
+          ]
+        },
+        {
+          "name": "FrequencyQuantity",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "frequency_quantity"
+            }
+          ]
+        },
+        {
+          "name": "Days",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "days"
+            }
+          ]
+        },
+        {
+          "name": "IsBadHabit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "is_bad_habit"
+            }
+          ]
+        },
+        {
+          "name": "SubHabits",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "sub_habits"
+            }
+          ]
+        },
+        {
+          "name": "DueDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "due_date"
+            }
+          ]
+        },
+        {
+          "name": "DueTime",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "due_time"
+            }
+          ]
+        },
+        {
+          "name": "DueEndTime",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "due_end_time"
+            }
+          ]
+        },
+        {
+          "name": "ReminderEnabled",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "reminder_enabled"
+            }
+          ]
+        },
+        {
+          "name": "ReminderTimes",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "reminder_times"
+            }
+          ]
+        },
+        {
+          "name": "ScheduledReminders",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "scheduled_reminders"
+            }
+          ]
+        },
+        {
+          "name": "SlipAlertEnabled",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "slip_alert_enabled"
+            }
+          ]
+        },
+        {
+          "name": "TagIds",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "tag_ids"
+            }
+          ]
+        },
+        {
+          "name": "ChecklistItems",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "checklist_items"
+            }
+          ]
+        },
+        {
+          "name": "IsGeneral",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "is_general"
+            }
+          ]
+        },
+        {
+          "name": "EndDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "end_date"
+            }
+          ]
+        },
+        {
+          "name": "IsFlexible",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "is_flexible"
+            }
+          ]
+        },
+        {
+          "name": "GoalIds",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "goal_ids"
+            }
+          ]
+        },
+        {
+          "name": "Emoji",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "emoji"
+            }
+          ]
+        },
+        {
+          "name": "IntervalWeeks",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "interval_weeks"
+            }
+          ]
+        },
+        {
+          "name": "RelativeReminders",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "relative_reminders"
+            }
+          ]
+        },
+        {
+          "name": "StartDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "start_date"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "UpdateHabitRequest",
+      "fields": [
+        {
+          "name": "Title",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "title"
+            }
+          ]
+        },
+        {
+          "name": "Description",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "description"
+            }
+          ]
+        },
+        {
+          "name": "FrequencyUnit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "frequency_unit"
+            }
+          ]
+        },
+        {
+          "name": "FrequencyQuantity",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "frequency_quantity"
+            }
+          ]
+        },
+        {
+          "name": "Days",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "days"
+            }
+          ]
+        },
+        {
+          "name": "IsBadHabit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "is_bad_habit"
+            }
+          ]
+        },
+        {
+          "name": "DueDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "due_date"
+            }
+          ]
+        },
+        {
+          "name": "DueTime",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "due_time"
+            }
+          ]
+        },
+        {
+          "name": "DueEndTime",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "due_end_time"
+            }
+          ]
+        },
+        {
+          "name": "ReminderEnabled",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "reminder_enabled"
+            }
+          ]
+        },
+        {
+          "name": "ReminderTimes",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "reminder_times"
+            }
+          ]
+        },
+        {
+          "name": "ScheduledReminders",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "scheduled_reminders"
+            }
+          ]
+        },
+        {
+          "name": "SlipAlertEnabled",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "slip_alert_enabled"
+            }
+          ]
+        },
+        {
+          "name": "ChecklistItems",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "checklist_items"
+            }
+          ]
+        },
+        {
+          "name": "IsGeneral",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "is_general"
+            }
+          ]
+        },
+        {
+          "name": "EndDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "end_date"
+            }
+          ]
+        },
+        {
+          "name": "ClearEndDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "clear_fields"
+            }
+          ]
+        },
+        {
+          "name": "IsFlexible",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "is_flexible"
+            }
+          ]
+        },
+        {
+          "name": "GoalIds",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "goal_ids"
+            }
+          ]
+        },
+        {
+          "name": "Emoji",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "emoji"
+            }
+          ]
+        },
+        {
+          "name": "IntervalWeeks",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "interval_weeks"
+            }
+          ]
+        },
+        {
+          "name": "RelativeReminders",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "relative_reminders"
+            }
+          ]
+        },
+        {
+          "name": "StartDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "start_date"
+            }
+          ]
+        },
+        {
+          "name": "TagIds",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "tag_ids"
+            }
+          ]
+        },
+        {
+          "name": "ParentId",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "parent_habit_id"
+            }
+          ]
+        },
+        {
+          "name": "ClearParent",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "clear_parent"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "CreateSubHabitRequest",
+      "fields": [
+        {
+          "name": "Title",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "title"
+            }
+          ]
+        },
+        {
+          "name": "Description",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "description"
+            }
+          ]
+        },
+        {
+          "name": "FrequencyUnit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "frequency_unit"
+            }
+          ]
+        },
+        {
+          "name": "FrequencyQuantity",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "frequency_quantity"
+            }
+          ]
+        },
+        {
+          "name": "Days",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "days"
+            }
+          ]
+        },
+        {
+          "name": "IsBadHabit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "is_bad_habit"
+            }
+          ]
+        },
+        {
+          "name": "DueDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "due_date"
+            }
+          ]
+        },
+        {
+          "name": "DueTime",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "due_time"
+            }
+          ]
+        },
+        {
+          "name": "DueEndTime",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "due_end_time"
+            }
+          ]
+        },
+        {
+          "name": "ReminderEnabled",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "reminder_enabled"
+            }
+          ]
+        },
+        {
+          "name": "ReminderTimes",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "reminder_times"
+            }
+          ]
+        },
+        {
+          "name": "ScheduledReminders",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "scheduled_reminders"
+            }
+          ]
+        },
+        {
+          "name": "SlipAlertEnabled",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "slip_alert_enabled"
+            }
+          ]
+        },
+        {
+          "name": "ChecklistItems",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "checklist_items"
+            }
+          ]
+        },
+        {
+          "name": "TagIds",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "tag_ids"
+            }
+          ]
+        },
+        {
+          "name": "EndDate",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "end_date"
+            }
+          ]
+        },
+        {
+          "name": "IsFlexible",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "is_flexible"
+            }
+          ]
+        },
+        {
+          "name": "Emoji",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "emoji"
+            }
+          ]
+        },
+        {
+          "name": "RelativeReminders",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "relative_reminders"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "UpdateChecklistRequest",
+      "fields": [
+        {
+          "name": "ChecklistItems",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_checklist",
+              "parameter": "checklist_items"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "CreateGoalRequest",
+      "fields": [
+        {
+          "name": "Title",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "title"
+            }
+          ]
+        },
+        {
+          "name": "Description",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "description"
+            }
+          ]
+        },
+        {
+          "name": "TargetValue",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "target_value"
+            }
+          ]
+        },
+        {
+          "name": "Unit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "unit"
+            }
+          ]
+        },
+        {
+          "name": "Deadline",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "deadline"
+            }
+          ]
+        },
+        {
+          "name": "Type",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "goal_type"
+            }
+          ]
+        },
+        {
+          "name": "HabitIds",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_goal",
+              "parameter": "habit_ids"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "UpdateGoalRequest",
+      "fields": [
+        {
+          "name": "Title",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal",
+              "parameter": "title"
+            }
+          ]
+        },
+        {
+          "name": "Description",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal",
+              "parameter": "description"
+            }
+          ]
+        },
+        {
+          "name": "TargetValue",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal",
+              "parameter": "target_value"
+            }
+          ]
+        },
+        {
+          "name": "Unit",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal",
+              "parameter": "unit"
+            }
+          ]
+        },
+        {
+          "name": "Deadline",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal",
+              "parameter": "deadline"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "UpdateProgressRequest",
+      "fields": [
+        {
+          "name": "CurrentValue",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal_progress",
+              "parameter": "current_value"
+            }
+          ]
+        },
+        {
+          "name": "Note",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal_progress",
+              "parameter": "note"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "UpdateStatusRequest",
+      "fields": [
+        {
+          "name": "Status",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_goal_status",
+              "parameter": "status"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "CreateTagRequest",
+      "fields": [
+        {
+          "name": "Name",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_tag",
+              "parameter": "name"
+            }
+          ]
+        },
+        {
+          "name": "Color",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_tag",
+              "parameter": "color"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "form": "UpdateTagRequest",
+      "fields": [
+        {
+          "name": "Name",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_tag",
+              "parameter": "name"
+            }
+          ]
+        },
+        {
+          "name": "Color",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_tag",
+              "parameter": "color"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "registries": {
     "chat": [
       {
@@ -246,6 +1188,19 @@
             ]
           },
           {
+            "name": "habits[].goal_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "habits[].interval_weeks",
             "type": "integer",
             "required": false
@@ -263,6 +1218,83 @@
           {
             "name": "habits[].is_general",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "habits[].parent_habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].relative_reminders",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].relative_reminders[].minutes_before",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "habits[].relative_reminders[].time",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].relative_reminders[].when",
+            "type": "string",
+            "required": false,
+            "values": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          {
+            "name": "habits[].reminder_enabled",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "habits[].reminder_times",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].scheduled_reminders",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].scheduled_reminders[].time",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "habits[].scheduled_reminders[].when",
+            "type": "string",
+            "required": true,
+            "values": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          {
+            "name": "habits[].slip_alert_enabled",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "habits[].start_date",
+            "type": "string",
             "required": false
           },
           {
@@ -364,6 +1396,19 @@
             ]
           },
           {
+            "name": "habits[].sub_habits[].goal_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "habits[].sub_habits[].interval_weeks",
             "type": "integer",
             "required": false
@@ -384,9 +1429,118 @@
             "required": false
           },
           {
+            "name": "habits[].sub_habits[].parent_habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].relative_reminders",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].relative_reminders[].minutes_before",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].relative_reminders[].time",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].relative_reminders[].when",
+            "type": "string",
+            "required": false,
+            "values": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          {
+            "name": "habits[].sub_habits[].reminder_enabled",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].reminder_times",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].scheduled_reminders",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].scheduled_reminders[].time",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "habits[].sub_habits[].scheduled_reminders[].when",
+            "type": "string",
+            "required": true,
+            "values": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          {
+            "name": "habits[].sub_habits[].slip_alert_enabled",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].start_date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].tag_names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "habits[].sub_habits[].title",
             "type": "string",
             "required": true
+          },
+          {
+            "name": "habits[].tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "habits[].tag_names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
           },
           {
             "name": "habits[].title",
@@ -1201,10 +2355,7 @@
           },
           {
             "name": "due_time",
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "required": false
           },
           {
@@ -1252,6 +2403,11 @@
             "required": false
           },
           {
+            "name": "habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "interval_weeks",
             "type": "integer",
             "required": false
@@ -1269,6 +2425,11 @@
           {
             "name": "is_general",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "parent_habit_id",
+            "type": "string",
             "required": false
           },
           {
@@ -1339,11 +2500,12 @@
             "required": false
           },
           {
+            "name": "start_date",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "sub_habits",
-            "type": "array",
-            "items": {
-              "type": "object"
-            },
             "required": false
           },
           {
@@ -1393,14 +2555,15 @@
           },
           {
             "name": "sub_habits[].due_end_time",
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "required": false
           },
           {
             "name": "sub_habits[].due_time",
             "type": "string",
-            "nullable": true,
             "required": false
           },
           {
@@ -1413,8 +2576,10 @@
           },
           {
             "name": "sub_habits[].end_date",
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "required": false
           },
           {
@@ -1438,6 +2603,19 @@
             ]
           },
           {
+            "name": "sub_habits[].goal_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "sub_habits[].interval_weeks",
             "type": "integer",
             "required": false
@@ -1450,6 +2628,16 @@
           {
             "name": "sub_habits[].is_flexible",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].is_general",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].parent_habit_id",
+            "type": "string",
             "required": false
           },
           {
@@ -1520,6 +2708,19 @@
             "required": false
           },
           {
+            "name": "sub_habits[].start_date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "sub_habits[].tag_names",
             "type": "array",
             "items": {
@@ -1531,6 +2732,14 @@
             "name": "sub_habits[].title",
             "type": "string",
             "required": true
+          },
+          {
+            "name": "tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
           },
           {
             "name": "tag_names",
@@ -1597,7 +2806,10 @@
           },
           {
             "name": "due_end_time",
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "required": false
           },
           {
@@ -1615,8 +2827,10 @@
           },
           {
             "name": "end_date",
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "required": false
           },
           {
@@ -1626,8 +2840,10 @@
           },
           {
             "name": "frequency_unit",
-            "type": "string",
-            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "required": false,
             "values": [
               "Day",
@@ -1636,6 +2852,19 @@
               "Week",
               "Year"
             ]
+          },
+          {
+            "name": "goal_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "habit_id",
+            "type": "string",
+            "required": false
           },
           {
             "name": "interval_weeks",
@@ -1649,6 +2878,11 @@
           },
           {
             "name": "is_flexible",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "is_general",
             "type": "boolean",
             "required": false
           },
@@ -1725,7 +2959,249 @@
             "required": false
           },
           {
+            "name": "start_date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].checklist_items",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].checklist_items[].is_checked",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].checklist_items[].text",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "sub_habits[].days",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "values": [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].description",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].due_date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].due_end_time",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false
+          },
+          {
+            "name": "sub_habits[].due_time",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].emoji",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false
+          },
+          {
+            "name": "sub_habits[].end_date",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false
+          },
+          {
+            "name": "sub_habits[].frequency_quantity",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].frequency_unit",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false,
+            "values": [
+              "Day",
+              "Month",
+              "OneTime",
+              "Week",
+              "Year"
+            ]
+          },
+          {
+            "name": "sub_habits[].goal_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].interval_weeks",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].is_bad_habit",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].is_flexible",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].is_general",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].parent_habit_id",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].relative_reminders",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].relative_reminders[].minutes_before",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].relative_reminders[].time",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].relative_reminders[].when",
+            "type": "string",
+            "required": false,
+            "values": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          {
+            "name": "sub_habits[].reminder_enabled",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].reminder_times",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].scheduled_reminders",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].scheduled_reminders[].time",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "sub_habits[].scheduled_reminders[].when",
+            "type": "string",
+            "required": true,
+            "values": [
+              "day_before",
+              "same_day"
+            ]
+          },
+          {
+            "name": "sub_habits[].slip_alert_enabled",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].start_date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].tag_names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].title",
+            "type": "string",
+            "required": true
+          },
+          {
             "name": "tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "tag_names",
             "type": "array",
             "items": {
               "type": "string"
@@ -2703,6 +4179,42 @@
         "parameters": []
       },
       {
+        "name": "revise_pending_changes",
+        "parameters": [
+          {
+            "name": "items",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": true
+          },
+          {
+            "name": "items[].edits_json",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "items[].item_id",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "pending_operation_id",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "remove_item_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ]
+      },
+      {
         "name": "send_support_request",
         "parameters": [
           {
@@ -3049,6 +4561,11 @@
             "required": false
           },
           {
+            "name": "clear_parent",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "days",
             "type": "array",
             "items": {
@@ -3130,6 +4647,14 @@
             ]
           },
           {
+            "name": "goal_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "habit_id",
             "type": "string",
             "required": true
@@ -3152,6 +4677,11 @@
           {
             "name": "is_general",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "parent_habit_id",
+            "type": "string",
             "required": false
           },
           {
@@ -3219,6 +4749,19 @@
           {
             "name": "slip_alert_enabled",
             "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "start_date",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "tag_ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "required": false
           },
           {
@@ -5594,6 +7137,21 @@
   },
   "capabilities": [
     {
+      "capability": "AccountChangeSet.CapabilityId",
+      "surfaces": {
+        "chat": {
+          "verdict": "absent",
+          "direct": [],
+          "viaOperations": []
+        },
+        "mcp": {
+          "verdict": "absent",
+          "direct": [],
+          "viaOperations": []
+        }
+      }
+    },
+    {
       "capability": "AgentCapabilityIds.AccountManage",
       "surfaces": {
         "chat": {
@@ -5821,8 +7379,12 @@
       "capability": "AgentCapabilityIds.ChatInteract",
       "surfaces": {
         "chat": {
-          "verdict": "absent",
-          "direct": [],
+          "verdict": "covered",
+          "direct": [
+            {
+              "tool": "revise_pending_changes"
+            }
+          ],
           "viaOperations": []
         },
         "mcp": {
@@ -5841,7 +7403,12 @@
               "tool": "verify_step_up_agent_operation_v2"
             }
           ],
-          "viaOperations": []
+          "viaOperations": [
+            {
+              "tool": "revise_pending_changes",
+              "via": "execute_agent_operation_v2"
+            }
+          ]
         }
       }
     },
@@ -17036,6 +18603,11 @@
                       "tool": "link_goals_to_habit",
                       "parameter": "goal_ids",
                       "status": "covered"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "goal_ids",
+                      "status": "covered"
                     }
                   ]
                 },
@@ -17049,7 +18621,14 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].goal_ids",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -17102,6 +18681,12 @@
                       "parameter": "goal_ids",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "goal_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
                     }
                   ]
                 },
@@ -17122,7 +18707,15 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].goal_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -18635,7 +20228,14 @@
               ],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "parent_habit_id",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "absent"
@@ -18646,6 +20246,11 @@
                     {
                       "tool": "move_habit_parent",
                       "parameter": "parent_id",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "parent_habit_id",
                       "status": "covered"
                     }
                   ]
@@ -18681,7 +20286,15 @@
               ],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "parent_habit_id",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "absent"
@@ -18699,6 +20312,12 @@
                     {
                       "tool": "move_habit_parent",
                       "parameter": "parent_id",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "parent_habit_id",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
@@ -18917,6 +20536,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders",
                       "status": "covered"
@@ -19015,6 +20639,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders",
                       "status": "covered",
@@ -19093,6 +20723,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].minutes_before",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].minutes_before",
@@ -19192,6 +20827,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].minutes_before",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].minutes_before",
                       "status": "covered",
@@ -19270,6 +20911,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].time",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].time",
@@ -19369,6 +21015,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].time",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].time",
                       "status": "covered",
@@ -19447,6 +21099,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].when",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].when",
@@ -19546,6 +21203,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].when",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].when",
                       "status": "covered",
@@ -19624,6 +21287,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_enabled",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_enabled",
@@ -19715,6 +21383,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_enabled",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_enabled",
@@ -19868,6 +21542,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_times",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_times",
                       "status": "covered"
@@ -19958,6 +21637,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_times",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_times",
@@ -20111,6 +21796,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders",
                       "status": "covered"
@@ -20201,6 +21891,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders",
@@ -20281,6 +21977,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].time",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].time",
                       "status": "covered"
@@ -20372,6 +22073,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].time",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].time",
                       "status": "covered",
@@ -20450,6 +22157,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].when",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].when",
@@ -20541,6 +22253,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].when",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].when",
@@ -20694,6 +22412,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].slip_alert_enabled",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.slip_alert_enabled",
                       "status": "covered"
@@ -20792,6 +22515,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].slip_alert_enabled",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.slip_alert_enabled",
                       "status": "covered",
@@ -20828,18 +22557,31 @@
             "chat": {
               "verdict": "gap",
               "problems": [
-                "domain-edit-without-tool-update",
-                "editable-field-without-readback"
+                "write-without-full-readback"
               ],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "start_date",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "absent"
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "start_date",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -20851,7 +22593,14 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].start_date",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -20861,18 +22610,33 @@
             "mcp": {
               "verdict": "gap",
               "problems": [
-                "domain-edit-without-tool-update",
-                "editable-field-without-readback"
+                "write-without-full-readback"
               ],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "start_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "absent"
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "start_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -20891,7 +22655,15 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].start_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -20936,6 +22708,11 @@
                       "tool": "assign_tags",
                       "parameter": "tag_names",
                       "status": "covered"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "tag_ids",
+                      "status": "covered"
                     }
                   ]
                 },
@@ -20949,7 +22726,14 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].tag_names",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -21004,6 +22788,12 @@
                       "parameter": "tag_names",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "tag_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
                     }
                   ]
                 },
@@ -21024,7 +22814,15 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].tag_names",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -36274,7 +38072,14 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "goal_ids",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "covered",
@@ -36292,6 +38097,11 @@
                       "tool": "link_goals_to_habit",
                       "parameter": "goal_ids",
                       "status": "covered"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "goal_ids",
+                      "status": "covered"
                     }
                   ]
                 },
@@ -36305,7 +38115,14 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].goal_ids",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -36317,7 +38134,15 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "goal_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "covered",
@@ -36350,6 +38175,12 @@
                       "parameter": "goal_ids",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "goal_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
                     }
                   ]
                 },
@@ -36370,7 +38201,15 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].goal_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -37307,7 +39146,14 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "is_general",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "covered",
@@ -37369,7 +39215,15 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "is_general",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "covered",
@@ -37880,6 +39734,11 @@
                       "tool": "move_habit_parent",
                       "parameter": "parent_id",
                       "status": "covered"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "parent_habit_id",
+                      "status": "covered"
                     }
                   ]
                 },
@@ -37947,6 +39806,12 @@
                     {
                       "tool": "move_habit_parent",
                       "parameter": "parent_id",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "parent_habit_id",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
@@ -38165,6 +40030,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders",
                       "status": "covered"
@@ -38269,6 +40139,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders",
@@ -38349,6 +40225,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].minutes_before",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].minutes_before",
                       "status": "covered"
@@ -38453,6 +40334,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].minutes_before",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].minutes_before",
@@ -38533,6 +40420,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].time",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].time",
                       "status": "covered"
@@ -38637,6 +40529,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].time",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].time",
@@ -38717,6 +40615,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].when",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].when",
                       "status": "covered"
@@ -38822,6 +40725,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].relative_reminders[].when",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.relative_reminders[].when",
                       "status": "covered",
@@ -38900,6 +40809,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_enabled",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_enabled",
@@ -38998,6 +40912,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_enabled",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_enabled",
@@ -39151,6 +41071,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_times",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_times",
                       "status": "covered"
@@ -39248,6 +41173,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].reminder_times",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.reminder_times",
@@ -39401,6 +41332,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders",
                       "status": "covered"
@@ -39499,6 +41435,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders",
                       "status": "covered",
@@ -39577,6 +41519,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].time",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].time",
@@ -39676,6 +41623,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].time",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].time",
                       "status": "covered",
@@ -39754,6 +41707,11 @@
                 "bulk": {
                   "status": "covered",
                   "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].when",
+                      "status": "covered"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].when",
@@ -39852,6 +41810,12 @@
                     }
                   ],
                   "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].scheduled_reminders[].when",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
                     {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.scheduled_reminders[].when",
@@ -40005,6 +41969,11 @@
                   "status": "covered",
                   "direct": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].slip_alert_enabled",
+                      "status": "covered"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.slip_alert_enabled",
                       "status": "covered"
@@ -40110,6 +42079,12 @@
                   ],
                   "viaOperations": [
                     {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].slip_alert_enabled",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
                       "tool": "bulk_update_habits",
                       "parameter": "updates.slip_alert_enabled",
                       "status": "covered",
@@ -40146,18 +42121,31 @@
             "chat": {
               "verdict": "gap",
               "problems": [
-                "domain-edit-without-tool-update",
-                "editable-field-without-readback"
+                "write-without-full-readback"
               ],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "start_date",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "absent"
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "start_date",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -40169,7 +42157,14 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].start_date",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -40179,18 +42174,33 @@
             "mcp": {
               "verdict": "gap",
               "problems": [
-                "domain-edit-without-tool-update",
-                "editable-field-without-readback"
+                "write-without-full-readback"
               ],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "start_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
                   "status": "absent"
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "start_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -40209,7 +42219,15 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].start_date",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -40233,7 +42251,7 @@
                   "direct": [
                     {
                       "tool": "create_sub_habit",
-                      "parameter": "tag_ids",
+                      "parameter": "tag_names",
                       "status": "covered"
                     }
                   ]
@@ -40254,6 +42272,11 @@
                       "tool": "assign_tags",
                       "parameter": "tag_names",
                       "status": "covered"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "tag_ids",
+                      "status": "covered"
                     }
                   ]
                 },
@@ -40267,7 +42290,14 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].tag_names",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -40292,7 +42322,7 @@
                   "viaOperations": [
                     {
                       "tool": "create_sub_habit",
-                      "parameter": "tag_ids",
+                      "parameter": "tag_names",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
                     }
@@ -40329,6 +42359,12 @@
                       "parameter": "tag_names",
                       "status": "covered",
                       "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "update_habit",
+                      "parameter": "tag_ids",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
                     }
                   ]
                 },
@@ -40349,7 +42385,15 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].tag_names",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
@@ -44131,8 +46175,7 @@
       "field": "StartDate",
       "surface": "chat",
       "problems": [
-        "domain-edit-without-tool-update",
-        "editable-field-without-readback"
+        "write-without-full-readback"
       ],
       "ticket": "thomasluizon/orbit-tickets#1585"
     },
@@ -44141,8 +46184,7 @@
       "field": "StartDate",
       "surface": "mcp",
       "problems": [
-        "domain-edit-without-tool-update",
-        "editable-field-without-readback"
+        "write-without-full-readback"
       ],
       "ticket": "thomasluizon/orbit-tickets#1585"
     },
@@ -44187,8 +46229,7 @@
       "field": "StartDate",
       "surface": "chat",
       "problems": [
-        "domain-edit-without-tool-update",
-        "editable-field-without-readback"
+        "write-without-full-readback"
       ],
       "ticket": "thomasluizon/orbit-tickets#1585"
     },
@@ -44197,8 +46238,7 @@
       "field": "StartDate",
       "surface": "mcp",
       "problems": [
-        "domain-edit-without-tool-update",
-        "editable-field-without-readback"
+        "write-without-full-readback"
       ],
       "ticket": "thomasluizon/orbit-tickets#1585"
     },

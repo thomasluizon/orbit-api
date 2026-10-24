@@ -67,7 +67,7 @@ public class PendingAgentOperationStore(
             .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
 
         if (entity is null || entity.ArgumentSchemaVersion != PendingAgentOperationState.CurrentArgumentSchemaVersion
-            || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue)
+            || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue || HasChangeSetOwner(userId, entity.Id))
             return null;
 
         var confirmationToken = GenerateToken();
@@ -104,7 +104,22 @@ public class PendingAgentOperationStore(
             entity.Surface,
             entity.ConfirmationRequirement,
             entity.PreviewFingerprint,
-            entity.ArgumentSchemaVersion);
+            entity.ArgumentSchemaVersion, entity.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(entity.OperationId, entity.ArgumentsJson));
+    }
+
+    public IReadOnlyList<PendingAgentOperationExecution> GetAwaiting(Guid userId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        var pending = dbContext.PendingAgentOperations.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ConsumedAtUtc == null && item.ConfirmedAtUtc == null
+                && item.ExpiresAtUtc > checkedAtUtc && item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion)
+            .OrderByDescending(item => item.CreatedAtUtc).ToList();
+        var members = pending.Where(item => item.OperationId == Orbit.Application.Chat.AccountChangeSet.OperationName)
+            .SelectMany(item => Orbit.Application.Chat.AccountChangeSet.Reservations(ParseArguments(item.ArgumentsJson)))
+            .Select(member => member.PendingOperationId).ToHashSet();
+        return pending.Where(item => !members.Contains(item.Id)).Select(item => new PendingAgentOperationExecution(
+            item.Id, item.CapabilityId, item.OperationId, ParseArguments(item.ArgumentsJson), item.Surface,
+            item.ConfirmationRequirement, item.PreviewFingerprint, item.ArgumentSchemaVersion, item.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(item.OperationId, item.ArgumentsJson))).ToArray();
     }
 
     public IReadOnlyList<PendingHabitCreation> GetPendingHabitCreations(Guid userId)
@@ -205,8 +220,11 @@ public class PendingAgentOperationStore(
             item.Id == pendingOperationId && item.UserId == userId);
         var cancelledAtUtc = DateTime.UtcNow;
         if (entity is null || entity.OperationFingerprint != expectedFingerprint
+            || HasChangeSetOwner(userId, pendingOperationId)
             || !entity.Cancel(cancelledAtUtc))
             return false;
+        if (entity.OperationId == AccountChangeSet.OperationName)
+            CancelChangeSetMembers(entity, cancelledAtUtc);
         try
         {
             dbContext.SaveChanges();
@@ -217,6 +235,24 @@ public class PendingAgentOperationStore(
             dbContext.Entry(entity).State = EntityState.Detached;
             return false;
         }
+    }
+
+    private bool HasChangeSetOwner(Guid userId, Guid pendingOperationId)
+    {
+        var checkedAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return dbContext.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId
+                && item.OperationId == AccountChangeSet.OperationName && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc)
+            .Select(item => item.ArgumentsJson).AsEnumerable()
+            .Any(json => AccountChangeSet.Reservations(ParseArguments(json)).Any(member => member.PendingOperationId == pendingOperationId));
+    }
+
+    private void CancelChangeSetMembers(PendingAgentOperationState owner, DateTime cancelledAtUtc)
+    {
+        var reservations = AccountChangeSet.Reservations(ParseArguments(owner.ArgumentsJson)).ToDictionary(member => member.PendingOperationId);
+        var ids = reservations.Keys.ToArray();
+        foreach (var member in dbContext.PendingAgentOperations.Where(item => item.UserId == owner.UserId
+            && ids.Contains(item.Id) && item.ConsumedAtUtc == null))
+            if (member.OperationFingerprint == reservations[member.Id].Fingerprint) member.Cancel(cancelledAtUtc);
     }
 
     public PendingAgentOperationExecution? GetConfirmedExecution(Guid userId, string capabilityId,
@@ -230,7 +266,7 @@ public class PendingAgentOperationStore(
             && item.ConsumedAtUtc == null && item.ExpiresAtUtc > checkedAtUtc);
         return entity is null ? null : new PendingAgentOperationExecution(entity.Id, entity.CapabilityId,
             entity.OperationId, ParseArguments(entity.ArgumentsJson), entity.Surface,
-            entity.ConfirmationRequirement, entity.PreviewFingerprint, entity.ArgumentSchemaVersion);
+            entity.ConfirmationRequirement, entity.PreviewFingerprint, entity.ArgumentSchemaVersion, entity.ExpiresAtUtc, PendingOperationActionKeys.GetRequired(entity.OperationId, entity.ArgumentsJson));
     }
 
     public bool TryConsumeFreshConfirmation(
@@ -251,7 +287,7 @@ public class PendingAgentOperationStore(
             .FirstOrDefault();
 
 #pragma warning disable ORBIT0004 // TryConsumeFreshConfirmation passes the current instant to IsUsable to check confirmation and step-up TTLs before consumption. https://github.com/thomasluizon/orbit-tickets/issues/230
-        if (entity is null || !entity.IsUsable(capabilityId, operationFingerprint, requireStepUp, DateTime.UtcNow))
+        if (entity is null || HasChangeSetOwner(userId, entity.Id) || !entity.IsUsable(capabilityId, operationFingerprint, requireStepUp, DateTime.UtcNow))
 #pragma warning restore ORBIT0004
             return false;
 

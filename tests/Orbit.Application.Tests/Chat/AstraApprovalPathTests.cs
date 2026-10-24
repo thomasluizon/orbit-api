@@ -50,7 +50,7 @@ public sealed class AstraApprovalPathTests : IDisposable
         var linked = AddHabit("Ler 10 minutos");
         var unrelated = AddHabit("Beber água");
         var unit = new UnitOfWork(_db, new DatabaseConnectionSettings());
-        var tool = new CreateGoalTool(new GenericRepository<Goal>(_db), unit, new GenericRepository<Habit>(_db));
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(new GenericRepository<Goal>(_db), unit, habits: new GenericRepository<Habit>(_db), configureTransactions: false));
         var (executor, store, revisions) = Build(tool);
         var args = JsonSerializer.SerializeToElement(new
         {
@@ -135,7 +135,7 @@ public sealed class AstraApprovalPathTests : IDisposable
         await _db.SaveChangesAsync();
         _db.ChangeTracker.Clear();
         IAiTool tool = operationId == "create_goal"
-            ? new CreateGoalTool(new GenericRepository<Goal>(_db), new UnitOfWork(_db, new DatabaseConnectionSettings()), new GenericRepository<Habit>(_db))
+            ? new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(new GenericRepository<Goal>(_db), new UnitOfWork(_db, new DatabaseConnectionSettings()), habits: new GenericRepository<Habit>(_db), configureTransactions: false))
             : new AssignTagsTool(new GenericRepository<Habit>(_db), new GenericRepository<Tag>(_db), new UnitOfWork(_db, new DatabaseConnectionSettings()));
         var (executor, store, _) = Build(tool);
         var args = operationId == "create_goal"
@@ -154,8 +154,7 @@ public sealed class AstraApprovalPathTests : IDisposable
     public async Task RoundThree_DirectApproval_RejectsStaleDependency()
     {
         var linked = AddHabit("Ler 10 minutos");
-        var tool = new CreateGoalTool(new GenericRepository<Goal>(_db), new UnitOfWork(_db, new DatabaseConnectionSettings()),
-            new GenericRepository<Habit>(_db));
+        var tool = new CreateGoalTool(Orbit.Tests.Shared.GoalToolCommandMediator.Create(new GenericRepository<Goal>(_db), new UnitOfWork(_db, new DatabaseConnectionSettings()), habits: new GenericRepository<Habit>(_db), configureTransactions: false));
         var (executor, store, _) = Build(tool);
         var args = JsonSerializer.SerializeToElement(new { title = "Ler livros", habit_ids = new[] { linked.Id } });
         var held = await executor.ExecuteAsync(new(_userId, tool.Name, args, AgentExecutionSurface.Chat,

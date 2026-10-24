@@ -1,4 +1,6 @@
 using System.Text.Json;
+using MediatR;
+using Orbit.Application.Goals.Commands;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
@@ -9,8 +11,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalStatusTool(
     IGenericRepository<Goal> goalRepository,
-    IGoalCompletionService goalCompletionService,
-    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
+    IMediator mediator) : IAiTool, IConcurrencyRetryableTool, IArgumentCheckTool
 {
     public string Name => "update_goal_status";
 
@@ -67,21 +68,8 @@ public class UpdateGoalStatusTool(
             return new ToolResult(false, Error: $"Goal {goalId} not found.");
 
         var goalTitle = goal.Title;
-        var result = status switch
-        {
-            GoalStatus.Completed => goal.MarkCompleted(),
-            GoalStatus.Abandoned => goal.MarkAbandoned(),
-            GoalStatus.Active => goal.Reactivate(),
-            _ => Orbit.Domain.Common.Result.Failure(ErrorMessages.InvalidGoalStatus)
-        };
-
-        if (result.IsFailure)
-            return ToolResult.FromFailure(result);
-
-        if (status == GoalStatus.Completed)
-            await goalCompletionService.SaveCompletedGoalAsync(userId, goalId, ct);
-        else
-            await unitOfWork.SaveChangesAsync(ct);
+        var result = await mediator.Send(new UpdateGoalStatusCommand(userId, goalId, status), ct);
+        if (result.IsFailure) return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: goalId.ToString(), EntityName: goalTitle);
     }

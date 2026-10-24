@@ -65,13 +65,7 @@ public partial class CreateHabitCommandHandler(
             return gateResult.PropagateError<Guid>();
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var dueDate = request.StartDate ?? request.DueDate ?? today;
-
-        if (!request.StartDate.HasValue && opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
-        {
-            while (!opts.Days.Contains(dueDate.DayOfWeek))
-                dueDate = dueDate.AddDays(1);
-        }
+        var dueDate = HabitScheduleService.InitialDueDate(today, request.DueDate, request.StartDate, opts.Days);
 
         var siblings = await repos.HabitRepository.FindAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == null && !h.IsDeleted,

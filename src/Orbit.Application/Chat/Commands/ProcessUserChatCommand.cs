@@ -346,6 +346,9 @@ public partial class ProcessUserChatCommandHandler(
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
+        if (await RecoverExplicitHeadingsAsync(request, context, response, cancellationToken) is { } recoveredHeadings)
+            return recoveredHeadings;
+
         if (response.IsFailure)
             return response.PropagateError<ChatResponse>();
 
@@ -370,6 +373,7 @@ public partial class ProcessUserChatCommandHandler(
             userLanguage,
             aiStreamSink,
             cancellationToken);
+        await CombinePendingChangesAsync(request, executionResults, cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))
