@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Orbit.Domain.Models;
 using Orbit.Domain.Entities;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 
 namespace Orbit.Application.Chat.Commands;
@@ -148,7 +149,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static AiToolCall? ResolveHabitCreation(AiToolCall call, JsonObject arguments, ToolExecutionAccumulator results)
     {
-        var items = call.Name == BulkCreateHabits ? arguments["habits"] as JsonArray : new JsonArray(arguments.DeepClone());
+        var items = call.Name == BulkCreateHabits ? arguments[ToolArgumentNames.Habits] as JsonArray : new JsonArray(arguments.DeepClone());
         if (items is null || items.Any(item => item is not JsonObject))
         {
             results.InvalidCalls[call.Id] = "Habits must be an array of objects.";
@@ -167,9 +168,9 @@ public partial class ProcessUserChatCommandHandler
             && root[SubHabits] is JsonArray children
             && ResolveHabitName(results, title) is { } parent)
         {
-            arguments = new JsonObject { [ParentHabitId] = parent.Id.ToString(), ["habits"] = children.DeepClone() };
+            arguments = new JsonObject { [ParentHabitId] = parent.Id.ToString(), [ToolArgumentNames.Habits] = children.DeepClone() };
             call = call with { Name = BulkCreateHabits };
-            items = arguments["habits"]!.AsArray();
+            items = arguments[ToolArgumentNames.Habits]!.AsArray();
         }
         else if (arguments[ParentHabitId] is null && results.RequiresExistingParent && !allHaveHeadings)
         {
@@ -208,7 +209,7 @@ public partial class ProcessUserChatCommandHandler
     private static AiToolCall BindCreationOperation(AiToolCall call, JsonObject arguments, JsonArray proposed, bool hasHeadings)
     {
         if (call.Name == BulkCreateHabits)
-            arguments["habits"] = proposed;
+            arguments[ToolArgumentNames.Habits] = proposed;
         else
         {
             arguments = proposed[0]!.AsObject();
@@ -218,20 +219,20 @@ public partial class ProcessUserChatCommandHandler
                     call = call with { Name = "create_sub_habit" };
                 else
                 {
-                    arguments = new JsonObject { ["habits"] = proposed };
+                    arguments = new JsonObject { [ToolArgumentNames.Habits] = proposed };
                     call = call with { Name = BulkCreateHabits };
                 }
             }
             else if (hasHeadings)
             {
-                arguments = new JsonObject { ["habits"] = proposed };
+                arguments = new JsonObject { [ToolArgumentNames.Habits] = proposed };
                 call = call with { Name = BulkCreateHabits };
             }
         }
         if (proposed.OfType<JsonObject>().Any(item => item[HabitId] is not null || item[HabitHeadingParents.SuggestedParentField] is not null))
         {
             call = call with { Name = BulkCreateHabits };
-            arguments = new JsonObject { ["habits"] = proposed.DeepClone() };
+            arguments = new JsonObject { [ToolArgumentNames.Habits] = proposed.DeepClone() };
         }
         return call with { Args = JsonSerializer.SerializeToElement(arguments) };
     }

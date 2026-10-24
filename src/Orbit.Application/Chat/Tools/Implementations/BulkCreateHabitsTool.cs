@@ -15,7 +15,7 @@ public class BulkCreateHabitsTool(
 
     public bool SupportsAtomicExecution(JsonElement arguments)
     {
-        if (!arguments.TryGetProperty("habits", out var habits) || habits.ValueKind != JsonValueKind.Array
+        if (!arguments.TryGetProperty(ToolArgumentNames.Habits, out var habits) || habits.ValueKind != JsonValueKind.Array
             || habits.EnumerateArray().Any(HasGoalLinks)) return false;
         if (!HasExistingParent(arguments, habits) && !habits.EnumerateArray().Any(RequiresTreeCommands)) return true;
         return habits.EnumerateArray().All(item => item.TryGetProperty(HabitId, out _)
@@ -52,7 +52,7 @@ public class BulkCreateHabitsTool(
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         var schemaArguments = JsonNode.Parse(args.GetRawText());
-        if (schemaArguments?["habits"] is JsonArray habits)
+        if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits)
             foreach (var habit in habits.OfType<JsonObject>())
             {
                 habit.Remove("preview_item_id");
@@ -67,7 +67,7 @@ public class BulkCreateHabitsTool(
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
         args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
-        if (!args.TryGetProperty("habits", out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
+        if (!args.TryGetProperty(ToolArgumentNames.Habits, out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
 
         var semantics = new Validators.HabitProposalValidator().Validate(new Validators.HabitProposal(string.Empty, args));
@@ -123,7 +123,7 @@ public class BulkCreateHabitsTool(
         || habits.EnumerateArray().Any(habit => habit.TryGetProperty(ParentHabitId, out _));
 
     private async Task<ToolResult> ExecuteWithParentsAsync(JsonElement args, JsonElement habitsEl,
-        IReadOnlyList<BulkHabitItem> items, Guid userId, bool checkOnly, CancellationToken ct)
+        List<BulkHabitItem> items, Guid userId, bool checkOnly, CancellationToken ct)
     {
         var created = new List<BulkCreateItemResult>();
         for (var index = 0; index < items.Count; index++)
@@ -232,7 +232,7 @@ public class BulkCreateHabitsTool(
 
     private async Task<ToolResult> AssignTreeTagsAsync(JsonElement source, BulkHabitItem item, Guid userId, Guid id, CancellationToken ct)
     {
-        if (item.Tags is not { Count: > 0 } && !source.TryGetProperty("tag_names", out _)) return new(true);
+        if (item.Tags is not { Count: > 0 } && !source.TryGetProperty(TagNames, out _)) return new(true);
         var available = await mediator.Send(new GetTagsQuery(userId, BypassCache: true), ct);
         if (available.IsFailure) return ToolResult.FromFailure(available);
         var tagIds = new List<Guid>(JsonArgumentParser.ParseGuidArray(source, TagIds) ?? []);
@@ -268,7 +268,7 @@ public class BulkCreateHabitsTool(
         Guid? parentId, Guid userId, bool checkOnly, CancellationToken ct)
     {
         var patch = JsonNode.Parse(source.GetRawText())!.AsObject();
-        foreach (var field in new[] { HabitId, ParentHabitId, SubHabits, "tag_names", TagIds, GoalIds, "preview_item_id", HabitHeadingParents.SuggestedParentField, HabitHeadingParents.CandidateIdsField, HabitHeadingParents.ExistingCandidatesField }) patch.Remove(field);
+        foreach (var field in new[] { HabitId, ParentHabitId, SubHabits, TagNames, TagIds, GoalIds, "preview_item_id", HabitHeadingParents.SuggestedParentField, HabitHeadingParents.CandidateIdsField, HabitHeadingParents.ExistingCandidatesField }) patch.Remove(field);
         var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(JsonSerializer.SerializeToElement(patch));
         if (error is not null) return new(false, Error: error);
         var command = new UpdateHabitFieldsCommand(userId, habitId, changes!,
@@ -281,7 +281,7 @@ public class BulkCreateHabitsTool(
         return await ExecuteChildrenAsync(source, item, userId, habitId, ct);
     }
 
-    private static IReadOnlyList<Guid>? ReuseAssociationIds(JsonElement source, string field) =>
+    private static Guid[]? ReuseAssociationIds(JsonElement source, string field) =>
         source.TryGetProperty(field, out var ids) && ids.ValueKind == JsonValueKind.Array
             ? ids.EnumerateArray().Select(id => Guid.Parse(id.GetString()!)).ToArray() : null;
 
@@ -305,7 +305,7 @@ public class BulkCreateHabitsTool(
 
         var days = oneTime ? null : JsonArgumentParser.ParseDays(el);
         if (frequencyUnit == Orbit.Domain.Enums.FrequencyUnit.Week && frequencyQuantity == 1 && days is { Count: > 0 }
-            && JsonArgumentParser.GetOptionalBool(el, "is_flexible") != true)
+            && JsonArgumentParser.GetOptionalBool(el, IsFlexible) != true)
             frequencyUnit = Orbit.Domain.Enums.FrequencyUnit.Day;
         return new BulkHabitItem(
             title ?? string.Empty,
@@ -313,22 +313,22 @@ public class BulkCreateHabitsTool(
             frequencyUnit,
             frequencyQuantity,
             Days: days,
-            IsBadHabit: JsonArgumentParser.GetOptionalBool(el, "is_bad_habit") ?? false,
+            IsBadHabit: JsonArgumentParser.GetOptionalBool(el, IsBadHabit) ?? false,
             DueDate: JsonArgumentParser.ParseDateOnly(el, DueDate),
-            DueTime: JsonArgumentParser.ParseTimeOnly(el, "due_time"),
+            DueTime: JsonArgumentParser.ParseTimeOnly(el, DueTime),
             DueEndTime: JsonArgumentParser.ParseTimeOnly(el, "due_end_time"),
             IsGeneral: JsonArgumentParser.GetOptionalBool(el, "is_general") ?? false,
-            EndDate: JsonArgumentParser.ParseDateOnly(el, "end_date"),
-            IsFlexible: JsonArgumentParser.GetOptionalBool(el, "is_flexible") ?? false,
+            EndDate: JsonArgumentParser.ParseDateOnly(el, EndDate),
+            IsFlexible: JsonArgumentParser.GetOptionalBool(el, IsFlexible) ?? false,
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(el),
             SubHabits: subHabits,
             Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"),
-            IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, "interval_weeks"),
+            IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, IntervalWeeks),
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(el, "reminder_enabled") ?? false,
             ReminderTimes: JsonArgumentParser.ParseIntArray(el, "reminder_times"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(el),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(el),
-            Tags: JsonArgumentParser.ParseStringArray(el, "tag_names"),
+            Tags: JsonArgumentParser.ParseStringArray(el, TagNames),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(el, "slip_alert_enabled") ?? false,
             StartDate: JsonArgumentParser.ParseDateOnly(el, StartDate))
         { InheritParentFrequency = !oneTime };

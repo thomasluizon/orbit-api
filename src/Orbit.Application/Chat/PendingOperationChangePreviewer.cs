@@ -26,9 +26,7 @@ public sealed partial class PendingOperationChangePreviewer(
     IDestructiveOperationPreviewer? destructivePreviewer = null,
     IGenericRepository<ChecklistTemplate>? templateRepository = null) : IPendingOperationChangePreviewer
 {
-    private const string IsBadHabitField = "is_bad_habit";
     private const string IsGeneralField = "is_general";
-    private const string IsFlexibleField = "is_flexible";
     private const string ChecklistItemsField = "checklist_items";
     private const string SlipAlertEnabledField = "slip_alert_enabled";
     private const string DueEndTimeField = "due_end_time";
@@ -43,8 +41,8 @@ public sealed partial class PendingOperationChangePreviewer(
     private static readonly HashSet<string> CreateFields = new(StringComparer.Ordinal)
     {
         "title", "description", "emoji", "frequency_unit", "frequency_quantity",
-        "interval_weeks", "days", DueDate, StartDate, "end_date", "due_time", GoalIds, "tag_names", TagIds, HabitId,
-        IsBadHabitField, IsGeneralField, IsFlexibleField, ChecklistItemsField, SubHabits,
+        IntervalWeeks, "days", DueDate, StartDate, EndDate, DueTime, GoalIds, TagNames, TagIds, HabitId,
+        IsBadHabit, IsGeneralField, IsFlexible, ChecklistItemsField, SubHabits,
         DueEndTimeField, SlipAlertEnabledField, ReminderEnabledField, ReminderTimesField,
         ScheduledRemindersField, RelativeRemindersField
     };
@@ -355,7 +353,7 @@ public sealed partial class PendingOperationChangePreviewer(
     {
         var values = HabitValues(habit);
         if (readsTags)
-            values["tag_names"] = values[TagIds] = FormatTags(habit);
+            values[TagNames] = values[TagIds] = FormatTags(habit);
         var fingerprint = readsTags ? AgentOperationFingerprint.Compute(FingerprintHabit(habit),
             JsonSerializer.Serialize(habit.Tags.OrderBy(tag => tag.Id).Select(FingerprintTag))) : FingerprintHabit(habit);
         return new AgentPreviewTarget(habit.Id, habit.Title, values, fingerprint);
@@ -376,25 +374,25 @@ public sealed partial class PendingOperationChangePreviewer(
         ["emoji"] = habit.Emoji,
         ["frequency_unit"] = AgentArgumentPreview.Format(habit.FrequencyUnit),
         ["frequency_quantity"] = AgentArgumentPreview.Format(habit.FrequencyQuantity),
-        ["interval_weeks"] = AgentArgumentPreview.Format(habit.IntervalWeeks),
+        [IntervalWeeks] = AgentArgumentPreview.Format(habit.IntervalWeeks),
         ["days"] = string.Join(", ", habit.Days),
         [DueDate] = AgentArgumentPreview.Format(habit.NextDueDate),
-        ["end_date"] = AgentArgumentPreview.Format(habit.EndDate),
-        ["due_time"] = AgentArgumentPreview.Format(habit.DueTime),
+        [EndDate] = AgentArgumentPreview.Format(habit.EndDate),
+        [DueTime] = AgentArgumentPreview.Format(habit.DueTime),
         [DueEndTimeField] = AgentArgumentPreview.Format(habit.DueEndTime),
         [IsGeneralField] = AgentArgumentPreview.Format(habit.Schedule == HabitSchedule.General),
         [SlipAlertEnabledField] = AgentArgumentPreview.Format(habit.SlipAlertEnabled),
         [RelativeRemindersField] = string.Join(", ", habit.RelativeReminders.Select(HabitFieldSummary.FormatRelative)),
         [ScheduledRemindersField] = string.Join(", ", habit.GetScheduledRemindersForLegacyClients().Select(FormatScheduledReminder)),
-        [IsBadHabitField] = AgentArgumentPreview.Format(habit.IsBadHabit),
-        [IsFlexibleField] = AgentArgumentPreview.Format(habit.Schedule == HabitSchedule.Flexible),
+        [IsBadHabit] = AgentArgumentPreview.Format(habit.IsBadHabit),
+        [IsFlexible] = AgentArgumentPreview.Format(habit.Schedule == HabitSchedule.Flexible),
         [ReminderEnabledField] = AgentArgumentPreview.Format(habit.ReminderEnabled),
         [ReminderTimesField] = string.Join(", ", habit.ReminderTimes),
         [ChecklistItemsField] = string.Join(", ", habit.ChecklistItems.Select(FormatChecklistItem))
     };
 
     private static bool HasTagArguments(JsonElement arguments) =>
-        arguments.TryGetProperty("tag_names", out _) || arguments.TryGetProperty(TagIds, out _);
+        arguments.TryGetProperty(TagNames, out _) || arguments.TryGetProperty(TagIds, out _);
 
     private static string? FormatTags(Habit habit) => habit.Tags.Count == 0
         ? null
@@ -583,7 +581,7 @@ public sealed partial class PendingOperationChangePreviewer(
     private async Task<PendingOperationChangePreview?> PreviewCreateAsync(
         Guid userId, JsonElement arguments, CancellationToken cancellationToken)
     {
-        if (!arguments.TryGetProperty("habits", out var habits) || habits.ValueKind != JsonValueKind.Array)
+        if (!arguments.TryGetProperty(ToolArgumentNames.Habits, out var habits) || habits.ValueKind != JsonValueKind.Array)
             return null;
         var command = new BulkCreateHabitsCommand(userId, habits.EnumerateArray()
             .Select(habit => habit.ValueKind == JsonValueKind.Object
@@ -664,7 +662,7 @@ public sealed partial class PendingOperationChangePreviewer(
             return [];
         var known = await habitRepository.FindAsync(habit => habit.UserId == userId && !habit.IsDeleted
             && (ids.Contains(habit.Id) || names.Contains(habit.Title.ToLower())),
-            query => query.Include(habit => habit.Tags).Include(habit => habit.Goals), cancellationToken);
+            query => query.Include(habit => habit.Tags).Include(habit => habit.Goals).AsSplitQuery(), cancellationToken);
         var oldParentIds = known.Where(habit => habit.ParentHabitId.HasValue)
             .Select(habit => habit.ParentHabitId!.Value).Except(known.Select(habit => habit.Id)).ToArray();
         if (oldParentIds.Length == 0) return known;
@@ -792,21 +790,21 @@ public sealed partial class PendingOperationChangePreviewer(
         Add("emoji", habit.Emoji, effective.Emoji, "emoji");
         Add("frequency_unit", habit.FrequencyUnit, effective.FrequencyUnit, "text");
         Add("frequency_quantity", habit.FrequencyQuantity, effective.FrequencyQuantity, "number");
-        Add("interval_weeks", habit.IntervalWeeks, effective.IntervalWeeks, "number");
+        Add(IntervalWeeks, habit.IntervalWeeks, effective.IntervalWeeks, "number");
         Add("days", string.Join(", ", habit.Days), string.Join(", ", effective.Days), "text",
             typedValue: JsonSerializer.SerializeToElement(effective.Days.Select(day => day.ToString())));
         Add(DueDate, habit.NextDueDate, effective.NextDueDate, "date");
         if (changes.HasStartDate) Add(StartDate, habit.StartDate, effective.StartDate, "date");
-        Add("end_date", habit.EndDate, effective.EndDate, "date");
-        Add("due_time", habit.DueTime, effective.DueTime, "time");
+        Add(EndDate, habit.EndDate, effective.EndDate, "date");
+        Add(DueTime, habit.DueTime, effective.DueTime, "time");
         Add(DueEndTimeField, habit.DueEndTime, effective.DueEndTime, "time");
         Add(IsGeneralField, habit.Schedule == HabitSchedule.General, effective.Schedule == HabitSchedule.General, JsonSchemaTypes.Boolean);
         Add(SlipAlertEnabledField, habit.SlipAlertEnabled, effective.SlipAlertEnabled, JsonSchemaTypes.Boolean);
         AddList(RelativeRemindersField, habit.RelativeReminders, effective.RelativeReminders,
             HabitFieldSummary.FormatRelative,
             JsonSerializer.SerializeToElement(effective.RelativeReminders.Select(RelativeReminderValue)));
-        Add(IsBadHabitField, habit.IsBadHabit, effective.IsBadHabit, JsonSchemaTypes.Boolean);
-        Add(IsFlexibleField, habit.Schedule == HabitSchedule.Flexible, effective.Schedule == HabitSchedule.Flexible, JsonSchemaTypes.Boolean);
+        Add(IsBadHabit, habit.IsBadHabit, effective.IsBadHabit, JsonSchemaTypes.Boolean);
+        Add(IsFlexible, habit.Schedule == HabitSchedule.Flexible, effective.Schedule == HabitSchedule.Flexible, JsonSchemaTypes.Boolean);
         Add("is_completed", habit.IsCompleted, effective.IsCompleted, JsonSchemaTypes.Boolean);
         Add(ReminderEnabledField, habit.ReminderEnabled, effective.ReminderEnabled, JsonSchemaTypes.Boolean);
         AddList(ReminderTimesField, habit.ReminderTimes, effective.ReminderTimes,
@@ -850,11 +848,11 @@ public sealed partial class PendingOperationChangePreviewer(
         BulkHabitChanges changes) => field switch
         {
             "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
-                or "interval_weeks" or DueDate or "due_time" or IsBadHabitField
-                or IsFlexibleField or ReminderEnabledField or ChecklistItemsField
+                or IntervalWeeks or DueDate or DueTime or IsBadHabit
+                or IsFlexible or ReminderEnabledField or ChecklistItemsField
                 or DueEndTimeField or IsGeneralField or SlipAlertEnabledField or RelativeRemindersField => true,
             "days" => effective.Schedule != HabitSchedule.Flexible,
-            "end_date" => habit.Schedule != HabitSchedule.General,
+            EndDate => habit.Schedule != HabitSchedule.General,
             ReminderTimesField => effective.DueTime is null
                 || !changes.HasScheduledReminders || changes.ScheduledReminders is not { Count: > 0 },
             ScheduledRemindersField => effective.DueTime is null,

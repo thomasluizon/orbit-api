@@ -125,8 +125,8 @@ internal static class BulkHabitToolArguments
     {
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
-            "title", "description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks",
-            "days", DueDate, StartDate, "end_date", "due_time", DueEndTimeField, "is_bad_habit", "is_flexible",
+            "title", "description", "emoji", "frequency_unit", "frequency_quantity", IntervalWeeks,
+            "days", DueDate, StartDate, EndDate, DueTime, DueEndTimeField, IsBadHabit, IsFlexible,
             IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
             "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields"
         };
@@ -146,8 +146,8 @@ internal static class BulkHabitToolArguments
             return (null, fieldError);
 
         var dateResult = ParseNullableDate(updates, DueDate, allowNull: false);
-        var endDateResult = ParseNullableDate(updates, "end_date", allowNull: true);
-        var timeResult = ParseNullableTime(updates, "due_time");
+        var endDateResult = ParseNullableDate(updates, EndDate, allowNull: true);
+        var timeResult = ParseNullableTime(updates, DueTime);
         var frequencyResult = ParseFrequency(updates);
 
         var changes = new BulkHabitChanges(
@@ -161,8 +161,8 @@ internal static class BulkHabitToolArguments
             FrequencyUnit: frequencyResult.Value,
             HasFrequencyQuantity: updates.TryGetProperty("frequency_quantity", out _),
             FrequencyQuantity: JsonArgumentParser.GetOptionalInt(updates, "frequency_quantity"),
-            HasIntervalWeeks: updates.TryGetProperty("interval_weeks", out _),
-            IntervalWeeks: JsonArgumentParser.GetOptionalInt(updates, "interval_weeks"),
+            HasIntervalWeeks: updates.TryGetProperty(IntervalWeeks, out _),
+            IntervalWeeks: JsonArgumentParser.GetOptionalInt(updates, IntervalWeeks),
             HasDays: updates.TryGetProperty("days", out _),
             Days: updates.TryGetProperty("days", out _) ? JsonArgumentParser.ParseDays(updates) ?? [] : null,
             HasDueDate: dateResult.IsSpecified,
@@ -171,10 +171,10 @@ internal static class BulkHabitToolArguments
             EndDate: endDateResult.Value,
             HasDueTime: timeResult.IsSpecified,
             DueTime: timeResult.Value,
-            HasIsBadHabit: updates.TryGetProperty("is_bad_habit", out _),
-            IsBadHabit: JsonArgumentParser.GetOptionalBool(updates, "is_bad_habit") ?? false,
-            HasIsFlexible: updates.TryGetProperty("is_flexible", out _),
-            IsFlexible: JsonArgumentParser.GetOptionalBool(updates, "is_flexible") ?? false,
+            HasIsBadHabit: updates.TryGetProperty(IsBadHabit, out _),
+            IsBadHabit: JsonArgumentParser.GetOptionalBool(updates, IsBadHabit) ?? false,
+            HasIsFlexible: updates.TryGetProperty(IsFlexible, out _),
+            IsFlexible: JsonArgumentParser.GetOptionalBool(updates, IsFlexible) ?? false,
             HasReminderEnabled: updates.TryGetProperty("reminder_enabled", out _),
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(updates, "reminder_enabled") ?? false,
             HasReminderTimes: updates.TryGetProperty("reminder_times", out _),
@@ -207,8 +207,8 @@ internal static class BulkHabitToolArguments
         return ValidateUpdateKinds(fields)
             ?? ParseNullableDate(fields, DueDate, allowNull: false).Error
             ?? ParseNullableDate(fields, StartDate, allowNull: false).Error
-            ?? ParseNullableDate(fields, "end_date", allowNull: true).Error
-            ?? ParseNullableTime(fields, "due_time").Error
+            ?? ParseNullableDate(fields, EndDate, allowNull: true).Error
+            ?? ParseNullableTime(fields, DueTime).Error
             ?? ParseNullableTime(fields, DueEndTimeField).Error
             ?? ParseFrequency(fields).Error;
     }
@@ -243,12 +243,12 @@ internal static class BulkHabitToolArguments
     {
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
-            "all", "habit_ids", "tag", "search", "is_completed", IsGeneralField, "is_bad_habit", "frequency"
+            "all", "habit_ids", "tag", "search", "is_completed", IsGeneralField, IsBadHabit, "frequency"
         };
         if (filter.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "filter contains an unsupported field.");
         filter = OptionalToolArguments.OmitNulls(filter);
-        foreach (var booleanName in new[] { "all", "is_completed", IsGeneralField, "is_bad_habit" })
+        foreach (var booleanName in new[] { "all", "is_completed", IsGeneralField, IsBadHabit })
         {
             if (filter.TryGetProperty(booleanName, out var booleanValue)
                 && booleanValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
@@ -294,7 +294,7 @@ internal static class BulkHabitToolArguments
             Tag: JsonArgumentParser.GetNullableString(filter, "tag"),
             Search: JsonArgumentParser.GetNullableString(filter, "search"),
             IsGeneral: JsonArgumentParser.GetOptionalBool(filter, IsGeneralField),
-            IsBadHabit: JsonArgumentParser.GetOptionalBool(filter, "is_bad_habit"),
+            IsBadHabit: JsonArgumentParser.GetOptionalBool(filter, IsBadHabit),
             Frequency: frequency,
             OneTime: oneTime,
             IsCompleted: JsonArgumentParser.GetOptionalBool(filter, "is_completed"));
@@ -373,7 +373,7 @@ internal static class BulkHabitToolArguments
 
     private static string? ValidateIntegerKinds(JsonElement updates)
     {
-        foreach (var nullableInteger in new[] { "frequency_quantity", "interval_weeks" })
+        foreach (var nullableInteger in new[] { "frequency_quantity", IntervalWeeks })
         {
             if (!HasKind(updates, nullableInteger, JsonValueKind.Number, JsonValueKind.Null))
                 return $"{nullableInteger} must be an integer or null.";
@@ -387,7 +387,7 @@ internal static class BulkHabitToolArguments
 
     private static string? ValidateBooleanKinds(JsonElement updates)
     {
-        var booleanName = new[] { "is_bad_habit", "is_flexible", "reminder_enabled", IsGeneralField, SlipAlertEnabledField }
+        var booleanName = new[] { IsBadHabit, IsFlexible, "reminder_enabled", IsGeneralField, SlipAlertEnabledField }
             .FirstOrDefault(name => !HasKind(updates, name, JsonValueKind.True, JsonValueKind.False));
         return booleanName is null ? null : $"{booleanName} must be a boolean.";
     }

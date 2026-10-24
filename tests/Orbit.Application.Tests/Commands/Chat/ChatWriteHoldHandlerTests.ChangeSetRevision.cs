@@ -14,6 +14,8 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public sealed partial class ChatWriteHoldHandlerTests
 {
+    private static readonly int[] MagnesiumReminderTimes = [10];
+
     [Fact]
     public async Task ChangeSetRevision_PatchesOneMemberAndPreservesItsSibling()
     {
@@ -88,7 +90,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             .Returns(Result.Success(new AiResponse
             {
                 ToolCalls = [
-                    new("create_sub_habit", "magnesium", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[0].Id, title = "Magnesium", frequency_unit = "Day", due_time = "21:00", reminder_enabled = true, reminder_times = new[] { 10 } })),
+                    new("create_sub_habit", "magnesium", JsonSerializer.SerializeToElement(new { parent_habit_id = parents[0].Id, title = "Magnesium", frequency_unit = "Day", due_time = "21:00", reminder_enabled = true, reminder_times = MagnesiumReminderTimes })),
                     new("update_habit", "description", JsonSerializer.SerializeToElement(new { habit_id = parents[1].Id, description = "Quiet time" }))
                 ],
                 ConversationContext = new()

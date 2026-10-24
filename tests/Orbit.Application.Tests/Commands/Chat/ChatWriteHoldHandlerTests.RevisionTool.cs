@@ -12,6 +12,8 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public sealed partial class ChatWriteHoldHandlerTests
 {
+    private static readonly string[] UnknownRevisionItemIds = ["unknown"];
+
     [Fact]
     public async Task RevisionTool_PatchesPendingBundleInPlaceAndKeepsUnmentionedFieldsAndMembers()
     {
@@ -92,7 +94,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         {
             pending_operation_id = pending.Id,
             items = edits,
-            remove_item_ids = fault == "unoffered_removal" ? new[] { "unknown" } : Array.Empty<string>()
+            remove_item_ids = fault == "unoffered_removal" ? UnknownRevisionItemIds : Array.Empty<string>()
         }), _userId, default);
 
         result.Success.Should().BeFalse();

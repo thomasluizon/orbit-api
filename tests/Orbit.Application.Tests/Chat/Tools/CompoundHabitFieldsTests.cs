@@ -10,6 +10,8 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public class CompoundHabitFieldsTests
 {
+    private static readonly int[] ReminderTimes = [10];
+
     [Fact]
     public async Task ExistingParent_PreservesRemindersSlipAlertChecklistAndTimes()
     {
@@ -22,7 +24,7 @@ public class CompoundHabitFieldsTests
             parent_habit_id = Guid.NewGuid(),
             habits = new[] { new {
                 title = "Take magnesium", frequency_unit = "Day", due_time = "22:00", due_end_time = "22:30",
-                end_date = "2026-11-30", reminder_enabled = true, reminder_times = new[] { 10 },
+                end_date = "2026-11-30", reminder_enabled = true, reminder_times = ReminderTimes,
                 slip_alert_enabled = true, checklist_items = new[] { new { text = "With water" } }
             } }
         });

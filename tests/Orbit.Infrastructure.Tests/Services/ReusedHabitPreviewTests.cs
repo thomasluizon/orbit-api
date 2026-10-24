@@ -25,6 +25,8 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public sealed class ReusedHabitPreviewTests : IDisposable
 {
+    private static readonly string[] NewTagNames = ["New tag"];
+
     private readonly SqliteOrbitDbContextFactory _factory = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly PendingOperationChangePreviewer _previewer;
@@ -212,7 +214,7 @@ public sealed class ReusedHabitPreviewTests : IDisposable
     [InlineData(true)]
     public async Task PreviewAndExecution_TagNamesShowAndApplyReplacement(bool clear)
     {
-        var arguments = Arguments(new() { ["tag_names"] = clear ? Array.Empty<string>() : new[] { "New tag" } });
+        var arguments = Arguments(new() { ["tag_names"] = clear ? Array.Empty<string>() : NewTagNames });
         var preview = await Preview(arguments);
         preview.Items![0].Fields.Single(field => field.Field == "tag_names").OldValue.Should().Be("Old tag");
 
