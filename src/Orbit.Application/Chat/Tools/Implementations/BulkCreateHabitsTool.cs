@@ -186,7 +186,6 @@ public class BulkCreateHabitsTool(
         var properties = new Dictionary<string, object>
         {
             [TitleProperty] = new { type = JsonSchemaTypes.String },
-            ["parent_habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text." },
             ["description"] = new { type = JsonSchemaTypes.String },
             ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
             ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = HabitModelInstructions.Schedule, @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
@@ -219,6 +218,7 @@ public class BulkCreateHabitsTool(
 
         if (includeSubHabits)
         {
+            properties["parent_habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text." };
             properties["sub_habits"] = new
             {
                 type = JsonSchemaTypes.Array,

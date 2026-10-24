@@ -49,6 +49,30 @@ public class BulkCreateHabitsToolTests
     }
 
     [Fact]
+    public async Task PerItemParents_DispatchChildrenWithIndependentSchedules()
+    {
+        var commands = new List<CreateSubHabitCommand>();
+        _mediator.Send(Arg.Do<CreateSubHabitCommand>(commands.Add), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Guid.NewGuid()));
+        var parents = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            habits = new[]
+            {
+                new { title = "Take vitamin D", parent_habit_id = parents[0], frequency_unit = "Week", frequency_quantity = 1 },
+                new { title = "Take rovustatina", parent_habit_id = parents[1], frequency_unit = "Day", frequency_quantity = 1 }
+            }
+        });
+
+        (await _tool.ExecuteAsync(args, UserId, default)).Success.Should().BeTrue();
+
+        commands.Select(command => command.ParentHabitId).Should().Equal(parents);
+        commands.Select(command => command.FrequencyUnit).Should().Equal(
+            Orbit.Domain.Enums.FrequencyUnit.Week, Orbit.Domain.Enums.FrequencyUnit.Day);
+        await _mediator.DidNotReceive().Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task NullParent_CreatesTheSameRootsAsAbsentParent()
     {
         var commands = new List<BulkCreateHabitsCommand>();

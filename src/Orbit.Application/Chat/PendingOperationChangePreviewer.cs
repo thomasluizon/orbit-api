@@ -360,7 +360,7 @@ public sealed class PendingOperationChangePreviewer(
     private static bool TryReadId(JsonElement arguments, string field, out Guid id)
     {
         id = Guid.Empty;
-        return arguments.TryGetProperty(field, out var value)
+        return arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty(field, out var value)
             && value.ValueKind == JsonValueKind.String
             && Guid.TryParse(value.GetString(), out id);
     }
@@ -640,7 +640,8 @@ public sealed class PendingOperationChangePreviewer(
     private static string AddCreationParent(JsonElement arguments, JsonElement habit, IReadOnlyList<Habit> parents,
         string name, List<PendingOperationChange> fields, List<PendingOperationValidationError> errors)
     {
-        var hasParent = habit.TryGetProperty("parent_habit_id", out var parentValue)
+        JsonElement parentValue = default;
+        var hasParent = habit.ValueKind == JsonValueKind.Object && habit.TryGetProperty("parent_habit_id", out parentValue)
             || arguments.TryGetProperty("parent_habit_id", out parentValue);
         var parent = hasParent && parentValue.ValueKind == JsonValueKind.String && Guid.TryParse(parentValue.GetString(), out var id)
             ? parents.FirstOrDefault(candidate => candidate.Id == id) : null;
@@ -648,7 +649,7 @@ public sealed class PendingOperationChangePreviewer(
         if (hasParent)
         {
             fields.Add(new PendingOperationChange(parent?.Id ?? Guid.Empty, name, "parent_habit_id", null,
-                parent?.Title ?? parentValue.ToString(), "text", parentValue.Clone(), true));
+                parent?.Title ?? parentValue.ToString(), "text", parentValue.Clone(), parent is null));
             if (parent is null)
                 errors.Add(new PendingOperationValidationError("parent_habit_id", "parent_choice_required",
                 "Choose an existing parent habit."));
