@@ -157,6 +157,9 @@ public class CapabilityParityToolTests
             new("work", "Work", "owner", false, null, false)
         };
         mediator.Send(Arg.Any<GetUserCalendarsQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(calendars));
+        mediator.Send(Arg.Any<GetCalendarAutoSyncStateQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new CalendarAutoSyncStateResponse(false, Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle,
+                null, true, ["primary"], "explicit")));
         var result = await new GetCalendarOverviewTool(mediator).ExecuteAsync(JsonSerializer.SerializeToElement(new
         {
             include_events = false,
