@@ -12,5 +12,7 @@ public static class HabitModelInstructions
 
     public const string Batch = "For several creates in one request, call bulk_create_habits once with the entire set, including dated events and independent preparation commitments. Use its existing batch preview. Preparation on different dates needs separate trackable items, rather than only the exam description. A failed item keeps its name and reason and remains editable and retryable.";
 
-    public static string All => string.Join("\n\n", Schedule, Polarity, Correction, DisplayDates, Batch);
+    public const string Routine = "A requested routine uses one parent habit with sub_habits for its activities. Choose this structure yourself; never ask checklist versus sub-habits for a routine. A morning or evening routine implies Day/1 unless another cadence was requested; weekday wording uses Day/1 with the requested days. Keep the parent's requested time and each child's own time, including lights out by 11 in an evening routine as 23:00. Durations belong to their activities. A missing hour does not block a preview: omit due_time when no hour was given. Propose the inferred cadence in the approval preview so the person can edit it. Only ask when no usable preview can be proposed. These rules apply equally to rotina da manhã, rotina da noite and dias úteis.";
+
+    public static string All => string.Join("\n\n", Schedule, Polarity, Correction, DisplayDates, Batch, Routine);
 }

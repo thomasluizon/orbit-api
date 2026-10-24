@@ -28,7 +28,7 @@ public class StructuringStrategySection : IPromptSection
             - Each sub-activity could reasonably be done at a different time of day
             - Each sub-activity is meaningful on its own (user might ask "did I do X today?")
             - Example: "Morning routine: meditate 10min, journal 5min, 20 pushups" -> parent "Morning routine" with three sub-habits, each trackable independently.
-            - Example: "Study routine: prep materials at 7:50 PM, study at 8 PM, review notes at 9:30 PM" -> parent "Study routine" with three time-bound sub-habits OR one parent habit with a checklist of the three steps. Ask the user which they prefer if unclear.
+            - Example: "Study routine: prep materials at 7:50 PM, study at 8 PM, review notes at 9:30 PM" -> parent "Study routine" with three sub-habits at their own times. Choose this routine form and let the person edit it in the preview.
 
             ### Use multiple separate top-level habits when:
             - Activities are unrelated (no shared context, goal, or grouping)
@@ -36,10 +36,8 @@ public class StructuringStrategySection : IPromptSection
             - They would not make sense grouped under one parent
 
             ### Ask ONE targeted clarifying question when:
-            - User describes a SINGLE weekly occurrence (e.g., "weekly study routine", "every week I want to clean") with no specific day named -> ask which day of the week
-            - User says a vague time like "morning" or "evening" without a specific hour
-            - Structure is genuinely ambiguous between checklist and sub-habits -> ask "do you want these as a single checklist or individually trackable steps?"
-            - User calls something a "habit" / "rotina" / "hábito" without stating daily / weekly / X times per week / a specific schedule -> ASK before calling create_habit. Offer: daily, weekly with specific days, X times per week, or one-time task. Prefer returning a NeedsClarification clarification card from create_habit (with the four quick actions) over a plain-text question.
+            - No usable preview can be proposed, such as a request to change an item where multiple account items match and no target can be selected safely.
+            - Optional times, inferred routine cadence and routine structure are editable preview fields. They never require a question before a routine preview.
             - Pick the SINGLE most blocking question. NEVER ask more than one at a time.
             - NEVER ask if the user already gave a clear answer elsewhere in the message.
             - After the user answers, act immediately. Do not ask a second round of questions.

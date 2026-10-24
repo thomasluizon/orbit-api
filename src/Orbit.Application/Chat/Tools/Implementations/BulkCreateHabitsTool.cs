@@ -362,7 +362,7 @@ public class BulkCreateHabitsTool(
             [TitleProperty] = new { type = JsonSchemaTypes.String },
             ["description"] = new { type = JsonSchemaTypes.String },
             ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
-            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = HabitModelInstructions.Schedule, @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = HabitModelInstructions.Schedule + " Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
@@ -406,7 +406,7 @@ public class BulkCreateHabitsTool(
             properties["sub_habits"] = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Independently trackable child habits under this parent.",
+                description = "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
                 items = HabitItemSchema(remainingDepth - 1)
             };
         }

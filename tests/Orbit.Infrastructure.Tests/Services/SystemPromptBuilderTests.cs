@@ -10,6 +10,31 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class SystemPromptBuilderTests
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Build_RoutinesChoosePreviewWithoutStructureOrCadenceQuestions(bool blockFirst, bool hasImage)
+    {
+        var builder = new SystemPromptBuilder();
+        var request = new PromptBuildRequest([], hasImage, UserToday: new DateOnly(2026, 4, 3),
+            BlockFirstComposition: blockFirst);
+        var prompt = builder.BuildStatic(request) + builder.BuildDynamic(request);
+
+        prompt.Should().Contain("one parent habit with sub_habits");
+        prompt.Should().Contain("morning or evening routine implies Day/1");
+        prompt.Should().Contain("Only ask when no usable preview can be proposed");
+        prompt.Should().NotContain("Ask the user which they prefer if unclear");
+        prompt.Should().NotContain("checklist-vs-subhabit unclear");
+        prompt.Should().NotContain("Prefer to ask the schedule INLINE");
+        prompt.Should().NotContain("without a specific hour");
+        prompt.Should().NotContain("the ideal flow is for you to ask first");
+        prompt.Should().NotMatchRegex(@"(?i)(?<!not )(?<!never )\b(?:ask|clarify|confirm) (?:the (?:user|person) )?(?:about |for )?(?:its |their |the |a )?(?:routine(?:'s)? )?(?:cadence|structure|frequency|schedule)\b");
+        prompt.Should().NotMatchRegex(@"(?i)\b(?:how often should (?:this|the|your) .*routine|what (?:cadence|schedule) (?:should|would) .*routine|(?:checklist or sub-habits|checklist versus children)\?)");
+        prompt.Should().NotMatchRegex(@"(?i)\broutine[^\r\n.]*(?:->|\bthen|\bmust|\bshould)\s+ask\b");
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void Build_FormatUsesNegotiatedComposition(bool blockFirst)

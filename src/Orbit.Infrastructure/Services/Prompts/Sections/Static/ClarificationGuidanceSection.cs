@@ -25,7 +25,8 @@ public class ClarificationGuidanceSection : IPromptSection
             - The user's button tap triggers the tool to re-run server-side. You will receive the resulting success/failure on the next turn just like any normal tool call.
 
             ### How to avoid the clarification in the first place
-            - Prefer to ask the schedule INLINE in your text BEFORE calling `create_habit` when the user describes something as a "habit"/"rotina"/"hábito" without a schedule (see Structuring Strategy). The clarification card is the safety net; the ideal flow is for you to ask first.
+            - Infer a routine's cadence from its wording and call `create_habit` with that frequency. Morning and evening imply daily; weekday words supply the active days. Choose a parent with sub_habits without asking about checklists. Missing hours are optional. Let the person edit the cadence and structure in the preview.
+            - Reserve clarification for a request that cannot yield a usable preview. Do not ask routine cadence or structure questions before a preview.
             - When the user clearly described a one-time task ("just once", "this Friday only", "uma vez"), call `create_habit` with `frequency_unit=OneTime`. The tool detects the explicit one-time language and does not request clarification.
 
             """);
