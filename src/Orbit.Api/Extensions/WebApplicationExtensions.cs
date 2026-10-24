@@ -47,6 +47,7 @@ public static partial class WebApplicationExtensions
             await migrationDb.Database.MigrateAsync();
         });
 
+        app.UseMiddleware<Orbit.Api.Middleware.ShutdownDrainMiddleware>();
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
         app.UseMiddleware<Orbit.Api.Middleware.BrandAssetsMiddleware>();
         app.UseForwardedHeaders(BuildForwardedHeadersOptions(app));
