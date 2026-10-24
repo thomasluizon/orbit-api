@@ -48,7 +48,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class AgentChatWriteHoldTests : IDisposable
+public partial class AgentChatWriteHoldTests : IDisposable
 {
     private readonly OrbitDbContext _dbContext;
     private readonly MemoryCache _flagCache = new(new MemoryCacheOptions());

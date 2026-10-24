@@ -101,14 +101,14 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool ResolveSearchFilter(string operationId, JsonObject arguments, ToolExecutionAccumulator results)
     {
-        if (!operationId.StartsWith("bulk_", StringComparison.Ordinal) || operationId == BulkCreateHabits
-            || arguments["filter"] is not JsonObject filter || filter["search"] is not JsonValue searchValue
-            || !searchValue.TryGetValue<string>(out var search) || string.IsNullOrWhiteSpace(search))
+        if (!BulkNoChangesOutcome.Supports(operationId) || arguments["revised_items"] is not null
+            || arguments["filter"] is not JsonObject)
             return true;
-        var parsed = BulkHabitToolArguments.ParseRequiredFilter(JsonSerializer.SerializeToElement(arguments));
-        if (parsed.Error is not null || parsed.Filter is null || BulkHabitSelection.Select(results.AllHabits, parsed.Filter).Count > 0)
+        var (filter, error) = BulkHabitToolArguments.ParseRequiredFilter(JsonSerializer.SerializeToElement(arguments));
+        if (error is not null || string.IsNullOrWhiteSpace(filter?.Search)
+            || results.AllHabits.Any(habit => HabitNameMatcher.Matches(habit.Title, filter.Search)))
             return true;
-        results.MissingHabitNames.Add(search);
+        results.MissingHabitNames.Add(filter.Search);
         return false;
     }
 
@@ -286,6 +286,7 @@ public partial class ProcessUserChatCommandHandler
         if (logs.Count == 0)
             return;
         var entries = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var matchedCalls = new List<AiToolCall>();
         foreach (var call in logs)
         {
             var expanded = await BulkHabitLogArguments.ExpandAsync(call.Args, data.HabitRepository,
@@ -296,17 +297,20 @@ public partial class ProcessUserChatCommandHandler
                 resolvedCalls[call.Id] = null;
                 continue;
             }
-            foreach (var item in expanded.Value.GetProperty("revised_items").EnumerateArray())
+            if (expanded.Value is not { } expandedArguments)
+                continue;
+            matchedCalls.Add(call);
+            foreach (var item in expandedArguments.GetProperty("revised_items").EnumerateArray())
                 entries.TryAdd(Orbit.Domain.Common.AgentOperationFingerprint.Compute("log", item.GetRawText()), item.Clone());
         }
         if (entries.Count == 0)
             return;
-        var first = logs.First(call => resolvedCalls[call.Id] is not null);
+        var first = matchedCalls[0];
         resolvedCalls[first.Id] = first with
         {
             Args = JsonSerializer.SerializeToElement(new { revised_items = entries.Values.ToArray() })
         };
-        foreach (var call in logs.Where(call => call.Id != first.Id))
+        foreach (var call in matchedCalls.Where(call => call.Id != first.Id))
         {
             if (resolvedCalls[call.Id] is not null)
                 results.MergedCallIds.Add(call.Id);

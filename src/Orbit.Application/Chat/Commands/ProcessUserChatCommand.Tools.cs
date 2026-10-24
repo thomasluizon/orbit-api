@@ -183,6 +183,9 @@ public partial class ProcessUserChatCommandHandler
                 ? new ToolRoundResult(MessageResponse(language), HadToolFailure: true)
                 : new ToolRoundResult(new AiResponse());
 
+        if (BulkNoChangesMessage(executionResults, language) is { } noChanges)
+            return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
+
         if (executionResults.AskBlock is not null)
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
 
