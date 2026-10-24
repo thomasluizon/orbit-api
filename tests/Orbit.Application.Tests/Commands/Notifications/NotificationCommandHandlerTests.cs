@@ -320,15 +320,17 @@ public class SubscribePushCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_SameAndroidDeviceUnderNewAccount_TransfersTheRowToTheNewAccount()
+    [Theory]
+    [InlineData("fcm-token-abc123", PushSubscription.FcmSentinel)]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", PushSubscription.ApnsSentinel)]
+    public async Task Handle_SameNativeDeviceUnderNewAccount_TransfersTheRowToTheNewAccount(string token, string marker)
     {
         var otherUserId = Guid.NewGuid();
-        var existing = PushSubscription.Create(otherUserId, "fcm-token-abc123", PushSubscription.FcmSentinel, PushSubscription.FcmSentinel).Value;
+        var existing = PushSubscription.Create(otherUserId, token, marker, marker).Value;
         ArrangeExistingEndpoint(existing);
         ArrangeUserSubscriptions();
 
-        var command = new SubscribePushCommand(UserId, "fcm-token-abc123", PushSubscription.FcmSentinel, PushSubscription.FcmSentinel);
+        var command = new SubscribePushCommand(UserId, token, marker, marker);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -339,9 +341,31 @@ public class SubscribePushCommandHandlerTests
     }
 
     [Theory]
+    [InlineData(PushSubscription.ApnsSentinel, PushSubscription.FcmSentinel)]
+    [InlineData(PushSubscription.FcmSentinel, PushSubscription.ApnsSentinel)]
+    public async Task Handle_ForeignNativeTokenWithDifferentTransport_KeepsTheRowWithItsOwner(string storedMarker, string presentedMarker)
+    {
+        const string token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        var otherUserId = Guid.NewGuid();
+        var existing = PushSubscription.Create(otherUserId, token, storedMarker, storedMarker).Value;
+        ArrangeExistingEndpoint(existing);
+
+        var command = new SubscribePushCommand(UserId, token, presentedMarker, presentedMarker);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PushEndpointOwnedByOtherUser);
+        existing.UserId.Should().Be(otherUserId);
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("p256dh", "other-auth")]
     [InlineData("other-p256dh", "auth")]
     [InlineData(PushSubscription.FcmSentinel, PushSubscription.FcmSentinel)]
+    [InlineData(PushSubscription.ApnsSentinel, PushSubscription.ApnsSentinel)]
     public async Task Handle_ForeignWebPushEndpointWithoutItsKeys_KeepsTheRowWithItsOwner(string p256dh, string auth)
     {
         var otherUserId = Guid.NewGuid();
@@ -445,22 +469,37 @@ public class SubscribePushCommandHandlerTests
         await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_FcmEndpoint_PersistsFcmTransport()
+    [Theory]
+    [InlineData("fcm-token-abc123", PushSubscription.FcmSentinel, "ignored", PushTransport.Fcm)]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", PushSubscription.ApnsSentinel, PushSubscription.ApnsSentinel, PushTransport.Apns)]
+    public async Task Handle_NativeEndpoint_PersistsNativeTransport(string token, string p256dh, string auth, PushTransport transport)
     {
         ArrangeNoExistingEndpoint();
         ArrangeUserSubscriptions();
 
-        PushSubscription? added = null;
-        await _pushSubRepo.AddAsync(Arg.Do<PushSubscription>(s => added = s), Arg.Any<CancellationToken>());
-
-        var command = new SubscribePushCommand(UserId, "fcm-token-abc123", PushSubscription.FcmSentinel, "ignored");
+        var command = new SubscribePushCommand(UserId, token, p256dh, auth);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        added.Should().NotBeNull();
-        added!.Transport.Should().Be(PushTransport.Fcm);
+        await _pushSubRepo.Received(1).AddAsync(Arg.Is<PushSubscription>(s =>
+            s.UserId == UserId && s.Endpoint == token && s.P256dh == p256dh && s.Auth == auth && s.Transport == transport),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Handle_ApnsEndpoint_RejectsEmptyToken(string token)
+    {
+        var command = new SubscribePushCommand(UserId, token, PushSubscription.ApnsSentinel, PushSubscription.ApnsSentinel);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public class SubscribePushCommandHandler(
             if (string.IsNullOrWhiteSpace(request.Endpoint))
                 return Result.Failure(ErrorMessages.FcmTokenRequired);
         }
-        else if (!WebPushEndpointPolicy.IsAllowed(request.Endpoint))
+        else if (transport == PushTransport.WebPush && !WebPushEndpointPolicy.IsAllowed(request.Endpoint))
         {
             return Result.Failure(ErrorMessages.PushEndpointInvalid);
         }
