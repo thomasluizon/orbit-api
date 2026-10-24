@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MediatR;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Tags.Commands;
+using Orbit.Application.Tags.Queries;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -73,58 +75,21 @@ public class BulkCreateHabitsTool(
         if (items.Count == 0)
             return new ToolResult(false, Error: "No habits provided.");
 
-        if (args.TryGetProperty("parent_habit_id", out _)
-            || habitsEl.EnumerateArray().Any(habit => habit.TryGetProperty("parent_habit_id", out _)))
+        if (HasExistingParent(args, habitsEl))
+            return await ExecuteWithParentsAsync(args, habitsEl, items, userId, checkOnly, ct);
+
+        if (habitsEl.EnumerateArray().Any(HasGoalLinks))
         {
-            if (items.Any(item => item.SubHabits is { Count: > 0 }))
-                return new ToolResult(false, Error: "Create children directly under the existing parent; nested sub_habits are not supported in this call.");
             var created = new List<BulkCreateItemResult>();
             for (var index = 0; index < items.Count; index++)
             {
-                var item = items[index];
-                var source = habitsEl[index];
-                var hasParent = source.TryGetProperty("parent_habit_id", out var parentValue)
-                    || args.TryGetProperty("parent_habit_id", out parentValue);
-                if (!hasParent)
-                {
-                    var rootCommand = new BulkCreateHabitsCommand(userId, [item]);
-                    if (checkOnly)
-                    {
-                        var checkedRoot = await ChatToolArgumentCheck.CheckCommandAsync(mediator, rootCommand, ct);
-                        if (!checkedRoot.Success) return checkedRoot;
-                    }
-                    else
-                    {
-                        var rootResult = await mediator.Send(rootCommand, ct);
-                        if (rootResult.IsFailure) return ToolResult.FromFailure(rootResult);
-                        created.AddRange(rootResult.Value.Results.Select(result => result with { Index = index }));
-                    }
-                    continue;
-                }
-                if (parentValue.ValueKind != JsonValueKind.String || !Guid.TryParse(parentValue.GetString(), out var parentId))
-                    return new ToolResult(false, Error: "parent_habit_id must be a valid habit ID.");
-                var childCommand = new CreateSubHabitCommand(userId, parentId, item.Title, item.Description,
-                    item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate,
-                    new HabitCommandOptions(Days: item.Days, DueTime: item.DueTime, DueEndTime: item.DueEndTime,
-                        IsFlexible: item.IsFlexible, EndDate: item.EndDate, ChecklistItems: item.ChecklistItems), Emoji: item.Emoji, InheritParentFrequency: item.InheritParentFrequency,
-                    IntervalWeeks: item.IntervalWeeks);
-                if (checkOnly)
-                {
-                    var checkedItem = await ChatToolArgumentCheck.CheckCommandAsync(mediator, childCommand, ct);
-                    if (!checkedItem.Success)
-                        return checkedItem;
-                }
-                else
-                {
-                    var childResult = await mediator.Send(childCommand, ct);
-                    if (childResult.IsFailure)
-                        return ToolResult.FromFailure(childResult);
-                    created.Add(new BulkCreateItemResult(created.Count, BulkItemStatus.Success, childResult.Value, item.Title));
-                }
+                var createdItem = await ExecuteTreeAsync(habitsEl[index], items[index], userId, null, checkOnly, ct);
+                if (!createdItem.Success) return createdItem;
+                created.Add(new(index, BulkItemStatus.Success,
+                    Guid.TryParse(createdItem.EntityId, out var id) ? id : null, items[index].Title));
             }
-            return new ToolResult(true, EntityName: $"{items.Count} sub-habits", Payload: new BulkCreateResult(created));
+            return new ToolResult(true, Payload: new BulkCreateResult(created));
         }
-
         var command = new BulkCreateHabitsCommand(userId, items);
         if (checkOnly)
             return await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
@@ -136,6 +101,110 @@ public class BulkCreateHabitsTool(
 
         var successCount = result.Value.Results.Count(item => item.Status == BulkItemStatus.Success);
         return new ToolResult(true, EntityName: $"{successCount}/{items.Count} habits created", Payload: result.Value);
+    }
+
+    private static bool HasExistingParent(JsonElement args, JsonElement habits) =>
+        args.TryGetProperty("parent_habit_id", out _)
+        || habits.EnumerateArray().Any(habit => habit.TryGetProperty("parent_habit_id", out _));
+
+    private async Task<ToolResult> ExecuteWithParentsAsync(JsonElement args, JsonElement habitsEl,
+        IReadOnlyList<BulkHabitItem> items, Guid userId, bool checkOnly, CancellationToken ct)
+    {
+        var created = new List<BulkCreateItemResult>();
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            var source = habitsEl[index];
+            var hasParent = source.TryGetProperty("parent_habit_id", out var parentValue)
+                || args.TryGetProperty("parent_habit_id", out parentValue);
+            if (!hasParent)
+            {
+                var rootCommand = new BulkCreateHabitsCommand(userId, [item]);
+                if (checkOnly)
+                {
+                    var checkedRoot = await ChatToolArgumentCheck.CheckCommandAsync(mediator, rootCommand, ct);
+                    if (!checkedRoot.Success) return checkedRoot;
+                }
+                else
+                {
+                    var rootResult = await mediator.Send(rootCommand, ct);
+                    if (rootResult.IsFailure) return ToolResult.FromFailure(rootResult);
+                    created.AddRange(rootResult.Value.Results.Select(result => result with { Index = index }));
+                }
+                continue;
+            }
+            if (parentValue.ValueKind != JsonValueKind.String || !Guid.TryParse(parentValue.GetString(), out var parentId))
+                return new ToolResult(false, Error: "parent_habit_id must be a valid habit ID.");
+            var childResult = await ExecuteTreeAsync(source, item, userId, parentId, checkOnly, ct);
+            if (!childResult.Success)
+                return childResult;
+            created.Add(new BulkCreateItemResult(index, BulkItemStatus.Success,
+                Guid.TryParse(childResult.EntityId, out var childId) ? childId : null, item.Title));
+        }
+        return new ToolResult(true, EntityName: $"{items.Count} sub-habits", Payload: new BulkCreateResult(created));
+    }
+
+    private static bool HasGoalLinks(JsonElement item) => item.TryGetProperty("goal_ids", out _)
+        || item.TryGetProperty("sub_habits", out var children) && children.EnumerateArray().Any(HasGoalLinks);
+
+    private async Task<ToolResult> ExecuteTreeAsync(JsonElement source, BulkHabitItem item, Guid userId,
+        Guid? parentId, bool checkOnly, CancellationToken ct)
+    {
+        var options = new HabitCommandOptions(item.Days, item.DueTime, item.DueEndTime,
+            item.ReminderEnabled, item.ReminderTimes, item.SlipAlertEnabled, item.ChecklistItems,
+            item.ScheduledReminders, item.EndDate, item.IsFlexible, item.RelativeReminders);
+        IRequest<Orbit.Domain.Common.Result<Guid>> command = parentId is { } parent
+            ? new CreateSubHabitCommand(userId, parent, item.Title, item.Description,
+                item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate, options,
+                Emoji: item.Emoji, InheritParentFrequency: item.InheritParentFrequency,
+                IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate)
+            : new CreateHabitCommand(userId, item.Title, item.Description, item.FrequencyUnit,
+                item.FrequencyQuantity, item.IsBadHabit, DueDate: item.DueDate, IsGeneral: item.IsGeneral,
+                Options: options, GoalIds: JsonArgumentParser.ParseGuidArray(source, "goal_ids"),
+                Emoji: item.Emoji, IntervalWeeks: item.IntervalWeeks, StartDate: item.StartDate);
+        if (checkOnly)
+        {
+            var check = await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+            if (!check.Success) return check;
+            return new ToolResult(true);
+        }
+        var result = await mediator.Send(command, ct);
+        if (result.IsFailure) return ToolResult.FromFailure(result);
+        var id = result.Value;
+        if (item.Tags is { Count: > 0 })
+        {
+            var available = await mediator.Send(new GetTagsQuery(userId), ct);
+            if (available.IsFailure) return ToolResult.FromFailure(available);
+            var tagIds = new List<Guid>();
+            foreach (var name in item.Tags)
+            {
+                var matches = available.Value.Where(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (matches.Length > 1) return new ToolResult(false, Error: "tag_choice_required");
+                if (matches.Length == 1) tagIds.Add(matches[0].Id);
+                else
+                {
+                    var added = await mediator.Send(new CreateTagCommand(userId, name, "#7c3aed"), ct);
+                    if (added.IsFailure) return ToolResult.FromFailure(added);
+                    tagIds.Add(added.Value);
+                }
+            }
+            var tags = await mediator.Send(new AssignTagsCommand(userId, id, tagIds), ct);
+            if (tags.IsFailure) return ToolResult.FromFailure(tags);
+        }
+        if (parentId is not null && JsonArgumentParser.ParseGuidArray(source, "goal_ids") is { Count: > 0 } goals)
+        {
+            var linked = await mediator.Send(new LinkGoalsToHabitCommand(userId, id, goals), ct);
+            if (linked.IsFailure) return ToolResult.FromFailure(linked);
+        }
+        if (source.TryGetProperty("sub_habits", out var children))
+            foreach (var child in children.EnumerateArray())
+            {
+                var parsed = ParseBulkHabitItem(child);
+                if (parsed is null) return new ToolResult(false, Error: "Each child needs a title.");
+                var added = await ExecuteTreeAsync(child, parsed, userId, id, false, ct);
+                if (!added.Success) return added;
+            }
+        return new ToolResult(true, EntityId: id.ToString(), EntityName: item.Title);
     }
 
     internal static BulkHabitItem? ParseBulkHabitItem(JsonElement el, bool allowEmptyTitle = false)
@@ -180,7 +249,14 @@ public class BulkCreateHabitsTool(
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(el),
             SubHabits: subHabits,
             Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"),
-            IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, "interval_weeks"))
+            IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, "interval_weeks"),
+            ReminderEnabled: JsonArgumentParser.GetOptionalBool(el, "reminder_enabled") ?? false,
+            ReminderTimes: JsonArgumentParser.ParseIntArray(el, "reminder_times"),
+            ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(el),
+            RelativeReminders: JsonArgumentParser.ParseRelativeReminders(el),
+            Tags: JsonArgumentParser.ParseStringArray(el, "tag_names"),
+            SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(el, "slip_alert_enabled") ?? false,
+            StartDate: JsonArgumentParser.ParseDateOnly(el, "start_date"))
         { InheritParentFrequency = !oneTime };
     }
 
@@ -219,6 +295,14 @@ public class BulkCreateHabitsTool(
             }
         };
 
+        properties["start_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD recurrence anchor." };
+        properties["reminder_enabled"] = new { type = JsonSchemaTypes.Boolean };
+        properties["reminder_times"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } };
+        properties["scheduled_reminders"] = BulkHabitToolArguments.ScheduledRemindersSchema();
+        properties["relative_reminders"] = BulkHabitToolArguments.RelativeRemindersSchema();
+        properties["slip_alert_enabled"] = new { type = JsonSchemaTypes.Boolean };
+        properties["tag_names"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
+        properties["goal_ids"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
         if (includeSubHabits)
         {
             properties["parent_habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing parent for this item. Overrides the shared parent. Resolve headings against account habits; never turn them into description text." };

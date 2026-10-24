@@ -22,7 +22,8 @@ public record CreateSubHabitCommand(
     IReadOnlyList<Guid>? TagIds = null,
     string? Emoji = null,
     bool InheritParentFrequency = false,
-    int? IntervalWeeks = null) : IRequest<Result<Guid>>;
+    int? IntervalWeeks = null,
+    DateOnly? StartDate = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -104,7 +105,7 @@ public class CreateSubHabitCommandHandler(
 
     private static Result<Habit> BuildHabit(CreateSubHabitCommand request, Habit parent, DateOnly userToday, int position)
     {
-        var childDueDate = request.DueDate ?? (parent.NextDueDate > userToday ? parent.NextDueDate : userToday);
+        var childDueDate = request.StartDate ?? request.DueDate ?? (parent.NextDueDate > userToday ? parent.NextDueDate : userToday);
         var opts = request.Options ?? new HabitCommandOptions();
 
         var frequencyUnit = request.FrequencyUnit;
@@ -148,7 +149,8 @@ public class CreateSubHabitCommandHandler(
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
             Position: position,
-            IntervalWeeks: intervalWeeks));
+            IntervalWeeks: intervalWeeks,
+            StartDate: request.StartDate));
 
     }
 

@@ -87,10 +87,12 @@ internal static class BulkHabitSubtree
 
         return Habit.Create(new HabitCreateParams(
             userId, item.Title, frequencyUnit, frequencyQuantity,
-            item.DueDate ?? parent?.NextDueDate ?? today, item.Description,
+            item.StartDate ?? item.DueDate ?? parent?.NextDueDate ?? today, item.Description,
             Emoji: item.Emoji,
             Days: days,
             IsBadHabit: item.IsBadHabit,
+            SlipAlertEnabled: item.SlipAlertEnabled,
+            StartDate: item.StartDate,
             DueTime: item.DueTime,
             DueEndTime: item.DueEndTime,
             ReminderEnabled: item.ReminderEnabled,
