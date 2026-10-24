@@ -15,6 +15,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -502,6 +503,45 @@ public class OAuthControllerTests : IDisposable
         var json = JsonSerializer.Serialize(ok.Value);
         json.Should().Contain("/mcp");
         json.Should().Contain("bearer_methods_supported");
+    }
+
+    [Fact]
+    public async Task GetProtectedResourceMetadata_BothRoutesReturnSameAnonymousDocument()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddControllers().AddApplicationPart(typeof(OAuthController).Assembly)
+            .AddControllersAsServices();
+        builder.Services.AddSingleton(_controller);
+        await using var app = builder.Build();
+        app.UseRouting();
+        app.UseEndpoints(endpoints => endpoints.MapControllers());
+        var pipeline = ((IApplicationBuilder)app).Build();
+        var documents = new List<string>();
+
+        foreach (var path in new[] { "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp" })
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+            context.Request.Method = "GET";
+            context.Request.Path = path;
+            context.Request.Scheme = "http";
+            context.Request.Host = new HostString("api.useorbit.org");
+            context.Request.Headers["X-Forwarded-Proto"] = "https";
+            context.Response.Body = new MemoryStream();
+
+            await pipeline(context);
+
+            context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+            context.Response.ContentType.Should().StartWith("application/json");
+            context.Response.Body.Position = 0;
+            documents.Add(await new StreamReader(context.Response.Body).ReadToEndAsync());
+        }
+
+        documents[1].Should().Be(documents[0]);
+        using var document = JsonDocument.Parse(documents[0]);
+        document.RootElement.GetProperty("resource").GetString().Should().Be("https://api.useorbit.org/mcp");
+        document.RootElement.GetProperty("authorization_servers")[0].GetString().Should().Be("https://api.useorbit.org");
+        document.RootElement.GetProperty("bearer_methods_supported")[0].GetString().Should().Be("header");
     }
 
     [Fact]

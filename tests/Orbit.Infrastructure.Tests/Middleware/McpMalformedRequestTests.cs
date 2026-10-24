@@ -19,6 +19,24 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public class McpMalformedRequestTests
 {
     [Theory]
+    [InlineData("initialize")]
+    [InlineData("ping")]
+    [InlineData("notifications/initialized")]
+    [InlineData("notifications/cancelled")]
+    public async Task Post_UnauthenticatedProtocolMethod_ReturnsOAuthChallenge(string method)
+    {
+        var logs = new RecordedLogs();
+        await using var app = CreateApp(logs, authenticated: false);
+        var context = await Post(app, """{"jsonrpc":"2.0","id":1,"method":"$method","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"orbit-auth-probe","version":"1"}}}""".Replace("$method", method, StringComparison.Ordinal));
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+        context.Response.Headers.WWWAuthenticate.ToString().Should().Be(
+            "Bearer resource_metadata=\"https://api.useorbit.org/.well-known/oauth-protected-resource/mcp\"");
+        context.Response.Headers.Should().NotContainKey("Mcp-Session-Id");
+        context.Response.Body.Length.Should().Be(0);
+    }
+
+    [Theory]
     [InlineData("1.5", "initialize")]
     [InlineData("null", "initialize")]
     [InlineData("1.5", "ping")]
@@ -62,7 +80,7 @@ public class McpMalformedRequestTests
         logs.Levels.Should().NotContain(level => level >= LogLevel.Error);
     }
 
-    private static WebApplication CreateApp(RecordedLogs logs)
+    private static WebApplication CreateApp(RecordedLogs logs, bool authenticated = true)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders().AddProvider(logs);
@@ -72,7 +90,9 @@ public class McpMalformedRequestTests
             new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test"));
         var auth = Substitute.For<IAuthenticationService>();
         auth.AuthenticateAsync(Arg.Any<HttpContext>(), Arg.Any<string>())
-            .Returns(AuthenticateResult.Success(new AuthenticationTicket(principal, "Test")));
+            .Returns(authenticated
+                ? AuthenticateResult.Success(new AuthenticationTicket(principal, "Test"))
+                : AuthenticateResult.NoResult());
         var limiter = Substitute.For<IDistributedRateLimitService>();
         limiter.TryAcquireAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
@@ -93,6 +113,8 @@ public class McpMalformedRequestTests
         var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider, RequestAborted = timeout.Token };
         context.Request.Method = "POST";
         context.Request.Path = "/mcp";
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("api.useorbit.org");
         context.Request.ContentType = "application/json";
         context.Request.Headers.Accept = "application/json, text/event-stream";
         context.Request.Headers["MCP-Protocol-Version"] = "2025-11-25";

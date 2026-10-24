@@ -169,7 +169,7 @@ public class McpPlanAccessTests
         {
             context.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
             context.Response.Headers.WWWAuthenticate.ToString().Should().Be(
-                "Bearer resource_metadata=\"https://api.example.com/.well-known/oauth-protected-resource\"");
+                "Bearer resource_metadata=\"https://api.example.com/.well-known/oauth-protected-resource/mcp\"");
             toolOutput.Should().BeNull();
             key.LastUsedAtUtc.Should().BeNull();
             await mediator.DidNotReceive().Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>());

@@ -26,22 +26,22 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("{\"method\":\"ping\"}")]
     [InlineData("{\"method\":\"notifications/cancelled\"}")]
     [InlineData("{\"method\":\"notifications/initialized\"}")]
-    public void IsMcpUnauthenticatedMethod_AllowsHandshakeAndNotifications(string body)
+    public void IsMcpLifecycleMethod_RecognizesHandshakeAndNotifications(string body)
     {
         using var document = WebApplicationExtensions.TryParseMcpBody(body);
 
-        WebApplicationExtensions.IsMcpUnauthenticatedMethod(document?.RootElement).Should().BeTrue();
+        WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeTrue();
     }
 
     [Theory]
     [InlineData("{\"method\":\"tools/call\"}")]
     [InlineData("{\"method\":\"tools/list\"}")]
     [InlineData("{\"id\":1}")]
-    public void IsMcpUnauthenticatedMethod_RequiresAuthForEverythingElse(string body)
+    public void IsMcpLifecycleMethod_DoesNotRecognizeOtherMethods(string body)
     {
         using var document = WebApplicationExtensions.TryParseMcpBody(body);
 
-        WebApplicationExtensions.IsMcpUnauthenticatedMethod(document?.RootElement).Should().BeFalse();
+        WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
     }
 
     [Theory]
@@ -50,23 +50,23 @@ public class WebApplicationExtensionsMcpTests
     [InlineData("[{\"method\":\"initialize\"}]")]
     [InlineData("true")]
     [InlineData("null")]
-    public void IsMcpUnauthenticatedMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
+    public void IsMcpLifecycleMethod_NonObjectBody_ReturnsFalseWithoutThrowing(string body)
     {
         using var document = WebApplicationExtensions.TryParseMcpBody(body);
 
-        var act = () => WebApplicationExtensions.IsMcpUnauthenticatedMethod(document?.RootElement);
+        var act = () => WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement);
 
         act.Should().NotThrow();
         act().Should().BeFalse();
     }
 
     [Fact]
-    public void IsMcpUnauthenticatedMethod_MalformedJson_ReturnsFalse()
+    public void IsMcpLifecycleMethod_MalformedJson_ReturnsFalse()
     {
         using var document = WebApplicationExtensions.TryParseMcpBody("{ not valid json");
 
         document.Should().BeNull();
-        WebApplicationExtensions.IsMcpUnauthenticatedMethod(document?.RootElement).Should().BeFalse();
+        WebApplicationExtensions.IsMcpLifecycleMethod(document?.RootElement).Should().BeFalse();
     }
 
     [Fact]
