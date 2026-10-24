@@ -188,6 +188,23 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.FollowUps.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("Toda noite às 21h30: ler 20 minutos, alongar por 10 minutos e apagar as luzes às 23h, como uma rotina da noite", "Ler 20 minutos às 9:30 PM, alongar por 10 minutos e apagar as luzes às 11 PM.")]
+    [InlineData("Every evening at 9:30 PM: read 20 minutes, stretch for 10 minutes, and lights out at 11 PM, as one evening routine", "Read 20 minutes at 21:30, stretch for 10 minutes and lights out at 23:00.")]
+    public async Task Handle_UserStatedTimesDurationsAndCounts_DoNotTriggerGrounding(string request, string reply)
+    {
+        SetupUserAndPayGate();
+        _appConfig.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(true);
+        SetupAiResponse(new AiResponse { TextMessage = reply });
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, request), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(reply);
+        _logger.ReceivedCalls().Should().NotContain(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning);
+    }
+
     [Fact]
     public async Task Handle_CleanNoToolTurn_ProducesNoWarnings()
     {

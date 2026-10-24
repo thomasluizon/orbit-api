@@ -242,6 +242,15 @@ public partial class AgentOperationExecutor(
                         ErrorCode: attemptedPreview.ErrorCode), cancellationToken);
             }
             var preview = attemptedPreview.Value;
+            if (execution.Request.ConfirmationToken is null && BulkNoChangesOutcome.Supports(execution.Operation.Id)
+                && preview is { ChangeTargetCount: 0, Items.Count: 0 })
+            {
+                pendingOperationStore.Cancel(execution.Request.UserId, pending.Id,
+                    AgentOperationFingerprint.Compute(execution.Operation.Id, execution.Arguments.GetRawText()));
+                return await BuildToolOutcomeResponseAsync(execution, policyDecision,
+                    new ToolResult(true, Payload: BulkNoChangesOutcome.For(execution.Operation.Id, execution.Arguments)),
+                    cancellationToken);
+            }
 
             if (preview is null || preview.ChangeTargetCount is not > 0 || preview.Items is not { Count: > 0 }
                 || string.IsNullOrWhiteSpace(preview.PreviewFingerprint))

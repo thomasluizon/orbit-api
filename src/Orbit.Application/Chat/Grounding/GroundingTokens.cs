@@ -25,6 +25,12 @@ internal static partial class GroundingTokens
         }
 
         text = DatePattern().Replace(text, match => TryDate(match.Value, out _) ? " " : match.Value);
+        foreach (Match match in TimePattern().Matches(text))
+        {
+            if (TryTime(match, out var time))
+                yield return ("Time", time, match.Value);
+        }
+        text = TimePattern().Replace(text, match => TryTime(match, out _) ? " " : match.Value);
         foreach (Match match in NumberPattern().Matches(text))
         {
             var raw = match.Value;
@@ -33,6 +39,23 @@ internal static partial class GroundingTokens
                 : raw;
             yield return ("Number", value, raw);
         }
+    }
+
+    private static bool TryTime(Match match, out string normalized)
+    {
+        var hour = int.Parse(match.Groups["hour"].Value, CultureInfo.InvariantCulture);
+        var minute = match.Groups["minute"].Success
+            ? int.Parse(match.Groups["minute"].Value, CultureInfo.InvariantCulture) : 0;
+        var meridiem = match.Groups["meridiem"].Value;
+        if (minute > 59 || (meridiem.Length > 0 ? hour is < 1 or > 12 : hour > 23))
+        {
+            normalized = string.Empty;
+            return false;
+        }
+        if (meridiem.Length > 0)
+            hour = hour % 12 + (meridiem.StartsWith("p", StringComparison.OrdinalIgnoreCase) ? 12 : 0);
+        normalized = $"{hour:00}:{minute:00}";
+        return true;
     }
 
     private static CultureInfo NumberCulture(string raw, bool portuguese)
@@ -68,6 +91,9 @@ internal static partial class GroundingTokens
 
     [GeneratedRegex(@"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|\d{1,2}(?: de)? [\p{L}]+(?: de)? \d{4}|[\p{L}]+ \d{1,2},? \d{4})\b", RegexOptions.IgnoreCase, 1000)]
     private static partial Regex DatePattern();
+
+    [GeneratedRegex(@"(?<![\p{L}\d])(?<hour>[0-9]{1,2})(?:(?::|h)(?<minute>[0-9]{2})(?:\s*(?<meridiem>[ap]\.?m\.?))?|h|\s*(?<meridiem>[ap]\.?m\.?))(?![\p{L}\d])", RegexOptions.IgnoreCase, 1000)]
+    private static partial Regex TimePattern();
 
     [GeneratedRegex(@"(?<![\p{L}\d])[-+]?\d+(?:[.,]\d+)*(?!\d)", RegexOptions.None, 1000)]
     private static partial Regex NumberPattern();

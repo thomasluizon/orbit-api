@@ -82,7 +82,9 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             NullLogger<BulkUpdateHabitEmojisTool>.Instance);
         var updateTool = new UpdateHabitTool(_habitRepo, _userDateService, _mediator);
         var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
+        var revisionServices = Substitute.For<IServiceProvider>();
         _toolRegistry = new AiToolRegistry([
+            new RevisePendingChangesTool(revisionServices),
             new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader),
             _createHabitTool,
             new BulkCreateHabitsTool(_mediator),
@@ -119,6 +121,10 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             _unitOfWork,
             NullLogger<AgentOperationExecutor>.Instance);
 
+        revisionServices.GetService(typeof(IPendingAgentOperationStore)).Returns(_pendingOperationStore);
+        revisionServices.GetService(typeof(IPendingOperationChangePreviewer)).Returns(_previewer);
+        revisionServices.GetService(typeof(IAgentCatalogService)).Returns(_catalogService);
+        revisionServices.GetService(typeof(PendingOperationRevisionService)).Returns(ParentRevisionService());
         SetupDependencies();
     }
 

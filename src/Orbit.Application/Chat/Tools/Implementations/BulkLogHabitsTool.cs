@@ -41,7 +41,9 @@ public sealed class BulkLogHabitsTool(
             var expanded = await BulkHabitLogArguments.ExpandAsync(args, habitRepository, userDateService, userId, ct);
             if (expanded.IsFailure)
                 return expanded;
-            args = expanded.Value;
+            if (expanded.Value is not { } expandedArguments)
+                return Orbit.Domain.Common.Result.Success();
+            args = expandedArguments;
         }
         IReadOnlyList<BulkLogItem> items;
         if (args.TryGetProperty("revised_items", out _))
@@ -79,7 +81,9 @@ public sealed class BulkLogHabitsTool(
             var expanded = await BulkHabitLogArguments.ExpandAsync(args, habitRepository, userDateService, userId, ct);
             if (expanded.IsFailure)
                 return ToolResult.FromFailure(expanded);
-            args = expanded.Value;
+            if (expanded.Value is not { } expandedArguments)
+                return new ToolResult(true, Payload: BulkNoChangesOutcome.For(Name, args));
+            args = expandedArguments;
         }
         if (args.TryGetProperty("revised_items", out _))
         {

@@ -89,7 +89,7 @@ public partial class ProcessUserChatCommandHandler
 
     private bool CheckGrounding(string? text, string location, TurnFactSet facts, ProcessUserChatCommand request, GroundingTurn turn)
     {
-        var violations = GroundednessChecker.Check(text, facts, turn.KnownNames, turn.Language);
+        var violations = GroundednessChecker.Check(text, facts, turn.KnownNames, turn.Language, request.Message);
         foreach (var violation in violations)
         {
             logger.LogWarning("Grounding violation {ViolationKind} {Claim} at {Location} for {UserId} {CorrelationId}; enforced {Enforced}",

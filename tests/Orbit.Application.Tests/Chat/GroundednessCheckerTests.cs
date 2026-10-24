@@ -138,6 +138,35 @@ public class GroundednessCheckerTests
         facts.Facts.Should().Contain(new GroundingFact("EntityName", "MEDITACAO DIARIA", "query_habits", "real_output"));
     }
 
+    [Theory]
+    [InlineData("21h30", "9:30 PM", "pt-BR")]
+    [InlineData("23h", "11 PM", "pt-BR")]
+    [InlineData("21:30", "21h30", "pt-BR")]
+    [InlineData("9:30 PM", "21:30", "en")]
+    public void Check_ReturnedTime_AcceptsEquivalentClockFormats(string source, string claim, string language)
+    {
+        GroundednessChecker.Check(claim, Facts(new { due_time = source }), language: language)
+            .Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("9 habits")]
+    [InlineData("9:30 AM")]
+    [InlineData("22:30")]
+    public void Check_ReturnedTime_DoesNotAuthorizeDifferentTimesOrCounts(string claim)
+    {
+        GroundednessChecker.Check(claim, Facts(new { due_time = "21:30" }))
+            .Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("٢١:٣٠")]
+    [InlineData("21h٣٠")]
+    public void Check_UnsupportedClockDigits_RemainUngroundedWithoutThrowing(string claim)
+    {
+        GroundednessChecker.Check(claim, TurnFactSet.Empty).Should().NotBeEmpty();
+    }
+
     private static TurnFactSet Facts(object payload) => TurnFactSet.FromToolResults([
         new AiToolCallResult("query_habits", "call_1", true, null, null, null, payload)]);
 }
