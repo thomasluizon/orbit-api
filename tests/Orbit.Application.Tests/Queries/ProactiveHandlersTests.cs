@@ -6,6 +6,7 @@ using Orbit.Application.Proactive.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Queries;
 
@@ -39,7 +40,8 @@ public sealed class ProactiveHandlersTests
     {
         var engine = Substitute.For<IProactiveEngine>();
         var userId = Guid.NewGuid();
-        var handler = new GetCurrentProactiveQueryHandler(engine);
+        var handler = new GetCurrentProactiveQueryHandler(engine, Substitute.For<IAgentOperationExecutor>(),
+            Substitute.For<IFeatureFlagService>());
         (await handler.Handle(new(userId), default)).Value.Should().BeNull();
         var item = ProactiveItem.Create(userId, ProactiveTrigger.EveningCheckin, new(2030, 10, 14),
             "{\"Trigger\":2,\"HabitTitles\":[\"Read\"]}", "Read is open.", "See habits", "Show my habits.",

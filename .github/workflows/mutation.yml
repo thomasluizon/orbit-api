@@ -31,17 +31,21 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: Setup .NET for span selection
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
       - name: Test shard selection
         run: node --test .github/scripts/mutation-matrix.test.mjs
       - name: Select changed projects
         id: select
         env:
-          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -o pipefail
-          if [ -n "$BASE_REF" ]; then
-            git diff --name-only --no-renames -z --end-of-options "$BASE_REF...HEAD" \
-              | node .github/scripts/mutation-matrix.mjs --stdin >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = pull_request ]; then
+            since_target=$(git rev-parse HEAD^1)
+            node .github/scripts/mutation-matrix.mjs --since "$since_target" >> "$GITHUB_OUTPUT"
           else
             node .github/scripts/mutation-matrix.mjs >> "$GITHUB_OUTPUT"
           fi

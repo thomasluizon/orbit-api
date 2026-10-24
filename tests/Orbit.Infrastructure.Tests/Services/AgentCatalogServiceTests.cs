@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
@@ -16,6 +17,35 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AgentCatalogServiceTests
 {
     private readonly AgentCatalogService _catalogService = new();
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OperationSchemas_AreEvaluatedOnFirstReadAndCachedAcrossCatalogViews(bool listFirst)
+    {
+        var source = (IAiTool)RuntimeHelpers.GetUninitializedObject(
+            typeof(Orbit.Application.Chat.Tools.Implementations.CreateHabitTool));
+        var tool = new SchemaCountingTool(source);
+        var tools = new List<IAiTool> { tool };
+        var catalog = new AgentCatalogService(tools);
+        tools.Clear();
+
+        catalog.GetCapabilityByChatTool(tool.Name).Should().NotBeNull();
+        catalog.GetCapabilities().Should().NotBeEmpty();
+        catalog.GetSurfaces().Should().NotBeEmpty();
+        catalog.GetUserDataCatalog().Should().NotBeEmpty();
+        tool.SchemaCalls.Should().Be(0, "constructing a catalog or reading metadata must not execute tool schemas");
+
+        var operation = listFirst
+            ? catalog.GetOperations().Single(operation => operation.Id == tool.Name)
+            : catalog.GetOperation(tool.Name);
+
+        operation.Should().NotBeNull();
+        operation!.RequestSchema.GetRawText().Should().Be(JsonSerializer.Serialize(source.GetParameterSchema()));
+        catalog.GetOperation(tool.Name).Should().BeSameAs(operation);
+        catalog.GetOperations().Single(item => item.Id == tool.Name).Should().BeSameAs(operation);
+        tool.SchemaCalls.Should().Be(1, "all operation views must share the catalog's schema cache");
+    }
 
     [Fact]
     public void ProactiveAstraTool_UsesExistingProCapabilityAndAiSettingsScope()
@@ -442,6 +472,22 @@ public class AgentCatalogServiceTests
             .Select(method => (
                 $"mcp tool {method.GetCustomAttribute<McpServerToolAttribute>()!.Name}",
                 method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty));
+    }
+
+    private sealed class SchemaCountingTool(IAiTool source) : IAiTool
+    {
+        public int SchemaCalls { get; private set; }
+        public string Name => source.Name;
+        public string Description => source.Description;
+
+        public object GetParameterSchema()
+        {
+            SchemaCalls++;
+            return source.GetParameterSchema();
+        }
+
+        public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+            source.ExecuteAsync(args, userId, ct);
     }
 
     private static bool IsControllerAction(MethodInfo methodInfo)

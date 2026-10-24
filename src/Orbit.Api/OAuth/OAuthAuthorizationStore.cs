@@ -51,8 +51,22 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
     }
 
     public string CreatePendingConsent(ConsentEntry entry) => Put("consent", entry, CodeExpiry);
-    public ConsentEntry? ReadPendingConsent(string secret) => Deserialize<ConsentEntry>(states.Read(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
-    public ConsentEntry? ConsumePendingConsent(string secret) => Deserialize<ConsentEntry>(states.Take(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
+    public ConsentTicket? ReadPendingConsent(string secret)
+    {
+        var state = states.ReadState(secret, "consent", timeProvider.GetUtcNow().UtcDateTime);
+        if (state is null)
+            return null;
+        var entry = Deserialize<ConsentEntry>(state.Payload);
+        return entry is null ? null : new ConsentTicket(entry, state.IsConsumed);
+    }
+
+    public ConsentTicket? ConsumePendingConsent(string secret)
+    {
+        var entry = Deserialize<ConsentEntry>(states.Take(secret, "consent", timeProvider.GetUtcNow().UtcDateTime));
+        if (entry is not null)
+            return new ConsentTicket(entry, false);
+        return ReadPendingConsent(secret) is { IsConsumed: true } used ? used : null;
+    }
     public string CreateRefreshToken(RefreshEntry entry)
     {
         var expiresAtUtc = entry.FamilyExpiresAtUtc ?? timeProvider.GetUtcNow().UtcDateTime.AddDays(30);
@@ -94,6 +108,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 
 public record ConsentEntry(Guid UserId, string CodeChallenge, string RedirectUri, string ClientId,
     string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null);
+public sealed record ConsentTicket(ConsentEntry Entry, bool IsConsumed);
 public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId, Guid FamilyId = default, DateTime? FamilyExpiresAtUtc = null);
 
 public record AuthorizationEntry(

@@ -31,6 +31,7 @@
 
   <ItemGroup>
     <Compile Include="..\Orbit.Domain.Tests\Generators\OrbitArbitraries.cs" Link="Generators\OrbitArbitraries.cs" />
+    <EmbeddedResource Include="Chat\Tools\CreateHabitTool.schema.json" LogicalName="CreateHabitTool.schema.json" />
   </ItemGroup>
 
 </Project>
