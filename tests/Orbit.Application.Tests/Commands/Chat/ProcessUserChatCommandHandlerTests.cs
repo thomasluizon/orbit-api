@@ -4200,18 +4200,21 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("{\"other\": \"value\"}");
     }
 
-    [Fact]
-    public async Task Handle_NullTextMessage_ReturnsNull()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \n ")]
+    public async Task Handle_EmptyTextMessage_FailsWithEmptyResponse(string? text)
     {
         SetupUserAndPayGate();
-        SetupAiResponse(new AiResponse { TextMessage = null, ToolCalls = null });
+        SetupAiResponse(new AiResponse { TextMessage = text, ToolCalls = null });
         var handler = CreateHandler();
 
         var command = new ProcessUserChatCommand(UserId, "Hello");
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().BeNull();
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.AiEmptyResponse);
     }
 
     [Fact]

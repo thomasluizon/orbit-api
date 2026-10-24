@@ -91,13 +91,24 @@ public partial class ProcessUserChatCommandHandlerTests
                 return Task.CompletedTask;
             }), CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().Be(enforce ? null : invented);
+        if (enforce)
+        {
+            result.IsFailure.Should().BeTrue();
+            result.ErrorCode.Should().Be(ErrorCodes.AiEmptyResponse);
+        }
+        else
+        {
+            result.IsSuccess.Should().BeTrue();
+            result.Value.AiMessage.Should().Be(invented);
+        }
         receivedModelSink.Should().Be(!enforce);
         events.Where(item => item.Type == "delta").Select(item => item.Text)
             .Should().Equal(enforce ? Array.Empty<string>() : new[] { invented });
-        var log = _logger.ReceivedCalls().Should().ContainSingle(call =>
-            call.GetMethodInfo().Name == "Log" && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning).Subject;
+        var warnings = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
+            && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning).ToArray();
+        warnings.Should().HaveCount(enforce ? 2 : 1);
+        var log = warnings.Should().ContainSingle(call =>
+            ((IEnumerable<KeyValuePair<string, object?>>)call.GetArguments()[2]!).Any(pair => pair.Key == "ViolationKind")).Subject;
         var properties = ((IEnumerable<KeyValuePair<string, object?>>)log.GetArguments()[2]!).ToDictionary();
         properties.Should().Contain("ViolationKind", "Number").And.Contain("Claim", "12")
             .And.Contain("Enforced", enforce).And.Contain("CorrelationId", "grounding-test");
