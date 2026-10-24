@@ -375,7 +375,9 @@ public partial class ProcessUserChatCommandHandler(
             aiStreamSink,
             cancellationToken);
         await CombinePendingChangesAsync(request, executionResults, cancellationToken);
-        toolLoopResult = RecoverExecutedContinuation(request, executionResults, toolLoopResult);
+        cancellationToken.ThrowIfCancellationRequested();
+        var recoveredPreviewOnly = toolLoopResult.ProviderError is not null && !HasSucceededWrite(executionResults);
+        toolLoopResult = RecoverOutcomeContinuation(request, executionResults, toolLoopResult);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))
@@ -391,7 +393,8 @@ public partial class ProcessUserChatCommandHandler(
 
         LogSavingChanges(logger);
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        await PersistExecutionResultsAsync(request.UserId, executionResults.ActionResults, cancellationToken);
+        if (!recoveredPreviewOnly)
+            await PersistExecutionResultsAsync(request.UserId, executionResults.ActionResults, cancellationToken);
         saveStopwatch.Stop();
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
