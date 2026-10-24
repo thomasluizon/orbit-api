@@ -67,13 +67,7 @@ public sealed partial class PendingOperationChangePreviewer(
     {
         arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
-        {
-            var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,
-                userDateService, userId, cancellationToken);
-            if (expanded.IsFailure)
-                return null;
-            arguments = expanded.Value;
-        }
+            return await PreviewLogDatesAsync(userId, operationId, arguments, cancellationToken);
         if (operationId == BulkCreateHabits)
             return await PreviewCreateAsync(userId, arguments, cancellationToken);
 
@@ -154,6 +148,18 @@ public sealed partial class PendingOperationChangePreviewer(
             : result;
     }
 
+    private async Task<PendingOperationChangePreview?> PreviewLogDatesAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken ct)
+    {
+        var expanded = await BulkHabitLogArguments.ExpandAsync(arguments, habitRepository,
+            userDateService, userId, ct);
+        if (expanded.IsFailure)
+            return null;
+        return expanded.Value is { } expandedArguments
+            ? await PreviewChangesAsync(userId, operationId, expandedArguments, ct)
+            : BuildPreview(operationId, [], []);
+    }
+
     private async Task<JsonElement> ResolveUnlogDateAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken)
     {
@@ -180,7 +186,9 @@ public sealed partial class PendingOperationChangePreviewer(
         var prepared = await emojiTool.PreparePreviewArgumentsAsync(arguments, userId, ct);
         if (prepared.IsFailure)
             return prepared.PropagateError<PendingOperationChangePreview?>();
-        var preview = await PreviewChangesAsync(userId, emojiTool.Name, prepared.Value, ct);
+        if (prepared.Value is not { } preparedArguments)
+            return Result.Success(BuildPreview(emojiTool.Name, [], []));
+        var preview = await PreviewChangesAsync(userId, emojiTool.Name, preparedArguments, ct);
         return preview is null
             ? Result.Failure<PendingOperationChangePreview?>("preview_unavailable")
             : Result.Success<PendingOperationChangePreview?>(preview);
@@ -747,7 +755,9 @@ public sealed partial class PendingOperationChangePreviewer(
         string operationId, IReadOnlyList<PendingOperationChange> changes, IReadOnlyList<PendingOperationItem> items)
     {
         if (items.Count == 0)
-            return null;
+            return BulkNoChangesOutcome.Supports(operationId)
+                ? new PendingOperationChangePreview([], 0, [])
+                : null;
         var fingerprint = AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(items));
         return new PendingOperationChangePreview(changes, items.Count, items, fingerprint);
     }

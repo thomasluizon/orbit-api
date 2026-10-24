@@ -94,21 +94,21 @@ public sealed partial class BulkUpdateHabitEmojisTool(
         return habits.Count == 0 ? Result.Failure("No matching habits found.") : Result.Success();
     }
 
-    internal async Task<Result<JsonElement>> PreparePreviewArgumentsAsync(
+    internal async Task<Result<JsonElement?>> PreparePreviewArgumentsAsync(
         JsonElement args, Guid userId, CancellationToken ct)
     {
         var emojis = new Dictionary<Guid, string?>();
         var (filter, error) = args.TryGetProperty("revised_items", out var items)
             ? ParseRevisedItems(items, emojis) : ParseInferenceFilter(args);
         if (error is not null)
-            return Result.Failure<JsonElement>(error);
+            return Result.Failure<JsonElement?>(error);
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, ct);
         if (habits.Count == 0)
-            return Result.Failure<JsonElement>("No matching habits found.");
+            return Result.Success<JsonElement?>(null);
         var ownership = Orbit.Application.Common.OwnershipValidation.AllResolved(filter!.HabitIds, habits,
             habit => habit.Id, Orbit.Application.Common.ErrorMessages.HabitNotFound);
         if (ownership.IsFailure)
-            return ownership.PropagateError<JsonElement>();
+            return ownership.PropagateError<JsonElement?>();
         var inputs = habits.Where(habit => !emojis.ContainsKey(habit.Id))
             .Select(habit => new HabitEmojiInferenceInput(habit.Id, habit.Title, habit.Description)).ToArray();
         var chunkIndex = 0;
@@ -118,14 +118,14 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             chunkIndex++;
             var inferred = await InferPreviewChunkAsync(userId, chunk, chunkIndex, chunkCount, habits.Count, ct);
             if (inferred.IsFailure)
-                return inferred.PropagateError<JsonElement>();
+                return inferred.PropagateError<JsonElement?>();
             foreach (var input in chunk)
                 emojis[input.HabitId] = inferred.Value[input.HabitId];
         }
         var changed = habits.Where(habit => !string.Equals(habit.Emoji, emojis[habit.Id], StringComparison.Ordinal)).ToArray();
         if (changed.Length == 0)
-            return Result.Failure<JsonElement>("No matching emoji changes.");
-        return Result.Success(JsonSerializer.SerializeToElement(new
+            return Result.Success<JsonElement?>(null);
+        return Result.Success<JsonElement?>(JsonSerializer.SerializeToElement(new
         {
             infer_from_title = false,
             revised_items = changed.Select(habit => new { habit_id = habit.Id, emoji = emojis[habit.Id] }).ToArray()

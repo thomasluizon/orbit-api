@@ -185,7 +185,8 @@ public sealed class PendingOperationChangePreviewerTests
         }
         var read = await Preview("bulk_delete_habits", """{"filter":{"search":"ler"}}""");
         read!.Items.Should().ContainSingle().Which.EntityId.Should().Be(reading.Id);
-        (await Preview("bulk_delete_habits", """{"filter":{"search":"medit"}}""")).Should().BeNull();
+        (await Preview("bulk_delete_habits", """{"filter":{"search":"medit"}}"""))!
+            .ChangeTargetCount.Should().Be(0);
     }
 
     [Fact]
@@ -235,13 +236,15 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
-    public async Task PreviewAsync_NoMatches_DoesNotOfferEmptyPreview()
+    public async Task PreviewAsync_NoMatches_ReturnsSuccessfulEmptySelection()
     {
         Setup([]);
 
         var preview = await Preview("bulk_log_habits", """{"filter":{"search":"meditação"}}""");
 
-        preview.Should().BeNull();
+        preview.Should().NotBeNull();
+        preview!.ChangeTargetCount.Should().Be(0);
+        preview.Items.Should().BeEmpty();
     }
 
     [Theory]
@@ -463,8 +466,10 @@ public sealed class PendingOperationChangePreviewerTests
             new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
             JsonSerializer.Deserialize<JsonElement>("{\"replace_existing\":true}"));
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("No matching emoji changes.");
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.ChangeTargetCount.Should().Be(0);
+        result.Value.Items.Should().BeEmpty();
         habit.Emoji.Should().Be("📚");
     }
 
@@ -610,13 +615,15 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
-    public async Task PreviewAsync_ZeroMatches_OffersNoPreview()
+    public async Task PreviewAsync_ZeroMatches_ReturnsEmptySelection()
     {
         Setup([]);
 
         var preview = await Preview("bulk_update_habits", """{"filter":{"all":true},"updates":{"emoji":"✅"}}""");
 
-        preview.Should().BeNull();
+        preview.Should().NotBeNull();
+        preview!.ChangeTargetCount.Should().Be(0);
+        preview.Items.Should().BeEmpty();
     }
 
     [Fact]

@@ -16,7 +16,7 @@ public partial class ProcessUserChatCommandHandler
     /// </summary>
     private static ActionResult? BuildActionResult(AiToolCall call, IAiTool tool, ToolResult result)
     {
-        if (tool.IsReadOnly)
+        if (tool.IsReadOnly || result is { Success: true, Payload: BulkNoChangesOutcome })
             return null;
 
         if (!result.Success)
