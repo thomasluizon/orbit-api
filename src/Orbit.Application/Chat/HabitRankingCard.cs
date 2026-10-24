@@ -12,7 +12,12 @@ public static class HabitRankingCardBuilder
     public const string Directive = "[[orbit:ranking]]";
     public const string PromptInstruction = "After get_habit_ranking succeeds, place [[orbit:ranking]] on its own line. "
         + "It contains completion log counts and absolute dates, not rates. Never substitute get_retrospective. "
-        + "Do not invent missing rows. Use the query token for later pages or refresh.";
+        + "Do not invent missing rows. Use the query token for later pages or refresh. "
+        + "For most completed habits, including 'Which habits did I complete most in the last 3 weeks?' "
+        + "and 'Quais hábitos eu mais concluí nas últimas 3 semanas?', call get_habit_ranking before emitting a directive. "
+        + "Last N weeks means N*7 local days ending today, inclusive, unless complete calendar weeks are explicitly requested. "
+        + "For 3 weeks use date_from=today-20 days and date_to_exclusive=today+1 day. Do not ask to choose rolling or calendar weeks. "
+        + "A window longer than the recorded history still uses all available records in that window.";
 
     public static bool IsSupported(AgentClientContext? client) => client?.SupportsParts == true
         && client.PartKinds?.Contains(Kind, StringComparer.Ordinal) == true;

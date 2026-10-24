@@ -12,7 +12,10 @@ public sealed class GetHabitRankingTool(IMediator mediator) : IAiTool
     public bool IsReadOnly => true;
     public string Description => "Read the full positive recurring-habit ranking by completion log count, including children. "
         + "Use this for most completed habits or ranking de hábitos, never retrospective consistency highlights. "
-        + "Resolve the requested window first; ask for dates if unspecified. Last six months or últimos 6 meses means "
+        + "Resolve the requested window first; ask for dates if unspecified. Last N weeks or últimas N semanas means "
+        + "N*7 local days ending today inclusive: date_from=today-(N*7-1), date_to_exclusive=today+1. "
+        + "Do not ask rolling versus calendar weeks unless complete calendar weeks were requested. "
+        + "Last six months or últimos 6 meses means "
         + "rolling_months with months=6, not 180 days. Explicit complete calendar months use complete_months.";
 
     public object GetParameterSchema() => new
