@@ -5,25 +5,18 @@
 namespace Orbit.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class DropUserHandle : Migration
+    public partial class UnmapUserHandle : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Handle",
-                table: "Users");
+            // https://github.com/thomasluizon/orbit-tickets/issues/1654 keeps the column for old instances during the release drain.
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "Handle",
-                table: "Users",
-                type: "character varying(20)",
-                maxLength: 20,
-                nullable: true);
+            // https://github.com/thomasluizon/orbit-tickets/issues/1654 keeps the column for old instances during the release drain.
         }
     }
 }

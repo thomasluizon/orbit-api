@@ -117,16 +117,23 @@ public class AuthUserStoreTests
         commands.Sql.Should().OnlyContain(sql => !sql.Contains("\"Handle\"", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task SignInWithoutHandleColumn_ProfileRetainsNullHandleKey()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SignIn_ProfileRetainsNullHandleKey_WithOrWithoutLegacyColumn(bool retainLegacyColumn)
     {
         var commands = new CommandRecorder();
         using var database = new SqliteOrbitDbContextFactory(commands);
         var context = database.Context;
         var store = new AuthUserStore(context);
-        await store.UpsertAsync(Candidate("Original", "pt-BR"), CancellationToken.None);
+        if (retainLegacyColumn)
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"Handle\" TEXT NULL");
+        var original = await store.UpsertAsync(Candidate("Original", "pt-BR"), CancellationToken.None);
         await context.SaveChangesAsync();
+        if (retainLegacyColumn)
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"Users\" SET \"Handle\" = {"old_handle"} WHERE \"Id\" = {original.Id}");
         context.ChangeTracker.Clear();
+        commands.Sql.Clear();
 
         var returning = await store.UpsertAsync(Candidate("Replacement", "en"), CancellationToken.None);
         await context.SaveChangesAsync();
@@ -148,6 +155,12 @@ public class AuthUserStoreTests
         payload.GetProperty("name").GetString().Should().Be("Original");
         (await context.Users.AsNoTracking().SingleAsync()).Id.Should().Be(returning.Id);
         commands.Sql.Should().OnlyContain(sql => !sql.Contains("\"Handle\"", StringComparison.Ordinal));
+        if (retainLegacyColumn)
+        {
+            await using var command = context.Database.GetDbConnection().CreateCommand();
+            command.CommandText = "SELECT \"Handle\" FROM \"Users\"";
+            (await command.ExecuteScalarAsync()).Should().Be("old_handle");
+        }
     }
 
     [Fact]

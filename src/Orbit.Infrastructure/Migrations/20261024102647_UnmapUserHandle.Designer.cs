@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261024101903_DropUserHandle")]
-    partial class DropUserHandle
+    [Migration("20261024102647_UnmapUserHandle")]
+    partial class UnmapUserHandle
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
