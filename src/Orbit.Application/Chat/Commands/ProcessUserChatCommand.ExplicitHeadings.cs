@@ -11,9 +11,12 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     private async Task<Result<ChatResponse>?> RecoverExplicitHeadingsAsync(
-        ProcessUserChatCommand request, ChatContext context, Result<AiResponse> response, CancellationToken ct)
+        ProcessUserChatCommand request, ChatContext context, Result<AiResponse> response,
+        ToolExecutionAccumulator? results, CancellationToken ct)
     {
-        if (request.BlockAnswer is not null || response.IsFailure && response.ErrorCode != ErrorCodes.AiEmptyResponse)
+        if (request.BlockAnswer is not null || request.ConfirmationToken is not null
+            || results is not null && HasSucceededWrite(results)
+            || response.IsFailure && response.ErrorCode != ErrorCodes.AiEmptyResponse)
             return null;
         var headings = HabitHeadingParents.Read(request.Message, context.UserHabits);
         if (headings.Count == 0 || headings.Any(heading => heading.Candidates.Count == 0)

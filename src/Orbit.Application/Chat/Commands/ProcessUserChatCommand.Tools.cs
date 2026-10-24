@@ -101,6 +101,22 @@ public partial class ProcessUserChatCommandHandler
     private static bool MustFailToolTurn(ProcessUserChatCommand request, ToolLoopResult result) =>
         result.ProviderError is not null || (request.BlockAnswer is not null && (result.HadToolFailure || result.FinalResponse.HasToolCalls));
 
+    private bool HasSucceededWrite(ToolExecutionAccumulator results) =>
+        results.OperationResults.Any(operation => operation.Status == AgentOperationStatus.Succeeded
+            && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false });
+
+    private ToolLoopResult RecoverExecutedContinuation(ProcessUserChatCommand request,
+        ToolExecutionAccumulator results, ToolLoopResult loop)
+    {
+        if (request.BlockAnswer is not null || loop.ProviderError?.Code != ErrorCodes.AiEmptyResponse
+            || !HasSucceededWrite(results))
+            return loop;
+        foreach (var pending in results.PendingOperations.ToArray())
+            if (!IsCurrentPendingOutcome(request.UserId, pending, results))
+                results.SupersedePendingOperation(pending.Id);
+        return loop with { FinalResponse = new AiResponse(), ProviderError = null };
+    }
+
     private async Task<Result<ChatResponse>> CompleteFailedToolTurnAsync(ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, ToolLoopResult loop, CancellationToken ct)
     {
@@ -109,7 +125,7 @@ public partial class ProcessUserChatCommandHandler
         {
             if (RecoverPendingContinuation(request, results) is { } pending)
                 return Result.Success(pending);
-            if (await RecoverExplicitHeadingsAsync(request, context, Result.Failure<AiResponse>(error), ct) is { } headings)
+            if (await RecoverExplicitHeadingsAsync(request, context, Result.Failure<AiResponse>(error), results, ct) is { } headings)
                 return headings;
         }
         if (CanCompleteComposition(request, context, results))
