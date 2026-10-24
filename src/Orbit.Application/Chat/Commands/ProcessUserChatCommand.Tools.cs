@@ -101,6 +101,26 @@ public partial class ProcessUserChatCommandHandler
     private static bool MustFailToolTurn(ProcessUserChatCommand request, ToolLoopResult result) =>
         result.ProviderError is not null || (request.BlockAnswer is not null && (result.HadToolFailure || result.FinalResponse.HasToolCalls));
 
+    private async Task<Result<ChatResponse>> CompleteFailedToolTurnAsync(ProcessUserChatCommand request,
+        ChatContext context, ToolExecutionAccumulator results, ToolLoopResult loop, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (request.BlockAnswer is null && loop.ProviderError is { } error)
+        {
+            if (RecoverPendingContinuation(request, results) is { } pending)
+                return Result.Success(pending);
+            if (await RecoverExplicitHeadingsAsync(request, context, Result.Failure<AiResponse>(error), ct) is { } headings)
+                return headings;
+        }
+        if (CanCompleteComposition(request, context, results))
+            return Result.Success(CompleteCompositionWithoutNarrative(request, context, results));
+        if (request.BlockAnswer is null && HasOnlySuccessfulRankingReads(results))
+            return Result.Success(CompleteRankingWithoutNarrative(request, context, results));
+        if (request.BlockAnswer is null && HasOnlySuccessfulFocusedReads(results))
+            return Result.Success(CompleteFocusedReadsWithoutNarrative(request, context, results));
+        return Result.Failure<ChatResponse>(loop.ProviderError ?? ErrorMessages.AiUnavailable);
+    }
+
     private sealed record ToolLoopResult(
         AiResponse FinalResponse,
         int Iterations,
@@ -199,6 +219,19 @@ public partial class ProcessUserChatCommandHandler
             results.SupersedePendingOperation(pending.Id);
         results.HasBudgetRecovery = true;
         return new AiResponse { TextMessage = CommittedWriteMessage(language, hasSavedActions) };
+    }
+
+    private ChatResponse? RecoverPendingContinuation(ProcessUserChatCommand request, ToolExecutionAccumulator results)
+    {
+        foreach (var pending in results.PendingOperations.ToArray())
+            if (!IsCurrentPendingOutcome(request.UserId, pending, results))
+                results.SupersedePendingOperation(pending.Id);
+        if (results.PendingOperations.Count == 0)
+            return null;
+        return new ChatResponse(null, results.ActionResults, results.OperationResults, results.PendingOperations,
+            results.PolicyDenials, request.CorrelationId, RelatedSurfaces: results.RelatedSurfaces,
+            Parts: request.ClientContext?.SupportsParts == true ? [] : null)
+        { GroundingFacts = PreviewFacts(results.PendingOperations) };
     }
 
     private bool IsCurrentPendingOutcome(Guid userId, PendingAgentOperation pending, ToolExecutionAccumulator results)

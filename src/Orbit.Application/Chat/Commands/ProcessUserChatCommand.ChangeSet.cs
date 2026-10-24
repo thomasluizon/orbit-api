@@ -31,12 +31,14 @@ public partial class ProcessUserChatCommandHandler
             throw new InvalidOperationException("The account change preview could not be bound.");
         var combinedIds = members.Select(member => member!.PendingOperationId).ToHashSet();
         results.PendingOperations.RemoveAll(pending => combinedIds.Contains(pending.Id));
-        results.PendingOperations.Add(pending with
+        var combined = pending with
         {
             Items = preview.Items,
             Changes = preview.Changes,
             ChangeTargetCount = preview.ChangeTargetCount,
             PreviewFingerprint = preview.PreviewFingerprint
-        });
+        };
+        results.PendingOperations.Add(combined);
+        results.PendingWriteCalls[pending.Id] = (AccountChangeSet.OperationName, combined);
     }
 }
