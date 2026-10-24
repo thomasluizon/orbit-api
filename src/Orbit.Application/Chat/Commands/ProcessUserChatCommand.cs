@@ -300,13 +300,35 @@ public partial class ProcessUserChatCommandHandler(
         var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
         try
         {
-            return await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+            var result = await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+            if (result.IsSuccess && !HasDisplayableAnswer(result.Value))
+            {
+                var outputKinds = (result.Value.Parts ?? []).GroupBy(part => part switch
+                {
+                    ChatBlockPart block => block.Kind,
+                    ChatTextPart => "text",
+                    _ => "unknown"
+                }).ToDictionary(group => group.Key, group => group.Count());
+                logger.LogWarning("Empty composed AI answer at round {RoundIndex}; output kinds {OutputKinds} for {UserId} {CorrelationId}",
+                    telemetry.RoundCount, JsonSerializer.Serialize(outputKinds), request.UserId, request.CorrelationId);
+                return Result.Failure<ChatResponse>(new AppError(ErrorCodes.AiEmptyResponse,
+                    ErrorCopy.Resolve(ErrorCodes.AiEmptyResponse, LocaleHelper.IsPortuguese(context.User?.Language))));
+            }
+            return result;
         }
         finally
         {
             CaptureMessageAnalytics(request.UserId, plan, telemetry);
         }
     }
+
+    private static bool HasDisplayableAnswer(ChatResponse response) =>
+        !string.IsNullOrWhiteSpace(response.AiMessage)
+        || response.Parts?.Any(part => part is ChatBlockPart || part is ChatTextPart text && !string.IsNullOrWhiteSpace(text.Text)) == true
+        || response.Actions.Count > 0 || response.Operations is { Count: > 0 } || response.PendingOperations is { Count: > 0 }
+        || response.HabitList is not null || response.GoalList is not null || response.MetricsCard is not null
+        || response.PeriodInsight is not null || response.DaySummary is not null || response.Streak is not null
+        || response.Calendar is not null || response.RecordLists is { Count: > 0 } || response.AccountRows is not null;
 
     private async Task<Result<ChatResponse>> HandleLoadedTurnAsync(
         ProcessUserChatCommand request, ChatContext context, ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, AiTurnTelemetry telemetry,
