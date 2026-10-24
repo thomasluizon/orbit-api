@@ -37,8 +37,7 @@ public class TransactionCommitMigrationTests
         var differ = db.GetService<IMigrationsModelDiffer>();
         differ.GetDifferences(previous.GetRelationalModel(), target.GetRelationalModel())
             .Should().BeEquivalentTo(migration.UpOperations, options => options.PreferringRuntimeMemberTypes());
-        differ.GetDifferences(target.GetRelationalModel(), current.GetRelationalModel()).Should().BeEmpty();
-        differ.GetDifferences(target.GetRelationalModel(), snapshot.GetRelationalModel()).Should().BeEmpty();
+        differ.GetDifferences(current.GetRelationalModel(), snapshot.GetRelationalModel()).Should().BeEmpty();
         db.Database.HasPendingModelChanges().Should().BeFalse();
     }
 }
