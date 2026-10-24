@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 #pragma warning disable OPENAI001
 
 using System.ClientModel;
@@ -70,7 +71,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
         {
             var user = users[index / 2];
             var date = new DateOnly(2026, 1, 1).AddDays(index);
-            var habit = Habit.Create(new HabitCreateParams(user.Id, $"private-habit-{index}", null, null, DueDate: date)).Value;
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, $"private-habit-{index}", null, null, DueDate: date)).Value;
             var handler = BuildHandler(service, tools, user, [habit], date);
             var command = new ProcessUserChatCommand(user.Id,
                 index % 2 == 0 ? "Hello AI" : "sincronizar com o Google e duplicar meu hábito",

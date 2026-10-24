@@ -841,8 +841,8 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_FlexibleQuotaSatisfied_NotSelectedAsPending()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Gym", FrequencyUnit.Week, 1,
-            DueDate: Today.AddDays(-7), IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, ValidUserId, "Gym", FrequencyUnit.Week, 1,
+            DueDate: Today.AddDays(-7))).Value;
         habit.Log(Today.AddDays(-1));
 
         InvokeSelectScheduledHabits([habit], Today).Should().BeEmpty();
@@ -851,7 +851,7 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_NonDueWeekdayWithResolvedPastOccurrences_NotSelected()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Gym", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, ValidUserId, "Gym", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-1), Days: [Today.AddDays(-1).DayOfWeek])).Value;
         habit.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-1), 0)]);
         var due = CreateHabit("Read");
@@ -909,8 +909,8 @@ public class AiSummaryServiceTests
     [Fact]
     public void BuildHabitSection_FlexibleHabit_DoesNotInventDailyMissesOrStreak()
     {
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Gym", FrequencyUnit.Week, 3,
-            DueDate: Today.AddDays(-13), IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, ValidUserId, "Gym", FrequencyUnit.Week, 3,
+            DueDate: Today.AddDays(-13))).Value;
         habit.Log(Today.AddDays(-1));
 
         InvokeBuildHabitSection([habit]).Should().Contain(
@@ -958,7 +958,7 @@ public class AiSummaryServiceTests
         DateOnly? dueDate = null,
         TimeOnly? dueTime = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             title,
             FrequencyUnit.Day,
@@ -975,7 +975,7 @@ public class AiSummaryServiceTests
         DateOnly? dueDate = null,
         Guid? parentId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             title,
             unit,
@@ -986,7 +986,7 @@ public class AiSummaryServiceTests
 
     private static Habit CreateBadHabit(string title, DateOnly? dueDate = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             ValidUserId,
             title,
             FrequencyUnit.Day,
@@ -997,7 +997,7 @@ public class AiSummaryServiceTests
 
     private static Habit CreateOneTimeTask(string title, DateOnly dueDate, Guid? parentId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId,
             title,
             null,

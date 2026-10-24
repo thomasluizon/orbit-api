@@ -43,8 +43,8 @@ public sealed class UpdateHabitParentTests : IDisposable
 
     private Habit Add(bool general = false, Guid? owner = null)
     {
-        var habit = Habit.Create(new HabitCreateParams(owner ?? _user.Id, "Original",
-            general ? null : FrequencyUnit.Day, general ? null : 1, Today, IsGeneral: general)).Value;
+        var habit = Habit.Create(new HabitCreateParams(general ? HabitSchedule.General : ((FrequencyUnit?)(general ? null : (FrequencyUnit?)FrequencyUnit.Day)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, owner ?? _user.Id, "Original",
+            general ? null : FrequencyUnit.Day, general ? null : 1, Today)).Value;
         _available.Add(habit);
         return habit;
     }
@@ -76,7 +76,7 @@ public sealed class UpdateHabitParentTests : IDisposable
     public async Task SetParent_ThenRepeat_PreservesScheduleAndChecklist(bool? clear)
     {
         var parent = Add();
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Monthly", FrequencyUnit.Month, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Monthly", FrequencyUnit.Month, 1,
             new DateOnly(2026, 1, 31), DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [15], ChecklistItems: [new("Same", true), new("Same", false)])).Value;
         habit.Log(new DateOnly(2026, 1, 31)).IsSuccess.Should().BeTrue();
@@ -161,7 +161,7 @@ public sealed class UpdateHabitParentTests : IDisposable
             ClearParent = detach
         }, default);
         result.IsSuccess.Should().BeTrue();
-        habit.IsGeneral.Should().BeTrue();
+        habit.Schedule.Should().Be(HabitSchedule.General);
         habit.ParentHabitId.Should().Be(detach ? null : newParent.Id);
     }
 
@@ -185,7 +185,7 @@ public sealed class UpdateHabitParentTests : IDisposable
             ClearParent = detach
         }, default);
         result.ErrorCode.Should().Be(ErrorCodes.GeneralMismatchWithChildren);
-        habit.IsGeneral.Should().BeFalse();
+        (habit.Schedule == HabitSchedule.General).Should().BeFalse();
         habit.ParentHabitId.Should().Be(parent.Id);
         habit.Title.Should().Be("Original");
     }
@@ -206,7 +206,7 @@ public sealed class UpdateHabitParentTests : IDisposable
         if (plan == "pro") _user.GrantLifetimePro();
         var parent = Add();
         var habit = completed
-            ? Habit.Create(new HabitCreateParams(_user.Id, "Original", FrequencyUnit.Day, 1,
+            ? Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _user.Id, "Original", FrequencyUnit.Day, 1,
                 Today.AddDays(-2), EndDate: Today.AddDays(-2))).Value
             : Add();
         if (completed)
@@ -247,7 +247,7 @@ public sealed class UpdateHabitParentTests : IDisposable
     public async Task CompletedOneTimePromotion_ChargesOnceOnlyWhenScheduleReopens(bool reopen)
     {
         var parent = Add();
-        var habit = Habit.Create(new HabitCreateParams(_user.Id, "Task", null, null, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, _user.Id, "Task", null, null, Today,
             ParentHabitId: parent.Id)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         _available.Add(habit);

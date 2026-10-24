@@ -18,10 +18,10 @@ public class EditableHabitStartDateTests
         var userId = Guid.NewGuid();
         var anchor = new DateOnly(2026, 10, 1);
         var end = new DateOnly(2026, 10, terminal ? 10 : 30);
-        var parent = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, anchor,
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1, anchor,
             Days: [DayOfWeek.Wednesday], StartDate: anchor, EndDate: end)).Value;
         parent.CatchUpDueDate(Today).IsSuccess.Should().BeTrue();
-        var child = Habit.Create(new HabitCreateParams(userId, "Chapter", FrequencyUnit.Day, 1, anchor,
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Chapter", FrequencyUnit.Day, 1, anchor,
             ParentHabitId: parent.Id, StartDate: anchor, EndDate: end)).Value;
 
         child.InheritResolvedOccurrence(parent);
@@ -42,8 +42,8 @@ public class EditableHabitStartDateTests
     public void InheritResolvedOccurrence_RejectsUnrelatedParentOrAccount(bool sameParent, bool sameAccount)
     {
         var userId = Guid.NewGuid();
-        var parent = Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1, Today.AddDays(2))).Value;
-        var child = Habit.Create(new HabitCreateParams(sameAccount ? userId : Guid.NewGuid(), "Chapter",
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1, Today.AddDays(2))).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, sameAccount ? userId : Guid.NewGuid(), "Chapter",
             FrequencyUnit.Day, 1, Today, ParentHabitId: sameParent ? parent.Id : Guid.NewGuid())).Value;
         var updatedAtUtc = child.UpdatedAtUtc;
 
@@ -61,7 +61,7 @@ public class EditableHabitStartDateTests
     [InlineData(true)]
     public void PostponeTo_PreservesOneTimeCompletionState(bool completed)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null, Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Read", null, null, Today)).Value;
         if (completed)
             habit.Log(Today).IsSuccess.Should().BeTrue();
 
@@ -76,9 +76,9 @@ public class EditableHabitStartDateTests
     public void UnchangedAnchor_ChangedWeekdayRecomputesEligibleOccurrence()
     {
         var anchor = new DateOnly(2026, 10, 26);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
             anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
-        habit.Update(new("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Wednesday], false, anchor.AddDays(2),
+        habit.Update(new(habit.Schedule, "Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Wednesday], false, anchor.AddDays(2),
             StartDate: anchor, UserToday: Today)).IsSuccess.Should().BeTrue();
         habit.NextDueDate.Should().Be(anchor.AddDays(2));
         habit.StartDate.Should().Be(anchor);
@@ -91,9 +91,9 @@ public class EditableHabitStartDateTests
     public void UnchangedAnchor_IntervalEditUsesAccountWeekStart(int weekStart, string expected)
     {
         var anchor = new DateOnly(2026, 10, 25);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
             anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
-        habit.Update(new("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, null,
+        habit.Update(new(habit.Schedule, "Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, null,
             StartDate: anchor, UserToday: Today, IntervalWeeks: 2, WeekStartDay: weekStart)).IsSuccess.Should().BeTrue();
         habit.NextDueDate.Should().Be(DateOnly.Parse(expected));
         habit.ScheduledStartDate.Should().Be(anchor);
@@ -103,10 +103,10 @@ public class EditableHabitStartDateTests
     public void UnchangedAnchor_EveryNEditCatchesUpFromSelection()
     {
         var anchor = Today.AddDays(-8);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
             anchor, StartDate: anchor)).Value;
         habit.CatchUpDueDate(Today).IsSuccess.Should().BeTrue();
-        habit.Update(new("Read", null, FrequencyUnit.Day, 3, null, false, null,
+        habit.Update(new(habit.Schedule, "Read", null, FrequencyUnit.Day, 3, null, false, null,
             StartDate: anchor, UserToday: Today)).IsSuccess.Should().BeTrue();
         habit.NextDueDate.Should().Be(Today.AddDays(1));
         habit.ScheduledStartDate.Should().Be(anchor);
@@ -116,10 +116,10 @@ public class EditableHabitStartDateTests
     public void UnchangedAnchor_MonthIntervalEditRetainsMonthEndPhase()
     {
         var anchor = new DateOnly(2028, 1, 31);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Month, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Month, 1,
             anchor, StartDate: anchor)).Value;
         habit.Log(anchor).IsSuccess.Should().BeTrue();
-        habit.Update(new("Read", null, FrequencyUnit.Month, 2, null, false, null,
+        habit.Update(new(habit.Schedule, "Read", null, FrequencyUnit.Month, 2, null, false, null,
             StartDate: anchor, UserToday: new DateOnly(2028, 2, 1))).IsSuccess.Should().BeTrue();
         habit.NextDueDate.Should().Be(new DateOnly(2028, 3, 31));
         habit.ScheduledStartDate.Should().Be(anchor);
@@ -132,7 +132,7 @@ public class EditableHabitStartDateTests
     public void Create_StoresSelectedDaySeparatelyFromFirstWeekday()
     {
         var anchor = new DateOnly(2026, 10, 26);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
             anchor.AddDays(2), Days: [DayOfWeek.Wednesday], StartDate: anchor)).Value;
         habit.StartDate.Should().Be(anchor);
         habit.NextDueDate.Should().Be(anchor.AddDays(2));
@@ -144,13 +144,13 @@ public class EditableHabitStartDateTests
     [InlineData(true)]
     public void Edit_ReanchorsFutureScheduleAndPreservesLogsAndSubsequentMutations(bool flexible)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 3,
-            Today.AddDays(-12), IsFlexible: flexible)).Value;
+        var habit = Habit.Create(new HabitCreateParams(flexible ? HabitSchedule.Flexible : HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 3,
+            Today.AddDays(-12))).Value;
         habit.Log(Today.AddDays(-12)).IsSuccess.Should().BeTrue();
         habit.Log(Today.AddDays(-9)).IsSuccess.Should().BeTrue();
         var logs = habit.Logs.Select(log => (log.Id, log.Date, log.Value, log.IsDeleted)).ToArray();
         var anchor = Today.AddDays(-4);
-        var update = new HabitUpdateParams("Read", null, FrequencyUnit.Day, 3, null, false, Today.AddDays(12),
+        var update = new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Read", null, FrequencyUnit.Day, 3, null, false, Today.AddDays(12),
             StartDate: anchor, UserToday: Today);
         habit.Update(update).IsSuccess.Should().BeTrue();
         habit.StartDate.Should().Be(anchor);
@@ -171,10 +171,10 @@ public class EditableHabitStartDateTests
     public void UnchangedSave_PreservesMonthEndPhase()
     {
         var start = new DateOnly(2028, 1, 31);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Month, 1, start)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Month, 1, start)).Value;
         habit.Log(start).IsSuccess.Should().BeTrue();
         habit.NextDueDate.Should().Be(new DateOnly(2028, 2, 29));
-        habit.Update(new HabitUpdateParams("Renamed", null, FrequencyUnit.Month, 1, null, false, habit.NextDueDate,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Renamed", null, FrequencyUnit.Month, 1, null, false, habit.NextDueDate,
             StartDate: start, UserToday: start)).IsSuccess.Should().BeTrue();
         habit.OriginalDayOfMonth.Should().Be(31);
         habit.Log(habit.NextDueDate).IsSuccess.Should().BeTrue();
@@ -184,9 +184,9 @@ public class EditableHabitStartDateTests
     [Fact]
     public void Edit_SkipsAlreadyLoggedTodayWithoutDuplicatingHistory()
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
-        habit.Update(new HabitUpdateParams("Read", null, FrequencyUnit.Day, 1, null, false, null,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Read", null, FrequencyUnit.Day, 1, null, false, null,
             StartDate: Today.AddDays(-1), UserToday: Today)).IsSuccess.Should().BeTrue();
         habit.NextDueDate.Should().Be(Today.AddDays(1));
         habit.Logs.Should().ContainSingle();
@@ -196,9 +196,9 @@ public class EditableHabitStartDateTests
     public void Edit_WeekdayInInactiveWeekMovesToNextActiveWeek()
     {
         var anchor = new DateOnly(2026, 10, 24);
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1,
             Today, Days: [DayOfWeek.Monday], IntervalWeeks: 2)).Value;
-        habit.Update(new HabitUpdateParams("Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, null,
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Read", null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, null,
             StartDate: anchor, UserToday: Today, IntervalWeeks: 2)).IsSuccess.Should().BeTrue();
         habit.StartDate.Should().Be(anchor);
         habit.ScheduledStartDate.Should().Be(anchor);
@@ -208,8 +208,8 @@ public class EditableHabitStartDateTests
     [Fact]
     public void Edit_ChangesSnapshotAndHydratedProjectionAnchor()
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
-        habit.Update(new HabitUpdateParams("Read", null, FrequencyUnit.Day, 1, null, false, null,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Read", null, FrequencyUnit.Day, 1, null, false, null,
             StartDate: Today.AddDays(3), UserToday: Today)).IsSuccess.Should().BeTrue();
         var read = Habit.FromScheduleSnapshot(HabitScheduleSnapshot.FromHabit(habit), habit.UserId);
         read.StartDate.Should().Be(Today.AddDays(3));
@@ -221,18 +221,17 @@ public class EditableHabitStartDateTests
     [InlineData(true)]
     public void ExplicitStart_RejectsUndatedAndOneTimeSchedules(bool general)
     {
-        Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null, Today,
-            IsGeneral: general, StartDate: Today)).IsFailure.Should().BeTrue();
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null, Today, IsGeneral: general)).Value;
-        habit.Update(new HabitUpdateParams("Read", null, null, null, null, false, null,
+        Habit.Create(new HabitCreateParams(general ? HabitSchedule.General : HabitSchedule.OneTime, Guid.NewGuid(), "Read", null, null, Today, StartDate: Today)).IsFailure.Should().BeTrue();
+        var habit = Habit.Create(new HabitCreateParams(general ? HabitSchedule.General : HabitSchedule.OneTime, Guid.NewGuid(), "Read", null, null, Today)).Value;
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.OneTime, "Read", null, null, null, null, false, null,
             StartDate: Today.AddDays(1), UserToday: Today)).IsFailure.Should().BeTrue();
     }
 
     [Fact]
     public void InvalidEdit_IsAtomicAndRejectsEndBeforeAnchorOrMissingContext()
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
-        var edit = new HabitUpdateParams("Changed", null, FrequencyUnit.Day, 1, null, false, null,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Read", FrequencyUnit.Day, 1, Today)).Value;
+        var edit = new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Changed", null, FrequencyUnit.Day, 1, null, false, null,
             StartDate: Today.AddDays(3), UserToday: Today, EndDate: Today.AddDays(2));
         habit.Update(edit).ErrorCode.Should().Be(DomainErrors.EndDateBeforeStartDate.Code);
         habit.Update(edit with { EndDate = null, UserToday = null }).IsFailure.Should().BeTrue();

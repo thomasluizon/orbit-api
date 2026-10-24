@@ -142,7 +142,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId,
             title,
             null,
@@ -986,7 +986,7 @@ public partial class ProcessUserChatCommandHandlerTests
         string message, string directive, bool includesDone)
     {
         SetupUserAndPayGate();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Water", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         var log = habit.Log(Today).Value;
         _habitRepo.FindAsync(
@@ -1027,10 +1027,10 @@ public partial class ProcessUserChatCommandHandlerTests
         string message, string directive, bool includesDone, bool supportsDoneStatus)
     {
         SetupUserAndPayGate();
-        var completedToday = Habit.Create(new HabitCreateParams(
+        var completedToday = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Filed taxes", null, null, DueDate: Today.AddDays(-1))).Value;
         var todayLog = completedToday.Log(Today).Value;
-        var completedEarlier = Habit.Create(new HabitCreateParams(
+        var completedEarlier = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Paid bill", null, null, DueDate: Today.AddDays(-1))).Value;
         completedEarlier.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
         var dueToday = CreateHabit("Meditate");
@@ -1075,7 +1075,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_LoggedRecurringHabit_WithoutDoneCapability_KeepsLegacyCardAndPromptFacts(string scope)
     {
         SetupUserAndPayGate();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Water", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         var log = habit.Log(Today).Value;
         _habitRepo.FindAsync(
@@ -1110,7 +1110,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_RemainingDirective_ExcludesDoneHabitForLegacyClient()
     {
         SetupUserAndPayGate();
-        var done = Habit.Create(new HabitCreateParams(
+        var done = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Water", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         done.Log(Today).IsSuccess.Should().BeTrue();
         var due = CreateHabit("Meditate");
@@ -1811,9 +1811,9 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         var habits = Enumerable.Range(0, 2).Select(index =>
-            Habit.Create(new HabitCreateParams(UserId, $"Daily {index}", FrequencyUnit.Day, 1, Today)).Value)
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, $"Daily {index}", FrequencyUnit.Day, 1, Today)).Value)
             .ToList();
-        habits.Add(Habit.Create(new HabitCreateParams(UserId, "Once", null, null, Today)).Value);
+        habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Once", null, null, Today)).Value);
         foreach (var habit in habits)
             typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
                 habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -1845,13 +1845,13 @@ public partial class ProcessUserChatCommandHandlerTests
         bool? supportsDoneStatus, string doneStatus)
     {
         SetupUserAndPayGate();
-        var done = Habit.Create(new HabitCreateParams(UserId, "Done", FrequencyUnit.Day, 1, Today,
+        var done = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Done", FrequencyUnit.Day, 1, Today,
             Position: 0, CreatedAtUtc: new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc))).Value;
         done.Log(Today).IsSuccess.Should().BeTrue();
-        var due = Habit.Create(new HabitCreateParams(UserId, "Due", null, null, Today, Position: 1)).Value;
-        var overdue = Habit.Create(new HabitCreateParams(UserId, "Overdue", null, null,
+        var due = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Due", null, null, Today, Position: 1)).Value;
+        var overdue = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Overdue", null, null,
             Today.AddDays(-1), Position: 2)).Value;
-        var future = Habit.Create(new HabitCreateParams(UserId, "Future", null, null,
+        var future = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Future", null, null,
             Today.AddDays(1), Position: 3)).Value;
         _habitRepo.FindAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -1903,7 +1903,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_OverdueOffCadenceLog_BuildsCompletedDayCard()
     {
         SetupUserAndPayGate();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Every other day", FrequencyUnit.Day, 2, Today.AddDays(-1))).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -2123,7 +2123,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_HabitMetricsTool_BuildsThirtyDayHabitCard()
     {
         SetupUserAndPayGate();
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1, Today.AddDays(-29))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1, Today.AddDays(-29))).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc));
         habit.Log(Today).IsSuccess.Should().BeTrue();
@@ -2155,7 +2155,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_OverdueOffCadenceLog_BuildsThirtyDayHabitSeries()
     {
         SetupUserAndPayGate();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Every other day", FrequencyUnit.Day, 2, Today.AddDays(-1))).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!.SetValue(
             habit, new DateTime(2026, 4, 1, 12, 0, 0, DateTimeKind.Utc));
@@ -2211,7 +2211,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         var activeHabit = CreateHabit("Morning Walk");
-        var completedHabit = Habit.Create(new HabitCreateParams(
+        var completedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Morning Walk", null, null, DueDate: Today.AddDays(-1))).Value;
         completedHabit.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
         _habitRepo.FindAsync(
@@ -2319,7 +2319,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Handle_PromptBuilderIncludesCompletedParentsForActiveSubHabits()
     {
         SetupUserAndPayGate();
-        var completedParent = Habit.Create(new HabitCreateParams(
+        var completedParent = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId,
             "Fitness",
             null,
@@ -2327,7 +2327,7 @@ public partial class ProcessUserChatCommandHandlerTests
             DueDate: Today)).Value;
         completedParent.Log(Today);
 
-        var activeChild = Habit.Create(new HabitCreateParams(
+        var activeChild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Push-ups",
             FrequencyUnit.Day,

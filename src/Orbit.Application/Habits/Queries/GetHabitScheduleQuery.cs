@@ -382,8 +382,6 @@ public class GetHabitScheduleQueryHandler(
                     h.IsDeleted,
                     h.IsBadHabit,
                     h.IsCompleted,
-                    h.Schedule == HabitSchedule.General,
-                    h.Schedule == HabitSchedule.Flexible,
                     h.Days.ToList(),
                     h.Schedule,
                     h.StartDate),

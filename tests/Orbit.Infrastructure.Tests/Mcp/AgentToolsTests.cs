@@ -131,7 +131,7 @@ public class AgentToolsTests
         var today = new DateOnly(2026, 4, 3);
         var dueTime = new TimeOnly(8, 0);
         DateOnly? endDate = field == "frequency_unit" ? null : today.AddDays(10);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Read", FrequencyUnit.Day, 1, today, Description: "Keep description",
             Emoji: "📚", DueTime: dueTime, DueEndTime: new TimeOnly(15, 0), EndDate: endDate)).Value;
         var repository = Substitute.For<IGenericRepository<Habit>>();

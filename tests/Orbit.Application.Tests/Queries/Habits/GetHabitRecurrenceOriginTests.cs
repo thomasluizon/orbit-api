@@ -20,7 +20,7 @@ public class GetHabitRecurrenceOriginTests
         bool fullDetail, FrequencyUnit frequency, int year, int month, int day)
     {
         var origin = new DateOnly(year, month, day);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(((FrequencyUnit?)(frequency)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             Guid.NewGuid(), "Recurring habit", frequency, 1, origin)).Value;
         habit.Log(origin).IsSuccess.Should().BeTrue();
         var nextDueDate = frequency == FrequencyUnit.Month ? origin.AddMonths(1) : origin.AddYears(1);
@@ -41,7 +41,7 @@ public class GetHabitRecurrenceOriginTests
     public async Task Detail_DailyHabit_ReturnsStartAndNullOriginalDay(bool fullDetail)
     {
         var origin = new DateOnly(2025, 1, 31);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             Guid.NewGuid(), "Daily habit", FrequencyUnit.Day, 1, origin)).Value;
 
         var detail = await ReadDetail(habit, fullDetail);
@@ -55,7 +55,7 @@ public class GetHabitRecurrenceOriginTests
     [InlineData(true)]
     public async Task Detail_LegacyHabitWithoutOrigins_ReturnsNullWithoutInferringFromDueDate(bool fullDetail)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             Guid.NewGuid(), "Legacy habit", FrequencyUnit.Month, 1, new DateOnly(2025, 2, 28))).Value;
         typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
         typeof(Habit).GetProperty(nameof(Habit.OriginalDayOfMonth))!.SetValue(habit, null);

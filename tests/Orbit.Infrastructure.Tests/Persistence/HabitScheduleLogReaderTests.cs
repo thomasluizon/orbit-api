@@ -149,6 +149,6 @@ public class HabitScheduleLogReaderTests
     }
 
     private static Habit CreateFlexibleHabit(Guid userId) =>
-        Habit.Create(new HabitCreateParams(
-            userId, "Flexible", FrequencyUnit.Week, 3, DueDate, IsFlexible: true)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            userId, "Flexible", FrequencyUnit.Week, 3, DueDate)).Value;
 }

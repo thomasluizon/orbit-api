@@ -18,10 +18,10 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     private static readonly DateOnly Anchor = new(2026, 7, 1);
 
     private static Habit RecurringHabit() =>
-        Habit.Create(new HabitCreateParams(UserId, "H", FrequencyUnit.Day, 1, DueDate: Anchor)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "H", FrequencyUnit.Day, 1, DueDate: Anchor)).Value;
 
     private static Habit FlexibleHabit() =>
-        Habit.Create(new HabitCreateParams(UserId, "F", FrequencyUnit.Week, 3, DueDate: Anchor, IsFlexible: true)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, UserId, "F", FrequencyUnit.Week, 3, DueDate: Anchor)).Value;
 
     private static HabitLog Log(Habit habit, DateOnly date) => habit.Log(date, advanceDueDate: false).Value;
 
@@ -74,7 +74,7 @@ public class HabitLogReaderTests(ITestOutputHelper output)
         var user = User.Create("Range User", "range@example.com").Value;
         var from = new DateOnly(2025, 1, 1);
         var to = new DateOnly(2025, 1, 31);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Range", FrequencyUnit.Day, 1, from)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Range", FrequencyUnit.Day, 1, from)).Value;
         Log(habit, from.AddDays(-1));
         Log(habit, from);
         Log(habit, to);
@@ -297,10 +297,10 @@ public class HabitLogReaderTests(ITestOutputHelper output)
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Subhabit User", "subhabit@example.com").Value;
         var otherUser = User.Create("Other User", "other@example.com").Value;
-        var parent = Habit.Create(new HabitCreateParams(user.Id, "Parent", FrequencyUnit.Day, 1, Anchor)).Value;
-        var child = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Parent", FrequencyUnit.Day, 1, Anchor)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Child", FrequencyUnit.Day, 1, Anchor, ParentHabitId: parent.Id)).Value;
-        var otherHabit = Habit.Create(new HabitCreateParams(otherUser.Id, "Other", FrequencyUnit.Day, 1, Anchor)).Value;
+        var otherHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, otherUser.Id, "Other", FrequencyUnit.Day, 1, Anchor)).Value;
         Log(parent, Anchor.AddDays(-10));
         Log(child, Anchor.AddDays(-1));
         Log(otherHabit, Anchor.AddDays(1));
@@ -319,8 +319,8 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("General User", "general@example.com").Value;
-        var general = Habit.Create(new HabitCreateParams(
-            user.Id, "General", null, null, Anchor, IsGeneral: true)).Value;
+        var general = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            user.Id, "General", null, null, Anchor)).Value;
         Log(general, Anchor.AddDays(-2));
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(general);
@@ -337,13 +337,13 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Slip User", "slip@example.com").Value;
-        var goodHabit = Habit.Create(new HabitCreateParams(
+        var goodHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Good", FrequencyUnit.Day, 1, Anchor)).Value;
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
         Log(goodHabit, Anchor.AddDays(-3));
         Log(badHabit, Anchor.AddDays(-1));
-        badHabit.Update(new HabitUpdateParams(
+        badHabit.Update(new HabitUpdateParams(badHabit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? badHabit.Schedule : HabitSchedule.Recurring,
             "Bad", null, FrequencyUnit.Day, 1, null, false, Anchor)).IsSuccess.Should().BeTrue();
         factory.Context.Users.Add(user);
         factory.Context.Habits.AddRange(goodHabit, badHabit);
@@ -360,10 +360,10 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Former Good User", "former-good@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Former Good", FrequencyUnit.Day, 1, Anchor)).Value;
         Log(habit, Anchor.AddDays(-1));
-        habit.Update(new HabitUpdateParams(
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring,
             "Former Good", null, FrequencyUnit.Day, 1, null, true, Anchor)).IsSuccess.Should().BeTrue();
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
@@ -380,7 +380,7 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Slip Only User", "slip-only@example.com").Value;
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Bad", FrequencyUnit.Day, 1, Anchor, IsBadHabit: true)).Value;
         Log(badHabit, Anchor);
         factory.Context.Users.Add(user);
@@ -434,7 +434,7 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Former Habit User", "former@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Former", FrequencyUnit.Day, 1, Anchor)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Former", FrequencyUnit.Day, 1, Anchor)).Value;
         Log(habit, Anchor.AddDays(-3));
         habit.SoftDelete();
         factory.Context.Users.Add(user);
@@ -465,7 +465,7 @@ public class HabitLogReaderTests(ITestOutputHelper output)
     }
 
     private static Habit FlexibleHabitFor(Guid userId) =>
-        Habit.Create(new HabitCreateParams(userId, "Flexible", FrequencyUnit.Week, 3, Anchor, IsFlexible: true)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, userId, "Flexible", FrequencyUnit.Week, 3, Anchor)).Value;
 
     private static OrbitDbContext CreateInMemoryDbContext()
     {

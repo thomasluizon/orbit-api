@@ -53,11 +53,10 @@ public class GetHabitScheduleQueryHandlerTests
         Guid? parentHabitId = null,
         bool isBadHabit = false)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(isGeneral ? HabitSchedule.General : frequencyUnit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             UserId, title, frequencyUnit, frequencyQuantity,
             Description: description,
             DueDate: dueDate ?? Today,
-            IsGeneral: isGeneral,
             ParentHabitId: parentHabitId,
             IsBadHabit: isBadHabit)).Value;
 
@@ -126,10 +125,9 @@ public class GetHabitScheduleQueryHandlerTests
     [InlineData(3)]
     public async Task Handle_CharacterizesFourScheduleTypes(int type)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams((HabitSchedule)type,
             UserId, "Habit", type is 1 or 2 ? FrequencyUnit.Day : null,
-            type is 1 or 2 ? 1 : null, Today,
-            IsFlexible: type == 2, IsGeneral: type == 3)).Value;
+            type is 1 or 2 ? 1 : null, Today)).Value;
         SetupHabits(habit);
 
         var result = await _handler.Handle(
@@ -164,9 +162,9 @@ public class GetHabitScheduleQueryHandlerTests
     public async Task Handle_YearlyFlexibleHabit_LoadsFactsAndPageLogsFromWindowStart()
     {
         var selectedDay = new DateOnly(2026, 12, 31);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Yearly flexible", FrequencyUnit.Year, 1,
-            new DateOnly(2026, 1, 1), IsFlexible: true)).Value;
+            new DateOnly(2026, 1, 1))).Value;
         SetupHabits(habit);
 
         var result = await _handler.Handle(
@@ -196,9 +194,9 @@ public class GetHabitScheduleQueryHandlerTests
         FrequencyUnit unit, bool isChild)
     {
         var parent = isChild ? CreateTestHabit(title: "Parent") : null;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible", unit, 3, Today.AddDays(-2),
-            ParentHabitId: parent?.Id, IsFlexible: true)).Value;
+            ParentHabitId: parent?.Id)).Value;
         habit.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
         habit.SkipFlexible(Today).IsSuccess.Should().BeTrue();
         SetupHabits(parent is null ? [habit] : [parent, habit]);
@@ -247,9 +245,8 @@ public class GetHabitScheduleQueryHandlerTests
     [Fact]
     public async Task Handle_CompletedFlexibleLog_KeepsSelectedDateVisible()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 1, Today.AddDays(-2),
-            IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", FrequencyUnit.Week, 1, Today.AddDays(-2))).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         SetupHabits(habit);
 
@@ -277,9 +274,9 @@ public class GetHabitScheduleQueryHandlerTests
         FrequencyUnit unit, bool isChild, bool search)
     {
         var parent = isChild ? CreateTestHabit(title: "Parent") : null;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible meditation", unit, 3, Today.AddDays(-2),
-            ParentHabitId: parent?.Id, IsFlexible: true)).Value;
+            ParentHabitId: parent?.Id)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         habit.SkipFlexible(Today).IsSuccess.Should().BeTrue();
         SetupHabits(parent is null ? [habit] : [parent, habit]);
@@ -328,9 +325,9 @@ public class GetHabitScheduleQueryHandlerTests
         bool completed, bool isChild, bool search)
     {
         var parent = isChild ? CreateTestHabit(title: "Parent") : null;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Flexible meditation", FrequencyUnit.Week, 3, Today.AddDays(-2),
-            ParentHabitId: parent?.Id, IsFlexible: true)).Value;
+            ParentHabitId: parent?.Id)).Value;
         if (completed)
             habit.Log(Today).IsSuccess.Should().BeTrue();
         else
@@ -1183,9 +1180,9 @@ public class GetHabitScheduleQueryHandlerTests
                 dueDate: Today.AddDays(-1),
                 parentHabitId: parentId);
 
-        var middle = Habit.Create(new HabitCreateParams(
+        var middle = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             UserId, "Meditation plan", FrequencyUnit.Week, 3, Today.AddDays(-2),
-            ParentHabitId: parentId, IsFlexible: true)).Value;
+            ParentHabitId: parentId)).Value;
         middle.SkipFlexible(Today).IsSuccess.Should().BeTrue();
         return middle;
     }

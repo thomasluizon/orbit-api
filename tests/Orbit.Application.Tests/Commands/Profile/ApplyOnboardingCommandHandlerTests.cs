@@ -73,7 +73,7 @@ public class ApplyOnboardingCommandHandlerTests
 
     private static Habit ExistingOneTimeTask(Guid userId, string title, bool completed)
     {
-        var task = Orbit.Domain.Entities.Habit.Create(new HabitCreateParams(
+        var task = Orbit.Domain.Entities.Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             userId, title, null, null, Today)).Value;
         if (completed)
             task.Log(Today).IsSuccess.Should().BeTrue();
@@ -440,7 +440,7 @@ public class ApplyOnboardingCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         created.Should().ContainSingle();
-        created[0].IsGeneral.Should().BeTrue();
+        (created[0].Schedule == HabitSchedule.General).Should().BeTrue();
         created[0].IntervalWeeks.Should().Be(2);
         HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(created[0], FirstMonday.AddDays(7)).Should().BeFalse();

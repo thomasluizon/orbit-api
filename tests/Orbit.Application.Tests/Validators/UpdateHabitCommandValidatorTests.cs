@@ -139,7 +139,7 @@ public class UpdateHabitCommandValidatorTests
     public async Task Validate_ChildTitle_UsesSubHabitMessage(bool tooLong, string expectedMessage)
     {
         var command = ValidCommand();
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             command.UserId, "Original child", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 9, 26),
             ParentHabitId: Guid.NewGuid())).Value;
@@ -172,7 +172,7 @@ public class UpdateHabitCommandValidatorTests
         try
         {
             var command = ValidCommand();
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 command.UserId, "Original habit", FrequencyUnit.Day, 1,
                 DueDate: new DateOnly(2026, 9, 26))).Value;
             command = command with

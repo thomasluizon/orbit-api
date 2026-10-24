@@ -281,7 +281,7 @@ public partial class ValidationLocalizationTests
 
     private static Task<ValidationResult> ValidateUpdatedHabitAsync(bool isChild, string field, string value)
     {
-        var habit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Read", null, null, new DateOnly(2030, 1, 1),
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "Read", null, null, new DateOnly(2030, 1, 1),
             ParentHabitId: isChild ? Guid.NewGuid() : null)).Value;
         var repository = Substitute.For<IGenericRepository<Habit>>();
         repository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),

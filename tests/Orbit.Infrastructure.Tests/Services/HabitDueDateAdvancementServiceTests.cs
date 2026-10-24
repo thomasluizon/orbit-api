@@ -30,14 +30,13 @@ public class HabitDueDateAdvancementServiceTests
         bool isFlexible = false,
         bool isBadHabit = false)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : HabitSchedule.Recurring,
             ValidUserId,
             "Test Habit",
             unit,
             quantity,
             DueDate: dueDate ?? Today.AddDays(-10),
             EndDate: endDate,
-            IsFlexible: isFlexible,
             IsBadHabit: isBadHabit)).Value;
     }
 
@@ -217,7 +216,7 @@ public class HabitDueDateAdvancementServiceTests
     public void QueryFilter_OneTimeTask_Excluded()
     {
         var cutoff = Today.AddDays(-1);
-        var oneTime = Habit.Create(new HabitCreateParams(
+        var oneTime = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             ValidUserId,
             "One-time task",
             null,
@@ -257,10 +256,10 @@ public class HabitDueDateAdvancementServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var staleDueDate = Today.AddDays(-3);
-        var nonBadHabit = Habit.Create(new HabitCreateParams(
+        var nonBadHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Non-bad recurring", FrequencyUnit.Day, 1,
             IsBadHabit: false, DueDate: staleDueDate)).Value;
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Bad recurring", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: staleDueDate)).Value;
         dbContext.Users.Add(user);
@@ -286,7 +285,7 @@ public class HabitDueDateAdvancementServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var anchor = Today.AddDays(-35);
-        var unsatisfiableHabit = Habit.Create(new HabitCreateParams(
+        var unsatisfiableHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Unsatisfiable",
             FrequencyUnit.Week,
@@ -297,7 +296,7 @@ public class HabitDueDateAdvancementServiceTests
         typeof(Habit).GetProperty(nameof(Habit.FrequencyQuantity))!.SetValue(unsatisfiableHabit, 2);
         typeof(Habit).GetProperty(nameof(Habit.IntervalWeeks))!.SetValue(unsatisfiableHabit, 2);
         var unsatisfiableDueDate = unsatisfiableHabit.NextDueDate;
-        var validHabit = Habit.Create(new HabitCreateParams(
+        var validHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Valid",
             FrequencyUnit.Day,
@@ -323,7 +322,7 @@ public class HabitDueDateAdvancementServiceTests
         await using var dbContext = CreateInMemoryDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
-        var boundaryHabit = Habit.Create(new HabitCreateParams(
+        var boundaryHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Boundary",
             FrequencyUnit.Day,
@@ -332,7 +331,7 @@ public class HabitDueDateAdvancementServiceTests
             IsBadHabit: true,
             IntervalWeeks: 2)).Value;
         var validDueDate = Today.AddDays(-3);
-        var validHabit = Habit.Create(new HabitCreateParams(
+        var validHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Valid",
             FrequencyUnit.Day,

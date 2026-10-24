@@ -69,7 +69,7 @@ public class AiRescheduleSuggestionServiceGenerationTests
     [Fact]
     public async Task GenerateAsync_RationalePreservesLiteralHabitName()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Run *gently*", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Run *gently*", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-5))).Value;
         var service = BuildService(JsonSerializer.Serialize(new
         {
@@ -144,7 +144,7 @@ public class AiRescheduleSuggestionServiceGenerationTests
     }
 
     private static Habit OverdueHabit() =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Evening run", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-5))).Value;
 
     private static AiRescheduleSuggestionService BuildService(string content, HttpStatusCode status = HttpStatusCode.OK,

@@ -77,9 +77,9 @@ public static class OrbitArbitraries
     private static Habit Build(
         FrequencyUnit? unit, int? quantity, DateOnly dueDate,
         IReadOnlyList<DayOfWeek>? days, bool isFlexible, bool isBadHabit) =>
-        Habit.Create(new HabitCreateParams(
+        Habit.Create(new HabitCreateParams(isFlexible ? HabitSchedule.Flexible : unit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
             HabitOwnerId, "Property Habit", unit, quantity,
-            Days: days, IsBadHabit: isBadHabit, DueDate: dueDate, IsFlexible: isFlexible)).Value;
+            Days: days, IsBadHabit: isBadHabit, DueDate: dueDate)).Value;
 
     private static List<DayOfWeek> DaysFromMask(int mask) =>
         Enumerable.Range(0, 7).Where(bit => (mask & (1 << bit)) != 0).Select(bit => (DayOfWeek)bit).ToList();

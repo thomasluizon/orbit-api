@@ -255,7 +255,7 @@ public class BulkLogHabitsToolTests
 
     private static Habit CreateHabit(string title)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
     }
 
     private void SetupHabitsFound(params Habit[] habits)

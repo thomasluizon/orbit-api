@@ -300,11 +300,11 @@ public sealed class ProactiveEngineServiceTests
         Guid? parentId = null;
         if (!badHabit)
         {
-            var parent = Habit.Create(new HabitCreateParams(h.User.Id, "Routine", FrequencyUnit.Day, 1, Today.AddDays(1))).Value;
+            var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, h.User.Id, "Routine", FrequencyUnit.Day, 1, Today.AddDays(1))).Value;
             h.Db.Habits.Add(parent);
             parentId = parent.Id;
         }
-        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, h.User.Id, "Read", FrequencyUnit.Day, 1,
             Today.AddDays(-20), IsBadHabit: badHabit, ParentHabitId: parentId,
             CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
         h.Db.Habits.Add(habit);
@@ -319,7 +319,7 @@ public sealed class ProactiveEngineServiceTests
     public async Task BadHabitOnly_WithRecentSlipAndAbstinenceYesterday_NeverPromptsStartingOrResuming(int hour)
     {
         using var h = new Harness(hour);
-        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Smoke", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, h.User.Id, "Smoke", FrequencyUnit.Day, 1,
             Today.AddDays(-20), IsBadHabit: true,
             CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
         var slip = habit.Log(Today.AddDays(-2), advanceDueDate: false);
@@ -342,7 +342,7 @@ public sealed class ProactiveEngineServiceTests
         using var h = new Harness(8);
         var good = HabitFor(h.User.Id);
         if (positiveActivity) good.Log(Today.AddDays(-3), advanceDueDate: false).IsSuccess.Should().BeTrue();
-        var bad = Habit.Create(new HabitCreateParams(h.User.Id, "Smoke", FrequencyUnit.Day, 1,
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, h.User.Id, "Smoke", FrequencyUnit.Day, 1,
             Today.AddDays(-20), IsBadHabit: true,
             CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
         bad.Log(Today.AddDays(-slipDaysAgo), advanceDueDate: false).IsSuccess.Should().BeTrue();
@@ -364,8 +364,8 @@ public sealed class ProactiveEngineServiceTests
     {
         using var h = new Harness(hour);
         h.User.SetWeekStartDay(weekStartDay);
-        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Read", FrequencyUnit.Week, 1,
-            Today.AddDays(-20), IsFlexible: true,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, h.User.Id, "Read", FrequencyUnit.Week, 1,
+            Today.AddDays(-20),
             CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
         habit.Log(Today.AddDays(-1), advanceDueDate: false, weekStartDay: weekStartDay).IsSuccess.Should().BeTrue();
         h.Db.Habits.Add(habit);
@@ -382,8 +382,8 @@ public sealed class ProactiveEngineServiceTests
     public async Task Current_ResolvesFlexibleItemWhenQuotaIsMetOnAnotherDay(int hour)
     {
         using var h = new Harness(hour);
-        var habit = Habit.Create(new HabitCreateParams(h.User.Id, "Read", FrequencyUnit.Week, 1,
-            Today.AddDays(-20), IsFlexible: true,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, h.User.Id, "Read", FrequencyUnit.Week, 1,
+            Today.AddDays(-20),
             CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
         h.Db.Habits.Add(habit);
         await h.Run();
@@ -740,7 +740,7 @@ public sealed class ProactiveEngineServiceTests
     internal static ProactiveItem Item(Guid userId, ProactiveTrigger trigger, DateOnly date, DateTime now, Guid? goalId = null) =>
         ProactiveItem.Create(userId, trigger, date, "{}", "Text.", "Action", "Prompt", now, goalId);
 
-    private static Habit HabitFor(Guid userId) => Habit.Create(new HabitCreateParams(userId, "Read", FrequencyUnit.Day, 1,
+    private static Habit HabitFor(Guid userId) => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Read", FrequencyUnit.Day, 1,
         Today.AddDays(-20), CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
 
     private static CalendarEventItem Event(int start, int end, DateOnly? day = null) => new(

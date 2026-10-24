@@ -81,7 +81,7 @@ public class LogHabitCommandHandlerTests
 
     private static Habit CreateTestHabit(Guid? userId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
@@ -221,7 +221,7 @@ public class LogHabitCommandHandlerTests
     [InlineData(FrequencyUnit.Month)]
     public async Task Handle_WeeklyOrMonthlyHabitLoggedToday_TogglesUnlog(FrequencyUnit frequency)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Recurring", frequency, 1, DueDate: Today)).Value;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -243,7 +243,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_OverdueHabitLoggedToday_TogglesUnlog()
     {
         var missedDate = Today.AddDays(-1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: missedDate)).Value;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -265,7 +265,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_PastDateInsideOverdueWindow_TogglesUnlog()
     {
         var targetDate = Today.AddDays(-1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Daily", FrequencyUnit.Day, 1, DueDate: targetDate)).Value;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -286,7 +286,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_ExistingLogBeyondOverdueWindow_RejectsUnlog()
     {
         var targetDate = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 1));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Daily", FrequencyUnit.Day, 1, DueDate: targetDate)).Value;
         for (var offset = 0; offset < 3; offset++)
             habit.Log(targetDate.AddDays(offset)).IsSuccess.Should().BeTrue();
@@ -332,7 +332,7 @@ public class LogHabitCommandHandlerTests
         var currentDate = oldest;
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(_ => currentDate);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Daily", FrequencyUnit.Day, 1, DueDate: oldest)).Value;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -367,7 +367,7 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedOneTimeTask_PayGateFailureRejectsWithoutChangingState()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Finished task", null, null, DueDate: Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         var existingLog = habit.Logs.Should().ContainSingle().Which;
@@ -543,7 +543,7 @@ public class LogHabitCommandHandlerTests
     {
         var dueDate = new DateOnly(2025, 1, 6);
         var today = new DateOnly(2026, 7, 1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Biennial", FrequencyUnit.Year, 2, DueDate: dueDate)).Value;
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
@@ -565,7 +565,7 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_NotScheduledOnDate_ReturnsFailure()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test", FrequencyUnit.Day, 2, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -586,7 +586,7 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WeeklyHabitDueLater_RejectsToday()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Weekly", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -609,7 +609,7 @@ public class LogHabitCommandHandlerTests
         var inactiveToday = inactiveDueDate.AddDays(1);
         var missedActiveDay = anchor.AddDays(14);
         var catchUpDay = missedActiveDay.AddDays(1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Alternating", FrequencyUnit.Day, 1, DueDate: anchor,
             Days: [DayOfWeek.Monday])).Value;
         habit.AdvanceDueDate(anchor.AddDays(6), weekStartDay: 1);
@@ -642,7 +642,7 @@ public class LogHabitCommandHandlerTests
         var inactiveDueDate = anchor.AddDays(7);
         var resolvedActiveDay = anchor.AddDays(14);
         var offScheduleToday = resolvedActiveDay.AddDays(1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Alternating",
             FrequencyUnit.Day,
@@ -677,7 +677,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_ResolvedMultiYearDueDateOutsideLoadedWindow_RejectsOffScheduleToday()
     {
         var oldDueDate = Today.AddYears(-2);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Renew passport",
             FrequencyUnit.Year,
@@ -769,7 +769,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_OneTimeTask_FutureDateAllowed()
     {
         var futureDate = Today.AddDays(3);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "One-time task", null, null, DueDate: futureDate)).Value;
 
         _habitRepo.FindOneTrackedAsync(
@@ -788,8 +788,8 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_FlexibleHabit_DoesNotToggleOnDuplicateDate()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today)).Value;
         habit.Log(Today);
 
         _habitRepo.FindOneTrackedAsync(
@@ -812,12 +812,11 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_FlexibleScheduleWithDivergentFlags_LogsSecondCompletion()
+    public async Task Handle_FlexibleSchedule_LogsSecondCompletion()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 2, Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", FrequencyUnit.Week, 2, Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
-        typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, false);
         _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
 
@@ -834,7 +833,7 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_BadHabit_DoesNotToggleOnDuplicateDate()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Bad Habit", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
 
@@ -880,7 +879,7 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_UserUpdatesStreak(int daysSinceActive, int previousStreak, int currentStreak, bool unscheduled)
     {
         var habit = unscheduled
-            ? Habit.Create(new HabitCreateParams(UserId, "Weekly", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-1))).Value
+            ? Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Weekly", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-1))).Value
             : CreateTestHabit();
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

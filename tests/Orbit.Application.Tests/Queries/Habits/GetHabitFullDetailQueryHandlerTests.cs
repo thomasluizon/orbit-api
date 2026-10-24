@@ -31,7 +31,7 @@ public class GetHabitFullDetailQueryHandlerTests
 
     private static Habit CreateTestHabit()
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
@@ -211,13 +211,12 @@ public class GetHabitFullDetailQueryHandlerTests
     [Fact]
     public async Task Handle_GeneralHabitLoggedToday_ReturnsCompleted()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General,
             UserId,
             "General Habit",
             null,
             null,
-            DueDate: Today,
-            IsGeneral: true)).Value;
+            DueDate: Today)).Value;
         var log = habit.Log(Today).Value;
         var user = CreateTestUser();
 
@@ -244,15 +243,14 @@ public class GetHabitFullDetailQueryHandlerTests
     public async Task Handle_GeneralDescendantLoggedToday_ReturnsCompleted()
     {
         var parent = CreateTestHabit();
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.General,
             UserId,
             "General Child",
             null,
             null,
             DueDate: Today,
-            IsGeneral: true,
             ParentHabitId: parent.Id)).Value;
-        var grandchild = Habit.Create(new HabitCreateParams(
+        var grandchild = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Grandchild", null, null,
             DueDate: Today.AddDays(-4), ParentHabitId: child.Id)).Value;
         var parentCreated = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -299,7 +297,7 @@ public class GetHabitFullDetailQueryHandlerTests
     public async Task Handle_CompletedOneTimeHabitWithoutLogToday_ReturnsCompleted()
     {
         var dueDate = Today.AddDays(-1);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId,
             "Completed Task",
             null,
@@ -331,7 +329,7 @@ public class GetHabitFullDetailQueryHandlerTests
     public async Task Handle_NestedHabitWithRelationships_ReturnsLinkedGoalsAndSlipAlertEnabled()
     {
         var parentId = Guid.NewGuid();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Nested Habit",
             FrequencyUnit.Day,
@@ -378,7 +376,7 @@ public class GetHabitFullDetailQueryHandlerTests
     [Fact]
     public async Task Handle_NestedHabitWithoutGoals_ReturnsEmptyLinkedGoals()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Nested Habit",
             FrequencyUnit.Day,

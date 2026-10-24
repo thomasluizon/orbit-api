@@ -47,7 +47,7 @@ public class UpdateHabitToolTests
     public async Task CommitmentCorrection_KeepsOneTimeScheduleAndOtherFields(string original, string renamed)
     {
         var checklist = new List<ChecklistItem> { new("Prepare", false) };
-        var habit = Habit.Create(new HabitCreateParams(UserId, original, null, null,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, original, null, null,
             new DateOnly(2026, 10, 29), Description: "At home", DueTime: new TimeOnly(13, 30),
             ReminderEnabled: true, ReminderTimes: [60], ChecklistItems: checklist, Emoji: "🩺")).Value;
         SetupHabitFound(habit);
@@ -92,7 +92,7 @@ public class UpdateHabitToolTests
     public async Task ParentGeneralFlag_CannotDivergeFromActiveChildren()
     {
         var parent = CreateHabit("Parent", null, null);
-        var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1,
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Child", FrequencyUnit.Day, 1,
             Today, ParentHabitId: parent.Id)).Value;
         SetupHabitFound(parent);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
@@ -100,7 +100,7 @@ public class UpdateHabitToolTests
         var result = await Execute($$"""{"habit_id":"{{parent.Id}}","is_general":true}""");
         result.Success.Should().BeFalse();
         result.Error.Should().Be(Orbit.Application.Common.ErrorMessages.GeneralMismatchWithChildren.Message);
-        parent.IsGeneral.Should().BeFalse();
+        (parent.Schedule == HabitSchedule.General).Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -112,7 +112,7 @@ public class UpdateHabitToolTests
     [InlineData("relative_reminders", "[{\"minutes_before\":30,\"when\":null,\"time\":null}]")]
     public async Task NewFields_UpdateStoredValues(string field, string value)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Read", null, null, Today,
             DueTime: new TimeOnly(9, 0))).Value;
         SetupHabitFound(habit);
         _payGate.CanUseSlipAlerts(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -121,7 +121,7 @@ public class UpdateHabitToolTests
         switch (field)
         {
             case "due_end_time": habit.DueEndTime.Should().Be(new TimeOnly(15, 0)); break;
-            case "is_general": habit.IsGeneral.Should().BeTrue(); break;
+            case "is_general": habit.Schedule.Should().Be(HabitSchedule.General); break;
             case "slip_alert_enabled": habit.SlipAlertEnabled.Should().BeTrue(); break;
             case "relative_reminders": habit.RelativeReminders.Should().Equal(new RelativeReminderTime(MinutesBefore: 30)); break;
         }
@@ -131,14 +131,14 @@ public class UpdateHabitToolTests
     public async Task ChildGeneralFlag_CannotDivergeFromParent()
     {
         var parent = CreateHabit("Parent", null, null);
-        var child = Habit.Create(new HabitCreateParams(UserId, "Child", null, null, Today, ParentHabitId: parent.Id)).Value;
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Child", null, null, Today, ParentHabitId: parent.Id)).Value;
         _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()(child) ? child : parent);
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         var result = await Execute($$"""{"habit_id":"{{child.Id}}","is_general":true}""");
         result.Success.Should().BeFalse();
-        child.IsGeneral.Should().BeFalse();
+        (child.Schedule == HabitSchedule.General).Should().BeFalse();
     }
 
     [Theory]
@@ -171,7 +171,7 @@ public class UpdateHabitToolTests
     [Fact]
     public async Task DueEndTime_ClearFieldClearsDeadline()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", null, null, Today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Read", null, null, Today,
             DueEndTime: new TimeOnly(15, 0))).Value;
         SetupHabitFound(habit);
         var result = await Execute($$"""{"habit_id":"{{habit.Id}}","clear_fields":["due_end_time"]}""");
@@ -183,7 +183,7 @@ public class UpdateHabitToolTests
     [MemberData(nameof(OptionalParameterCases.Fields), typeof(UpdateHabitTool), "", MemberType = typeof(OptionalParameterCases))]
     public async Task OptionalNull_PreservesHabitLikeAbsent(string field)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1,
             DueDate: Today, Description: "Keep", Emoji: "📖", Days: [DayOfWeek.Friday],
             DueTime: new TimeOnly(8, 0), DueEndTime: new TimeOnly(15, 0), EndDate: Today.AddDays(10), ReminderEnabled: true,
             ReminderTimes: [15], ChecklistItems: [new ChecklistItem("Page", true)])).Value;
@@ -276,7 +276,7 @@ public class UpdateHabitToolTests
             new(When: ScheduledReminderWhen.DayBefore, Time: new TimeOnly(18, 0))
         };
         var checklist = new List<ChecklistItem> { new("Fill bottle", true) };
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Water", FrequencyUnit.Day, 1, Today,
             Description: "Two litres", Days: [DayOfWeek.Monday, DayOfWeek.Wednesday],
             IsBadHabit: true, DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(15, 0),
@@ -315,7 +315,7 @@ public class UpdateHabitToolTests
     [InlineData("""{"clear_fields": ["due_time"]}""")]
     public async Task PartialUpdate_KeepsDueEndTime(string updates)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Read", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), DueEndTime: new TimeOnly(15, 0))).Value;
         SetupHabitFound(habit);
@@ -336,7 +336,7 @@ public class UpdateHabitToolTests
         {
             new(ScheduledReminderWhen.SameDay, new TimeOnly(14, 0))
         };
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Read", null, null, Today, DueEndTime: new TimeOnly(15, 0),
             ReminderEnabled: true, ScheduledReminders: scheduledReminders)).Value;
         SetupHabitFound(habit);
@@ -575,7 +575,7 @@ public class UpdateHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "is_flexible": true}""");
 
         result.Success.Should().BeTrue();
-        habit.IsFlexible.Should().BeTrue();
+        habit.Schedule.Should().Be(HabitSchedule.Flexible);
     }
 
     [Fact]
@@ -908,12 +908,12 @@ public class UpdateHabitToolTests
 
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
+        return Habit.Create(new HabitCreateParams(((FrequencyUnit?)(freq)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, title, freq, qty, DueDate: Today)).Value;
     }
 
     private static Habit CreateCompletedRecurringHabit()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Finished recurring habit", FrequencyUnit.Day, 1, DueDate: Today, EndDate: Today)).Value;
         habit.AdvanceDueDate(Today);
         return habit;
@@ -921,18 +921,18 @@ public class UpdateHabitToolTests
 
     private static Habit CreateHabitWithTime(string title, FrequencyUnit? freq, int? qty, TimeOnly dueTime)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today, DueTime: dueTime)).Value;
+        return Habit.Create(new HabitCreateParams(((FrequencyUnit?)(freq)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, title, freq, qty, DueDate: Today, DueTime: dueTime)).Value;
     }
 
     private static Habit CreateHabitWithEmoji(string title, string emoji)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today, Emoji: emoji)).Value;
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, DueDate: Today, Emoji: emoji)).Value;
     }
 
     private static Habit CreateHabitWithTimeAndScheduledReminders(
         string title, TimeOnly dueTime, params ScheduledReminderTime[] scheduledReminders)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1, DueDate: Today,
             DueTime: dueTime, ScheduledReminders: scheduledReminders)).Value;
     }
@@ -940,7 +940,7 @@ public class UpdateHabitToolTests
     private static Habit CreateHabitWithScheduledReminders(
         string title, params ScheduledReminderTime[] scheduledReminders)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1, DueDate: Today,
             ScheduledReminders: scheduledReminders)).Value;
     }
@@ -948,7 +948,7 @@ public class UpdateHabitToolTests
     private static Habit CreateHabitWithTimeAndReminderTimes(
         string title, TimeOnly dueTime, params int[] reminderTimes)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1, DueDate: Today,
             DueTime: dueTime, ReminderEnabled: true, ReminderTimes: reminderTimes)).Value;
     }

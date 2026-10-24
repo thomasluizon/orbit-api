@@ -184,8 +184,8 @@ public partial class AgentChatWriteHoldTests : IDisposable
     {
         var today = new DateOnly(2026, 9, 25);
         _dbContext.Habits.AddRange(
-            Habit.Create(new HabitCreateParams(_userId, "One", FrequencyUnit.Day, 1, today)).Value,
-            Habit.Create(new HabitCreateParams(_userId, "Two", FrequencyUnit.Day, 1, today)).Value);
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "One", FrequencyUnit.Day, 1, today)).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Two", FrequencyUnit.Day, 1, today)).Value);
         await _dbContext.SaveChangesAsync();
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
@@ -334,7 +334,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
     {
         var today = new DateOnly(2026, 9, 25);
         _dbContext.Habits.Add(
-            Habit.Create(new HabitCreateParams(_userId, "One", FrequencyUnit.Day, 1, today)).Value);
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "One", FrequencyUnit.Day, 1, today)).Value);
         await _dbContext.SaveChangesAsync();
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
@@ -362,7 +362,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
         if (addHabit)
         {
             _dbContext.Habits.Add(
-                Habit.Create(new HabitCreateParams(_userId, "Two", FrequencyUnit.Day, 1, today)).Value);
+                Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Two", FrequencyUnit.Day, 1, today)).Value);
             await _dbContext.SaveChangesAsync();
         }
         _dbContext.ChangeTracker.Clear();
@@ -576,7 +576,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
     public async Task ExecuteAsync_CreateApproval_JsonStorageOrderAndUnrelatedChangeDoNotMakeItStale()
     {
         var today = new DateOnly(2026, 10, 19);
-        var unrelated = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        var unrelated = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber água", FrequencyUnit.Day, 1, today)).Value;
         _dbContext.Habits.Add(unrelated);
         await _dbContext.SaveChangesAsync();
         var tool = new StubTool("bulk_create_habits");
@@ -593,7 +593,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
         var reordered = """{"habits":[{"frequency_unit":"Day","title":"Novo"}]}""";
         stored.Revise(reordered, AgentOperationFingerprint.Compute(tool.Name, reordered),
             held.PendingOperation!.PreviewFingerprint!, DateTime.UtcNow).Should().BeTrue();
-        unrelated.Update(new HabitUpdateParams("Changed unrelated habit", unrelated.Description, unrelated.FrequencyUnit,
+        unrelated.Update(new HabitUpdateParams(unrelated.Schedule, "Changed unrelated habit", unrelated.Description, unrelated.FrequencyUnit,
             unrelated.FrequencyQuantity, Days: unrelated.Days.ToList(), IsBadHabit: unrelated.IsBadHabit, DueDate: unrelated.NextDueDate)).IsSuccess.Should().BeTrue();
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
@@ -616,7 +616,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
     {
         var today = new DateOnly(2026, 10, 19);
         var habits = new[] { "Beber água", "Academia" }.Select(title =>
-            Habit.Create(new HabitCreateParams(_userId, title, FrequencyUnit.Day, 1, today)).Value).ToArray();
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, title, FrequencyUnit.Day, 1, today)).Value).ToArray();
         _dbContext.Habits.AddRange(habits);
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
@@ -662,7 +662,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
     [Fact]
     public async Task ReviseDateRange_KeepingOneDate_PreservesTheOfferedItem()
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Beber água", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Beber água", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 19))).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
@@ -782,7 +782,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
         if (action == "stale")
         {
             var changed = await _dbContext.Habits.SingleAsync(habit => habit.Id == habits[0].Id);
-            changed.Update(new HabitUpdateParams("Changed title", changed.Description, changed.FrequencyUnit,
+            changed.Update(new HabitUpdateParams(changed.Schedule, "Changed title", changed.Description, changed.FrequencyUnit,
                 changed.FrequencyQuantity, changed.Days.ToList(), changed.IsBadHabit, changed.NextDueDate, Emoji: changed.Emoji)).IsSuccess.Should().BeTrue();
             await _dbContext.SaveChangesAsync();
         }
@@ -919,12 +919,12 @@ public partial class AgentChatWriteHoldTests : IDisposable
     private async Task<(Habit[] Habits, Habit Completed, Habit Foreign)> CreateIconHabitsAsync(int count)
     {
         var today = new DateOnly(2026, 10, 19);
-        var habits = Enumerable.Range(0, count).Select(index => Habit.Create(new HabitCreateParams(_userId,
+        var habits = Enumerable.Range(0, count).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId,
             $"Habit {index:D3}", FrequencyUnit.Day, 1, today, Description: "Keep description", DueTime: new TimeOnly(9, 0),
             Days: [DayOfWeek.Monday], ChecklistItems: [new("Keep checklist", true)], Emoji: "📝")).Value).ToArray();
-        var completed = Habit.Create(new HabitCreateParams(_userId, "Completed", null, null, today, Emoji: "✅")).Value;
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, _userId, "Completed", null, null, today, Emoji: "✅")).Value;
         completed.Log(today);
-        var foreign = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Foreign", FrequencyUnit.Day, 1, today, Emoji: "🔒")).Value;
+        var foreign = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Foreign", FrequencyUnit.Day, 1, today, Emoji: "🔒")).Value;
         _dbContext.Habits.AddRange(habits.Concat([completed, foreign]));
         await _dbContext.SaveChangesAsync();
         _dbContext.ChangeTracker.Clear();
@@ -1015,7 +1015,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
     [InlineData(false)]
     public async Task InferredIcons_InitialPreparationFailure_IsFailedAndCancelledWithoutStaleApproval(bool budget)
     {
-        var habit = Habit.Create(new HabitCreateParams(_userId, "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 19))).Value;
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
@@ -1055,7 +1055,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
     [InlineData(false)]
     public async Task InferredIcons_CancellationOrDeadline_CancelsTheUnboundProposal(bool callerCancelled)
     {
-        _dbContext.Habits.Add(Habit.Create(new HabitCreateParams(_userId, "Read", FrequencyUnit.Day, 1,
+        _dbContext.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 19))).Value);
         await _dbContext.SaveChangesAsync();
         using var cancellation = new CancellationTokenSource();

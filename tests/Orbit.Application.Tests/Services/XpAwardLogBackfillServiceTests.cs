@@ -54,7 +54,7 @@ public class XpAwardLogBackfillServiceTests
     private static Habit CreateDailyHabitWithStreak(int days)
     {
         var startDate = Today.AddDays(-(days - 1));
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Daily", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Daily", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
         for (var i = 0; i < days; i++)
             habit.Log(startDate.AddDays(i));

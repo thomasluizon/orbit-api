@@ -46,7 +46,7 @@ public class SyncCleanupServiceTests
         var parent = CreateDeletedHabit(
             deletedDaysAgo: AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1,
             userId: user.Id);
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Child", FrequencyUnit.Day, 1, DueDate: completionDate,
             ParentHabitId: parent.Id)).Value;
         child.Log(completionDate, advanceDueDate: false);
@@ -76,10 +76,10 @@ public class SyncCleanupServiceTests
         var completionDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-40);
         var parent = CreateDeletedHabit(
             AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1, user.Id);
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Child", FrequencyUnit.Day, 1, DueDate: completionDate,
             ParentHabitId: parent.Id)).Value;
-        var grandchild = Habit.Create(new HabitCreateParams(
+        var grandchild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Grandchild", FrequencyUnit.Day, 1, DueDate: completionDate,
             ParentHabitId: child.Id)).Value;
         grandchild.Log(completionDate, advanceDueDate: false);
@@ -105,12 +105,12 @@ public class SyncCleanupServiceTests
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var agedDays = AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1;
         var firstParent = CreateDeletedHabit(agedDays, firstUser.Id);
-        var badChild = Habit.Create(new HabitCreateParams(
+        var badChild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             firstUser.Id, "Slip", FrequencyUnit.Day, 1, DueDate: today,
             IsBadHabit: true, ParentHabitId: firstParent.Id)).Value;
         badChild.Log(today.AddDays(-40), advanceDueDate: false);
         var secondParent = CreateDeletedHabit(agedDays, secondUser.Id);
-        var goodChild = Habit.Create(new HabitCreateParams(
+        var goodChild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             secondUser.Id, "Completion", FrequencyUnit.Day, 1, DueDate: today,
             ParentHabitId: secondParent.Id)).Value;
         var completionDate = today.AddDays(-38);
@@ -135,11 +135,11 @@ public class SyncCleanupServiceTests
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var parent = CreateDeletedHabit(
             AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1, user.Id);
-        var child = Habit.Create(new HabitCreateParams(
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Old", FrequencyUnit.Day, 1, DueDate: today,
             ParentHabitId: parent.Id)).Value;
         child.Log(today.AddDays(-40), advanceDueDate: false);
-        var liveHabit = Habit.Create(new HabitCreateParams(
+        var liveHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Live", FrequencyUnit.Day, 1, DueDate: today)).Value;
         liveHabit.Log(today.AddDays(-1), advanceDueDate: false);
         dbContext.Users.Add(user);
@@ -165,17 +165,17 @@ public class SyncCleanupServiceTests
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var agedDays = AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1;
 
-        var badHabit = Habit.Create(new HabitCreateParams(
+        var badHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             firstUser.Id, "Slip", FrequencyUnit.Day, 1, DueDate: today, IsBadHabit: true)).Value;
         badHabit.Log(today.AddDays(-40), advanceDueDate: false);
         badHabit.SoftDelete(DateTime.UtcNow.AddDays(-agedDays));
 
-        var skippedHabit = Habit.Create(new HabitCreateParams(
-            firstUser.Id, "Skip", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
+        var skippedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            firstUser.Id, "Skip", FrequencyUnit.Week, 3, DueDate: today)).Value;
         skippedHabit.SkipFlexible(today.AddDays(-39));
         skippedHabit.SoftDelete(DateTime.UtcNow.AddDays(-agedDays));
 
-        var otherHabit = Habit.Create(new HabitCreateParams(
+        var otherHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             secondUser.Id, "Complete", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var otherCompletionDate = today.AddDays(-38);
         otherHabit.Log(otherCompletionDate, advanceDueDate: false);
@@ -218,7 +218,7 @@ public class SyncCleanupServiceTests
         var agedDays = AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays + 1;
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var habitLog = habit.Log(today).Value;
         habit.Unlog(today);
@@ -254,7 +254,7 @@ public class SyncCleanupServiceTests
     private static Habit CreateDeletedHabit(double deletedDaysAgo, Guid userId)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(userId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
         habit.SoftDelete();
         typeof(Habit)
             .GetProperty(nameof(Habit.DeletedAtUtc))!

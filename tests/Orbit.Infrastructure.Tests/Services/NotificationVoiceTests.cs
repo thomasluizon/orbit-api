@@ -57,7 +57,7 @@ public class NotificationVoiceTests
     private static string DailySummaryPrompt(string language)
     {
         var today = new DateOnly(2026, 9, 18);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             Guid.NewGuid(),
             language == "pt-BR" ? "Correr" : "Run",
             FrequencyUnit.Day,

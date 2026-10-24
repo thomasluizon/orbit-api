@@ -193,9 +193,9 @@ public sealed class PendingOperationRevisionServiceTests
     public async Task ReviseAsync_RejectsDerivedFieldsThatCannotBeReplaced(string field)
     {
         var habit = field == "days"
-            ? Habit.Create(new HabitCreateParams(_userId, "First", FrequencyUnit.Day, 1,
+            ? Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "First", FrequencyUnit.Day, 1,
                 new DateOnly(2026, 9, 25), Days: [DayOfWeek.Monday, DayOfWeek.Wednesday])).Value
-            : Habit.Create(new HabitCreateParams(_userId, "First", FrequencyUnit.Day, 1,
+            : Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "First", FrequencyUnit.Day, 1,
                 new DateOnly(2026, 9, 25), DueTime: new TimeOnly(9, 0), ReminderTimes: [])).Value;
         SetupHabits([habit]);
         var pendingId = Guid.NewGuid();
@@ -448,7 +448,7 @@ public sealed class PendingOperationRevisionServiceTests
             .Returns(habits);
     }
 
-    private Habit CreateHabit(string title) => Habit.Create(new HabitCreateParams(
+    private Habit CreateHabit(string title) => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
         _userId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25))).Value;
 
     private static bool RevisedArgsMatch(string json, Guid id, string emoji)

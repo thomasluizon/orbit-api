@@ -15,10 +15,10 @@ public class HabitScheduleEnumReaderTests
     [InlineData(HabitSchedule.Recurring)]
     [InlineData(HabitSchedule.Flexible)]
     [InlineData(HabitSchedule.General)]
-    public void ScheduleReaders_UsePersistedScheduleInsteadOfLegacyFlags(HabitSchedule schedule)
+    public void ScheduleReaders_UsePersistedScheduleAfterSnapshotRoundTrip(HabitSchedule schedule)
     {
         var habit = Create(schedule);
-        var divergent = WithDivergentFlags(habit);
+        var divergent = Rehydrate(habit);
         var end = Start.AddDays(3);
 
         HabitScheduleService.GetScheduledDates(divergent, Start, end)
@@ -36,11 +36,11 @@ public class HabitScheduleEnumReaderTests
     }
 
     [Fact]
-    public void FlexibleMetrics_UsePersistedScheduleInsteadOfLegacyFlags()
+    public void FlexibleMetrics_UsePersistedScheduleAfterSnapshotRoundTrip()
     {
         var habit = Create(HabitSchedule.Flexible);
         habit.Log(Start.AddDays(2), advanceDueDate: false).IsSuccess.Should().BeTrue();
-        var divergent = WithDivergentFlags(habit);
+        var divergent = Rehydrate(habit);
         divergent.LoadScheduleLogsForRead(habit.Logs);
 
         HabitMetricsCalculator.Calculate(divergent, Start.AddDays(2), 1, TimeZoneInfo.Utc)
@@ -52,9 +52,9 @@ public class HabitScheduleEnumReaderTests
     [InlineData(HabitSchedule.Recurring)]
     [InlineData(HabitSchedule.Flexible)]
     [InlineData(HabitSchedule.General)]
-    public void SnapshotProducers_DeriveLegacyFlagsFromPersistedSchedule(HabitSchedule schedule)
+    public void SnapshotProducers_PreservePersistedSchedule(HabitSchedule schedule)
     {
-        var habit = WithDivergentFlags(Create(schedule));
+        var habit = Rehydrate(Create(schedule));
         var query = new[] { habit }.AsQueryable();
         var snapshots = new[]
         {
@@ -66,26 +66,20 @@ public class HabitScheduleEnumReaderTests
         foreach (var snapshot in snapshots)
         {
             snapshot.Schedule.Should().Be(schedule);
-            snapshot.IsGeneral.Should().Be(schedule == HabitSchedule.General);
-            snapshot.IsFlexible.Should().Be(schedule == HabitSchedule.Flexible);
             snapshot.StartDate.Should().Be(Start);
             snapshot.NextDueDate.Should().Be(habit.NextDueDate);
         }
     }
 
-    private static Habit Create(HabitSchedule schedule) => Habit.Create(new HabitCreateParams(
+    private static Habit Create(HabitSchedule schedule) => Habit.Create(new HabitCreateParams(schedule,
         Guid.NewGuid(), "Habit",
         schedule == HabitSchedule.Flexible ? FrequencyUnit.Week
             : schedule == HabitSchedule.Recurring ? FrequencyUnit.Day : null,
         schedule == HabitSchedule.Flexible ? 2
             : schedule == HabitSchedule.Recurring ? 1 : null,
-        Start, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible,
+        Start,
         CreatedAtUtc: Start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
 
-    private static Habit WithDivergentFlags(Habit habit) => Habit.FromScheduleSnapshot(
-        HabitScheduleSnapshot.FromHabit(habit) with
-        {
-            IsGeneral = !habit.IsGeneral,
-            IsFlexible = !habit.IsFlexible
-        }, habit.UserId);
+    private static Habit Rehydrate(Habit habit) => Habit.FromScheduleSnapshot(
+        HabitScheduleSnapshot.FromHabit(habit), habit.UserId);
 }

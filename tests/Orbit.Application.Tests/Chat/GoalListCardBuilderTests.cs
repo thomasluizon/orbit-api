@@ -73,7 +73,7 @@ public class GoalListCardBuilderTests
     {
         var today = new DateOnly(2026, 9, 30);
         var goal = CreateGoal("Read", 100, "pages", current: 40, deadline: today.AddDays(30));
-        goal.AddHabit(Habit.Create(new HabitCreateParams(UserId, "Read daily", FrequencyUnit.Day, 1, today)).Value);
+        goal.AddHabit(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read daily", FrequencyUnit.Day, 1, today)).Value);
 
         var item = GoalListCardBuilder.Build([goal], today).Items.Single();
 
@@ -94,7 +94,7 @@ public class GoalListCardBuilderTests
         noHabits.ProjectedCompletionDate.Should().BeNull();
         noHabits.DaysToDeadline.Should().BeNull();
 
-        goal.AddHabit(Habit.Create(new HabitCreateParams(UserId, "Read daily", FrequencyUnit.Day, 1, today)).Value);
+        goal.AddHabit(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read daily", FrequencyUnit.Day, 1, today)).Value);
         var disabled = GoalListCardBuilder.Build([goal], today, includeProjections: false).Items.Single();
         disabled.TrackingStatus.Should().BeNull();
         disabled.ProgressPercentage.Should().BeNull();

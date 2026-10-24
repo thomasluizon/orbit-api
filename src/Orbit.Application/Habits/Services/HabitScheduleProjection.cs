@@ -22,8 +22,6 @@ public static class HabitScheduleProjection
             habit.IsDeleted,
             habit.IsBadHabit,
             habit.IsCompleted,
-            habit.Schedule == HabitSchedule.General,
-            habit.Schedule == HabitSchedule.Flexible,
             habit.Days.ToList(),
             habit.Schedule,
             habit.StartDate));
@@ -46,8 +44,6 @@ public static class HabitScheduleProjection
                 habit.IsDeleted,
                 habit.IsBadHabit,
                 habit.IsCompleted,
-                habit.Schedule == HabitSchedule.General,
-                habit.Schedule == HabitSchedule.Flexible,
                 habit.Days.ToList(),
                 habit.Schedule,
                 habit.StartDate)));

@@ -376,8 +376,8 @@ public class HabitCountSectionTests
     {
         var habits = new List<Habit>
         {
-            Habit.Create(new HabitCreateParams(Guid.NewGuid(), "H1", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value,
-            Habit.Create(new HabitCreateParams(Guid.NewGuid(), "H2", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "H1", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value,
+            Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(), "H2", null, null, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value,
         };
         var ctx = new PromptContext(habits, false, null, null, null, null);
         var result = new HabitCountSection().Build(ctx);

@@ -13,11 +13,11 @@ internal static class HabitUpdateValidation
     public static UpdateHabitCommand ToCommand(Guid userId, Guid habitId, HabitUpdateParams update) =>
         new(userId, habitId, update.Title, update.Description,
             update.FrequencyUnit, update.FrequencyQuantity, update.IsBadHabit, update.DueDate,
-            IsGeneral: update.IsGeneral, ClearEndDate: update.ClearEndDate, Emoji: update.Emoji,
+            IsGeneral: update.Schedule == HabitSchedule.General, ClearEndDate: update.ClearEndDate, Emoji: update.Emoji,
             IntervalWeeks: update.IntervalWeeks, StartDate: update.StartDate,
             Options: new UpdateHabitCommandOptions(update.Days, update.DueTime, update.DueEndTime,
                 update.ReminderEnabled, update.ReminderTimes, update.SlipAlertEnabled, update.ChecklistItems,
-                update.ScheduledReminders, update.EndDate, update.IsFlexible, update.RelativeReminders));
+                update.ScheduledReminders, update.EndDate, update.Schedule == HabitSchedule.Flexible, update.RelativeReminders));
 
     public static async Task<Result> ValidateAsync(Guid userId, Habit habit, HabitUpdateParams update,
         IGenericRepository<Habit> repository, CancellationToken ct, IReadOnlyList<Habit>? related = null)
@@ -26,8 +26,8 @@ internal static class HabitUpdateValidation
         var validation = await new UpdateHabitCommandValidator(repository).ValidateAsync(command, ct);
         if (!validation.IsValid)
             return Result.Failure(validation.ToString());
-        return update.IsGeneral is { } isGeneral
-            ? ValidateGeneral(habit, isGeneral, related ?? await LoadRelatedAsync([habit], userId, repository, ct))
+        return update.Schedule != habit.Schedule || update.ResetCompletion
+            ? ValidateGeneral(habit, update.Schedule == HabitSchedule.General, related ?? await LoadRelatedAsync([habit], userId, repository, ct))
             : Result.Success();
     }
 
@@ -57,15 +57,10 @@ internal static class HabitUpdateValidation
             : Result.Success();
     }
 
-    public static HabitUpdateParams ResolveSingleUpdate(Habit habit, BulkHabitChanges changes, DateOnly today) =>
-        ResolveUpdate(habit, changes, today) with
-        {
-            FrequencyQuantity = changes.HasFrequencyQuantity ? changes.FrequencyQuantity ?? habit.FrequencyQuantity : habit.FrequencyQuantity,
-            IntervalWeeks = changes.HasIntervalWeeks ? changes.IntervalWeeks ?? habit.IntervalWeeks : habit.IntervalWeeks,
-            Days = changes.HasDays ? changes.Days : habit.Days.ToList()
-        };
+    public static Result<HabitUpdateParams> ResolveSingleUpdate(Habit habit, BulkHabitChanges changes, DateOnly today) =>
+        ResolveUpdate(habit, changes, today, single: true);
 
-    public static HabitUpdateParams ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today)
+    public static Result<HabitUpdateParams> ResolveUpdate(Habit habit, BulkHabitChanges changes, DateOnly today, bool single = false)
     {
         var dueTime = changes.HasDueTime ? changes.DueTime : habit.DueTime;
         var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
@@ -76,12 +71,21 @@ internal static class HabitUpdateValidation
             habit.ReminderTimes,
             habit.ScheduledReminders);
 
-        return ApplyExtendedFields(new HabitUpdateParams(
+        var (frequencyUnit, frequencyQuantity, intervalWeeks, days) = ResolveCadence(habit, changes, single);
+        var schedule = LegacyHabitSchedule.Resolve(
+            changes.HasIsGeneral ? changes.IsGeneral : habit.Schedule == HabitSchedule.General,
+            changes.HasIsFlexible ? changes.IsFlexible : habit.Schedule == HabitSchedule.Flexible,
+            frequencyUnit, frequencyQuantity, changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
+            days, intervalWeeks);
+        if (schedule.IsFailure)
+            return schedule.PropagateError<HabitUpdateParams>();
+
+        return Result.Success(ApplyExtendedFields(new HabitUpdateParams(schedule.Value,
             changes.HasTitle ? changes.Title ?? habit.Title : habit.Title,
             changes.HasDescription ? changes.Description : habit.Description,
-            changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit,
-            changes.HasFrequencyQuantity ? changes.FrequencyQuantity : habit.FrequencyQuantity,
-            changes.HasIsFlexible && changes.IsFlexible ? [] : changes.HasDays ? changes.Days : habit.Days.ToList(),
+            frequencyUnit,
+            frequencyQuantity,
+            days,
             changes.HasIsBadHabit ? changes.IsBadHabit : habit.IsBadHabit,
             changes.HasDueDate ? changes.DueDate : habit.NextDueDate,
             DueTime: dueTime,
@@ -89,18 +93,30 @@ internal static class HabitUpdateValidation
             ReminderEnabled: changes.HasReminderEnabled ? changes.ReminderEnabled : null,
             ReminderTimes: reminderTimes,
             ChecklistItems: changes.HasChecklistItems ? changes.ChecklistItems : null,
-            IsFlexible: changes.HasIsFlexible ? changes.IsFlexible : null,
             EndDate: changes.HasEndDate ? changes.EndDate : null,
             ClearEndDate: changes.HasEndDate && changes.EndDate is null,
             ScheduledReminders: scheduledReminders,
             Emoji: changes.HasEmoji ? changes.Emoji : habit.Emoji,
             UserToday: today,
-            IntervalWeeks: changes.HasIntervalWeeks ? changes.IntervalWeeks : habit.IntervalWeeks), changes);
+            IntervalWeeks: intervalWeeks), changes));
     }
+    private static (FrequencyUnit? Unit, int? Quantity, int? Interval, IReadOnlyList<DayOfWeek>? Days)
+        ResolveCadence(Habit habit, BulkHabitChanges changes, bool single)
+    {
+        var frequencyUnit = changes.HasFrequencyUnit ? changes.FrequencyUnit : habit.FrequencyUnit;
+        var frequencyQuantity = changes.HasFrequencyQuantity
+            ? single ? changes.FrequencyQuantity ?? habit.FrequencyQuantity : changes.FrequencyQuantity : habit.FrequencyQuantity;
+        var intervalWeeks = changes.HasIntervalWeeks
+            ? single ? changes.IntervalWeeks ?? habit.IntervalWeeks : changes.IntervalWeeks : habit.IntervalWeeks;
+        var days = !single && changes.HasIsFlexible && changes.IsFlexible ? []
+            : changes.HasDays ? changes.Days : habit.Days.ToList();
+        return (frequencyUnit, frequencyQuantity, intervalWeeks, days);
+    }
+
     private static HabitUpdateParams ApplyExtendedFields(HabitUpdateParams update, BulkHabitChanges changes) => update with
     {
         DueEndTime = changes.HasDueEndTime ? changes.DueEndTime : update.DueEndTime,
-        IsGeneral = changes.HasIsGeneral ? changes.IsGeneral : null,
+        ResetCompletion = changes.HasIsGeneral && changes.IsGeneral,
         SlipAlertEnabled = changes.HasSlipAlertEnabled ? changes.SlipAlertEnabled : null,
         RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null,
         StartDate = changes.HasStartDate ? changes.StartDate : null

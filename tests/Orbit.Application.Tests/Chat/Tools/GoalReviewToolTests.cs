@@ -137,7 +137,7 @@ public class GoalReviewToolTests
     public async Task LinkedStandardGoal_UsesFreshDerivedProgress()
     {
         var goal = Goal.Create(UserId, "Read books", 12, "books").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Read",
             FrequencyUnit.Day,

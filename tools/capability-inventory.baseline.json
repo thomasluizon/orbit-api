@@ -19525,399 +19525,6 @@
           }
         },
         {
-          "name": "IsFlexible",
-          "type": "bool",
-          "surfaces": {
-            "chat": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_flexible",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                }
-              }
-            },
-            "mcp": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "isFlexible",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "get_habit",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "list_habits",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "viaOperations": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habitsJson[].isFlexible",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_flexible",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_flexible",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "IsGeneral",
-          "type": "bool",
-          "surfaces": {
-            "chat": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "is_general",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_general",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_general",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered"
-                    }
-                  ]
-                }
-              }
-            },
-            "mcp": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "isGeneral",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "create_habit",
-                      "parameter": "is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "get_habit",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "list_habits",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "isGeneral",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habitsJson[].isGeneral",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_general",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_general",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
           "name": "Logs",
           "type": "IReadOnlyCollection<HabitLog>",
           "surfaces": {
@@ -21756,13 +21363,33 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -21774,10 +21401,29 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].frequency_unit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 }
               }
             },
@@ -21786,13 +21432,60 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "frequencyUnit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "create_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "frequencyUnit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -21811,10 +21504,51 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habitsJson[].frequencyUnit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.frequency_unit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.frequency_unit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 }
               }
             }
@@ -39019,392 +38753,6 @@
           }
         },
         {
-          "name": "IsFlexible",
-          "type": "bool",
-          "surfaces": {
-            "chat": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_flexible",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered"
-                    }
-                  ]
-                }
-              }
-            },
-            "mcp": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "isFlexible",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "get_habit",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "list_habits",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "viaOperations": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habitsJson[].isFlexible",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_flexible",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_flexible",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_flexible",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "IsGeneral",
-          "type": "bool",
-          "surfaces": {
-            "chat": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "is_general",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_general",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_general",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered"
-                    }
-                  ]
-                }
-              }
-            },
-            "mcp": {
-              "verdict": "inventoried",
-              "problems": [],
-              "operations": {
-                "create": {
-                  "status": "covered",
-                  "viaOperations": [
-                    {
-                      "tool": "create_sub_habit",
-                      "parameter": "is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "read": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "get_habit",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "list_habits",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "query_habits",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "update": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "isGeneral",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "update_habit",
-                      "parameter": "is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "delete": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "delete_habit",
-                      "status": "entity-operation",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "bulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habitsJson[].isGeneral",
-                      "status": "covered"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_general",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_create_habits",
-                      "parameter": "habits[].is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    },
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                },
-                "filterKeyedBulk": {
-                  "status": "covered",
-                  "direct": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updatesJson.is_general",
-                      "status": "covered"
-                    }
-                  ],
-                  "viaOperations": [
-                    {
-                      "tool": "bulk_update_habits",
-                      "parameter": "updates.is_general",
-                      "status": "covered",
-                      "via": "execute_agent_operation_v2"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        {
           "name": "Logs",
           "type": "IReadOnlyCollection<HabitLog>",
           "surfaces": {
@@ -41292,13 +40640,33 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -41310,10 +40678,29 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].frequency_unit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered"
+                    }
+                  ]
                 }
               }
             },
@@ -41322,13 +40709,60 @@
               "problems": [],
               "operations": {
                 "create": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "frequencyUnit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "create_sub_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "read": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "get_habit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "list_habits",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "query_habits",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "update": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "frequencyUnit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "update_habit",
+                      "parameter": "frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "delete": {
                   "status": "covered",
@@ -41347,10 +40781,51 @@
                   ]
                 },
                 "bulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habitsJson[].frequencyUnit",
+                      "status": "covered"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.frequency_unit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_create_habits",
+                      "parameter": "habits[].frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    },
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 },
                 "filterKeyedBulk": {
-                  "status": "absent"
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updatesJson.frequency_unit",
+                      "status": "covered"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "bulk_update_habits",
+                      "parameter": "updates.frequency_unit",
+                      "status": "covered",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
                 }
               }
             }

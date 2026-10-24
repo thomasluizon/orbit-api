@@ -37,7 +37,7 @@ public class MoveHabitParentCommandHandlerTests
 
     private static Habit CreateTestHabit(string title = "Test Habit")
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, title, FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
@@ -119,7 +119,7 @@ public class MoveHabitParentCommandHandlerTests
     [Fact]
     public async Task Handle_CompletedChildPromotion_DoesNotConsumeLiveRootAllowance()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Completed child", null, null, DueDate: Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         habit.SetParentHabitId(Guid.NewGuid());
@@ -238,10 +238,10 @@ public class MoveHabitParentCommandHandlerTests
     [Fact]
     public async Task Handle_IsGeneralMatchesNewParent_MovesSuccessfully()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Child", null, null, DueDate: Today, IsGeneral: true)).Value;
-        var newParent = Habit.Create(new HabitCreateParams(
-            UserId, "New Parent", null, null, DueDate: Today, IsGeneral: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            UserId, "Child", null, null, DueDate: Today)).Value;
+        var newParent = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            UserId, "New Parent", null, null, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -266,10 +266,10 @@ public class MoveHabitParentCommandHandlerTests
     [Fact]
     public async Task Handle_IsGeneralMismatchesNewParent_ReturnsFailureWithoutSaving()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Child", FrequencyUnit.Day, 1, DueDate: Today, IsGeneral: false)).Value;
-        var newParent = Habit.Create(new HabitCreateParams(
-            UserId, "New Parent", null, null, DueDate: Today, IsGeneral: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+            UserId, "Child", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var newParent = Habit.Create(new HabitCreateParams(HabitSchedule.General,
+            UserId, "New Parent", null, null, DueDate: Today)).Value;
 
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

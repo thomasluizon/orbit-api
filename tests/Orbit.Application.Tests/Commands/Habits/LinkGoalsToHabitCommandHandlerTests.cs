@@ -30,7 +30,7 @@ public class LinkGoalsToHabitCommandHandlerTests
     }
 
     private static Habit CreateTestHabit() =>
-        Habit.Create(new HabitCreateParams(UserId, "Test Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Test Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
     private static Goal CreateTestGoal(string title = "Be Healthy") =>
         Goal.Create(UserId, title, 10, "kg").Value;

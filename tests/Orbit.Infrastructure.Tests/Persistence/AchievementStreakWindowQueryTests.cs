@@ -120,7 +120,7 @@ public class AchievementStreakWindowQueryTests(ITestOutputHelper output)
     private static Habit CreateHabit(Guid userId, int streakDays)
     {
         var start = Today.AddDays(-1200);
-        var habit = Habit.Create(new HabitCreateParams(userId, "Daily", FrequencyUnit.Day, 1, start)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, "Daily", FrequencyUnit.Day, 1, start)).Value;
         for (var day = 0; day < streakDays; day++)
             habit.Log(Today.AddDays(-day), advanceDueDate: false).IsSuccess.Should().BeTrue();
         return habit;

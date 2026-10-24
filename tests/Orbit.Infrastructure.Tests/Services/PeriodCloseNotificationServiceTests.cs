@@ -321,7 +321,7 @@ public class PeriodCloseNotificationServiceTests
         if (timeZone is not null)
             user.SetTimeZone(timeZone).IsSuccess.Should().BeTrue();
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             $"{name} habit",
             FrequencyUnit.Day,

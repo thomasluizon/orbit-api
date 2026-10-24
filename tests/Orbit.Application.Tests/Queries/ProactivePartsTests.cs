@@ -213,7 +213,7 @@ public sealed class ProactivePartsTests
             Flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
             var users = Substitute.For<IGenericRepository<User>>();
             users.GetByIdAsync(User.Id, Arg.Any<CancellationToken>()).Returns(User);
-            _habit = Habit.Create(new HabitCreateParams(User.Id, "Read", FrequencyUnit.Day, 1, Day.AddDays(-10),
+            _habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, User.Id, "Read", FrequencyUnit.Day, 1, Day.AddDays(-10),
                 CreatedAtUtc: new(2025, 10, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
             if (hasLogs) _habit.Log(Day.AddDays(-2), advanceDueDate: false);
             Habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),

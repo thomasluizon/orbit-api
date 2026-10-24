@@ -47,14 +47,14 @@ public class UpdateHabitCommandHandlerTests
 
     private static Habit CreateTestHabit(Guid? userId = null)
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId ?? UserId, "Original Title", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
 
     private static Habit CreateCompletedRecurringHabit()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Completed recurring habit", FrequencyUnit.Day, 1,
             DueDate: Today, EndDate: Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
@@ -66,7 +66,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_UnchangedStartWithChangedInterval_UsesAccountCalendar()
     {
         var anchor = new DateOnly(2026, 10, 25);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1,
             anchor, Days: [DayOfWeek.Monday], StartDate: anchor)).Value;
         _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
@@ -196,7 +196,7 @@ public class UpdateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_IsGeneralReactivationAtCeiling_IsRefusedWithoutMutation()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Completed task", null, null, DueDate: Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
         _habitRepo.FindOneTrackedAsync(
@@ -224,7 +224,7 @@ public class UpdateHabitCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("You've reached the 1000 habit limit.");
         habit.IsCompleted.Should().BeTrue();
-        habit.IsGeneral.Should().BeFalse();
+        (habit.Schedule == HabitSchedule.General).Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -261,7 +261,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_SlipAlerts_OnlyEnablingRequiresPro(
         bool enabled, bool? requested, bool hasProAccess)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Original Title", FrequencyUnit.Day, 1, Today,
             SlipAlertEnabled: enabled)).Value;
         _habitRepo.FindOneTrackedAsync(
@@ -310,7 +310,7 @@ public class UpdateHabitCommandHandlerTests
     [InlineData("clock", true)]
     public async Task Handle_ReminderSchedule_ClearsSentRowsOnlyWhenChanged(string change, bool clears)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Timed habit", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
             ReminderTimes: [15, 30],
@@ -376,7 +376,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_UntimedReminderSchedule_ClearsSentRowsOnlyWhenChanged(bool changed)
     {
         var clock = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0));
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Untimed habit", FrequencyUnit.Day, 1, Today,
             ReminderEnabled: true, ScheduledReminders: [clock])).Value;
         var sent = SentReminder.Create(habit.Id, Today, 0);
@@ -402,7 +402,7 @@ public class UpdateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_TimedHabitScheduledReminderEdit_SavesFoldedClockReminder()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Timed habit", FrequencyUnit.Day, 1, Today,
             DueTime: new TimeOnly(9, 0),
             ScheduledReminders: [new(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0))])).Value;
@@ -458,7 +458,7 @@ public class UpdateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_LegacyPayloadWithoutIntervalWeeks_PreservesInterval()
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Alternating week habit",
             FrequencyUnit.Day,
@@ -657,12 +657,12 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
-            IsGeneral: parent.IsGeneral);
+            IsGeneral: (parent.Schedule == HabitSchedule.General));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsGeneral.Should().Be(parent.IsGeneral);
+        (habit.Schedule == HabitSchedule.General).Should().Be((parent.Schedule == HabitSchedule.General));
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -684,7 +684,7 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
-            IsGeneral: !parent.IsGeneral);
+            IsGeneral: !(parent.Schedule == HabitSchedule.General));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -712,12 +712,12 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
-            IsGeneral: child.IsGeneral);
+            IsGeneral: (child.Schedule == HabitSchedule.General));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsGeneral.Should().Be(child.IsGeneral);
+        (habit.Schedule == HabitSchedule.General).Should().Be((child.Schedule == HabitSchedule.General));
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -740,7 +740,7 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
-            IsGeneral: !child.IsGeneral);
+            IsGeneral: !(child.Schedule == HabitSchedule.General));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -753,7 +753,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_IsGeneralMismatchesCompletedOneTimeTaskChild_Succeeds()
     {
         var habit = CreateTestHabit();
-        var completedChild = Habit.Create(new HabitCreateParams(
+        var completedChild = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Completed one-time child", null, null, DueDate: Today)).Value;
         completedChild.SetParentHabitId(habit.Id);
         completedChild.Log(Today);
@@ -770,12 +770,12 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, null, null,
-            IsGeneral: !completedChild.IsGeneral);
+            IsGeneral: !(completedChild.Schedule == HabitSchedule.General));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        habit.IsGeneral.Should().Be(!completedChild.IsGeneral);
+        (habit.Schedule == HabitSchedule.General).Should().Be(!(completedChild.Schedule == HabitSchedule.General));
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -783,7 +783,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_IsGeneralMismatchesIncompleteOneTimeTaskChild_ReturnsFailureWithoutSaving()
     {
         var habit = CreateTestHabit();
-        var incompleteChild = Habit.Create(new HabitCreateParams(
+        var incompleteChild = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,
             UserId, "Incomplete one-time child", null, null, DueDate: Today)).Value;
         incompleteChild.SetParentHabitId(habit.Id);
 
@@ -799,7 +799,7 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
-            IsGeneral: !incompleteChild.IsGeneral);
+            IsGeneral: !(incompleteChild.Schedule == HabitSchedule.General));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

@@ -33,6 +33,7 @@ export const entities = {
 
 export const aliases = {
   NextDueDate: ["due_date", "dueDate"],
+  Schedule: ["is_general", "isGeneral", "is_flexible", "isFlexible", "frequency_unit", "frequencyUnit"],
   Tags: ["tags", "tag_names", "tag_ids", "tagIds"], Goals: ["goal_ids", "goalIds"],
   ParentHabitId: ["parent_habit_id", "parent_id", "parentHabitId", "parentId"],
   ChecklistItems: ["checklist_items", "checklistItemsJson"],
@@ -77,10 +78,10 @@ export const outputAliases = {
 
 // Select the rendered expressions, never a predicate or an intermediate projection.
 export const rendered = {
-  "chat:query_habits": { file: chat + "QueryHabitsTool.cs", start: "private static string BuildHabitLine", receiver: "habit", fields: "Id Title Emoji NextDueDate FrequencyUnit FrequencyQuantity IsBadHabit IsGeneral IsCompleted", partial: "ChecklistItems Tags" },
+  "chat:query_habits": { file: chat + "QueryHabitsTool.cs", start: "private static string BuildHabitLine", receiver: "habit", fields: "Id Title Emoji NextDueDate FrequencyUnit FrequencyQuantity IsBadHabit Schedule IsCompleted", partial: "ChecklistItems Tags" },
   "chat:query_goals": { file: chat + "QueryGoalsTool.cs", start: "private static string BuildOutput", receiver: "goal", fields: "Id Title Description Type Status TargetValue CurrentValue Unit Deadline", partial: "Habits" },
-  "mcp:get_habit": { receiver: "h", names: { NextDueDate: "DueDate" }, fields: "Id Title Emoji Description FrequencyUnit FrequencyQuantity NextDueDate DueTime Days IsBadHabit IsGeneral IsFlexible IsCompleted CreatedAtUtc", partial: "ChecklistItems Children" },
-  "mcp:list_habits": { receiver: "h", fields: "Id Title Emoji FrequencyUnit FrequencyQuantity DueTime IsCompleted IsBadHabit IsGeneral IsFlexible", partial: "ChecklistItems Children Tags" },
+  "mcp:get_habit": { receiver: "h", names: { NextDueDate: "DueDate" }, fields: "Id Title Emoji Description FrequencyUnit FrequencyQuantity NextDueDate DueTime Days IsBadHabit Schedule IsCompleted CreatedAtUtc", partial: "ChecklistItems Children" },
+  "mcp:list_habits": { receiver: "h", fields: "Id Title Emoji FrequencyUnit FrequencyQuantity DueTime IsCompleted IsBadHabit Schedule", partial: "ChecklistItems Children Tags" },
   "mcp:get_goal": { receiver: "g", fields: "Id Title Description Status CurrentValue TargetValue Unit Deadline CreatedAtUtc CompletedAtUtc", partial: "Habits" },
   "mcp:list_goals": { receiver: "g", fields: "Id Title Status CurrentValue TargetValue Unit Deadline" },
   "mcp:list_tags": { receiver: "t", fields: "Id Name Color" },
@@ -116,14 +117,11 @@ const formats = {
   ScheduledReminders: scheduled, "ScheduledReminders.When": scheduled, "ScheduledReminders.Time": scheduled,
   RelativeReminders: relative, "RelativeReminders.MinutesBefore": relative, "RelativeReminders.When": relative, "RelativeReminders.Time": relative,
   SlipAlertEnabled: [format('if (SlipAlertEnabled) fields.Add("Slip alerts: enabled")')],
-  IsFlexible: [format('if (IsFlexible) fields.Add("Flexible: true")')],
   ChecklistItems: checklist, "ChecklistItems.Text": checklist, "ChecklistItems.IsChecked": checklist,
 }
 const summaryChains = (source, member, receiver, common, fields = Object.keys(formats)) => Object.fromEntries(fields.map(field => [field, { steps: [
   ...common,
-  step(source, member, source === summary && field === "IsFlexible"
-    ? "IsFlexible = habit.Schedule == HabitSchedule.Flexible"
-    : `${field.split(".")[0]} = ${receiver}.${field.split(".")[0]}`),
+  step(source, member, `${field.split(".")[0]} = ${receiver}.${field.split(".")[0]}`),
   ...formats[field],
   format('return string.Join(" | ", fields)'),
 ] }]))
@@ -133,7 +131,7 @@ const querySummary = summaryChains(summary, "HabitFieldSummary.From", "habit", [
 ])
 const detailSummary = summaryChains(habits, "HabitTools.GetHabit", "h", [
   step(habits, "HabitTools.GetHabit", "}.Format()"), step(habits, "HabitTools.GetHabit", "habitSummary += details"),
-], Object.keys(formats).filter(field => !["Description", "DueTime", "Days", "IsFlexible"].includes(field)))
+], Object.keys(formats).filter(field => !["Description", "DueTime", "Days"].includes(field)))
 const listSummary = summaryChains(habits, "HabitTools.ListHabits", "h", [
   step(habits, "HabitTools.ListHabits", "lines.Add(McpToolHelpers.FormatHabitLine"),
   step(habits, "HabitTools.ListHabits", "}.Format(h.DueDate)"),
@@ -147,7 +145,12 @@ const calendarSelection = { status: "partial", steps: [
 ] }
 
 export const readChains = {
-  "chat:query_habits": { ...querySummary, IsGeneral: { steps: [
+  "chat:query_habits": { ...querySummary, Schedule: { steps: [
+    step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{freqLabel}"),
+    step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.FormatFrequencyLabel", "habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General"),
+    step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{detailSuffix}"),
+    step(summary, "HabitFieldSummary.From", "Schedule = habit.Schedule"),
+    format('if (Schedule == HabitSchedule.Flexible) fields.Add("Flexible: true")'),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "BuildLabels(habit,"),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{labelStr}"),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildLabels", 'if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL")'),
@@ -156,12 +159,23 @@ export const readChains = {
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildHabitLine", "{labelStr}"),
     step(chat + "QueryHabitsTool.cs", "QueryHabitsTool.BuildLabels", 'habit.Goals.Select(g => $"{g.Title} ({g.Id})")'),
   ] } },
-  "mcp:get_habit": { ...detailSummary, Goals: { steps: [
+  "mcp:get_habit": { ...detailSummary, Schedule: { steps: [
+    step(habits, "HabitTools.GetHabit", 'h.Schedule == HabitSchedule.General ? "General: Yes'),
+    step(habits, "HabitTools.GetHabit", 'h.Schedule == HabitSchedule.Flexible ? "Flexible: Yes'),
+    step(habits, "HabitTools.GetHabit", 'h.FrequencyUnit is not null ? string.Create'),
+  ] }, Goals: { steps: [
     step(habits, "HabitTools.GetHabit", 'habitSummary += $"Goals:'),
     step(habits, "HabitTools.GetHabit", 'h.LinkedGoals.Select(g => $"{g.Title} ({g.Id})")'),
     step("src/Orbit.Application/Habits/Queries/GetHabitByIdQuery.cs", "GetHabitByIdQueryHandler.Handle", "LinkedGoals: habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList()"),
   ] } },
-  "mcp:list_habits": listSummary,
+  "mcp:list_habits": { ...listSummary, Schedule: { steps: [
+    step(habits, "HabitTools.ListHabits", "h.Schedule ?? HabitSchedule.OneTime"),
+    step(habits, "HabitTools.ListHabits", "McpToolHelpers.FormatHabitLine"),
+    step(helpers, "McpToolHelpers.FormatHabitLine", 'data.Schedule != HabitSchedule.General) line += " | one-time"'),
+    step(helpers, "McpToolHelpers.FormatHabitLine", 'data.Schedule == HabitSchedule.General) line += " | general"'),
+    step(helpers, "McpToolHelpers.FormatHabitLine", 'data.Schedule == HabitSchedule.Flexible) line += " | flexible"'),
+    step(helpers, "McpToolHelpers.FormatHabitLine", 'data.FreqUnit is not null) line +='),
+  ] } },
   "chat:get_calendar_overview": { GoogleCalendarSelectedIds: calendarSelection },
   "mcp:get_calendar_overview": { GoogleCalendarSelectedIds: { status: "partial", steps: [
     ...calendarSelection.steps,

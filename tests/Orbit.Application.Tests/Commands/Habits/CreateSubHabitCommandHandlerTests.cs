@@ -39,7 +39,7 @@ public class CreateSubHabitCommandHandlerTests
 
     private static Habit CreateParentHabit()
     {
-        return Habit.Create(new HabitCreateParams(
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Parent Habit", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
     }
@@ -143,7 +143,7 @@ public class CreateSubHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InheritParentFrequencyWithNoOverride_UsesParentCadence()
     {
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId,
             "Parent Habit",
             FrequencyUnit.Day,
@@ -191,7 +191,7 @@ public class CreateSubHabitCommandHandlerTests
     [Fact]
     public async Task Handle_ExplicitWeeklyCadenceUnderBiweeklyParent_DoesNotInheritInterval()
     {
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Parent Habit", FrequencyUnit.Day, 1, DueDate: Today,
             Days: [DayOfWeek.Monday],
             IntervalWeeks: 2)).Value;
@@ -233,7 +233,7 @@ public class CreateSubHabitCommandHandlerTests
             .Returns(2);
 
         var grandparent = CreateParentHabit();
-        var parent = Habit.Create(new HabitCreateParams(
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Child", FrequencyUnit.Day, 1,
             DueDate: Today, ParentHabitId: grandparent.Id)).Value;
 

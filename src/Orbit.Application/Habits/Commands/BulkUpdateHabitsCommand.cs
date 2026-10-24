@@ -156,7 +156,10 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             return Result.Failure("No matching habits found.");
         var today = await dates.GetUserTodayAsync(request.UserId, ct);
         var updates = habits.Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, request.Changes, today))).ToList();
-        return await ValidateUpdatesAsync(request.UserId, updates, repository, ct);
+        var failed = updates.FirstOrDefault(item => item.Update.IsFailure).Update;
+        if (failed is not null)
+            return failed.PropagateError();
+        return await ValidateUpdatesAsync(request.UserId, updates.Select(item => (item.Habit, item.Update.Value)).ToList(), repository, ct);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Bulk habit update chunk failed after {AppliedCount} of {TotalMatched} matches")]
@@ -175,9 +178,13 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
             cancellationToken);
         foreach (var habit in habits)
             await habitRepository.ReloadAsync(habit, cancellationToken);
-        var updates = habits
+        var resolved = habits
             .Select(habit => (Habit: habit, Update: HabitUpdateValidation.ResolveUpdate(habit, changes, today)))
             .ToList();
+        var failed = resolved.FirstOrDefault(item => item.Update.IsFailure).Update;
+        if (failed is not null)
+            return failed.PropagateError<int>();
+        var updates = resolved.Select(item => (item.Habit, Update: item.Update.Value)).ToList();
 
         var validation = await ValidateUpdatesAsync(userId, updates, habitRepository, cancellationToken);
         if (validation.IsFailure)
@@ -211,7 +218,7 @@ public sealed partial class BulkUpdateHabitsCommandHandler(
         IReadOnlyList<(Habit Habit, HabitUpdateParams Update)> updates, IGenericRepository<Habit> repository,
         CancellationToken ct)
     {
-        var related = updates.Any(item => item.Update.IsGeneral.HasValue)
+        var related = updates.Any(item => item.Update.Schedule != item.Habit.Schedule || item.Update.ResetCompletion)
             ? await HabitUpdateValidation.LoadRelatedAsync(updates.Select(item => item.Habit).ToList(), userId, repository, ct)
             : [];
         foreach (var (habit, update) in updates)

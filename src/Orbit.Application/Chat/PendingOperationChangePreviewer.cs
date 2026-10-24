@@ -125,7 +125,9 @@ public sealed partial class PendingOperationChangePreviewer(
             if (itemChanges is not null)
             {
                 var update = HabitUpdateValidation.ResolveUpdate(habit, itemChanges, today);
-                var preview = habit.PreviewUpdate(update);
+                if (update.IsFailure)
+                    return null;
+                var preview = habit.PreviewUpdate(update.Value);
                 if (preview.IsFailure)
                     return null;
                 AddChanges(fields, habit, preview.Value, itemChanges);
@@ -791,14 +793,13 @@ public sealed partial class PendingOperationChangePreviewer(
             DueDate = habit.NextDueDate,
             habit.DueTime,
             habit.DueEndTime,
-            IsGeneral = habit.Schedule == HabitSchedule.General,
+            habit.Schedule,
             habit.SlipAlertEnabled,
             habit.EndDate,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
             habit.IntervalWeeks,
             habit.IsBadHabit,
-            IsFlexible = habit.Schedule == HabitSchedule.Flexible,
             habit.ReminderEnabled,
             habit.ReminderTimes,
             habit.Days,

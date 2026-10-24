@@ -105,10 +105,10 @@ public class DeleteHabitToolTests
         await using (var seed = CreateContext(databaseName))
         {
             var ownerHabit = CreateHabit("Owner-only habit");
-            var child = Habit.Create(new HabitCreateParams(UserId, "Child", FrequencyUnit.Day, 1,
+            var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Child", FrequencyUnit.Day, 1,
                 DueDate: Today, ParentHabitId: ownerHabit.Id)).Value;
             var httpHabit = CreateHabit("HTTP habit");
-            var httpChild = Habit.Create(new HabitCreateParams(UserId, "HTTP child", FrequencyUnit.Day, 1,
+            var httpChild = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "HTTP child", FrequencyUnit.Day, 1,
                 DueDate: Today, ParentHabitId: httpHabit.Id)).Value;
             seed.Habits.AddRange(ownerHabit, child, httpHabit, httpChild);
             await seed.SaveChangesAsync();
@@ -170,7 +170,7 @@ public class DeleteHabitToolTests
 
     private static Habit CreateHabit(string title)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        return Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
     }
 
     private void SetupHabitFound(Habit habit)

@@ -301,7 +301,7 @@ public class CalendarFeedAgreementTests
         beforeImport.IsSuccess.Should().BeTrue();
         beforeImport.Value.Should().ContainSingle().Which.GoogleEventId.Should().Be(fetched.Id);
 
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Daily Standup", FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2027, 1, 7),
             DueTime: startTime is null ? null : new TimeOnly(9, 0))).Value;

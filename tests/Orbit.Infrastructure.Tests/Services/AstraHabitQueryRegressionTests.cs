@@ -23,7 +23,7 @@ public class AstraHabitQueryRegressionTests
         var db = factory.Context;
         var user = User.Create("Test", "relations@example.com").Value;
         var today = new DateOnly(2026, 10, 19);
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Read", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Read", FrequencyUnit.Day, 1, today)).Value;
         for (var i = 0; i < relationCount; i++)
         {
             habit.AddTag(Tag.Create(user.Id, $"Tag {i}", "#123456").Value);
@@ -53,8 +53,8 @@ public class AstraHabitQueryRegressionTests
         var db = factory.Context;
         var user = User.Create("Test", "query@example.com").Value;
         var today = new DateOnly(2026, 10, 19);
-        var water = Habit.Create(new HabitCreateParams(user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
-        var reading = Habit.Create(new HabitCreateParams(user.Id, "Ler 10 minutos", FrequencyUnit.Day, 1, today)).Value;
+        var water = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        var reading = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Ler 10 minutos", FrequencyUnit.Day, 1, today)).Value;
         water.Log(today.AddDays(-1));
         reading.Log(today.AddDays(-1));
         db.Users.Add(user);
@@ -95,8 +95,8 @@ public class AstraHabitQueryRegressionTests
         var db = factory.Context;
         var user = User.Create("Test", "test@example.com").Value;
         var today = new DateOnly(2026, 10, 19);
-        var water = Habit.Create(new HabitCreateParams(user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
-        var reading = Habit.Create(new HabitCreateParams(user.Id, "Ler 10 minutos", FrequencyUnit.Day, 1, today)).Value;
+        var water = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        var reading = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Ler 10 minutos", FrequencyUnit.Day, 1, today)).Value;
         var tag = Tag.Create(user.Id, "Saúde", "#123456").Value;
         water.AddTag(tag);
         db.Users.Add(user);

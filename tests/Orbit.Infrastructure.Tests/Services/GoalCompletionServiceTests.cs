@@ -34,7 +34,7 @@ public class GoalCompletionServiceTests
         var dbContext = factory.Context;
         var user = User.Create("Local User", "local@example.com").Value;
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Scrolling", FrequencyUnit.Day, 1,
             DueDate: Today.AddDays(-1), IsBadHabit: true)).Value;
         var goal = Goal.Create(new Goal.CreateGoalParams(
@@ -287,7 +287,7 @@ public class GoalCompletionServiceTests
         user.SetWeekStartDay(0).IsSuccess.Should().BeTrue();
         var anchor = new DateOnly(2026, 8, 10);
         var evaluationDate = new DateOnly(2026, 9, 6);
-        var habitResult = Habit.Create(new HabitCreateParams(
+        var habitResult = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id,
             "Biweekly Friday",
             FrequencyUnit.Day,
@@ -466,13 +466,12 @@ public class GoalCompletionServiceTests
 
     private static Habit CreateHabit(Guid userId, string title)
     {
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
             userId,
             title,
             FrequencyUnit.Day,
             1,
-            DueDate: Today,
-            IsFlexible: true)).Value;
+            DueDate: Today)).Value;
         return habit;
     }
 

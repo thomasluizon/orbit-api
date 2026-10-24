@@ -64,14 +64,12 @@ public class SyncControllerTests : IDisposable
     public async Task Sync_KeepsFourSchedulePayloads(HabitSchedule schedule, bool divergentFlags)
     {
         var today = new DateOnly(2026, 4, 3);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",
+        var habit = Habit.Create(new HabitCreateParams(schedule, UserId, "Habit",
             schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
             schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
-            today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+            today)).Value;
         if (divergentFlags)
         {
-            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
         }
         _dbContext.Habits.Add(habit);
         await _dbContext.SaveChangesAsync();
@@ -103,8 +101,8 @@ public class SyncControllerTests : IDisposable
         var since = DateTime.UtcNow.AddMinutes(-5);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var activeHabit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
-        var deletedHabit = Habit.Create(new HabitCreateParams(UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var activeHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var deletedHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: today)).Value;
         deletedHabit.SoftDelete();
         var habitLog = activeHabit.Log(today, advanceDueDate: false).Value;
         var deletedHabitLog = activeHabit.Log(today.AddDays(-1), advanceDueDate: false).Value;
@@ -128,7 +126,7 @@ public class SyncControllerTests : IDisposable
         var deletedChecklistTemplate = ChecklistTemplate.Create(UserId, "Evening", ["Floss"]).Value;
         deletedChecklistTemplate.SoftDelete();
 
-        var otherUserHabit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Other", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var otherUserHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Other", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var otherUserNotification = Notification.Create(Guid.NewGuid(), "Other Reminder", "Ignore me");
 
         _dbContext.AddRange(
@@ -178,7 +176,7 @@ public class SyncControllerTests : IDisposable
         var since = DateTime.UtcNow.AddMinutes(-5);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var activeHabit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var activeHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var activeGoal = Goal.Create(UserId, "Read books", 12, "books").Value;
         activeGoal.AddHabit(activeHabit);
         var activeTag = Tag.Create(UserId, "Health", "#00ff00").Value;
@@ -232,7 +230,7 @@ public class SyncControllerTests : IDisposable
     public async Task ProcessBatch_ProcessesSupportedMutations()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var goal = Goal.Create(UserId, "Read books", 12, "books").Value;
         var tag = Tag.Create(UserId, "Health", "#00ff00").Value;
         var notification = Notification.Create(UserId, "Reminder", "Drink water");

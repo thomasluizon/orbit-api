@@ -34,7 +34,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var user = User.Create("Schedule User", "schedule-anchor@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             user.Id, "Morning plan", FrequencyUnit.Day, 1, Today)).Value;
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
@@ -81,11 +81,11 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         var user = User.Create("Schedule User", $"schedule-fields-{userId:N}@example.com").Value;
         typeof(User).GetProperty("Id")!.SetValue(user, userId);
         factory.Context.Users.Add(user);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Morning plan", FrequencyUnit.Day, 1, Today,
             Description: "Display details", ChecklistItems: [new ChecklistItem("First step", false)])).Value;
         habit.SetPosition(0);
-        var offPage = Habit.Create(new HabitCreateParams(
+        var offPage = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Evening plan", FrequencyUnit.Day, 1, Today,
             Description: "Off page details")).Value;
         offPage.SetPosition(1);
@@ -135,7 +135,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         var user = User.Create("Schedule User", $"schedule-search-{userId:N}@example.com").Value;
         typeof(User).GetProperty("Id")!.SetValue(user, userId);
         factory.Context.Users.Add(user);
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Morning plan", FrequencyUnit.Day, 1, Today,
             Description: "Quiet reflection")).Value;
         var tag = Tag.Create(userId, "Mindful", "#fff").Value;
@@ -172,9 +172,9 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         typeof(User).GetProperty("Id")!.SetValue(user, userId);
         factory.Context.Users.Add(user);
         var oldDueDate = Today.AddDays(-500);
-        var resolved = Habit.Create(new HabitCreateParams(
+        var resolved = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Resolved", FrequencyUnit.Year, 2, DueDate: oldDueDate)).Value;
-        var unresolved = Habit.Create(new HabitCreateParams(
+        var unresolved = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Unresolved", FrequencyUnit.Year, 2, DueDate: oldDueDate)).Value;
         resolved.Log(oldDueDate, advanceDueDate: false).IsSuccess.Should().BeTrue();
         factory.Context.Habits.AddRange(resolved, unresolved);
@@ -211,7 +211,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         var habits = new List<Habit>();
         for (var index = 0; index < 25; index++)
         {
-            var habit = Habit.Create(new HabitCreateParams(
+            var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
                 userId, $"Habit {index}", FrequencyUnit.Day, 1, DueDate: Today)).Value;
             habit.SetPosition(index);
             for (var daysAgo = 30; daysAgo >= 0; daysAgo--)
@@ -233,7 +233,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         var repository = new GenericRepository<Habit>(factory.Context);
         counter.Reset();
         await repository.FindAsync(
-            habit => habit.UserId == userId && !habit.IsGeneral,
+            habit => habit.UserId == userId && habit.Schedule != HabitSchedule.General,
             query => query.Include(habit => habit.Logs.Where(log => log.Date >= Today.AddDays(-366) && log.Date <= Today))
                 .AsSplitQuery(),
             CancellationToken.None);

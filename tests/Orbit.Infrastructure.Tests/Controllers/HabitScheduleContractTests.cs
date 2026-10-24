@@ -67,7 +67,7 @@ public class HabitScheduleContractTests
                 habit.Log(Start.AddDays(offset)).IsSuccess.Should().BeTrue();
         if (edit)
             foreach (var habit in new[] { parent, child })
-                habit.Update(new HabitUpdateParams("Habit", null, FrequencyUnit.Day, 1, null, false, null,
+                habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Habit", null, FrequencyUnit.Day, 1, null, false, null,
                     StartDate: Start.AddDays(-2), UserToday: Start)).IsSuccess.Should().BeTrue();
         var expectedStart = edit ? "2026-04-01" : "2026-04-03";
         context.Users.Add(user);
@@ -204,10 +204,9 @@ public class HabitScheduleContractTests
     }
 
     private static Habit Create(Guid userId, HabitSchedule type, Guid? parentId = null) =>
-        Habit.Create(new HabitCreateParams(userId, "Habit",
+        Habit.Create(new HabitCreateParams((type == HabitSchedule.General) ? HabitSchedule.General : (type == HabitSchedule.Flexible) ? HabitSchedule.Flexible : ((FrequencyUnit?)((FrequencyUnit?)(type is HabitSchedule.Recurring or HabitSchedule.Flexible ? (FrequencyUnit?)FrequencyUnit.Day : null))) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, userId, "Habit",
             type is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
             type is HabitSchedule.Recurring or HabitSchedule.Flexible ? 1 : null, Start,
-            IsGeneral: type == HabitSchedule.General, IsFlexible: type == HabitSchedule.Flexible,
             ParentHabitId: parentId)).Value;
 
     private static void AssertContract(object response, HabitSchedule type, string expectedStart)

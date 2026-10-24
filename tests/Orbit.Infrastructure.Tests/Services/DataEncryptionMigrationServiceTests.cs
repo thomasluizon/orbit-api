@@ -70,7 +70,7 @@ public class DataEncryptionMigrationServiceTests
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             for (int i = 0; i < 120; i++)
-                seedContext.Habits.Add(Habit.Create(new HabitCreateParams(UserId, $"Habit {i}", FrequencyUnit.Day, 1, DueDate: today)).Value);
+                seedContext.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, $"Habit {i}", FrequencyUnit.Day, 1, DueDate: today)).Value);
             await seedContext.SaveChangesAsync();
         }
 

@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Globalization;
 using FluentAssertions;
 using Orbit.Domain.Entities;
@@ -35,7 +36,7 @@ public class ActiveGoalsSectionTests
         var userId = Guid.NewGuid();
         var goal = Goal.Create(new Goal.CreateGoalParams(
             userId, "Run", 10.5m, "miles", "Race training", Deadline: new DateOnly(2026, 12, 31))).Value;
-        var habit = Habit.Create(new HabitCreateParams(
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, "Morning run", Orbit.Domain.Enums.FrequencyUnit.Day, 1,
             DueDate: new DateOnly(2026, 1, 1))).Value;
         goal.AddHabit(habit);

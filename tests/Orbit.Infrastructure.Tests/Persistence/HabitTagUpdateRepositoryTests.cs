@@ -28,7 +28,7 @@ public class HabitTagUpdateRepositoryTests
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase($"HabitTags-{Guid.NewGuid()}").Options;
         var user = User.Create("Alex", "habit-tags@example.test").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Original", FrequencyUnit.Day, 1, today,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Original", FrequencyUnit.Day, 1, today,
             ChecklistItems: [new("Same", false), new("Same", true)])).Value;
         var oldTag = Tag.Create(user.Id, "Old", "#ffffff").Value;
         var newTag = Tag.Create(user.Id, "New", "#ffffff").Value;

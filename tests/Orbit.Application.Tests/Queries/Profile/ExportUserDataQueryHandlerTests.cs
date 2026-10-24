@@ -79,14 +79,12 @@ public class ExportUserDataQueryHandlerTests
     [InlineData(HabitSchedule.General, true)]
     public async Task Export_KeepsFourSchedulePayloads(HabitSchedule schedule, bool divergentFlags)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit",
+        var habit = Habit.Create(new HabitCreateParams(schedule, UserId, "Habit",
             schedule is HabitSchedule.Recurring or HabitSchedule.Flexible ? FrequencyUnit.Day : null,
             schedule == HabitSchedule.Flexible ? 2 : schedule == HabitSchedule.Recurring ? 1 : null,
-            Today, IsGeneral: schedule == HabitSchedule.General, IsFlexible: schedule == HabitSchedule.Flexible)).Value;
+            Today)).Value;
         if (divergentFlags)
         {
-            typeof(Habit).GetProperty(nameof(Habit.IsGeneral))!.SetValue(habit, !habit.IsGeneral);
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, !habit.IsFlexible);
         }
         ArrangeUser(CreateTestUser());
         Returns(_habitRepo, habit);
@@ -248,9 +246,9 @@ public class ExportUserDataQueryHandlerTests
     {
         ArrangeUser(CreateTestUser());
 
-        var habitWithLogs = Habit.Create(new HabitCreateParams(
+        var habitWithLogs = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
-        var habitWithoutLogs = Habit.Create(new HabitCreateParams(
+        var habitWithoutLogs = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         Returns(_habitRepo, habitWithLogs, habitWithoutLogs);
 

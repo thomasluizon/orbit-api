@@ -28,7 +28,7 @@ public class ReferralRewardTransactionTests
         var referral = Referral.Create(referrer.Id, referred.Id);
         typeof(User).GetProperty("CreatedAtUtc")!.SetValue(referred, nowAtUtc.AddDays(-3));
         typeof(Referral).GetProperty("CreatedAtUtc")!.SetValue(referral, nowAtUtc.AddDays(-3));
-        var habit = Habit.Create(new HabitCreateParams(referred.Id, "Habit", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, referred.Id, "Habit", FrequencyUnit.Day, 1,
             DueDate: DateOnly.FromDateTime(nowAtUtc))).Value;
         db.AddRange(referrer, referred, referral, habit);
         for (var offset = 0; offset < 3; offset++)
@@ -75,7 +75,7 @@ public class ReferralRewardTransactionTests
         var referral = Referral.Create(referrer.Id, referred.Id);
         typeof(User).GetProperty("CreatedAtUtc")!.SetValue(referred, nowAtUtc.AddDays(-3));
         typeof(Referral).GetProperty("CreatedAtUtc")!.SetValue(referral, nowAtUtc.AddDays(-3));
-        var habit = Habit.Create(new HabitCreateParams(referred.Id, "Habit", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, referred.Id, "Habit", FrequencyUnit.Day, 1,
             DueDate: DateOnly.FromDateTime(nowAtUtc))).Value;
         db.AddRange(referrer, referred, caller, referral, habit);
         for (var offset = 0; offset < 3; offset++)

@@ -24,7 +24,7 @@ public class HabitScheduleSnapshotInvalidationTests
         using var factory = new SqliteOrbitDbContextFactory();
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Snapshot User", "habit-save@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "One time", null, null, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "One time", null, null, today)).Value;
         factory.Context.Users.Add(user);
         factory.Context.Habits.Add(habit);
         await factory.Context.SaveChangesAsync();
@@ -48,7 +48,7 @@ public class HabitScheduleSnapshotInvalidationTests
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Snapshot User", "failed-save@example.com").Value;
         factory.Context.Users.Add(user);
-        factory.Context.Habits.Add(Habit.Create(new HabitCreateParams(user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value);
+        factory.Context.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value);
         await factory.Context.SaveChangesAsync();
         var store = new HabitScheduleSnapshotStore(new GenericRepository<Habit>(factory.Context));
         HabitScheduleSnapshotInvalidation.Attach(factory.Context, store);
@@ -72,7 +72,7 @@ public class HabitScheduleSnapshotInvalidationTests
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Snapshot User", "xp-save@example.com").Value;
         factory.Context.Users.Add(user);
-        factory.Context.Habits.Add(Habit.Create(new HabitCreateParams(user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value);
+        factory.Context.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value);
         await factory.Context.SaveChangesAsync();
         var store = new HabitScheduleSnapshotStore(new GenericRepository<Habit>(factory.Context));
         HabitScheduleSnapshotInvalidation.Attach(factory.Context, store);
@@ -96,7 +96,7 @@ public class HabitScheduleSnapshotInvalidationTests
         var context = factory.Context;
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Repair User", "repair-retry@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value;
         context.Users.Add(user);
         context.Habits.Add(habit);
         await context.SaveChangesAsync();
@@ -118,7 +118,7 @@ public class HabitScheduleSnapshotInvalidationTests
         await using (var editor = factory.CreateContext())
         {
             var editedHabit = await editor.Habits.SingleAsync(candidate => candidate.Id == habit.Id);
-            var edit = editedHabit.Update(new HabitUpdateParams(
+            var edit = editedHabit.Update(new HabitUpdateParams(editedHabit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? editedHabit.Schedule : HabitSchedule.Recurring,
                 "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today));
             edit.IsSuccess.Should().BeTrue();
             await editor.SaveChangesAsync();
@@ -137,7 +137,7 @@ public class HabitScheduleSnapshotInvalidationTests
         var context = factory.Context;
         var today = new DateOnly(2026, 4, 3);
         var user = User.Create("Repair User", "repair-reset@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Daily", FrequencyUnit.Day, 1, today)).Value;
         context.Users.Add(user);
         context.Habits.Add(habit);
         await context.SaveChangesAsync();
@@ -149,7 +149,7 @@ public class HabitScheduleSnapshotInvalidationTests
         await using (var editor = factory.CreateContext())
         {
             var editedHabit = await editor.Habits.SingleAsync(candidate => candidate.Id == habit.Id);
-            editedHabit.Update(new HabitUpdateParams(
+            editedHabit.Update(new HabitUpdateParams(editedHabit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? editedHabit.Schedule : HabitSchedule.Recurring,
                 "Friday", null, FrequencyUnit.Day, 1, [DayOfWeek.Friday], false, today))
                 .IsSuccess.Should().BeTrue();
             await editor.SaveChangesAsync();
@@ -172,8 +172,8 @@ public class HabitScheduleSnapshotInvalidationTests
         var today = new DateOnly(2026, 4, 3);
         var priorMonday = new DateOnly(2026, 3, 30);
         var user = User.Create("Bulk User", "bulk-schedule@example.com").Value;
-        var oneTime = Habit.Create(new HabitCreateParams(user.Id, "One time", null, null, today)).Value;
-        var weeklyResult = Habit.Create(new HabitCreateParams(user.Id, "Weekly", FrequencyUnit.Week, 1,
+        var oneTime = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "One time", null, null, today)).Value;
+        var weeklyResult = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Weekly", FrequencyUnit.Week, 1,
             priorMonday));
         weeklyResult.IsSuccess.Should().BeTrue(weeklyResult.Error);
         var weekly = weeklyResult.Value;

@@ -22,7 +22,7 @@ public class HabitRankingTests
         var userId = Guid.NewGuid();
         var from = new DateOnly(2024, 1, 1);
         var to = from.AddDays(9);
-        var habits = Enumerable.Range(0, 5).Select(i => Habit.Create(new HabitCreateParams(
+        var habits = Enumerable.Range(0, 5).Select(i => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             userId, $"Habit {i}", FrequencyUnit.Day, 1, DueDate: i == 0 ? to : from)).Value).ToList();
         for (var i = 0; i < habits.Count; i++)
             for (var day = 0; day <= i; day++)
@@ -66,17 +66,17 @@ public class HabitRankingTests
         var user = Guid.NewGuid();
         var from = new DateOnly(2024, 1, 1);
         var parent = Logged(user, from, "Parent");
-        var child = Habit.Create(new HabitCreateParams(user, "Child", FrequencyUnit.Day, 1,
+        var child = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Child", FrequencyUnit.Day, 1,
             DueDate: from, ParentHabitId: parent.Id)).Value;
         child.Log(from, advanceDueDate: false);
         child.Log(from.AddDays(1), advanceDueDate: false);
-        var flexible = Habit.Create(new HabitCreateParams(user, "Flexible", FrequencyUnit.Day, 5,
-            DueDate: from, IsFlexible: true)).Value;
+        var flexible = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, user, "Flexible", FrequencyUnit.Day, 5,
+            DueDate: from)).Value;
         flexible.Log(from, advanceDueDate: false);
         flexible.Log(from, advanceDueDate: false);
         flexible.Log(from, advanceDueDate: false).Value.SoftDelete();
         flexible.SkipFlexible(from);
-        var ended = Habit.Create(new HabitCreateParams(user, "Ended", FrequencyUnit.Day, 1,
+        var ended = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Ended", FrequencyUnit.Day, 1,
             DueDate: from, EndDate: from)).Value;
         ended.Log(from);
         ended.IsCompleted.Should().BeTrue();
@@ -89,13 +89,13 @@ public class HabitRankingTests
         deleted.SoftDelete();
         var undone = Logged(user, from, "Undone");
         undone.Unlog(from);
-        var bad = Habit.Create(new HabitCreateParams(user, "Slip", FrequencyUnit.Day, 1,
+        var bad = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Slip", FrequencyUnit.Day, 1,
             DueDate: from, IsBadHabit: true)).Value;
         bad.Log(from, advanceDueDate: false);
-        var task = Habit.Create(new HabitCreateParams(user, "Task", null, null, DueDate: from)).Value;
+        var task = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user, "Task", null, null, DueDate: from)).Value;
         task.Log(from);
         var crossUser = Logged(Guid.NewGuid(), from, "Someone else");
-        var noLogs = Habit.Create(new HabitCreateParams(user, "Zero", FrequencyUnit.Day, 1, DueDate: from)).Value;
+        var noLogs = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Zero", FrequencyUnit.Day, 1, DueDate: from)).Value;
 
         var result = await Handler([parent, child, flexible, ended, completedRead, deleted, undone, bad, task, crossUser, noLogs])
             .Handle(new GetHabitRankingQuery(user, from, from.AddDays(2)), default);
@@ -249,10 +249,10 @@ public class HabitRankingTests
     {
         var user = Guid.NewGuid();
         var from = new DateOnly(2024, 1, 1);
-        var habit = Habit.Create(new HabitCreateParams(user, "Converted", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Converted", FrequencyUnit.Day, 1,
             DueDate: from, IsBadHabit: true)).Value;
         habit.Log(from, advanceDueDate: false);
-        habit.Update(new HabitUpdateParams("Converted", null, FrequencyUnit.Day, 1, null, false, from)).IsSuccess.Should().BeTrue();
+        habit.Update(new HabitUpdateParams(habit.Schedule is HabitSchedule.Flexible or HabitSchedule.General ? habit.Schedule : HabitSchedule.Recurring, "Converted", null, FrequencyUnit.Day, 1, null, false, from)).IsSuccess.Should().BeTrue();
         habit.Log(from.AddDays(1), advanceDueDate: false);
 
         var result = (await Handler([habit]).Handle(new GetHabitRankingQuery(user, from, from.AddDays(2)), default)).Value;
@@ -262,7 +262,7 @@ public class HabitRankingTests
 
     private static Habit Logged(Guid user, DateOnly date, string name = "Habit")
     {
-        var habit = Habit.Create(new HabitCreateParams(user, name, FrequencyUnit.Day, 1, DueDate: date)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, name, FrequencyUnit.Day, 1, DueDate: date)).Value;
         habit.Log(date, advanceDueDate: false);
         return habit;
     }

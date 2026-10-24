@@ -1,3 +1,4 @@
+using Orbit.Domain.Enums;
 using System.Security.Claims;
 using System.Text;
 using FluentAssertions;
@@ -130,8 +131,8 @@ public class AccountEventsTests
         {
             await using (var transaction = await context.Database.BeginTransactionAsync())
             {
-                var first = Habit.Create(new HabitCreateParams(user.Id, "First", null, null, new DateOnly(2026, 1, 1))).Value;
-                var second = Habit.Create(new HabitCreateParams(user.Id, "Second", null, null, new DateOnly(2026, 1, 1))).Value;
+                var first = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "First", null, null, new DateOnly(2026, 1, 1))).Value;
+                var second = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Second", null, null, new DateOnly(2026, 1, 1))).Value;
                 context.Habits.Add(first);
                 await context.SaveChangesAsync();
                 context.Habits.Add(second);
@@ -149,7 +150,7 @@ public class AccountEventsTests
             var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings(), collector);
             Func<Task> rolledBack = () => unitOfWork.ExecuteInTransactionAsync(async ct =>
             {
-                context.Habits.Add(Habit.Create(new HabitCreateParams(user.Id, "Rolled back", null, null, new DateOnly(2026, 1, 1))).Value);
+                context.Habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Rolled back", null, null, new DateOnly(2026, 1, 1))).Value);
                 await context.SaveChangesAsync(ct);
                 throw new InvalidOperationException("rollback");
             });
@@ -166,7 +167,7 @@ public class AccountEventsTests
         using var factory = new SqliteOrbitDbContextFactory(collector, new AccountEventTransactionInterceptor(collector));
         var context = factory.Context;
         var user = User.Create("Owner", "links@example.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(user.Id, "Habit", null, null, new DateOnly(2026, 1, 1))).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Habit", null, null, new DateOnly(2026, 1, 1))).Value;
         var tag = Tag.Create(user.Id, "Focus", "#ffffff").Value;
         context.Users.Add(user);
         context.Habits.Add(habit);

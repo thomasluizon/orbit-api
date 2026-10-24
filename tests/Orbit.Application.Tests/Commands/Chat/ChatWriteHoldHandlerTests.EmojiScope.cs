@@ -25,9 +25,9 @@ public sealed partial class ChatWriteHoldHandlerTests
     public async Task Handle_EmojiScope_ApprovalAppliesOnlyPreviewedChanges(
         string message, string filter, bool replaceExisting)
     {
-        var missing = Habit.Create(new HabitCreateParams(_userId, "Read", FrequencyUnit.Day, 1, Today)).Value;
-        var chosen = Habit.Create(new HabitCreateParams(_userId, "Diet", FrequencyUnit.Day, 1, Today, Emoji: "🍔")).Value;
-        var same = Habit.Create(new HabitCreateParams(_userId, "Walk", FrequencyUnit.Day, 1, Today, Emoji: "📚")).Value;
+        var missing = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", FrequencyUnit.Day, 1, Today)).Value;
+        var chosen = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Diet", FrequencyUnit.Day, 1, Today, Emoji: "🍔")).Value;
+        var same = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Walk", FrequencyUnit.Day, 1, Today, Emoji: "📚")).Value;
         var habits = new[] { missing, chosen, same };
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
@@ -56,7 +56,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
         execution.Arguments.GetProperty("revised_items").EnumerateArray()
             .Select(item => item.GetProperty("habit_id").GetGuid()).Should().BeEquivalentTo(expectedIds);
-        var late = Habit.Create(new HabitCreateParams(_userId, "Late", FrequencyUnit.Day, 1, Today)).Value;
+        var late = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Late", FrequencyUnit.Day, 1, Today)).Value;
         habits = [missing, chosen, same, late];
         _emojiInference.ClearReceivedCalls();
         var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;

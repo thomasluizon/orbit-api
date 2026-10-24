@@ -94,7 +94,7 @@ public class LogHabitToolTests
     [Fact]
     public async Task AlreadyCompleted_ReturnsError()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, DueDate: Today)).Value;
         habit.Log(Today);
         SetupHabitFound(habit);
         _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
@@ -106,16 +106,12 @@ public class LogHabitToolTests
         result.Error.Should().NotBeNullOrEmpty();
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task FlexibleHabit_RejectsLogAfterWindowTarget(bool divergentFlags)
+    [Fact]
+    public async Task FlexibleHabit_RejectsLogAfterWindowTarget()
     {
-        var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today, IsFlexible: true)).Value;
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            UserId, "Flexible", FrequencyUnit.Week, 2, DueDate: Today)).Value;
         habit.Log(Today).IsSuccess.Should().BeTrue();
-        if (divergentFlags)
-            typeof(Habit).GetProperty(nameof(Habit.IsFlexible))!.SetValue(habit, false);
         SetupHabitFound(habit);
         _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -233,7 +229,7 @@ public class LogHabitToolTests
 
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
-        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
+        return Habit.Create(new HabitCreateParams(((FrequencyUnit?)(freq)) is null ? HabitSchedule.OneTime : HabitSchedule.Recurring, UserId, title, freq, qty, DueDate: Today)).Value;
     }
 
     private void SetupHabitFound(Habit habit)

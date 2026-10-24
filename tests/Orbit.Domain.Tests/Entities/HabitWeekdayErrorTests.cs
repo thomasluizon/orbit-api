@@ -12,7 +12,7 @@ public class HabitWeekdayErrorTests
     [InlineData(FrequencyUnit.Day, 2)]
     public void InvalidWeekdaySchedule_ErrorStatesBothRequirements(FrequencyUnit unit, int quantity)
     {
-        var result = Habit.Create(new HabitCreateParams(
+        var result = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             Guid.NewGuid(), "Varrer a garagem", unit, quantity,
             new DateOnly(2026, 8, 6), Days: [DayOfWeek.Thursday]));
 
