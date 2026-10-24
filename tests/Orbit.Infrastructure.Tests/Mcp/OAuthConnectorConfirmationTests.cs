@@ -84,7 +84,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
     public async Task Connector_DeleteConfirmRetry_DeletesHabitAndAuditsOAuth()
     {
         var user = await Authenticate(_userId, Guid.NewGuid());
-        var habit = Habit.Create(new HabitCreateParams(_userId, "QA habit", FrequencyUnit.Day, 1,
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "QA habit", FrequencyUnit.Day, 1,
             new DateOnly(2026, 1, 1))).Value;
         _db.Habits.Add(habit);
         await _db.SaveChangesAsync();

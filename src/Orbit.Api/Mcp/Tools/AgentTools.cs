@@ -51,7 +51,7 @@ public class AgentTools(
             confirmationToken), cancellationToken);
     }
 
-    [McpServerTool(Name = "confirm_agent_operation_v2"), Description("Confirm a pending destructive or high-risk Orbit AI operation and receive a short-lived confirmation token. Available through the Claude connector; manual API keys must confirm in the Orbit app or connect through the Claude connector.")]
+    [McpServerTool(Name = "confirm_agent_operation_v2"), Description("Confirm a pending destructive or high-risk Orbit AI operation and receive a short-lived confirmation token. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
     public CallToolResult ConfirmAgentOperation(
         ClaimsPrincipal user,
         [Description("Pending operation ID")] string pendingOperationId)
@@ -68,7 +68,7 @@ public class AgentTools(
             : Success(confirmation);
     }
 
-    [McpServerTool(Name = "step_up_agent_operation_v2"), Description("Request a short-lived email step-up challenge for a pending high-risk Orbit AI operation. Available through the Claude connector; manual API keys must confirm in the Orbit app or connect through the Claude connector.")]
+    [McpServerTool(Name = "step_up_agent_operation_v2"), Description("Request a short-lived email step-up challenge for a pending high-risk Orbit AI operation. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
     public async Task<CallToolResult> StepUpAgentOperation(
         ClaimsPrincipal user,
         [Description("Pending operation ID")] string pendingOperationId,
@@ -85,7 +85,7 @@ public class AgentTools(
         return result.IsFailure ? Error("step_up_failed", result.Error) : Success(result.Value);
     }
 
-    [McpServerTool(Name = "verify_step_up_agent_operation_v2"), Description("Verify a step-up email challenge for a pending high-risk Orbit AI operation. Available through the Claude connector; manual API keys must confirm in the Orbit app or connect through the Claude connector.")]
+    [McpServerTool(Name = "verify_step_up_agent_operation_v2"), Description("Verify a step-up email challenge for a pending high-risk Orbit AI operation. Available through the Claude connector; manual API keys must connect through the Claude connector or make this change in the Orbit app.")]
     public async Task<CallToolResult> VerifyStepUpAgentOperation(
         ClaimsPrincipal user,
         [Description("Pending operation ID")] string pendingOperationId,

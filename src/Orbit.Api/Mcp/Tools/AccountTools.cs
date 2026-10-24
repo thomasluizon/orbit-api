@@ -12,7 +12,7 @@ public class AccountTools(McpExecutorBridge executorBridge)
         ClaimsPrincipal user,
         [Description("Action to perform: reset_account, request_deletion, or confirm_deletion")] string action,
         [Description("For confirm_deletion: the deletion code emailed to the user")] string? code = null,
-        [Description("Confirmation token from confirm_agent_operation_v2 through the Claude connector, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2; manual API keys must confirm in the Orbit app or use the Claude connector. (required: account changes are high-risk and need step-up)")] string? confirmationToken = null,
+        [Description("Confirmation token from confirm_agent_operation_v2 through the Claude connector, after step_up_agent_operation_v2 and verify_step_up_agent_operation_v2; manual API keys must use the Claude connector or make this change in the Orbit app. (required: account changes are high-risk and need step-up)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "manage_account", new

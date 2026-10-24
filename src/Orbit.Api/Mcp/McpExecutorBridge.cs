@@ -11,7 +11,7 @@ namespace Orbit.Api.Mcp;
 public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
 {
     internal const string InteractiveConfirmationGuidance =
-        "Manual API keys cannot approve destructive or high-risk actions. Connect through the Claude connector or confirm in the Orbit app.";
+        "Manual API keys cannot approve destructive or high-risk actions. Connect through the Claude connector, or make this change in the Orbit app.";
 
     private static readonly JsonSerializerOptions ArgumentSerializerOptions = new()
     {

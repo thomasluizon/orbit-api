@@ -124,7 +124,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
     public async Task<string> DeleteGoal(
         ClaimsPrincipal user,
         [Description("The goal ID (GUID)")] string goalId,
-        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must confirm in the Orbit app or use the Claude connector. (required: deleting a goal is destructive)")] string? confirmationToken = null,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: deleting a goal is destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "delete_goal", new
