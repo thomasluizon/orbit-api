@@ -45,7 +45,10 @@ public sealed record HabitRankingRow(int Rank, Guid HabitId, string Name, string
 
 public sealed record HabitRankingResponse(string QueryId, string QueryToken, string Revision,
     HabitRankingResolvedQuery Query, IReadOnlyList<HabitRankingRow> Rows, int TotalCount,
-    int Offset, bool IsComplete, string? NextCursor);
+    int Offset, bool IsComplete, string? NextCursor)
+{
+    internal DateOnly? FirstRecordedDate { get; init; }
+}
 
 /// <summary>Calendar arithmetic is separate from the legacy retrospective rolling-day periods.</summary>
 public static class HabitRankingPeriodRange
@@ -139,7 +142,10 @@ public sealed class GetHabitRankingQueryHandler(
         return Result.Success(new HabitRankingResponse(queryId, tokens.Sign(canonical), revision,
             new HabitRankingResolvedQuery(query.DateFrom, query.DateToExclusive, query.TimeZone, query.Metric,
                 "Count of distinct positive completion log records; undone, deleted and slip records excluded.",
-                new HabitRankingScope(), query.HabitIds, query.PageSize), rows, counted.Count, offset, complete, next));
+                new HabitRankingScope(), query.HabitIds, query.PageSize), rows, counted.Count, offset, complete, next)
+        {
+            FirstRecordedDate = counted.SelectMany(h => h.Logs).Select(log => (DateOnly?)log.Date).Min()
+        });
     }
 
     private sealed record CountedHabit(Habit Habit, IReadOnlyList<HabitLog> Logs);

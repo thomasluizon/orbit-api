@@ -12,7 +12,12 @@ public static class HabitRankingCardBuilder
     public const string Directive = "[[orbit:ranking]]";
     public const string PromptInstruction = "After get_habit_ranking succeeds, place [[orbit:ranking]] on its own line. "
         + "It contains completion log counts and absolute dates, not rates. Never substitute get_retrospective. "
-        + "Do not invent missing rows. Use the query token for later pages or refresh.";
+        + "Do not invent missing rows. Use the query token for later pages or refresh. "
+        + "For most completed habits, including 'Which habits did I complete most in the last 3 weeks?' "
+        + "and 'Quais hábitos eu mais concluí nas últimas 3 semanas?', call get_habit_ranking before emitting a directive. "
+        + "Last N weeks means N*7 local days ending today, inclusive, unless complete calendar weeks are explicitly requested. "
+        + "For 3 weeks use date_from=today-20 days and date_to_exclusive=today+1 day. Do not ask to choose rolling or calendar weeks. "
+        + "A window longer than the recorded history still uses all available records in that window.";
 
     public static bool IsSupported(AgentClientContext? client) => client?.SupportsParts == true
         && client.PartKinds?.Contains(Kind, StringComparer.Ordinal) == true;
@@ -26,6 +31,16 @@ public static class HabitRankingCardBuilder
             || string.IsNullOrWhiteSpace(response.QueryToken) || string.IsNullOrWhiteSpace(response.Revision))
             return null;
         return new HabitRankingCard(response);
+    }
+
+    internal static string? HistoryNotice(HabitRankingResponse response, string? language)
+    {
+        if (response.FirstRecordedDate is not { } first || first <= response.Query.DateFrom)
+            return null;
+        var date = first.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return language?.StartsWith("pt", StringComparison.OrdinalIgnoreCase) == true
+            ? $"As conclusões registradas neste período começam em {date}."
+            : $"Recorded completions in this window start on {date}.";
     }
 
     public static string Readable(HabitRankingResponse response, string? language)
@@ -42,6 +57,7 @@ public static class HabitRankingCardBuilder
             : portuguese
                 ? $"{response.Offset + 1}-{response.Offset + response.Rows.Count} de {response.TotalCount}."
                 : $"{response.Offset + 1}-{response.Offset + response.Rows.Count} of {response.TotalCount}.";
-        return string.Join('\n', new[] { title }.Concat(rows).Append(status));
+        return string.Join('\n', new[] { title }.Concat(rows).Append(status)
+            .Concat(HistoryNotice(response, language) is { } notice ? [notice] : []));
     }
 }

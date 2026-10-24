@@ -226,7 +226,11 @@ public partial class ProcessUserChatCommandHandler
         built.BuildFailure |= card is null;
         if (card is not null && HabitRankingCardBuilder.IsSupported(request.ClientContext)
             && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled))
+        {
             built.Parts.Add(new ChatBlockPart(PartKinds.HabitRanking, card));
+            if (HabitRankingCardBuilder.HistoryNotice(ranking, language) is { } notice)
+                built.Parts.Add(new ChatTextPart(notice));
+        }
         else
         {
             built.Fallback = card is null ? "build_failure" : "missing_capability";
