@@ -1,9 +1,14 @@
 using System.Data.Common;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
+using NSubstitute;
+using Orbit.Application.Common;
+using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -36,6 +41,7 @@ public class AuthUserStoreTests
         commands.Sql.Should().Equal(signupSql);
         signupSql.Should().HaveCount(3);
         signupSql[0].Should().Contain("ON CONFLICT (\"Email\") DO UPDATE");
+        signupSql[0].Should().NotContain("\"Handle\"");
         signupSql[1].Should().StartWith("SELECT");
         signupSql[2].Should().StartWith("UPDATE");
         returning.Should().BeEquivalentTo(first);
@@ -64,6 +70,96 @@ public class AuthUserStoreTests
             .Split(',').Select(column => column.Trim().Trim('"'));
 
         columns.Should().Contain(requiredColumns);
+    }
+
+    [Fact]
+    public async Task MappedInsert_DoesNotWriteHandleEvenWhenAssigned()
+    {
+        var commands = new CommandRecorder();
+        using var database = new SqliteOrbitDbContextFactory(commands);
+        var user = Candidate("New", "pt-BR");
+        typeof(User).GetProperty(nameof(User.Handle))!.SetValue(user, "candidate_handle");
+        commands.Sql.Clear();
+
+        database.Context.Users.Add(user);
+        await database.Context.SaveChangesAsync();
+
+        commands.Sql.Should().ContainSingle().Which.Should().NotContain("\"Handle\"");
+        database.Context.ChangeTracker.Clear();
+        (await database.Context.Users.SingleAsync()).Handle.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MappedUpdate_PreservesStoredHandle(bool updateWholeEntity)
+    {
+        var commands = new CommandRecorder();
+        using var database = new SqliteOrbitDbContextFactory(commands);
+        var context = database.Context;
+        var user = Candidate("Original", "pt-BR");
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"Users\" SET \"Handle\" = {"old_handle"} WHERE \"Id\" = {user.Id}");
+        context.ChangeTracker.Clear();
+        user = await context.Users.SingleAsync();
+        user.Handle.Should().Be("old_handle");
+        typeof(User).GetProperty(nameof(User.Handle))!.SetValue(user, "replacement_handle");
+        user.SetLanguage("en");
+        if (updateWholeEntity)
+            context.Users.Update(user);
+        commands.Sql.Clear();
+
+        await context.SaveChangesAsync();
+
+        commands.Sql.Should().ContainSingle().Which.Should().NotContain("\"Handle\"");
+        context.ChangeTracker.Clear();
+        user = await context.Users.SingleAsync();
+        user.Handle.Should().Be("old_handle");
+        user.Language.Should().Be("en");
+    }
+
+    [Fact]
+    public async Task SignInWithStoredHandle_ProfileRetainsNullHandleKey()
+    {
+        using var database = new SqliteOrbitDbContextFactory();
+        var context = database.Context;
+        var store = new AuthUserStore(context);
+        var original = await store.UpsertAsync(Candidate("Original", "pt-BR"), CancellationToken.None);
+        await context.SaveChangesAsync();
+        await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"Users\" SET \"Handle\" = {"old_handle"} WHERE \"Id\" = {original.Id}");
+        context.ChangeTracker.Clear();
+
+        var returning = await store.UpsertAsync(Candidate("Replacement", "en"), CancellationToken.None);
+        await context.SaveChangesAsync();
+        returning.Handle.Should().Be("old_handle");
+        var users = new GenericRepository<User>(context);
+        var dateService = Substitute.For<IUserDateService>();
+        dateService.GetUserTodayAsync(returning.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(returning.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        var handler = new GetProfileQueryHandler(users, new GenericRepository<ApiKey>(context),
+            new GenericRepository<StreakFreeze>(context), Substitute.For<IHabitLogReader>(),
+            new ProfileStreakServices(dateService, Substitute.For<IUserStreakService>()),
+            flags, Substitute.For<IPayGateService>());
+
+        var profile = await handler.Handle(new GetProfileQuery(returning.Id), CancellationToken.None);
+
+        profile.IsSuccess.Should().BeTrue();
+        var payload = JsonSerializer.SerializeToElement(profile.Value, JsonSerializerOptions.Web);
+        payload.GetProperty("handle").ValueKind.Should().Be(JsonValueKind.Null);
+        payload.GetProperty("name").GetString().Should().Be("Original");
+        (await context.Users.AsNoTracking().SingleAsync()).Handle.Should().Be("old_handle");
+    }
+
+    [Fact]
+    public void RetainedHandleMapping_HasNoPendingMigration()
+    {
+        using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=unused").Options);
+
+        context.Model.FindEntityType(typeof(User))!.FindProperty(nameof(User.Handle)).Should().NotBeNull();
+        context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
     [Fact]

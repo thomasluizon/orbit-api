@@ -53,7 +53,7 @@ public record ProfileResponse(
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
     bool CanViewGamification,
-    /// <summary>Compatibility field retained until thomasluizon/orbit-tickets#685.</summary>
+    /// <summary>Always null; retained for installed clients until thomasluizon/orbit-tickets#685 permits removal under thomasluizon/orbit-tickets#1654.</summary>
     string? Handle,
     /// <summary>Compatibility field retained until thomasluizon/orbit-tickets#685.</summary>
     bool SocialOptIn,
