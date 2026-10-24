@@ -134,6 +134,12 @@ public class AgentChatWriteHoldTests : IDisposable
             AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt));
 
+        if (operationId == AccountChangeSet.OperationId)
+        {
+            response.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+            response.Operation.PolicyReason.Should().Be("invalid_change_set");
+            return;
+        }
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, operationId);
         response.PendingOperation.Should().NotBeNull(operationId);
         response.PendingOperation!.ActionKey.Should().NotBeNullOrWhiteSpace(operationId);
@@ -1125,6 +1131,9 @@ public class AgentChatWriteHoldTests : IDisposable
                 .Returns(call => Result.Success(AgentArgumentPreview.Build(call.Arg<string>(), call.Arg<JsonElement>(), null, default)));
         }
 
+        var work = Substitute.For<IUnitOfWork>();
+        work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<AgentExecuteOperationResponse>>>(0)(call.ArgAt<CancellationToken>(1)));
         return new AgentOperationExecutor(
             _catalogService,
             _policyEvaluator,
@@ -1134,7 +1143,7 @@ public class AgentChatWriteHoldTests : IDisposable
             toolRegistry,
             previewer,
             _pendingOperationStore,
-            Substitute.For<IUnitOfWork>(),
+            work,
             NullLogger<AgentOperationExecutor>.Instance);
     }
 

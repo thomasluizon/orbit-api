@@ -11,14 +11,27 @@ public static class AccountChangeSet
     public const string CapabilityId = "chat.changes";
 
     public sealed record Member(Guid PendingOperationId, string OperationId, JsonElement Arguments, string PreviewFingerprint, string? SourceFingerprint = null);
+    public sealed record Reservation(Guid PendingOperationId, string Fingerprint);
 
-    public static JsonElement Arguments(IEnumerable<PendingAgentOperationExecution> operations) =>
-        JsonSerializer.SerializeToElement(new
+    public static JsonElement Arguments(IEnumerable<PendingAgentOperationExecution> operations)
+    {
+        var members = operations.Select(operation => new Member(operation.PendingOperationId,
+            operation.OperationId, operation.Arguments, operation.PreviewFingerprint!,
+            AgentOperationFingerprint.Compute(operation.OperationId, operation.Arguments.GetRawText()))).ToArray();
+        return JsonSerializer.SerializeToElement(new
         {
-            operations = operations.Select(operation => new Member(operation.PendingOperationId,
-                operation.OperationId, operation.Arguments, operation.PreviewFingerprint!,
-                AgentOperationFingerprint.Compute(operation.OperationId, operation.Arguments.GetRawText())))
+            operations = members,
+            reservations = members.Select(member => new Reservation(member.PendingOperationId, member.SourceFingerprint!))
         });
+    }
+
+    public static IReadOnlyList<Reservation> Reservations(JsonElement arguments)
+    {
+        if (arguments.TryGetProperty("reservations", out var stored))
+            return stored.Deserialize<List<Reservation>>() ?? [];
+        return (Read(arguments) ?? []).Select(member => new Reservation(member.PendingOperationId,
+            member.SourceFingerprint ?? AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText()))).ToArray();
+    }
 
     public static IReadOnlyList<Member>? Read(JsonElement arguments)
     {

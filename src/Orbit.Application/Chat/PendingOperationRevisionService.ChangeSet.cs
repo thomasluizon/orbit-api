@@ -40,7 +40,7 @@ public sealed partial class PendingOperationRevisionService
                 || string.IsNullOrWhiteSpace(result.Value.PreviewFingerprint)) return Failure("invalid_revision");
             revisedMembers.Add(member with { Arguments = arguments.Value, PreviewFingerprint = result.Value.PreviewFingerprint });
         }
-        var revised = JsonSerializer.SerializeToElement(new { operations = revisedMembers });
+        var revised = JsonSerializer.SerializeToElement(new { operations = revisedMembers, reservations = AccountChangeSet.Reservations(execution.Arguments) });
         var preview = await previewer.PreviewAsync(userId, execution.OperationId, revised, ct);
         if (preview.IsFailure || preview.Value?.Items?.Count != request.Items.Count) return Failure("invalid_revision");
         var updated = store.Revise(userId, execution.PendingOperationId, expected, revised.GetRawText(),

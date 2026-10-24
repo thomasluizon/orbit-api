@@ -64,7 +64,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         if (parent.IsFailure)
             return parent;
 
-        var children = BuildChildHabits(subHabits, userId, parent.Value, today);
+        var children = BuildChildHabits(subHabits, userId, parent.Value, parent.Value.NextDueDate);
         return children.IsFailure ? children : Domain.Common.Result.Success();
     }
 
@@ -87,7 +87,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         var creation = BuildCreationIntent(normalized, userId, today);
         if (creation is null)
             return null;
-        node["due_date"] ??= today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        node["due_date"] = creation.Definition.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (node["sub_habits"] is JsonArray nodes)
             foreach (var (child, intent) in nodes.OfType<JsonObject>().Zip(creation.Children))
             {
@@ -123,7 +123,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
         if (args.TryGetProperty("sub_habits", out var nodes))
             foreach (var sub in nodes.EnumerateArray())
             {
-                var definition = BuildChildParameters(sub, userId, parent.Value, today);
+                var definition = BuildChildParameters(sub, userId, parent.Value, parent.Value.NextDueDate);
                 if (definition.IsFailure || Habit.Create(definition.Value).IsFailure)
                     return null;
                 children.Add(PreparedCreation(sub, definition.Value with { ParentHabitId = null }, []));
@@ -191,7 +191,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
 
         return Domain.Common.Result.Success(new HabitCreateParams(
             userId, title, frequencyUnit, frequencyQuantity,
-            dueDate ?? today,
+            HabitScheduleService.InitialDueDate(today, dueDate, JsonArgumentParser.ParseDateOnly(args, "start_date"), days),
             JsonArgumentParser.GetOptionalString(args, "description"),
             Days: days,
             IsBadHabit: isBadHabit,

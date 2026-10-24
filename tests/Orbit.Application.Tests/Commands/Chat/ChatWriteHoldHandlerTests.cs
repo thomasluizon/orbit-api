@@ -256,7 +256,8 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         stored.PreviewFingerprint.Should().Be(single.PreviewFingerprint);
         _pendingOperationStore.GetExecution(_userId, bulk.Id).Should().NotBeNull();
         _dbContext.PendingAgentOperations.Should().OnlyContain(item => item.ConsumedAtUtc == null && item.RevisionNumber == 1);
-        _pendingOperationStore.Confirm(_userId, single.Id).Should().NotBeNull();
+        if (reason == "previous_turn") _pendingOperationStore.Confirm(_userId, single.Id).Should().NotBeNull();
+        else _pendingOperationStore.Confirm(_userId, single.Id).Should().BeNull();
         habits.Should().OnlyContain(habit => habit.Description == null);
     }
 

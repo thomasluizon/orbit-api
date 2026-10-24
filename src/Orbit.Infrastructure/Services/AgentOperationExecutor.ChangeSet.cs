@@ -75,9 +75,8 @@ public partial class AgentOperationExecutor
             if (result.Operation.Status != AgentOperationStatus.Succeeded)
                 return new ToolResult(false, Error: result.Operation.PolicyReason ?? result.Operation.ErrorCode ?? "change_set_failed", Payload: results);
         }
-        foreach (var member in AccountChangeSet.Read(execution.Arguments)!)
-            if (!pendingOperationStore.Cancel(execution.Request.UserId, member.PendingOperationId,
-                member.SourceFingerprint ?? AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText())))
+        foreach (var member in AccountChangeSet.Reservations(execution.Arguments))
+            if (!pendingOperationStore.Cancel(execution.Request.UserId, member.PendingOperationId, member.Fingerprint))
                 throw new InvalidOperationException("An approved account change lost its reservation.");
         return new ToolResult(true, Payload: results);
     }

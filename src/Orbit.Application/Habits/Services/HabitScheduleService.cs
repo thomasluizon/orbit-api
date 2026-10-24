@@ -12,6 +12,14 @@ public record HabitInstanceItem(
 
 public static class HabitScheduleService
 {
+    public static DateOnly InitialDueDate(DateOnly today, DateOnly? dueDate, DateOnly? startDate,
+        IReadOnlyList<DayOfWeek>? days)
+    {
+        var initial = startDate ?? dueDate ?? today;
+        return startDate.HasValue || days is not { Count: > 0 } ? initial
+            : Enumerable.Range(0, 7).Select(initial.AddDays).FirstOrDefault(date => days.Contains(date.DayOfWeek), initial);
+    }
+
     /// <summary>
     /// Determines if a habit is scheduled on a given date based on its
     /// frequency, quantity, active days, and anchor (due) date.
