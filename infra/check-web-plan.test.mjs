@@ -25,7 +25,7 @@ test("allows an unrelated service update", () => {
   assert.deepEqual(checkPlan(fixture("unrelated-update.json")), [])
 })
 
-for (const address of ["render_web_service.production_web", "render_web_service.production_redesign_web"]) {
+for (const address of ["render_web_service.production_web", "render_web_service.staging_web"]) {
   test(`guards ${address} and rejects replacement`, () => {
     const update = fixture("web-update.json")
     update.resource_changes[0].address = address

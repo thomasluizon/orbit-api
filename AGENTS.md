@@ -137,8 +137,8 @@ WHERE "Key" = 'MinSupportedVersion'
 - Read the active version distribution and release dates from Google Play Console.
 - Confirm the proposed floor is already live and sends `X-App-Version` and handles the
   existing HTTP 426 response with a usable upgrade prompt.
-- Check `APP_VERSION` in Render's production web services `orbit-web` and
-  `orbit-web-redesign`, and staging web service `orbit-web-staging`.
+- Check `APP_VERSION` in Render's production web service `orbit-web` and
+  staging web service `orbit-web-staging`.
   An unset value is fail open. A set value must be at least the proposed floor before
   changing the database row.
 - Read the row back and verify its exact value. Monitor Android and web HTTP 426 traffic
