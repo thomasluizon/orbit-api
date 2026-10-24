@@ -52,6 +52,7 @@ public class OrbitDbContext : DbContext
     public DbSet<UserSessionRefreshToken> UserSessionRefreshTokens => Set<UserSessionRefreshToken>();
     public DbSet<AiBudgetCall> AiBudgetCalls => Set<AiBudgetCall>();
     public DbSet<OAuthState> OAuthStates => Set<OAuthState>();
+    public DbSet<DesktopHandoff> DesktopHandoffs => Set<DesktopHandoff>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
     public DbSet<IssuedAstraBlock> IssuedAstraBlocks => Set<IssuedAstraBlock>();
@@ -168,6 +169,16 @@ public class OrbitDbContext : DbContext
             entity.Property(state => state.SecretHash).HasMaxLength(64);
             entity.Property(state => state.Kind).HasMaxLength(30);
             entity.Property(state => state.Payload).HasConversion(encConverter).HasColumnType("text");
+        });
+        modelBuilder.Entity<DesktopHandoff>(entity =>
+        {
+            entity.Property(handoff => handoff.CodeHash).HasMaxLength(64).IsRequired();
+            entity.Property(handoff => handoff.State).HasMaxLength(DesktopHandoff.MaxStateLength).IsRequired();
+            entity.Property(handoff => handoff.CodeChallenge).HasMaxLength(43).IsRequired();
+            entity.Property(handoff => handoff.RedirectUri).HasMaxLength(2048).IsRequired();
+            entity.HasIndex(handoff => handoff.CodeHash).IsUnique();
+            entity.HasIndex(handoff => handoff.ExpiresAtUtc);
+            entity.HasOne<User>().WithMany().HasForeignKey(handoff => handoff.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         ConfigurePendingAgentOperationEntity(modelBuilder);
         ConfigureAgentStepUpChallengeEntity(modelBuilder);

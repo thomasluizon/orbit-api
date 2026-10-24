@@ -33,6 +33,7 @@ locals {
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
     Database__MigrateOnStartup          = "false"
+    DesktopAuth__RedirectUri            = "org.useorbit.desktop://auth/callback"
     GooglePlay__MonthlyBasePlanId       = "monthly"
     GooglePlay__PackageName             = "org.useorbit.app"
     GooglePlay__ProductId               = "orbit_pro"
@@ -77,6 +78,7 @@ locals {
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
     ASPNETCORE_ENVIRONMENT             = "Staging"
     Database__MigrateOnStartup         = "true"
+    DesktopAuth__RedirectUri           = "org.useorbit.desktop.staging://auth/callback"
     Cors__AllowedOrigins__0            = "https://app-staging.useorbit.org"
     Cors__AllowedOrigins__1            = "https://staging.useorbit.org"
     Cors__LandingOrigins__2            = "https://orbit-landing-staging.onrender.com"

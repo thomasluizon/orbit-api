@@ -737,6 +737,50 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("ConversationTurns");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.DesktopHandoff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeChallenge")
+                        .IsRequired()
+                        .HasMaxLength(43)
+                        .HasColumnType("character varying(43)");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RedirectUri")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique();
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("DesktopHandoffs");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.DistributedRateLimitBucket", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2683,6 +2727,15 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ConversationTurn", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.DesktopHandoff", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
