@@ -16,11 +16,12 @@ public sealed record BulkHabitFilter(
     bool? IsBadHabit = null,
     FrequencyUnit? Frequency = null,
     bool OneTime = false,
-    bool? IsCompleted = null)
+    bool? IsCompleted = null,
+    bool? HasEmoji = null)
 {
     public bool HasSelector =>
         All || HabitIds.Count > 0 || !string.IsNullOrWhiteSpace(Tag) || !string.IsNullOrWhiteSpace(Search)
-        || IsGeneral.HasValue || IsBadHabit.HasValue || Frequency.HasValue || OneTime || IsCompleted.HasValue;
+        || IsGeneral.HasValue || IsBadHabit.HasValue || Frequency.HasValue || OneTime || IsCompleted.HasValue || HasEmoji.HasValue;
 }
 
 internal static class BulkHabitSelection
@@ -59,6 +60,7 @@ internal static class BulkHabitSelection
             .Where(habit => filter.IsGeneral is null || (habit.Schedule == HabitSchedule.General) == filter.IsGeneral)
             .Where(habit => filter.IsBadHabit is null || habit.IsBadHabit == filter.IsBadHabit)
             .Where(habit => !filter.OneTime || habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
+            .Where(habit => filter.HasEmoji is null || !string.IsNullOrWhiteSpace(habit.Emoji) == filter.HasEmoji)
             .Where(habit => filter.Frequency is null || habit.FrequencyUnit == filter.Frequency)
             .OrderBy(habit => habit.Position ?? int.MaxValue)
             .ThenBy(habit => habit.Title, StringComparer.OrdinalIgnoreCase)

@@ -13,11 +13,11 @@ public static partial class OptionalParameterCases
             [(typeof(BulkLogHabitsTool), "")] = ["filter", "habit_ids", "date", "dates"],
             [(typeof(BulkUpdateHabitEmojisTool), "")] =
             [
-                "emoji_mode", "filter", "habit_ids", "emoji", "infer_from_title", "include_completed"
+                "emoji_mode", "filter", "habit_ids", "emoji", "infer_from_title", "include_completed", "replace_existing"
             ],
             [(typeof(BulkUpdateHabitsTool), "filter")] =
             [
-                "all", "habit_ids", "tag", "search", "is_completed", "is_general", "is_bad_habit", "frequency"
+                "all", "habit_ids", "tag", "search", "is_completed", "has_emoji", "is_general", "is_bad_habit", "frequency"
             ],
             [(typeof(BulkUpdateHabitsTool), "updates")] =
             [

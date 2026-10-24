@@ -963,7 +963,7 @@ public class HabitToolsTests
             skipped_count = 0,
             partial = false
         });
-        var filter = "{\"tag\":\"Health\",\"include_completed\":true}";
+        var filter = "{\"tag\":\"Health\",\"has_emoji\":false}";
         string? output = null;
         var request = await CapturedRequestAsync(async () => output = mode switch
         {
@@ -975,7 +975,8 @@ public class HabitToolsTests
         request.OperationId.Should().Be("bulk_update_habit_emojis");
         request.ConfirmationToken.Should().Be("approved");
         request.Arguments.GetProperty("filter").GetProperty("tag").GetString().Should().Be("Health");
-        request.Arguments.GetProperty("filter").GetProperty("include_completed").GetBoolean().Should().BeTrue();
+        request.Arguments.GetProperty("filter").GetProperty("has_emoji").GetBoolean().Should().BeFalse();
+        request.Arguments.GetProperty("replace_existing").GetBoolean().Should().BeFalse();
         request.Arguments.GetProperty("infer_from_title").GetBoolean().Should().Be(mode == "infer");
         if (mode == "infer")
             request.Arguments.TryGetProperty("emoji", out _).Should().BeFalse();
@@ -989,6 +990,17 @@ public class HabitToolsTests
         output.Should().Contain("\"applied_count\":225");
         output.Should().Contain("\"total_matched\":225");
         output.Should().Contain("\"partial\":false");
+    }
+
+    [Fact]
+    public async Task BulkUpdateHabitEmojis_ForwardsExplicitReplacementIntent()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.BulkUpdateHabitEmojis(_user, "{\"all\":true}", replaceExisting: true));
+
+        request.Arguments.GetProperty("replace_existing").GetBoolean().Should().BeTrue();
     }
 
     [Theory]

@@ -527,7 +527,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     [McpServerTool(Name = "bulk_update_habits"), Description("Update the full server-side set of habits matching a JSON filter in one operation.")]
     public async Task<string> BulkUpdateHabits(
         ClaimsPrincipal user,
-        [Description("JSON filter with all, habit_ids, tag, search, is_completed, is_general, is_bad_habit, or frequency")] string filterJson,
+        [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("JSON object containing the habit fields to update")] string updatesJson,
         [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
@@ -543,17 +543,19 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return FormatBulkMutationResult(result);
     }
 
-    [McpServerTool(Name = "bulk_update_habit_emojis"), Description("Update emojis for the full server-side set matching a filter. Infer from each title in bounded AI batches, apply an explicit emoji, or pass null to clear. Returns applied_count, total_matched and partial.")]
+    [McpServerTool(Name = "bulk_update_habit_emojis"), Description("Update emojis for the full server-side set matching a filter. Use has_emoji=false for without an icon / sem ícone. Inference preserves existing icons unless replaceExisting=true was explicitly requested. Infer from each title in bounded AI batches, apply an explicit emoji, or pass null to clear. Returns applied_count, total_matched and partial.")]
     public async Task<string> BulkUpdateHabitEmojis(
         ClaimsPrincipal user,
-        [Description("JSON filter with all, habit_ids, tag, search, is_completed, is_general, is_bad_habit, or frequency")] string filterJson,
+        [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("Emoji to apply, null to clear, or omit to infer from titles")] string? emoji = "",
         [Description("Infer one relevant emoji per habit. Defaults to true when emoji is omitted.")] bool? inferFromTitle = null,
         [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [Description("Set true only when the user asks to replace existing icons during inference.")] bool replaceExisting = false)
     {
         var arguments = new Dictionary<string, object?>
         {
+            ["replace_existing"] = replaceExisting,
             ["filter"] = JsonSerializer.Deserialize<JsonElement>(filterJson),
             ["infer_from_title"] = inferFromTitle ?? emoji == string.Empty
         };
@@ -568,7 +570,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     [McpServerTool(Name = "bulk_reschedule_habits"), Description("Reschedule the full server-side set of habits matching a JSON filter in one operation.")]
     public async Task<string> BulkRescheduleHabits(
         ClaimsPrincipal user,
-        [Description("JSON filter with all, habit_ids, tag, search, is_completed, is_general, is_bad_habit, or frequency")] string filterJson,
+        [Description("JSON filter with all, habit_ids, tag, search, is_completed, has_emoji, is_general, is_bad_habit, or frequency. Use has_emoji=false for habits without an icon.")] string filterJson,
         [Description("New due date in YYYY-MM-DD format")] string dueDate,
         [Description("Confirmation token returned by confirm_agent_operation_v2")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)

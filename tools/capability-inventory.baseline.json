@@ -1588,6 +1588,11 @@
             "required": false
           },
           {
+            "name": "filter.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filter.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -1672,6 +1677,11 @@
             "required": false
           },
           {
+            "name": "filter.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filter.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -1745,6 +1755,11 @@
             "required": false
           },
           {
+            "name": "filter.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filter.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -1810,6 +1825,11 @@
             "items": {
               "type": "string"
             },
+            "required": false
+          },
+          {
+            "name": "filter.has_emoji",
+            "type": "boolean",
             "required": false
           },
           {
@@ -1902,6 +1922,11 @@
             "required": false
           },
           {
+            "name": "filter.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filter.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -1949,6 +1974,14 @@
               "null"
             ],
             "required": false
+          },
+          {
+            "name": "replace_existing",
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "required": false
           }
         ]
       },
@@ -1983,6 +2016,11 @@
             "items": {
               "type": "string"
             },
+            "required": false
+          },
+          {
+            "name": "filter.has_emoji",
+            "type": "boolean",
             "required": false
           },
           {
@@ -5037,6 +5075,11 @@
             "required": false
           },
           {
+            "name": "filterJson.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filterJson.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -5113,6 +5156,11 @@
             "items": {
               "type": "string"
             },
+            "required": false
+          },
+          {
+            "name": "filterJson.has_emoji",
+            "type": "boolean",
             "required": false
           },
           {
@@ -5193,6 +5241,11 @@
             "required": false
           },
           {
+            "name": "filterJson.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filterJson.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -5263,6 +5316,11 @@
             "items": {
               "type": "string"
             },
+            "required": false
+          },
+          {
+            "name": "filterJson.has_emoji",
+            "type": "boolean",
             "required": false
           },
           {
@@ -5344,6 +5402,11 @@
             "required": false
           },
           {
+            "name": "filterJson.has_emoji",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "filterJson.is_bad_habit",
             "type": "boolean",
             "required": false
@@ -5373,6 +5436,12 @@
             "type": "bool?",
             "required": false,
             "default": "null"
+          },
+          {
+            "name": "replaceExisting",
+            "type": "bool",
+            "required": false,
+            "default": "false"
           }
         ]
       },
@@ -5413,6 +5482,11 @@
             "items": {
               "type": "string"
             },
+            "required": false
+          },
+          {
+            "name": "filterJson.has_emoji",
+            "type": "boolean",
             "required": false
           },
           {

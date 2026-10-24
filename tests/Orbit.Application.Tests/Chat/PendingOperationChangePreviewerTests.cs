@@ -429,6 +429,45 @@ public sealed class PendingOperationChangePreviewerTests
             .OnlyContain(field => field.Field == "emoji" && field.NewValue == "✅");
     }
 
+    [Theory]
+    [InlineData("✅")]
+    [InlineData(null)]
+    public async Task PreviewAsync_EmojiNoOps_AreExcludedFromItemsCountsAndExecution(string? emoji)
+    {
+        var unchanged = CreateHabit("Unchanged", emoji);
+        var changed = CreateHabit("Changed", "🍔");
+        Setup([unchanged, changed]);
+        var args = emoji is null ? "{\"emoji_mode\":\"clear\"}" : "{\"emoji\":\"✅\"}";
+
+        var preview = await Preview("bulk_update_habit_emojis", args);
+
+        preview!.ChangeTargetCount.Should().Be(1);
+        preview.Items.Should().ContainSingle().Which.EntityId.Should().Be(changed.Id);
+        preview.Changes.Should().ContainSingle().Which.EntityId.Should().Be(changed.Id);
+        preview.ExecutionArguments!.Value.GetProperty("revised_items").EnumerateArray()
+            .Should().ContainSingle().Which.GetProperty("habit_id").GetGuid().Should().Be(changed.Id);
+    }
+
+    [Fact]
+    public async Task PreviewAsync_AllInferredEmojisUnchanged_OffersNoOperation()
+    {
+        var habit = CreateHabit("Read", "📚");
+        Setup([habit]);
+        var inference = Substitute.For<IHabitEmojiInferenceService>();
+        inference.InferAsync(UserId, Arg.Any<IReadOnlyList<HabitEmojiInferenceInput>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string> { [habit.Id] = "📚" }));
+        var tool = new BulkUpdateHabitEmojisTool(_habits, inference, Substitute.For<IUnitOfWork>(),
+            NullLogger<BulkUpdateHabitEmojisTool>.Instance);
+
+        var result = await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new AiToolRegistry([tool])).PreviewAsync(UserId, tool.Name,
+            JsonSerializer.Deserialize<JsonElement>("{\"replace_existing\":true}"));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("No matching emoji changes.");
+        habit.Emoji.Should().Be("📚");
+    }
+
     [Fact]
     public async Task PreviewAsync_Create_UsesStableInputIndexes()
     {

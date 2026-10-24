@@ -233,6 +233,7 @@ internal static class BulkHabitToolArguments
             tag = new { type = JsonSchemaTypes.String, description = "Exact tag name, case-insensitive." },
             search = new { type = JsonSchemaTypes.String, description = "Match every search word to a title word prefix, ignoring case, accents and order. Excludes descriptions." },
             is_completed = new { type = JsonSchemaTypes.Boolean, description = "true: completed; false: active (default)." },
+            has_emoji = new { type = JsonSchemaTypes.Boolean, description = "false: without an icon (sem ícone); true: already has an icon." },
             is_general = new { type = JsonSchemaTypes.Boolean },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean },
             frequency = new { type = JsonSchemaTypes.String, @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } }
@@ -243,12 +244,12 @@ internal static class BulkHabitToolArguments
     {
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
-            "all", "habit_ids", "tag", "search", "is_completed", IsGeneralField, IsBadHabit, "frequency"
+            "all", "habit_ids", "tag", "search", "is_completed", "has_emoji", IsGeneralField, IsBadHabit, "frequency"
         };
         if (filter.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
             return (null, "filter contains an unsupported field.");
         filter = OptionalToolArguments.OmitNulls(filter);
-        foreach (var booleanName in new[] { "all", "is_completed", IsGeneralField, IsBadHabit })
+        foreach (var booleanName in new[] { "all", "is_completed", "has_emoji", IsGeneralField, IsBadHabit })
         {
             if (filter.TryGetProperty(booleanName, out var booleanValue)
                 && booleanValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
@@ -297,7 +298,8 @@ internal static class BulkHabitToolArguments
             IsBadHabit: JsonArgumentParser.GetOptionalBool(filter, IsBadHabit),
             Frequency: frequency,
             OneTime: oneTime,
-            IsCompleted: JsonArgumentParser.GetOptionalBool(filter, "is_completed"));
+            IsCompleted: JsonArgumentParser.GetOptionalBool(filter, "is_completed"),
+            HasEmoji: JsonArgumentParser.GetOptionalBool(filter, "has_emoji"));
 
         if (result.All && result.HabitIds.Count > 0)
             return (null, "filter cannot combine all=true with habit_ids.");
