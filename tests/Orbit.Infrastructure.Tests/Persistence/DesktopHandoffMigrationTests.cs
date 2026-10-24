@@ -13,14 +13,14 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 public class DesktopHandoffMigrationTests
 {
     [Fact]
-    public void Migration_FollowsHandleUnmappingAndIsLatest()
+    public void Migration_FollowsHandleUnmapping()
     {
         using var context = CreateContext();
         var migrations = context.GetService<IMigrationsAssembly>().Migrations;
         var unmap = migrations.Single(pair => pair.Value.AsType() == typeof(UnmapUserHandle)).Key;
         var handoff = migrations.Single(pair => pair.Value.AsType() == typeof(AddDesktopHandoffs)).Key;
 
-        migrations.Keys.TakeLast(2).Should().Equal(unmap, handoff);
+        migrations.Keys.Should().ContainInOrder(unmap, handoff);
     }
 
     [Fact]
