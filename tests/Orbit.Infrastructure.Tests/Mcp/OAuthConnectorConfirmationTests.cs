@@ -56,7 +56,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
     internal static async Task<ClaimsPrincipal> Authenticate(Guid userId, Guid? familyId,
         bool readOnly = false, IReadOnlyList<string>? scopes = null)
     {
-        var (key, raw) = ApiKey.Create(userId, "Claude.ai", scopes ?? [AgentScopes.DeleteHabits, AgentScopes.ReadHabits],
+        var (key, raw) = ApiKey.Create(userId, familyId.HasValue ? ApiKey.ConnectorName : "Manual key", scopes ?? [AgentScopes.DeleteHabits, AgentScopes.ReadHabits],
             isReadOnly: readOnly, oauthFamilyId: familyId).Value;
         var run = await ApiKeyAuthenticationHandlerTests.RunHandler($"Bearer {raw}", candidates: [key]);
         run.Result.Succeeded.Should().BeTrue();

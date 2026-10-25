@@ -7,6 +7,8 @@ namespace Orbit.Domain.Entities;
 
 public class ApiKey : Entity
 {
+    public const string ConnectorName = "Claude.ai";
+
     public Guid UserId { get; private set; }
     public string Name { get; private set; } = null!;
     public string KeyHash { get; private set; } = null!;
@@ -39,6 +41,9 @@ public class ApiKey : Entity
 
         if (name.Trim().Length > 50)
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyNameTooLong);
+
+        if (oauthFamilyId is null && IsConnectorName(name))
+            return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyNameReserved);
 
         if (expiresAtUtc.HasValue && expiresAtUtc.Value <= DateTime.UtcNow)
             return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyExpiryInPast);
@@ -80,6 +85,9 @@ public class ApiKey : Entity
 
         return Result.Success((apiKey, rawKey));
     }
+
+    public static bool IsConnectorName(string? name) =>
+        string.Equals(name?.Trim(), ConnectorName, StringComparison.OrdinalIgnoreCase);
 
     public bool Verify(string rawKey)
     {

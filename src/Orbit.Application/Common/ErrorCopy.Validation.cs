@@ -9,6 +9,7 @@ public static partial class ErrorCopy
         (ValidationErrorCodes.VerificationCodeFormat, "Enter all 6 digits", "Digite os 6 dígitos"),
         (ValidationErrorCodes.ApiKeyNameRequired, "Give the API key a name", "Dê um nome à chave de API"),
         (ValidationErrorCodes.ApiKeyNameLength, "Shorten the API key name to 50 characters or fewer", "Encurte o nome da chave de API para até 50 caracteres"),
+        (ValidationErrorCodes.ApiKeyNameReserved, "Claude.ai is reserved for the Claude connector. Choose another name for this API key.", "Claude.ai é reservado para o conector do Claude. Escolha outro nome para esta chave de API."),
         (ValidationErrorCodes.ApiKeyScopesRequired, "API key scopes must be non-empty strings.", "As permissões da chave de API não podem estar vazias."),
         (ValidationErrorCodes.ApiKeyScopeInvalid, "API key scope '{PropertyValue}' is not a recognized scope.", "A permissão '{PropertyValue}' da chave de API não é reconhecida."),
         (ValidationErrorCodes.ApiKeyExpiryFuture, "API key expiry must be in the future.", "A validade da chave de API deve estar no futuro."),

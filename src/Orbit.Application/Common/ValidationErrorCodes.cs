@@ -5,6 +5,7 @@ public static class ValidationErrorCodes
     public const string VerificationCodeFormat = "VALIDATION_VERIFICATION_CODE_FORMAT";
     public const string ApiKeyNameRequired = "VALIDATION_API_KEY_NAME_REQUIRED";
     public const string ApiKeyNameLength = "VALIDATION_API_KEY_NAME_LENGTH";
+    public const string ApiKeyNameReserved = "VALIDATION_API_KEY_NAME_RESERVED";
     public const string ApiKeyScopesRequired = "VALIDATION_API_KEY_SCOPES_REQUIRED";
     public const string ApiKeyScopeInvalid = "VALIDATION_API_KEY_SCOPE_INVALID";
     public const string ApiKeyExpiryFuture = "VALIDATION_API_KEY_EXPIRY_FUTURE";

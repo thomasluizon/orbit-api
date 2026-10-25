@@ -59,6 +59,7 @@ public static class DomainErrors
 
     public static readonly AppError ApiKeyNameRequired = new("API_KEY_NAME_REQUIRED", "API key name is required.");
     public static readonly AppError ApiKeyNameTooLong = new("API_KEY_NAME_TOO_LONG", "API key name must be 50 characters or less.");
+    public static readonly AppError ApiKeyNameReserved = new("API_KEY_NAME_RESERVED", "The API key name is reserved for the OAuth connector.");
     public static readonly AppError ApiKeyExpiryInPast = new("API_KEY_EXPIRY_IN_PAST", "API key expiry must be in the future.");
     public static readonly AppError ApiKeyScopesInvalid = new("API_KEY_SCOPES_INVALID", "API key scopes must be non-empty strings.");
 
