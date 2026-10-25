@@ -12,6 +12,35 @@ namespace Orbit.Application.Tests.Chat;
 public sealed class ChatResponseNegotiationTests
 {
     [Theory]
+    [InlineData(null, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(null, true, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(null, false, true)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(null, true, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void Negotiation_AllowanceRequiresItsOwnCapability(bool? supportsAllowance, bool consumed, bool parts)
+    {
+        var response = Replay(new("Answer", [], Parts: parts ? [new ChatTextPart("Answer")] : null,
+            MessageAllowanceConsumed: consumed));
+        var client = supportsAllowance is null ? null : new AgentClientContext(
+            SupportsParts: parts, SupportsMessageAllowance: supportsAllowance);
+
+        var result = ChatResponseNegotiation.ForClient(response, client, []);
+
+        result.MessageAllowanceConsumed.Should().Be(supportsAllowance == true ? consumed : null);
+        var wire = JsonSerializer.SerializeToElement(result, ChatStreamEvent.SerializerOptions);
+        wire.TryGetProperty("messageAllowanceConsumed", out var allowance).Should().Be(supportsAllowance == true);
+        if (supportsAllowance == true)
+            allowance.GetBoolean().Should().Be(consumed);
+    }
+
+    [Theory]
     [InlineData("choice", false)]
     [InlineData("pickList", false)]
     [InlineData("choice", true)]

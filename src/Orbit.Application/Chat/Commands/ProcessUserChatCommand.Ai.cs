@@ -17,6 +17,7 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context,
         Func<AiStreamEvent, Task>? aiStreamSink,
         AiTurnTelemetry telemetry,
+        ChatTurnState turn,
         CancellationToken cancellationToken)
     {
         var promptRequest = new PromptBuildRequest(
@@ -96,6 +97,8 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
         if (reservation.IsFailure)
             return reservation.PropagateError<AiResponse>();
+        if (request.BlockAnswer is null)
+            turn.MessageAllowanceConsumed = true;
 
         return await ai.IntentService.SendWithToolsAsync(
             new AiToolRequest(

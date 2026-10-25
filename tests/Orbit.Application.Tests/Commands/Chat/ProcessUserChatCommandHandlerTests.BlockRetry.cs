@@ -205,8 +205,10 @@ public partial class ProcessUserChatCommandHandlerTests
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
     }
 
-    [Fact]
-    public async Task ChoiceAnswer_LostReply_ReplaysStoredResponseAndRejectsDifferentAnswer()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChoiceAnswer_LostReply_ReplaysStoredResponseAndRejectsDifferentAnswer(bool supportsAllowance)
     {
         var user = User.Create("Alex", "retry@example.com").Value;
         var quota = CreateRealPayGate(user);
@@ -214,13 +216,14 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "Evening works." });
         var handler = CreateHandler(quota);
         var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"], "After dinner"),
-            ClientContext: new(SupportsParts: true));
+            ClientContext: new(SupportsParts: true, SupportsMessageAllowance: supportsAllowance));
 
         var first = await handler.Handle(request, default);
         var replay = await handler.Handle(request, default);
 
         replay.IsSuccess.Should().BeTrue();
-        replay.Value.Should().BeEquivalentTo(first.Value);
+        first.Value.MessageAllowanceConsumed.Should().Be(supportsAllowance ? true : null);
+        replay.Value.Should().BeEquivalentTo(first.Value with { MessageAllowanceConsumed = supportsAllowance ? false : null });
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
         (await handler.Handle(request with { BlockAnswer = new(block.Id, ["a"], "After dinner") }, default))
             .ErrorCode.Should().Be(ErrorCodes.AstraBlockAnswered);

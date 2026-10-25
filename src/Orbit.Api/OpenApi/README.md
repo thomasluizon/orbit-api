@@ -21,6 +21,18 @@ artifact bytes retain their exact meaning. Legacy retirement needs separate
 consumer adoption work. Future compatible endpoint additions can still update
 all supported streams through ordinary generation and comparison.
 
+Chat clients may send optional `clientContext.supportsMessageAllowance: true` to
+receive optional `messageAllowanceConsumed` on each successful chat response,
+including the SSE final response. True means the request consumed one message;
+false means it consumed none. The value follows the allowance reservation, so
+cached replies, block replays, pick-list previews, moderated declines and crisis
+replies report false. A fresh choice answer or model turn reports true when its
+reservation succeeds. Omission or false for the capability omits the response
+field and preserves the typed HTTP 400 moderation refusal (SSE error status 400
+on streams). Self-harm flags and phrase-guard crises keep returning support as
+successful turns for every client. Deploy the API before the paired consumer in
+thomasluizon/orbit-tickets#1708 advertises this capability.
+
 `PUT /api/habits/{id}` accepts optional nullable `tagIds` in both HTTP versions.
 Omission or null preserves tags, an empty array clears them, and a supplied array
 replaces the assignment together with core fields, checklist and requested goals.

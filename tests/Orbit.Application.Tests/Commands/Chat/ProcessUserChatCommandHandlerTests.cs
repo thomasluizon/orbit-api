@@ -83,8 +83,8 @@ public partial class ProcessUserChatCommandHandlerTests
     private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
 
     [Theory]
-    [InlineData(true, false)]
     [InlineData(false, true)]
+    [InlineData(true, true)]
     public async Task Moderation_RefusesBeforeCallingModel(bool flagged, bool unavailable)
     {
         EnableRecording();
@@ -96,6 +96,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(Result.Success(new AiResponse { TextMessage = "Allowed" }));
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "screen this input"), CancellationToken.None);
         result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable);
         _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
         await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
         await _unitOfWork.DidNotReceiveWithAnyArgs().AcquireAdvisoryLockAsync(default!, default);
@@ -521,11 +522,12 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "O que e um mau habito?",
-                ClientContext: new AgentClientContext(SupportsParts: supportsParts)),
+                ClientContext: new AgentClientContext(SupportsParts: supportsParts, SupportsMessageAllowance: true)),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Resposta em cache");
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
         result.Value.Parts.Should().BeNull();
         await _payGate.DidNotReceive()
             .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());

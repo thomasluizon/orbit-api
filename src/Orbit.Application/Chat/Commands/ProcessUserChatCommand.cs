@@ -69,7 +69,8 @@ public record ChatResponse(
     IReadOnlyList<string>? FollowUps = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -205,11 +206,17 @@ public partial class ProcessUserChatCommandHandler(
                 evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
         }
 
-        var recording = new ConversationRecordingState();
+        var recording = new ChatTurnState();
         Result<ChatResponse>? response = null;
         try
         {
             response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
+            if (response.IsSuccess)
+            {
+                var negotiated = ChatResponseNegotiation.ForAllowance(response.Value, request.ClientContext,
+                    recording.MessageAllowanceConsumed);
+                response = Result.Success(negotiated);
+            }
             return response.IsSuccess && evalTrace is not null
                 ? Result.Success(response.Value with { EvalTrace = evalTrace.Build() })
                 : response;
@@ -221,7 +228,7 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
-        ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken)
+        ChatTurnState recording, ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken)
     {
         if (request.BlockAnswer is not null)
         {
@@ -233,12 +240,19 @@ public partial class ProcessUserChatCommandHandler(
                 {
                     recording.UserContent = prepared.Message;
                     recording.Enabled = !prepared.IsReplay;
+                    recording.MessageAllowanceConsumed = prepared.MessageAllowanceConsumed;
                 }, recording.ToolCalls.Add);
             return await answerService.ExecuteAsync(request, prepared =>
-                prepared.Crisis != CrisisLocales.None
+            {
+                if (prepared.ModeratedInput is { } flaggedInput)
+                {
+                    recording.Enabled = false;
+                    return HandleModeratedTurnAsync(request, flaggedInput, cancellationToken);
+                }
+                return prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
-                (_, token) => ModerateInputAsync(request, token));
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc);
+            }, cancellationToken, (_, token) => ModerateInputAsync(request, token));
         }
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None)
@@ -253,6 +267,8 @@ public partial class ProcessUserChatCommandHandler(
         var inputCheck = await ModerateInputAsync(request, cancellationToken);
         if (inputCheck.IsFailure)
             return inputCheck.PropagateError<ChatResponse>();
+        if (inputCheck.Value.Flagged)
+            return await HandleModeratedTurnAsync(request, inputCheck.Value, cancellationToken);
         await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
@@ -261,13 +277,33 @@ public partial class ProcessUserChatCommandHandler(
         return await HandleTurnAsync(request, recording, evalTrace, cancellationToken);
     }
 
-    private async Task<Result> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
+    private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
     {
         var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
         var check = await moderation.CheckTextAsync(input, cancellationToken);
         if (check.Unavailable)
-            return Result.Failure(ErrorMessages.AiUnavailable);
-        return check.Flagged ? Result.Failure("This input was refused by content moderation.") : Result.Success();
+            return Result.Failure<ModerationResult>(ErrorMessages.AiUnavailable);
+        return Result.Success(check);
+    }
+
+    private async Task<Result<ChatResponse>> HandleModeratedTurnAsync(
+        ProcessUserChatCommand request, ModerationResult check, CancellationToken cancellationToken)
+    {
+        var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var isPortuguese = LocaleHelper.IsPortuguese(user?.Language);
+        if (check.Categories.Any(category => category is "self-harm" or "self-harm/intent" or "self-harm/instructions"))
+            return await HandleCrisisTurnAsync(request,
+                isPortuguese ? CrisisLocales.Portuguese : CrisisLocales.English, captureMessage: true);
+        var message = ErrorCopy.Resolve(ErrorCodes.ContentModerationRefused, isPortuguese);
+        if (request.ClientContext?.SupportsMessageAllowance != true)
+            return Result.Failure<ChatResponse>(message, ErrorCodes.ContentModerationRefused);
+        if (request.StreamSink is not null)
+        {
+            await request.StreamSink(ChatStreamEvent.Reset());
+            await request.StreamSink(ChatStreamEvent.Delta(message));
+        }
+        return Result.Success(new ChatResponse(message, [], CorrelationId: request.CorrelationId,
+            Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(message)] : null));
     }
 
     private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)
@@ -281,7 +317,7 @@ public partial class ProcessUserChatCommandHandler(
         return cancellation;
     }
 
-    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ConversationRecordingState recording,
+    private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ChatTurnState recording,
         ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
         DateTime? answeredAtUtc = null)
     {
@@ -333,7 +369,7 @@ public partial class ProcessUserChatCommandHandler(
         || response.Calendar is not null || response.RecordLists is { Count: > 0 } || response.AccountRows is not null;
 
     private async Task<Result<ChatResponse>> HandleLoadedTurnAsync(
-        ProcessUserChatCommand request, ChatContext context, ConversationRecordingState recording, ChatEvalTraceCollector? evalTrace, AiTurnTelemetry telemetry,
+        ProcessUserChatCommand request, ChatContext context, ChatTurnState recording, ChatEvalTraceCollector? evalTrace, AiTurnTelemetry telemetry,
         System.Diagnostics.Stopwatch totalStopwatch, DateTime? answeredAtUtc, CancellationToken cancellationToken)
     {
         var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
@@ -367,7 +403,7 @@ public partial class ProcessUserChatCommandHandler(
             return pendingReply;
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, cancellationToken);
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, telemetry, recording, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 

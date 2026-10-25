@@ -3,6 +3,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
@@ -96,8 +97,10 @@ public partial class ProcessUserChatCommandHandlerTests
         _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
         _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
         SetupAiResponse(new AiResponse { TextMessage = "Evening works." });
-        var result = await CreateHandler().Handle(new(UserId, "Evening", BlockAnswer: new(block.Id, ["b"])), default);
+        var result = await CreateHandler().Handle(new(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]),
+            ClientContext: new(SupportsMessageAllowance: true)), default);
         result.IsSuccess.Should().BeTrue();
+        result.Value.MessageAllowanceConsumed.Should().BeTrue();
         _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserContent == "When?\nEvening" && turn.AssistantContent == result.Value.AiMessage && turn.UsedModel));
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request => request.UserMessage == "When?\nEvening"),
@@ -194,9 +197,16 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public async Task ChoiceAnswer_ModerationRefusal_DoesNotReserveOrDispatch(bool flagged, bool unavailable)
+    [InlineData(true, false, false, false)]
+    [InlineData(true, false, false, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(true, false, true, true)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, true, false, true)]
+    [InlineData(false, true, true, false)]
+    [InlineData(false, true, true, true)]
+    public async Task ChoiceAnswer_ModerationResult_DoesNotReserveOrDispatch(
+        bool flagged, bool unavailable, bool supportsAllowance, bool stream)
     {
         SetupUserAndPayGate();
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
@@ -206,9 +216,26 @@ public partial class ProcessUserChatCommandHandlerTests
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(flagged, unavailable, []));
 
-        var result = await CreateHandler().Handle(new(UserId, "Morning", BlockAnswer: new(block.Id, ["a"])), default);
+        var streamed = new List<ChatStreamEvent>();
+        var result = await CreateHandler().Handle(new(UserId, "Morning", BlockAnswer: new(block.Id, ["a"]),
+            ClientContext: new(SupportsParts: true, SupportsMessageAllowance: supportsAllowance),
+            StreamSink: stream ? item => { streamed.Add(item); return Task.CompletedTask; }
+        : null), default);
 
-        result.IsFailure.Should().BeTrue();
+        result.IsSuccess.Should().Be(!unavailable && supportsAllowance);
+        if (unavailable)
+            result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable);
+        else if (!supportsAllowance)
+            result.ErrorCode.Should().Be(ErrorCodes.ContentModerationRefused);
+        else
+        {
+            result.Value.AiMessage.Should().NotBeNullOrWhiteSpace();
+            result.Value.MessageAllowanceConsumed.Should().BeFalse();
+        }
+        if (stream && result.IsSuccess)
+            streamed.Should().Equal(ChatStreamEvent.Reset(), ChatStreamEvent.Delta(result.Value.AiMessage!));
+        else
+            streamed.Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
@@ -334,8 +361,10 @@ public partial class ProcessUserChatCommandHandlerTests
         _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
             .Returns(new AgentExecuteOperationResponse(new("bulk_create_habits", "bulk_create_habits", AgentRiskClass.Low,
                 AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), pending));
-        var result = await handler.Handle(new(UserId, "Walk", BlockAnswer: new(block.Id, ["a"])), default);
+        var result = await handler.Handle(new(UserId, "Walk", BlockAnswer: new(block.Id, ["a"]),
+            ClientContext: new(SupportsMessageAllowance: true)), default);
         result.IsSuccess.Should().BeTrue();
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
         result.Value.PendingOperations.Should().ContainSingle();
         _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
             !turn.UsedModel && turn.UserContent == "Walk" && turn.ToolCallsJson.Contains("bulk_create_habits")

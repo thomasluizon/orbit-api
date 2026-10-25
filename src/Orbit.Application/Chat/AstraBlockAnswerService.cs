@@ -15,7 +15,8 @@ namespace Orbit.Application.Chat;
 
 public sealed record PreparedAstraBlockAnswer(
     string Message, ChatResponse? Response = null, CrisisLocales Crisis = CrisisLocales.None,
-    DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false);
+    DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false,
+    bool MessageAllowanceConsumed = false, ModerationResult? ModeratedInput = null);
 
 public sealed class AstraBlockAnswerService(
     IIssuedAstraBlockStore store,
@@ -34,12 +35,14 @@ public sealed class AstraBlockAnswerService(
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
         Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
-        Func<string, CancellationToken, Task<Result>>? checkInput = null)
+        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkInput = null)
     {
         var preparation = await PrepareAsync(request, ct, checkInput);
         if (preparation.IsFailure)
             return preparation.PropagateError<ChatResponse>();
         var prepared = preparation.Value;
+        if (prepared.ModeratedInput is not null)
+            return await produceResponse(prepared);
         observePrepared?.Invoke(prepared);
         if (prepared.Response is { } storedResponse)
         {
@@ -146,7 +149,7 @@ public sealed class AstraBlockAnswerService(
     }
 
     public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct,
-        Func<string, CancellationToken, Task<Result>>? checkInput = null)
+        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkInput = null)
     {
         var answer = request.BlockAnswer ?? throw new ArgumentException("Block answer is required.", nameof(request));
         var validation = await new AstraBlockAnswerValidator().ValidateAsync(answer, ct);
@@ -186,6 +189,8 @@ public sealed class AstraBlockAnswerService(
                     var inputCheck = await checkInput(message, token);
                     if (inputCheck.IsFailure)
                         return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
+                    if (inputCheck.Value.Flagged)
+                        return Result.Success(new PreparedAstraBlockAnswer(message, ModeratedInput: inputCheck.Value));
                 }
                 var now = TimeProvider.System.GetUtcNow().UtcDateTime;
                 var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
@@ -196,6 +201,7 @@ public sealed class AstraBlockAnswerService(
                 var user = await users.GetByIdAsync(request.UserId, token);
                 ChatResponse? response = null;
                 DateOnly? reservedAllowanceDate = null;
+                var messageAllowanceConsumed = false;
                 if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
                 {
                     response = await BuildPickListResponseAsync(request, definition, answer, user, token);
@@ -205,13 +211,14 @@ public sealed class AstraBlockAnswerService(
                     var reservation = await payGate.TryConsumeAiMessage(request.UserId, unitOfWork, token);
                     if (reservation.IsFailure)
                         throw new AnswerRejectedException(reservation.PropagateError<PreparedAstraBlockAnswer>());
+                    messageAllowanceConsumed = true;
                     reservedAllowanceDate = (await users.GetByIdAsync(request.UserId, token))?.AiMessagesLocalDate;
                 }
                 await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
                     IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
                     response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
-                    answeredAtUtc, reservedAllowanceDate));
+                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed));
             }, ct);
         }
         catch (AnswerRejectedException exception)

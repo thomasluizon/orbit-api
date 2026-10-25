@@ -79,9 +79,8 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(true, false)]
     [InlineData(false, true)]
-    public async Task ConversationRecorder_ModeratedBlockRefusal_QueuesDiagnosticWithoutRunningTurn(bool flagged, bool unavailable)
+    public async Task ConversationRecorder_UnavailableBlockModeration_QueuesDiagnosticWithoutRunningTurn(bool flagged, bool unavailable)
     {
         SetupUserAndPayGate();
         EnableRecording();

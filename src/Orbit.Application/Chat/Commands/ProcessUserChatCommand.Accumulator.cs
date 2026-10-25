@@ -18,7 +18,7 @@ public partial class ProcessUserChatCommandHandler
         private readonly HashSet<(Guid Id, AgentOperationStatus Status)> _reportedPendingOutcomes = [];
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
-        public ConversationRecordingState? Recording { get; init; }
+        public ChatTurnState? Recording { get; init; }
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; init; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; init; } = [];
         public bool RequiresExistingParent { get; init; }
