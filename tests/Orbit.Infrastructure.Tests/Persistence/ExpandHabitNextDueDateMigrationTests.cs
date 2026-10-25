@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Migrations;
@@ -47,7 +46,7 @@ public class ExpandHabitNextDueDateMigrationTests
     }
 
     [Fact]
-    public void Model_MapsCursorAndDatabaseGeneratedLegacyShadowWithoutPendingChanges()
+    public void Model_MapsCursorWithoutLegacyShadowOrPendingChanges()
     {
         using var context = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=unused").Options);
@@ -55,11 +54,7 @@ public class ExpandHabitNextDueDateMigrationTests
         var cursor = habit.FindProperty(nameof(Habit.NextDueDate))!;
         cursor.IsShadowProperty().Should().BeFalse();
         cursor.GetColumnName().Should().Be("NextDueDate");
-        var legacy = habit.FindProperty("DueDate")!;
-        legacy.IsShadowProperty().Should().BeTrue();
-        legacy.ValueGenerated.Should().Be(ValueGenerated.OnAddOrUpdate);
-        legacy.GetBeforeSaveBehavior().Should().Be(PropertySaveBehavior.Ignore);
-        legacy.GetAfterSaveBehavior().Should().Be(PropertySaveBehavior.Ignore);
+        habit.FindProperty("DueDate").Should().BeNull();
         typeof(Habit).GetProperty("DueDate").Should().BeNull();
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }

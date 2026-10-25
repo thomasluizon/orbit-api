@@ -1049,10 +1049,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<DateOnly>("DueDate")
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("date");
-
                     b.Property<TimeOnly?>("DueEndTime")
                         .HasColumnType("time without time zone");
 
@@ -1085,12 +1081,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsFlexible")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsGeneral")
                         .HasColumnType("boolean");
 
                     b.Property<DateOnly>("NextDueDate")
