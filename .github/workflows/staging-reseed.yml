@@ -90,8 +90,8 @@ jobs:
           STAGING_RESEED_STEP: Back up staging data
           STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
         run: |
-          PGDATABASE="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
-          export PGDATABASE
+          STAGING_DATABASE_URL="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
+          export STAGING_DATABASE_URL
           python3 .github/scripts/staging-reseed-data.py backup
       - name: Restore operator access after the data backup
         if: always() && steps.age.outputs.replace == 'true'
@@ -143,8 +143,8 @@ jobs:
           STAGING_RESEED_STEP: Restore and verify staging data
           STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
         run: |
-          PGDATABASE="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
-          export PGDATABASE
+          STAGING_DATABASE_URL="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
+          export STAGING_DATABASE_URL
           python3 .github/scripts/staging-reseed-data.py restore
       - name: Apply migrations to the replacement database
         if: steps.age.outputs.replace == 'true'

@@ -10,6 +10,16 @@ const workflow = readFileSync(join(root, ".github/workflows/staging-reseed.yml")
 const plans = JSON.parse(readFileSync(join(import.meta.dirname, "staging-reseed-plans.json"), "utf8"))
 const steps = [...workflow.matchAll(/^      - name: (.+)\n([\s\S]*?)(?=^      - |$(?![\s\S]))/gm)]
   .map(([, name, body]) => ({ name, body }))
+const defaultConnection = {
+  url: "postgresql://orbit_staging:carry-test-secret@staging.example/orbit_staging",
+  env: { PGHOST: "staging.example", PGPORT: "5432", PGUSER: "orbit_staging",
+    PGPASSWORD: "carry-test-secret", PGDATABASE: "orbit_staging", PGSSLMODE: "require", PGCONNECT_TIMEOUT: "30" },
+}
+const encodedConnection = {
+  url: "postgres://carry%40user:p%40ss%3Aword%2Ftest@db-carry.example:6543/orbit%2Fstaging?sslmode=verify-full",
+  env: { PGHOST: "db-carry.example", PGPORT: "6543", PGUSER: "carry@user",
+    PGPASSWORD: "p@ss:word/test", PGDATABASE: "orbit/staging", PGSSLMODE: "verify-full", PGCONNECT_TIMEOUT: "30" },
+}
 
 function stepScript(name) {
   const step = steps.find(candidate => candidate.name === name)
@@ -46,13 +56,36 @@ if (command === "plan") {
   process.stdout.write(readFileSync(process.env.MOCK_PLAN, "utf8"))
 } else if (command === "output") {
   process.stdout.write(args.at(-1) === "staging_external_connection_string"
-    ? "postgresql://orbit_staging:carry-test-secret@staging.example/orbit_staging"
+    ? process.env.MOCK_DATABASE_URL
     : "dpg-dasotg8jo6nc73cok6g0-a")
 }
 `, { mode: 0o755 })
   writeFileSync(join(directory, "dotnet"), "#!/usr/bin/env bash\nprintf 'dotnet\\n' >> \"$MOCK_CALLS\"\n", { mode: 0o755 })
+  writeFileSync(join(directory, "connection.mjs"), `
+export function requireConnection(args) {
+  if (!process.env.PGHOST || !process.env.PGDATABASE || process.env.PGDATABASE.includes("://")) {
+    console.error("PostgreSQL client requires an explicit host and database")
+    process.exit(45)
+  }
+  const expected = JSON.parse(process.env.MOCK_CONNECTION)
+  for (const [key, value] of Object.entries(expected)) {
+    if (process.env[key] !== value) {
+      console.error("PostgreSQL client has incorrect " + key)
+      process.exit(45)
+    }
+  }
+  if (args.some(arg => arg.includes("://") || arg.includes(expected.PGPASSWORD))) {
+    console.error("PostgreSQL client credentials must stay out of arguments")
+    process.exit(45)
+  }
+  const dbname = args.indexOf("--dbname")
+  if (dbname >= 0 && args[dbname + 1] !== expected.PGDATABASE) process.exit(45)
+}
+`)
   writeFileSync(join(directory, "psql"), `#!/usr/bin/env node
 import { appendFileSync } from "node:fs"
+import { requireConnection } from "./connection.mjs"
+requireConnection(process.argv.slice(2))
 let input = "", exported = false
 process.stdin.setEncoding("utf8")
 process.stdin.on("data", chunk => {
@@ -72,8 +105,11 @@ process.stdin.on("end", () => {
   for (const command of ["pg_dump", "pg_restore"]) {
     writeFileSync(join(directory, command), `#!/usr/bin/env node
 import { appendFileSync, existsSync, writeFileSync } from "node:fs"
+import { requireConnection } from "./connection.mjs"
 const args = process.argv.slice(2)
 const operation = ${JSON.stringify(command)} === "pg_dump" ? "dump" : args.includes("--list") ? "archive" : "restore"
+if (operation !== "archive") requireConnection(args)
+if (operation === "restore" && !args.includes("--dbname")) process.exit(45)
 appendFileSync(process.env.MOCK_CALLS, JSON.stringify({command: ${JSON.stringify(command)}, args}) + "\\n")
 if (process.env.MOCK_FAILURE === operation) process.exit(43)
 if (operation === "dump") {
@@ -94,11 +130,14 @@ if (operation === "dump") {
     MOCK_PLANS: join(directory, "plans.json"),
     MOCK_FAILURE: options.failure ?? "",
     MOCK_UNSAFE: String(options.unsafe ?? false),
+    MOCK_DATABASE_URL: (options.connection ?? defaultConnection).url,
+    MOCK_CONNECTION: JSON.stringify((options.connection ?? defaultConnection).env),
     MOCK_COUNTS: options.counts ?? '["public", "Users", 4]\n["public", "Habits", 12]\n["public", "EmptyTable", 0]\n["public", "__EFMigrationsHistory", 7]\n',
     STAGING_CARRY_DIRECTORY: options.carryDirectory ?? join(directory, "carry"),
   }
   delete env.BASH_ENV
   delete env.STAGING_RESEED_STEP
+  for (const key of Object.keys(defaultConnection.env)) delete env[key]
   if (bashEnv) env.BASH_ENV = bashEnv.replace("${{ github.workspace }}", root)
   if (stepName) env.STAGING_RESEED_STEP = stepName
   const result = spawnSync("bash", ["-e", scriptPath], { cwd: root, env, encoding: "utf8" })
@@ -160,6 +199,21 @@ test("successful data carry reaches migrations only after replacement and count 
   const verify = calls.findLastIndex(line => line.includes('"command":"psql"'))
   const migrate = calls.indexOf("dotnet")
   assert.ok(dump >= 0 && apply > dump && restore > apply && verify > restore && migrate > verify)
+})
+
+test("all data clients use decoded credentials, an explicit port and URI TLS mode", t => {
+  const backup = runStep(t, "Back up staging data", { connection: encodedConnection })
+  assert.equal(backup.status, 0, backup.stderr)
+  const restore = runStep(t, "Restore and verify staging data", {
+    carryDirectory: backup.carryDirectory, connection: encodedConnection,
+  })
+  assert.equal(restore.status, 0, restore.stderr)
+  assert.match(restore.stdout, /Verified staging data row counts for all 4 tables/)
+  for (const result of [backup, restore]) {
+    for (const secret of [encodedConnection.url, encodedConnection.env.PGPASSWORD, "p%40ss%3Aword%2Ftest"]) {
+      assert.ok(!(result.stdout + result.stderr + result.calls).includes(secret))
+    }
+  }
 })
 
 test("data restore refuses an incomplete backup", t => {
