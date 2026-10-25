@@ -468,7 +468,6 @@ public partial class User : Entity
         if (!AiMessagesLocalDate.HasValue || AiMessagesLocalDate.Value < userToday)
         {
             AiMessagesUsedToday = 0;
-            AdRewardBonusMessages = 0;
             AiMessagesLocalDate = userToday;
         }
         AiMessagesUsedToday++;
@@ -485,24 +484,6 @@ public partial class User : Entity
 
     public int GetAiMessagesUsedForQuota(DateOnly userToday) =>
         AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
-
-    public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
-    {
-        if (HasProAccess)
-            return Result.Failure(DomainErrors.ProUsersDoNotSeeAds);
-
-        if (!LastAdRewardLocalDate.HasValue || LastAdRewardLocalDate.Value < userToday)
-            AdRewardsClaimedToday = 0;
-
-        if (AdRewardsClaimedToday >= dailyCap)
-            return Result.Failure(DomainErrors.AdRewardLimitReached);
-
-        AdRewardBonusMessages += bonusMessages;
-        AdRewardsClaimedToday++;
-        LastAdRewardAt = DateTime.UtcNow;
-        LastAdRewardLocalDate = userToday;
-        return Result.Success();
-    }
 
     public void SetGoogleTokens(string accessToken, string? refreshToken)
     {

@@ -671,20 +671,20 @@ public class UserTests
     }
 
     [Fact]
-    public void IncrementAiMessageCount_NextLocalDate_ZeroesAdRewardBonus()
+    public void IncrementAiMessageCount_NextLocalDate_PreservesLegacyAdRewardBonus()
     {
         var user = CreateValidUser();
         var today = new DateOnly(2026, 3, 1);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         user.IncrementAiMessageCount(today);
-        user.GrantAdReward(today, bonusMessages: 5);
+        typeof(User).GetProperty(nameof(User.AdRewardBonusMessages))!.SetValue(user, 5);
         user.IncrementAiMessageCount(today);
         user.AdRewardBonusMessages.Should().Be(5);
 
         user.IncrementAiMessageCount(today.AddDays(1));
 
         user.AiMessagesUsedToday.Should().Be(1);
-        user.AdRewardBonusMessages.Should().Be(0);
+        user.AdRewardBonusMessages.Should().Be(5);
     }
 
     [Fact]
@@ -695,7 +695,9 @@ public class UserTests
         var today = new DateOnly(2026, 3, 1);
         for (int i = 0; i < 20; i++)
             user.IncrementAiMessageCount(today);
-        user.GrantAdReward(today, bonusMessages: 5);
+        typeof(User).GetProperty(nameof(User.AdRewardBonusMessages))!.SetValue(user, 5);
+        typeof(User).GetProperty(nameof(User.AdRewardsClaimedToday))!.SetValue(user, 1);
+        typeof(User).GetProperty(nameof(User.LastAdRewardLocalDate))!.SetValue(user, today);
 
         user.ResetAccount();
 
