@@ -223,6 +223,25 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         CountFor(_secondAccount).Should().Be(0);
     }
 
+    [Fact]
+    public async Task WnsClaimExistingChannel_AtDeviceCap_PreservesOtherDevices()
+    {
+        for (var index = 0; index < AppConstants.MaxPushSubscriptionsPerUser - 1; index++)
+            (await Subscribe(_firstAccount, $"https://dm3p.notify.windows.com/?token=other-{index}", "wns", "wns", deviceId: Guid.NewGuid())).IsSuccess.Should().BeTrue();
+        var deviceId = Guid.NewGuid();
+        (await Subscribe(_firstAccount, "https://dm3p.notify.windows.com/?token=old", "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        const string channel = "https://dm3p.notify.windows.com/?token=new";
+        (await Subscribe(_secondAccount, channel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        (await Subscribe(_firstAccount, channel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        CountFor(_firstAccount).Should().Be(AppConstants.MaxPushSubscriptionsPerUser);
+        CountFor(_secondAccount).Should().Be(0);
+        using var verification = _factory.CreateContext();
+        verification.PushSubscriptions.Count(s => s.Endpoint.Contains("token=other-")).Should().Be(AppConstants.MaxPushSubscriptionsPerUser - 1);
+        verification.PushSubscriptions.Any(s => s.Endpoint.EndsWith("token=old")).Should().BeFalse();
+    }
+
     private async Task<Result> Subscribe(Guid userId, string endpoint, string p256dh, string auth, string? apnsTopic = null, Guid? deviceId = null)
     {
         await using var context = _factory.CreateContext();

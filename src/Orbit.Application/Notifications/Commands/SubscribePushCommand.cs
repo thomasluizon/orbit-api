@@ -95,6 +95,7 @@ public class SubscribePushCommandHandler(
         if (transfer.IsFailure)
             return transfer;
 
+        IReadOnlyList<PushSubscription> previous = [];
         if (request.DeviceId is not null || request.ApnsTopic is not null)
         {
             var renewal = existing.RenewRegistration(request.Endpoint, request.Auth, request.ApnsTopic, request.DeviceId);
@@ -102,15 +103,17 @@ public class SubscribePushCommandHandler(
                 return renewal;
             if (request.DeviceId is not null)
             {
-                var previous = await pushSubscriptionRepository.FindTrackedAsync(
+                previous = (await pushSubscriptionRepository.FindTrackedAsync(
                     s => s.UserId == request.UserId && s.DeviceId == request.DeviceId
                         && s.P256dh == request.P256dh && s.Id != existing.Id,
-                    cancellationToken);
+                    cancellationToken)).ToList();
                 pushSubscriptionRepository.RemoveRange(previous);
             }
         }
 
-        EvictOldestBeyondCap(await GetPersistedUserSubscriptions(request.UserId, cancellationToken), existing);
+        var subscriptions = await GetPersistedUserSubscriptions(request.UserId, cancellationToken);
+        var removedIds = previous.Select(subscription => subscription.Id).ToHashSet();
+        EvictOldestBeyondCap(subscriptions.Where(subscription => !removedIds.Contains(subscription.Id)).ToList(), existing);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();

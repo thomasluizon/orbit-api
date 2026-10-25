@@ -19,7 +19,8 @@ public partial class PushNotificationService(
     IOptions<VapidSettings> vapidSettings,
     ILogger<PushNotificationService> logger,
     HttpClient httpClient,
-    IApnsPushSender apnsSender) : IPushNotificationService
+    IApnsPushSender apnsSender,
+    IWnsPushSender wnsSender) : IPushNotificationService
 {
     private readonly VapidSettings _settings = vapidSettings.Value;
 
@@ -58,10 +59,18 @@ public partial class PushNotificationService(
 
         foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Apns))
         {
-            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken);
+            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken, sub.ApnsTopic);
             if (outcome == ApnsDeliveryOutcome.Stale)
                 staleSubscriptions.Add(sub);
             delivered |= outcome == ApnsDeliveryOutcome.Delivered;
+        }
+
+        foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Wns))
+        {
+            var outcome = await wnsSender.SendAsync(sub.Endpoint, CreateWebPushPayload(safeTitle, safeBody, url), cancellationToken);
+            if (outcome == WnsDeliveryOutcome.Stale)
+                staleSubscriptions.Add(sub);
+            delivered |= outcome == WnsDeliveryOutcome.Delivered;
         }
 
         if (webPushSubs.Count > 0)

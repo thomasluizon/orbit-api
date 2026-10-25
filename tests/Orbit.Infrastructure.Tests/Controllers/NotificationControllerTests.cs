@@ -170,6 +170,17 @@ public class NotificationControllerTests
     }
 
     [Fact]
+    public async Task Subscribe_DesktopMetadata_IsForwarded()
+    {
+        _mediator.Send(Arg.Any<SubscribePushCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var deviceId = Guid.NewGuid();
+        var request = new NotificationController.SubscribeRequest("token", "apns", "apns", "org.useorbit.desktop", deviceId);
+        (await _controller.Subscribe(request, default)).Should().BeOfType<OkResult>();
+        await _mediator.Received(1).Send(Arg.Is<SubscribePushCommand>(command => command.UserId == UserId
+            && command.ApnsTopic == request.ApnsTopic && command.DeviceId == deviceId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Subscribe_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<SubscribePushCommand>(), Arg.Any<CancellationToken>())
