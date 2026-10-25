@@ -122,10 +122,17 @@ public class AstraBlockAnswerServiceTests
     }
 
     [Theory]
-    [InlineData("create_habits")]
-    [InlineData("log_habits")]
-    [InlineData("skip_habits")]
-    public async Task PickListAtDailyLimit_ReturnsOnePreviewOfExactlyTheStoredSelection(string action)
+    [InlineData("create_habits", "parts")]
+    [InlineData("log_habits", "parts")]
+    [InlineData("skip_habits", "parts")]
+    [InlineData("create_habits", "legacy")]
+    [InlineData("log_habits", "legacy")]
+    [InlineData("skip_habits", "legacy")]
+    [InlineData("create_habits", "disabled")]
+    [InlineData("log_habits", "disabled")]
+    [InlineData("skip_habits", "disabled")]
+    [InlineData("create_habits", "prior")]
+    public async Task PickListAtDailyLimit_ReturnsOnePreviewOfExactlyTheStoredSelection(string action, string mode)
     {
         var items = Enumerable.Range(0, 4).Select(i => new AstraBlockItem(i.ToString(), "Habit " + i,
             action == "create_habits" ? JsonSerializer.SerializeToElement(new { title = "Habit " + i })
@@ -140,10 +147,28 @@ public class AstraBlockAnswerServiceTests
         _executor.ExecuteAsync(Arg.Do<AgentExecuteOperationRequest>(value => captured = value), Arg.Any<CancellationToken>())
             .Returns(new AgentExecuteOperationResponse(new("bulk_" + action, "bulk_" + action, AgentRiskClass.Low,
                 AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation), pending));
-        var result = await Service.PrepareAsync(Request(block.Id, ["3", "1"]), default);
+        _featureFlags.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(mode switch
+        {
+            "disabled" => [FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraPartsDisabled],
+            "prior" => [],
+            _ => [FeatureFlagKeys.AstraBlockFirst]
+        });
+        var result = await Service.PrepareAsync(Request(block.Id, ["3", "1"]) with
+        { ClientContext = new(SupportsParts: mode != "legacy") }, default);
         result.IsSuccess.Should().BeTrue();
         result.Value.Response!.PendingOperations.Should().ContainSingle().Which.Should().Be(pending);
-        result.Value.Response.AiMessage.Should().Be("Nothing has been saved.");
+        if (mode == "parts")
+        {
+            result.Value.Response.AiMessage.Should().BeNullOrEmpty();
+            result.Value.Response.Parts.Should().BeEmpty();
+        }
+        else if (mode == "prior")
+            result.Value.Response.AiMessage.Should().Be("Nothing has been saved.");
+        else
+        {
+            result.Value.Response.AiMessage.Should().Contain("Habit 1").And.Contain("Habit 3").And.Contain("approving");
+            result.Value.Response.Parts.Should().BeNull();
+        }
         captured!.ConfirmationToken.Should().BeNull();
         captured.IncludeChangePreview.Should().BeTrue();
         var arguments = captured.Arguments.GetProperty(action == "create_habits" ? "habits" : "revised_items");

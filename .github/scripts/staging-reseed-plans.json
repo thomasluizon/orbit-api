@@ -1,0 +1,52 @@
+{
+  "untargeted": {
+    "resource_changes": [
+      {
+        "address": "render_env_group.staging_database",
+        "change": {
+          "actions": [
+            "update"
+          ]
+        }
+      },
+      {
+        "address": "render_env_group_link.staging_database",
+        "change": {
+          "actions": [
+            "update"
+          ]
+        }
+      },
+      {
+        "address": "render_postgres.staging",
+        "change": {
+          "actions": [
+            "delete",
+            "create"
+          ]
+        }
+      }
+    ]
+  },
+  "targeted": {
+    "resource_changes": [
+      {
+        "address": "render_env_group.staging_database",
+        "change": {
+          "actions": [
+            "update"
+          ]
+        }
+      },
+      {
+        "address": "render_postgres.staging",
+        "change": {
+          "actions": [
+            "delete",
+            "create"
+          ]
+        }
+      }
+    ]
+  }
+}

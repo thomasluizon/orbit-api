@@ -6,6 +6,8 @@ on:
     paths:
       - infra/**
       - .github/workflows/terraform.yml
+      - .github/workflows/staging-reseed.yml
+      - .github/scripts/staging-reseed*
 
 permissions:
   contents: read
@@ -29,3 +31,4 @@ jobs:
       - run: terraform -chdir=infra validate
       - run: npm ci --prefix infra --ignore-scripts
       - run: npm test --prefix infra
+      - run: node --test .github/scripts/staging-reseed.test.mjs

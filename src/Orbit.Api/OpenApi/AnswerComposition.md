@@ -50,6 +50,14 @@ pending operation IDs with the same outcome deduplicate. A suggestion creates a 
 a write still needs its approval preview. Proactive notification delivery keeps its separate
 contract; its action enters this chat pipeline.
 
+Clients without parts support receive readable `aiMessage` text for pending writes even
+when narrative is blank or rejected by grounding. The server uses the typed preview's entity
+names and a localized approval instruction, never an execution claim or internal operation
+identifier. This fallback also covers parent-preview recovery, current previews on block-answer
+replay, and the parts kill flag. It is independent of `astra_block_first`; disabling composition
+must preserve readable legacy answers. Stream reset and replacement text agree with the final
+response and recorded history. A pending preview keeps contextual follow-ups suppressed.
+
 ## Append-only follow-up context
 
 `followUps` remains an optional string array. Parsing accepts zero, one or two questions,

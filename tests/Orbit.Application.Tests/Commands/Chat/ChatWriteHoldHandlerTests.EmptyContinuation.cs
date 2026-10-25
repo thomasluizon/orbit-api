@@ -213,7 +213,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         else
         {
             result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pendingId);
-            result.Value.AiMessage.Should().BeNullOrEmpty();
+            result.Value.AiMessage.Should().Contain("Journal").And.Contain("approving");
         }
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
@@ -271,7 +271,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items.Should().HaveCount(2);
         _pendingOperationStore.GetExecution(_userId, preview.Id)!.OperationId.Should().Be("apply_account_changes");
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().Contain("approving");
         parents[0].Title.Should().Be("Post Lunch");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());

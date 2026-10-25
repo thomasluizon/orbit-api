@@ -117,9 +117,11 @@ public sealed partial class ChatWriteHoldHandlerTests
         var actual = reply.Value.PendingOperations.Should().ContainSingle().Which;
         actual.Id.Should().Be(pending.Id);
         JsonElement.DeepEquals(JsonSerializer.SerializeToElement(actual.Items), JsonSerializer.SerializeToElement(pending.Items)).Should().BeTrue();
-        reply.Value.AiMessage.Should().BeNullOrEmpty();
+        reply.Value.AiMessage.Should().NotBeNullOrWhiteSpace();
+        foreach (var item in actual.Items!)
+            reply.Value.AiMessage.Should().Contain(item.EntityName);
         reply.Value.Parts.Should().BeNullOrEmpty();
-        events.Should().NotContain(item => item.Type == "delta");
+        events.Where(item => item.Type == "delta").Should().ContainSingle().Which.Text.Should().Be(reply.Value.AiMessage);
         actual.Items!.SelectMany(item => item.Fields).Count(field => field.Field == "parent_habit_id"
             && field.ProposedValue is { ValueKind: JsonValueKind.String }).Should().Be(children ? 2 : 0);
     }
@@ -197,9 +199,11 @@ public sealed partial class ChatWriteHoldHandlerTests
             ClientContext: new AgentClientContext(SupportsParts: parts), StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.Value.PendingOperations.Should().ContainSingle();
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        if (parts) result.Value.AiMessage.Should().BeNullOrEmpty();
+        else result.Value.AiMessage.Should().Contain("approving").And.NotContain("top-level").And.NotContain("nothing saved");
         result.Value.Parts.Should().BeNullOrEmpty();
-        events.Should().NotContain(item => item.Type == "delta");
+        if (parts) events.Should().NotContain(item => item.Type == "delta");
+        else events.Where(item => item.Type == "delta").Should().ContainSingle().Which.Text.Should().Be(result.Value.AiMessage);
     }
 
     [Theory]
