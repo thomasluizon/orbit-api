@@ -244,6 +244,11 @@ public sealed class AstraBlockAnswerService(
         if (preview.Operation.Status != AgentOperationStatus.PendingConfirmation
             || preview.PendingOperation?.Items?.Count != chosen.Length)
             throw new AnswerRejectedException(Failure(ErrorCodes.AstraBlockPreviewUnavailable));
+        var flags = await featureFlags.GetEnabledKeysForUserAsync(request.UserId, token);
+        if (flags.Contains(FeatureFlagKeys.AstraBlockFirst))
+            return ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
+                PendingOperations: [preview.PendingOperation], CorrelationId: request.CorrelationId, Parts: []),
+                request.ClientContext, flags, user?.Language);
         var line = LocaleHelper.IsPortuguese(user?.Language) ? "Nada foi salvo." : "Nothing has been saved.";
         return new ChatResponse(line, [], PendingOperations: [preview.PendingOperation],
             CorrelationId: request.CorrelationId,
