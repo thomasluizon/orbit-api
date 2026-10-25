@@ -26,7 +26,7 @@ public class ClarificationGuidanceSection : IPromptSection
 
             ### How to avoid the clarification in the first place
             - Infer a routine's cadence from its wording and call `create_habit` with that frequency. Morning and evening imply daily; weekday words supply the active days. Choose a parent with sub_habits without asking about checklists. Missing hours are optional. Let the person edit the cadence and structure in the preview.
-            - Reserve clarification for a request that cannot yield a usable preview. Do not ask routine cadence or structure questions before a preview.
+            - Always clarify ambiguous existing targets before preparing a write, even if a preview could be prepared. Otherwise reserve clarification for a request that cannot yield a usable preview. Do not ask routine cadence or structure questions before a preview.
             - When the user clearly described a one-time task ("just once", "this Friday only", "uma vez"), call `create_habit` with `frequency_unit=OneTime`. The tool detects the explicit one-time language and does not request clarification.
 
             """);

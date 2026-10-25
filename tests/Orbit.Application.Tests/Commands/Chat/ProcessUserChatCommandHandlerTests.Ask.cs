@@ -53,6 +53,47 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
+    [InlineData("en", "Which walk?", "Morning", "Evening")]
+    [InlineData("pt-BR", "Qual caminhada?", "Manhã", "Noite")]
+    public async Task Ask_AmbiguousTarget_SuppressesWritesBeforeAndAfterTheQuestion(
+        string language, string question, string first, string second)
+    {
+        var user = User.Create("Person", "ask@example.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        var write = FakeTool("delete_habit");
+        write.IsReadOnly.Returns(false);
+        write.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true));
+        var options = JsonSerializer.SerializeToElement(new
+        {
+            form = "choice",
+            question,
+            options = new[] { new { id = "morning", label = first }, new { id = "evening", label = second } }
+        });
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = [new(write.Name, "before", ParseArguments("{}")), new("ask", "question", options),
+                new(write.Name, "after", ParseArguments("{}"))]
+        });
+
+        var result = await CreateHandler(RealAskTool(), write).Handle(new(UserId,
+            language == "pt-BR" ? "Exclua Caminhada" : "Delete Walk",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue();
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        result.Value.Actions.Should().BeEmpty();
+        var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
+            .Should().BeOfType<AstraChoiceBlock>().Subject;
+        block.Question.Should().Be(question);
+        block.Options.Select(option => option.Label).Should().Equal(first, second);
+        await write.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
+    }
+
+    [Theory]
     [InlineData(false, false, AgentAuthMethod.Jwt)]
     [InlineData(true, true, AgentAuthMethod.Jwt)]
     [InlineData(true, false, AgentAuthMethod.ApiKey)]

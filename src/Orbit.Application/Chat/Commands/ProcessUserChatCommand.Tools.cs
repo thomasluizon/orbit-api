@@ -164,6 +164,7 @@ public partial class ProcessUserChatCommandHandler
         var askCall = aiResponse.ToolCalls!.FirstOrDefault(call => call.Name == "ask");
         var orderedCalls = aiResponse.ToolCalls!
             .TakeWhile(call => call.Name != "ask")
+            .Where(call => askCall is null || ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
 
