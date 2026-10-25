@@ -48,7 +48,7 @@ public partial class OAuthPostgresRetryTests
             var refresh = store.CreateRefreshToken(new(user.Id, original.Id, "client", original.OAuthFamilyId!.Value));
             failure.Enabled = true;
 
-            var response = await RefreshController(db).Token("refresh_token", null, null, null, default, refresh);
+            var response = await RefreshController(db).Token("refresh_token", null, null, null, default, refresh, client_id: "client");
 
             var success = response.Should().BeOfType<OkObjectResult>().Subject;
             var body = JsonSerializer.SerializeToElement(success.Value);
@@ -64,8 +64,8 @@ public partial class OAuthPostgresRetryTests
 
             await using var nextRequest = RetryContext(database, new LostAcknowledgement());
             (await RefreshController(nextRequest).Token("refresh_token", null, null, null, default,
-                body.GetProperty("refresh_token").GetString())).Should().BeOfType<OkObjectResult>();
-            (await RefreshController(nextRequest).Token("refresh_token", null, null, null, default, refresh))
+                body.GetProperty("refresh_token").GetString(), client_id: "client")).Should().BeOfType<OkObjectResult>();
+            (await RefreshController(nextRequest).Token("refresh_token", null, null, null, default, refresh, client_id: "client"))
                 .Should().BeOfType<BadRequestObjectResult>();
             (await database.ApiKeys.AsNoTracking().Where(key => key.OAuthFamilyId == original.OAuthFamilyId).ToListAsync())
                 .Should().OnlyContain(key => key.IsRevoked);
@@ -223,7 +223,7 @@ public partial class OAuthPostgresRetryTests
     private static OAuthController RefreshController(OrbitDbContext db) =>
         new(Substitute.For<IMediator>(), new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System),
             new GenericRepository<ApiKey>(db), new UnitOfWork(db, new DatabaseConnectionSettings()),
-            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance)
+            Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(), NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>())
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
     private sealed class LostAcknowledgement : DbTransactionInterceptor

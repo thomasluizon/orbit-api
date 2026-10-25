@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Orbit.Domain.Common;
+using Orbit.Domain.Models;
 
 namespace Orbit.Domain.Entities;
 
@@ -17,6 +18,7 @@ public class ApiKey : Entity
     public DateTime? LastUsedAtUtc { get; private set; }
     public bool IsRevoked { get; private set; }
     public Guid? OAuthFamilyId { get; private set; }
+    public string? OAuthClientId { get; private set; }
 
     private ApiKey() { }
 
@@ -26,7 +28,8 @@ public class ApiKey : Entity
         IReadOnlyList<string>? scopes = null,
         bool isReadOnly = false,
         DateTime? expiresAtUtc = null,
-        Guid? oauthFamilyId = null)
+        Guid? oauthFamilyId = null,
+        string? oauthClientId = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<(ApiKey, string)>(DomainErrors.UserIdRequired);
@@ -42,6 +45,10 @@ public class ApiKey : Entity
 
         if (oauthFamilyId == Guid.Empty)
             return Result.Failure<(ApiKey, string)>("An OAuth family id must not be empty.");
+        if (oauthClientId is not null && (oauthFamilyId is null || string.IsNullOrWhiteSpace(oauthClientId)
+            || oauthClientId.Length > OAuthClientMetadata.MaxClientIdLength
+            || oauthClientId.Contains(':') && !OAuthClientMetadata.IsMetadataUrl(oauthClientId)))
+            return Result.Failure<(ApiKey, string)>("An OAuth client id requires a valid client and key family.");
 
         var normalizedScopes = (scopes ?? [])
             .Where(scope => !string.IsNullOrWhiteSpace(scope))
@@ -67,7 +74,8 @@ public class ApiKey : Entity
             ExpiresAtUtc = expiresAtUtc,
             CreatedAtUtc = DateTime.UtcNow,
             IsRevoked = false,
-            OAuthFamilyId = oauthFamilyId
+            OAuthFamilyId = oauthFamilyId,
+            OAuthClientId = oauthClientId
         };
 
         return Result.Success((apiKey, rawKey));

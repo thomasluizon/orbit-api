@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Infrastructure.Persistence;
@@ -474,6 +475,7 @@ public class OrbitDbContext : DbContext
             entity.Property(k => k.IsRevoked).IsConcurrencyToken();
             entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(k => k.Name).HasMaxLength(50);
+            entity.Property(k => k.OAuthClientId).HasMaxLength(OAuthClientMetadata.MaxClientIdLength);
             entity.Property(k => k.KeyPrefix).HasMaxLength(12);
             entity.Property(k => k.Scopes)
                 .HasConversion(

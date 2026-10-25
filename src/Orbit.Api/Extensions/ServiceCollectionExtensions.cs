@@ -349,6 +349,10 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(Orbit.Application.Auth.Models.DesktopAuthOptions.SectionName));
         builder.Services.AddScoped<IDesktopHandoffStore, Orbit.Infrastructure.Persistence.DesktopHandoffStore>();
         builder.Services.AddScoped<OAuthAuthorizationStore>();
+        builder.Services.AddScoped<IOAuthClientMetadataService, OAuthClientMetadataService>();
+        builder.Services.AddHttpClient(OAuthClientMetadataService.HttpClientName,
+            client => client.Timeout = OAuthClientMetadataService.Timeout)
+            .ConfigurePrimaryHttpMessageHandler(OAuthMetadataNetwork.CreateHandler);
         builder.Services.AddScoped<IApiKeyUsageTracker, Orbit.Infrastructure.Persistence.ApiKeyUsageTracker>();
         if (!BuildTimeDocumentGeneration.IsActive)
             builder.Services.AddHostedService<Orbit.Api.Authentication.LegacyApiKeyInventory>();

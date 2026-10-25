@@ -107,7 +107,7 @@ public sealed class OAuthAuthorizationStore(IOAuthStateStore states, TimeProvide
 }
 
 public record ConsentEntry(Guid UserId, string CodeChallenge, string RedirectUri, string ClientId,
-    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null);
+    string State, string? Nonce, string Language, IReadOnlyList<string>? Scopes = null, string? ClientName = null);
 public sealed record ConsentTicket(ConsentEntry Entry, bool IsConsumed);
 public record RefreshEntry(Guid UserId, Guid ApiKeyId, string ClientId, Guid FamilyId = default, DateTime? FamilyExpiresAtUtc = null);
 

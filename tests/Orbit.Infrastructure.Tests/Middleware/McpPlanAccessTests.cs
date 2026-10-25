@@ -188,7 +188,7 @@ public class McpPlanAccessTests
             .Returns(Result.Success(new LoginResponse(user.Id, "login-token", user.Name, user.Email)));
         var controller = new OAuthController(mediator, store, keys, unitOfWork,
             Options.Create(new GoogleSettings()), new ConfigurationBuilder().Build(),
-            NullLogger<OAuthController>.Instance);
+            NullLogger<OAuthController>.Instance, Substitute.For<IOAuthClientMetadataService>());
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         const string verifier = "mcp-client-code-verifier";
         const string redirectUri = "https://claude.ai/callback";
@@ -201,7 +201,7 @@ public class McpPlanAccessTests
         redirect = ((RedirectResult)controller.GrantConsent(ticket, "requested")).Url;
         var code = QueryHelpers.ParseQuery(new Uri(redirect).Query)["code"].ToString();
 
-        var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None);
+        var result = await controller.Token("authorization_code", code, verifier, redirectUri, CancellationToken.None, client_id: "mcp-client");
 
         var response = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
         response.GetProperty("token_type").GetString().Should().Be("Bearer");
