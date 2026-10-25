@@ -2,14 +2,14 @@ name: Capability inventory
 
 on:
   pull_request:
-    branches: [main, redesign/main]
+    branches: [main]
     paths:
       - 'src/**/*.cs'
       - 'tools/capability-inventory*'
       - 'tools/__tests__/capability-inventory.test.mjs'
       - '.github/workflows/capability-inventory.yml'
   push:
-    branches: [main, redesign/main]
+    branches: [main]
     paths:
       - 'src/**/*.cs'
       - 'tools/capability-inventory*'
