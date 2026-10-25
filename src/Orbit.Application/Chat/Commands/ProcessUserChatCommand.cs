@@ -337,6 +337,21 @@ public partial class ProcessUserChatCommandHandler(
         try
         {
             var result = await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+            if (result.IsSuccess)
+            {
+                var readable = ChatResponseNegotiation.ForPendingPreview(result.Value,
+                    ApplyClientKillFlags(request, context.EnabledFeatureFlags).ClientContext?.SupportsParts == true,
+                    GetUserLanguage(context.User));
+                if (!ReferenceEquals(readable, result.Value))
+                {
+                    if (request.StreamSink is { } sink)
+                    {
+                        await sink(ChatStreamEvent.Reset());
+                        await sink(ChatStreamEvent.Delta(readable.AiMessage!));
+                    }
+                    result = Result.Success(readable);
+                }
+            }
             if (result.IsSuccess && !HasDisplayableAnswer(result.Value))
             {
                 var outputKinds = (result.Value.Parts ?? []).GroupBy(part => part switch

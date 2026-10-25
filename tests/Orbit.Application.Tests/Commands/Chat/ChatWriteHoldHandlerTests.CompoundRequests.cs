@@ -33,7 +33,9 @@ public sealed partial class ChatWriteHoldHandlerTests
         pending.Items[1].Fields.Should().Contain(field => field.Field == "parent_habit_id" && field.NewValue == "Before Bed");
         pending.Items[0].Fields.Should().Contain(field => field.Field == "frequency_unit" && field.NewValue == "Week");
         pending.Items[1].Fields.Should().Contain(field => field.Field == "frequency_unit" && field.NewValue == "Day");
-        result.Value.AiMessage.Should().BeNull();
+        result.Value.AiMessage.Should().NotBeNullOrWhiteSpace();
+        foreach (var item in pending.Items)
+            result.Value.AiMessage.Should().Contain(item.EntityName);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
     [Fact]
@@ -60,7 +62,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         result.IsSuccess.Should().BeTrue();
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items.Should().HaveCount(2);
-        result.Value.AiMessage.Should().BeNull();
+        result.Value.AiMessage.Should().Contain("approving");
         parents[0].Title.Should().Be("Post Lunch");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         var stored = _pendingOperationStore.GetExecution(_userId, preview.Id)!;

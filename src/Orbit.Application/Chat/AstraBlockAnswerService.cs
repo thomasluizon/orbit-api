@@ -244,6 +244,11 @@ public sealed class AstraBlockAnswerService(
         if (preview.Operation.Status != AgentOperationStatus.PendingConfirmation
             || preview.PendingOperation?.Items?.Count != chosen.Length)
             throw new AnswerRejectedException(Failure(ErrorCodes.AstraBlockPreviewUnavailable));
+        var flags = await featureFlags.GetEnabledKeysForUserAsync(request.UserId, token);
+        if (flags.Contains(FeatureFlagKeys.AstraBlockFirst))
+            return ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
+                PendingOperations: [preview.PendingOperation], CorrelationId: request.CorrelationId, Parts: []),
+                request.ClientContext, flags, user?.Language);
         var line = LocaleHelper.IsPortuguese(user?.Language) ? "Nada foi salvo." : "Nothing has been saved.";
         return new ChatResponse(line, [], PendingOperations: [preview.PendingOperation],
             CorrelationId: request.CorrelationId,
@@ -258,9 +263,8 @@ public sealed class AstraBlockAnswerService(
             ?? throw new InvalidOperationException("Stored block has no response.");
         var userId = request.UserId;
         var flags = await featureFlags.GetEnabledKeysForUserAsync(userId, ct);
-        stored = ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags);
         if (stored.PendingOperations is not { Count: > 0 } pending)
-            return stored;
+            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags);
         var current = new List<PendingAgentOperation>();
         foreach (var operation in pending)
         {
@@ -281,7 +285,9 @@ public sealed class AstraBlockAnswerService(
                 PreviewFingerprint = preview.PreviewFingerprint
             });
         }
-        return stored with { PendingOperations = current };
+        var user = await users.GetByIdAsync(userId, ct);
+        return ChatResponseNegotiation.ForClient(stored with { PendingOperations = current }, request.ClientContext, flags,
+            user?.Language);
     }
 
     private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)

@@ -511,7 +511,7 @@ public partial class ProcessUserChatCommandHandlerTests
         if (afterCorrection)
         {
             result.Value.PendingOperations.Should().ContainSingle();
-            result.Value.AiMessage.Should().BeNull();
+            result.Value.AiMessage.Should().Contain("approving");
         }
         else
         {

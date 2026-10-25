@@ -2860,6 +2860,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.Value.PendingOperations.Should().ContainSingle();
         result.Value.FollowUps.Should().BeNull();
+        result.Value.AiMessage.Should().NotBeNullOrWhiteSpace();
+        result.Value.Parts.Should().BeNull();
         events.Should().NotContain(item => item.Type == "step");
         await _operationExecutor.Received(1).ExecuteAsync(
             Arg.Is<AgentExecuteOperationRequest>(item => item.IncludeChangePreview == !previewDisabled),

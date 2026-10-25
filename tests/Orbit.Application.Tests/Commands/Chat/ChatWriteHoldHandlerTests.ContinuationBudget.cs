@@ -260,7 +260,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items.Should().HaveCount(habits.Length);
         _pendingOperationStore.IsAwaitingConfirmation(_userId, preview.Id).Should().BeTrue();
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().Contain("approving");
         HabitSnapshot(habits).Should().Be(before);
         await AssertOneBudgetContinuationAsync();
     }

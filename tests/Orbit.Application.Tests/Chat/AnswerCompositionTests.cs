@@ -84,6 +84,50 @@ public partial class ProcessUserChatCommandHandlerTests
         }
     }
 
+    [Theory]
+    [InlineData("en", "legacy")]
+    [InlineData("pt-BR", "legacy")]
+    [InlineData("en", "disabled")]
+    [InlineData("pt-BR", "disabled")]
+    [InlineData("en", "parts")]
+    public async Task Composition_RealPreviewHasReadableFallbackWithoutModelClaims(string language, string mode)
+    {
+        SetupExistingParents(language);
+        EnableComposition();
+        if (mode == "disabled")
+            _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+                .Returns(["astra_block_first", "astra_parts_disabled", "astra_conversation_recording"]);
+        var tool = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(tool);
+        var held = HoldReplayWrites(tool);
+        SetupAiResponse(ReplayCall(tool.Name, """{"habits":[{"title":"Reading","frequency_unit":"Day","frequency_quantity":1}]}""").Value);
+        ReplyToReplay("Saved Reading 99 times.");
+        var events = new List<ChatStreamEvent>();
+        var result = await handler.Handle(new(UserId, "Create a Reading habit", ClientContext: new(
+            SupportsParts: mode != "legacy", SupportsPendingOperationChanges: true),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle()
+            .Which.EntityName.Should().Be("Reading");
+        held.Should().ContainSingle();
+        result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.Success);
+        if (mode == "parts")
+        {
+            result.Value.AiMessage.Should().BeNullOrEmpty();
+            events.Should().NotContain(item => item.Type == "delta");
+        }
+        else
+        {
+            result.Value.AiMessage.Should().Contain("Reading").And.NotContain("99").And.NotContain("Saved");
+            result.Value.AiMessage.Should().Contain(language == "en" ? "approving" : "aprovar");
+            result.Value.Parts.Should().BeNull();
+            events.Last(item => item.Type == "delta").Text.Should().Be(result.Value.AiMessage);
+        }
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
+    }
+
     private IAiTool CompositionTool(string name, string? kind = null)
     {
         if (name == "get_daily_summary") return SummaryReadTool();
