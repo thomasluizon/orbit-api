@@ -29,7 +29,6 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
       TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
-      STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -89,6 +88,7 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_RESEED_STEP: Back up staging data
+          STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
         run: |
           PGDATABASE="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
           export PGDATABASE
@@ -141,6 +141,7 @@ jobs:
         if: steps.age.outputs.replace == 'true'
         env:
           STAGING_RESEED_STEP: Restore and verify staging data
+          STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
         run: |
           PGDATABASE="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
           export PGDATABASE
@@ -257,4 +258,5 @@ jobs:
         if: always()
         env:
           STAGING_RESEED_STEP: Delete local staging data
+          STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
         run: rm -rf -- "$STAGING_CARRY_DIRECTORY"
