@@ -11,18 +11,18 @@ const plans = JSON.parse(readFileSync(join(import.meta.dirname, "staging-reseed-
 const steps = [...workflow.matchAll(/^      - name: (.+)\n([\s\S]*?)(?=^      - |$(?![\s\S]))/gm)]
   .map(([, name, body]) => ({ name, body }))
 const defaultPassword = ["carry", "test", "secret"].join("-")
-const encodedUser = ["carry", "user"].join("@")
-const encodedPassword = ["p", "@", "ss", ":", "word", "/", "test"].join("")
-const encodedDatabase = ["orbit", "staging"].join("/")
+const fixtureUser = ["carry", "user"].join("@")
+const fixturePassword = ["p", "@", "ss", ":", "word", "/", "test"].join("")
+const fixtureDatabase = ["orbit", "staging"].join("/")
 const defaultConnection = {
   url: `postgresql://${encodeURIComponent("orbit_staging")}:${encodeURIComponent(defaultPassword)}@staging.example/${encodeURIComponent("orbit_staging")}`,
   env: { PGHOST: "staging.example", PGPORT: "5432", PGUSER: "orbit_staging",
     PGPASSWORD: defaultPassword, PGDATABASE: "orbit_staging", PGSSLMODE: "require", PGCONNECT_TIMEOUT: "30" },
 }
 const encodedConnection = {
-  url: `postgres://${encodeURIComponent(encodedUser)}:${encodeURIComponent(encodedPassword)}@db-carry.example:6543/${encodeURIComponent(encodedDatabase)}?sslmode=verify-full`,
-  env: { PGHOST: "db-carry.example", PGPORT: "6543", PGUSER: encodedUser,
-    PGPASSWORD: encodedPassword, PGDATABASE: encodedDatabase, PGSSLMODE: "verify-full", PGCONNECT_TIMEOUT: "30" },
+  url: `postgres://${encodeURIComponent(fixtureUser)}:${encodeURIComponent(fixturePassword)}@db-carry.example:6543/${encodeURIComponent(fixtureDatabase)}?sslmode=verify-full`,
+  env: { PGHOST: "db-carry.example", PGPORT: "6543", PGUSER: fixtureUser,
+    PGPASSWORD: fixturePassword, PGDATABASE: fixtureDatabase, PGSSLMODE: "verify-full", PGCONNECT_TIMEOUT: "30" },
 }
 
 function stepScript(name) {
