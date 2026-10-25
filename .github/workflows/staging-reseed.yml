@@ -25,6 +25,7 @@ jobs:
     environment: render-operations
     timeout-minutes: 60
     env:
+      BASH_ENV: ${{ github.workspace }}/.github/scripts/staging-reseed-errors.sh
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
       TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
@@ -39,11 +40,15 @@ jobs:
           terraform_version: 1.16.4
           terraform_wrapper: false
       - name: Initialize staging database state
+        env:
+          STAGING_RESEED_STEP: Initialize staging database state
         run: |
           [[ -n "$TF_VAR_staging_environment_id" && -n "$TF_VAR_staging_api_service_id" ]]
           terraform -chdir=infra/staging-database init -input=false
       - name: Read staging database age
         id: age
+        env:
+          STAGING_RESEED_STEP: Read staging database age
         run: |
           database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
           created_at="$(curl --fail --silent --show-error --max-time 30 \
@@ -59,19 +64,29 @@ jobs:
       - name: Replace staging database and refresh its API connection
         id: replace
         if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Replace staging database and refresh its API connection
         run: |
           terraform -chdir=infra/staging-database plan -input=false \
             -replace=render_postgres.staging \
+            -target=render_postgres.staging \
+            -target=render_env_group.staging_database \
             -out=staging-reseed.tfplan > /dev/null
-          terraform -chdir=infra/staging-database show -json staging-reseed.tfplan | jq --exit-status '
-            [.resource_changes[] | select(.change.actions != ["no-op"])] |
-            (length >= 1 and all(.[]; .address == "render_postgres.staging" or
+          plan_json="$(terraform -chdir=infra/staging-database show -json staging-reseed.tfplan)"
+          jq --exit-status '
+            [.resource_changes[] | select(.change.actions != ["no-op"])] as $changes |
+            if ($changes | (length >= 1 and all(.[]; .address == "render_postgres.staging" or
               (.address == "render_env_group.staging_database" and .change.actions == ["update"]))) and
             any(.[]; .address == "render_postgres.staging" and
-              (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"]))
-          ' > /dev/null
+              (.change.actions == ["delete", "create"] or .change.actions == ["create", "delete"])))
+            then true
+            else error("Rejected staging reseed plan: " +
+              ($changes | map({address, actions: .change.actions}) | tojson))
+            end
+          ' <<< "$plan_json" > /dev/null
           terraform -chdir=infra/staging-database apply -input=false -auto-approve staging-reseed.tfplan > /dev/null
-          echo "database_id=$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)" >> "$GITHUB_OUTPUT"
+          database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
+          echo "database_id=${database_id}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         if: steps.age.outputs.replace == 'true'
         with:
@@ -79,29 +94,34 @@ jobs:
       - name: Allow runner access for migrations
         if: steps.age.outputs.replace == 'true'
         env:
+          STAGING_RESEED_STEP: Allow runner access for migrations
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
         run: bash .github/scripts/staging-postgres-access.sh open
       - name: Apply migrations to the replacement database
         if: steps.age.outputs.replace == 'true'
         env:
+          STAGING_RESEED_STEP: Apply migrations to the replacement database
           ASPNETCORE_ENVIRONMENT: Staging
           Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
-            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- migrate-staging
+          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)"
+          Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
+          export Seed__ExpectedHost Seed__DatabaseUrl
+          dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- migrate-staging
       - name: Restore operator access after migrations
         id: migration_cleanup
         if: always() && steps.replace.outputs.database_id != ''
         env:
+          STAGING_RESEED_STEP: Restore operator access after migrations
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
         run: bash .github/scripts/staging-postgres-access.sh restore
       - name: Deploy the staging API and wait for that deploy
         if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Deploy the staging API and wait for that deploy
         run: |
-          set -euo pipefail
           commit_id="$(curl --fail --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             --get --data-urlencode 'status=live' --data-urlencode 'limit=1' \
@@ -152,29 +172,37 @@ jobs:
               | jq --exit-status --raw-output --arg id "$deploy_id" 'select(.id == $id) | .status')"
             case "$deploy_status" in
               live) exit 0 ;;
-              build_failed|update_failed|pre_deploy_failed|canceled|deactivated) exit 1 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                echo "Render deploy ${deploy_id} ended with status ${deploy_status}" >&2
+                exit 1
+                ;;
             esac
             sleep 20
           done
+          echo "Render deploy ${deploy_id} did not become live before the wait expired" >&2
           exit 1
       - name: Allow runner access for the owner seed
         if: steps.age.outputs.replace == 'true'
         env:
+          STAGING_RESEED_STEP: Allow runner access for the owner seed
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
         run: bash .github/scripts/staging-postgres-access.sh open
       - name: Seed the owner account
         if: steps.age.outputs.replace == 'true'
         env:
+          STAGING_RESEED_STEP: Seed the owner account
           ASPNETCORE_ENVIRONMENT: Staging
           Seed__OwnerEmail: ${{ vars.SEED_OWNER_EMAIL }}
         run: |
-          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)" \
-            Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)" \
-            dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- seed-staging
+          Seed__ExpectedHost="$(terraform -chdir=infra/staging-database output -raw staging_external_host)"
+          Seed__DatabaseUrl="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
+          export Seed__ExpectedHost Seed__DatabaseUrl
+          dotnet run --project src/Orbit.Api/Orbit.Api.csproj --no-launch-profile -- seed-staging
       - name: Restore operator access after the owner seed
         if: always() && steps.replace.outputs.database_id != ''
         env:
+          STAGING_RESEED_STEP: Restore operator access after the owner seed
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
         run: bash .github/scripts/staging-postgres-access.sh restore
