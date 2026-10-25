@@ -92,7 +92,9 @@ public class AgentPolicyEvaluator(
         if (featureFlagDenial is not null)
             return featureFlagDenial;
 
+        var grantedByAdminRole = capability.Id == FeatureFlagActions.CapabilityId && user.IsAdmin;
         if (context.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth &&
+            !grantedByAdminRole &&
             !context.GrantedScopes.Contains(capability.Scope, StringComparer.OrdinalIgnoreCase))
         {
             return new AgentPolicyDecision(
