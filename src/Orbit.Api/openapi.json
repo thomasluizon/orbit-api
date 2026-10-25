@@ -12666,7 +12666,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Profile/onboarding": {
@@ -16518,7 +16519,8 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "deprecated": true
           }
         }
       },
@@ -24216,7 +24218,8 @@
               "string"
             ]
           }
-        }
+        },
+        "deprecated": true
       },
       "SetLanguageRequest": {
         "required": [
