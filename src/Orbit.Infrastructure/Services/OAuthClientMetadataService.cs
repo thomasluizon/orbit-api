@@ -17,7 +17,7 @@ public sealed class OAuthClientMetadataService(IHttpClientFactory httpClients, I
 
     public async Task<OAuthClientMetadata?> GetAsync(string clientId, CancellationToken cancellationToken)
     {
-        if (!OAuthClientMetadata.IsMetadataUrl(clientId))
+        if (!OAuthClientMetadata.TryParseMetadataUrl(clientId, out var metadataUri))
             return null;
         var cacheKey = (HttpClientName, clientId);
         if (cache.TryGetValue<OAuthClientMetadata>(cacheKey, out var cached))
@@ -28,52 +28,69 @@ public sealed class OAuthClientMetadataService(IHttpClientFactory httpClients, I
         try
         {
             using var client = httpClients.CreateClient(HttpClientName);
-            using var request = new HttpRequestMessage(HttpMethod.Get, clientId);
+            using var request = new HttpRequestMessage(HttpMethod.Get, metadataUri);
             request.Headers.Accept.ParseAdd("application/json");
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-            var mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (response.StatusCode != HttpStatusCode.OK || response.Content.Headers.ContentLength > MaxDocumentBytes
-                || mediaType is null || !(mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase)
-                    || mediaType.StartsWith("application/", StringComparison.OrdinalIgnoreCase)
-                    && mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase)))
+            if (!IsAcceptableResponse(response))
                 return null;
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            var buffer = new byte[MaxDocumentBytes + 1];
-            var length = 0;
-            while (length < buffer.Length)
-            {
-                var read = await stream.ReadAsync(buffer.AsMemory(length), ct);
-                if (read == 0)
-                    break;
-                length += read;
-            }
-            if (length > MaxDocumentBytes)
+            var body = await ReadBoundedBodyAsync(response.Content, ct);
+            if (body is null)
                 return null;
-            using var json = JsonDocument.Parse(buffer.AsMemory(0, length));
-            if (json.RootElement.ValueKind != JsonValueKind.Object)
-                return null;
-            var properties = json.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
-            if (properties.Distinct(StringComparer.Ordinal).Count() != properties.Length
-                || properties.Contains("client_secret", StringComparer.Ordinal)
-                || properties.Contains("client_secret_expires_at", StringComparer.Ordinal))
-                return null;
-            var document = json.RootElement.Deserialize<OAuthClientMetadataDocument>();
-            if (document is null || document.ClientId != clientId || !validator.Validate(document).IsValid)
-                return null;
-            var metadata = OAuthClientMetadata.Create(document.ClientId, document.ClientName,
-                document.RedirectUris, document.TokenEndpointAuthMethod);
-            if (metadata.IsFailure)
+            using var json = JsonDocument.Parse(body.Value);
+            var metadata = ValidateDocument(json.RootElement, clientId);
+            if (metadata is null)
                 return null;
             var lifetime = CacheLifetime(response);
             if (lifetime > TimeSpan.Zero)
-                cache.Set(cacheKey, metadata.Value, lifetime);
-            return metadata.Value;
+                cache.Set(cacheKey, metadata, lifetime);
+            return metadata;
         }
         catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException
             || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             return null;
         }
+    }
+
+    private static bool IsAcceptableResponse(HttpResponseMessage response)
+    {
+        var mediaType = response.Content.Headers.ContentType?.MediaType;
+        return response.StatusCode == HttpStatusCode.OK && !(response.Content.Headers.ContentLength > MaxDocumentBytes)
+            && mediaType is not null && (mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase)
+                || mediaType.StartsWith("application/", StringComparison.OrdinalIgnoreCase)
+                && mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static async Task<ReadOnlyMemory<byte>?> ReadBoundedBodyAsync(HttpContent content, CancellationToken ct)
+    {
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        var buffer = new byte[MaxDocumentBytes + 1];
+        var length = 0;
+        while (length < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(length), ct);
+            if (read == 0)
+                break;
+            length += read;
+        }
+        return length > MaxDocumentBytes ? null : buffer.AsMemory(0, length);
+    }
+
+    private OAuthClientMetadata? ValidateDocument(JsonElement root, string clientId)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+            return null;
+        var properties = root.EnumerateObject().Select(property => property.Name).ToArray();
+        if (properties.Distinct(StringComparer.Ordinal).Count() != properties.Length
+            || properties.Contains("client_secret", StringComparer.Ordinal)
+            || properties.Contains("client_secret_expires_at", StringComparer.Ordinal))
+            return null;
+        var document = root.Deserialize<OAuthClientMetadataDocument>();
+        if (document is null || document.ClientId != clientId || !validator.Validate(document).IsValid)
+            return null;
+        var metadata = OAuthClientMetadata.Create(document.ClientId, document.ClientName,
+            document.RedirectUris, document.TokenEndpointAuthMethod);
+        return metadata.IsFailure ? null : metadata.Value;
     }
 
     private TimeSpan CacheLifetime(HttpResponseMessage response)

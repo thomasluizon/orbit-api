@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Models;
@@ -29,8 +30,11 @@ public sealed class OAuthClientMetadata
         return Result.Success(new OAuthClientMetadata(clientId!, clientName, redirectUris));
     }
 
-    public static bool IsMetadataUrl(string? clientId)
+    public static bool IsMetadataUrl(string? clientId) => TryParseMetadataUrl(clientId, out _);
+
+    public static bool TryParseMetadataUrl(string? clientId, [NotNullWhen(true)] out Uri? metadataUri)
     {
+        metadataUri = null;
         if (string.IsNullOrWhiteSpace(clientId) || clientId.Length > MaxClientIdLength
             || clientId.Any(char.IsWhiteSpace) || clientId.Contains('\\')
             || !Uri.TryCreate(clientId, UriKind.Absolute, out var uri) || uri.Scheme != "https"
@@ -40,7 +44,10 @@ public sealed class OAuthClientMetadata
         var authorityEnd = suffix.IndexOfAny(['/', '?', '#']);
         if (authorityEnd < 0 || suffix[authorityEnd] != '/')
             return false;
-        var path = suffix[authorityEnd..].Split('?', '#')[0];
-        return !Uri.UnescapeDataString(path).Split('/').Any(segment => segment is "." or "..");
+        var path = suffix[authorityEnd..].Split(['?', '#'], StringSplitOptions.None)[0];
+        if (Uri.UnescapeDataString(path).Split('/').Any(segment => segment is "." or ".."))
+            return false;
+        metadataUri = uri;
+        return true;
     }
 }

@@ -14,7 +14,7 @@ public partial class OAuthController
     public async Task<IActionResult> AppleStart([FromServices] AppleAuthorizationFlow flow,
         [FromQuery] string client_id, [FromQuery] string redirect_uri, [FromQuery] string state,
         [FromQuery] string code_challenge, [FromQuery] string code_challenge_method,
-        [FromQuery] string? nonce = null, [FromQuery] string? scope = null, CancellationToken ct = default)
+        [FromQuery] string? nonce = null, [FromQuery] string? scope = null)
     {
         if (string.IsNullOrWhiteSpace(client_id) || client_id.Length > 1024 || string.IsNullOrEmpty(state) || state.Length > 2048
             || string.IsNullOrEmpty(code_challenge) || code_challenge.Length > 128 || code_challenge_method != "S256"
@@ -23,7 +23,7 @@ public partial class OAuthController
         var scopes = RequestedScopes(scope);
         if (scopes is null)
             return BadRequest(new { error = "invalid_scope" });
-        var client = await ValidateClientAsync(client_id, redirect_uri, ct);
+        var client = await ValidateClientAsync(client_id, redirect_uri, HttpContext.RequestAborted);
         if (client.Error is not null)
             return BadRequest(new { error = client.Error });
         var language = ResolveLanguage();

@@ -18,7 +18,7 @@ public class OAuthClientIdentityMigrationTests
         var column = migration.UpOperations.Should().ContainSingle().Which.Should().BeOfType<AddColumnOperation>().Subject;
         column.Table.Should().Be("ApiKeys");
         column.Name.Should().Be("OAuthClientId");
-        column.ClrType.Should().Be(typeof(string));
+        column.ClrType.Should().Be<string>();
         column.MaxLength.Should().Be(1024);
         column.IsNullable.Should().BeTrue();
         column.DefaultValue.Should().BeNull();
