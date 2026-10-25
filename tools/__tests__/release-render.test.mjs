@@ -32,7 +32,7 @@ function replay(t, job, sequences, name = "Trigger and monitor Render deploy") {
   const statePath = join(directory, "state.json")
   const outputPath = join(directory, "output")
   writeFileSync(outputPath, "")
-  writeFileSync(statePath, JSON.stringify({ sequences, counts: {}, calls: [], waits: [] }))
+  writeFileSync(statePath, JSON.stringify({ sequences: { baseline: [response([])], ...sequences }, counts: {}, calls: [], waits: [], elapsed: 0 }))
   writeFileSync(join(directory, "curl"), `#!${process.execPath}
 const fs = require("node:fs")
 const statePath = ${JSON.stringify(statePath)}
@@ -42,7 +42,7 @@ const option = flag => args[args.indexOf(flag) + 1]
 const method = args.includes("--request") ? option("--request") : "GET"
 const url = args.find(arg => arg.startsWith("https://api.render.com/"))
 const route = method === "POST" ? "post" : method === "PATCH" ? "patch"
-  : args.includes("status=live") ? "live" : url?.endsWith("/deploys") ? "list" : "poll"
+  : args.includes("status=live") ? "live" : url?.endsWith("/deploys") ? (state.counts.post ? "list" : "baseline") : "poll"
 if (!url || !state.sequences[route]) {
   console.error("Unexpected request", args)
   process.exit(99)
@@ -59,16 +59,27 @@ for (let attempt = 0; attempt <= retries; attempt++) {
     console.error("Response sequence exhausted", route)
     process.exit(99)
   }
+  if (entry.notBefore > state.elapsed) {
+    fs.writeFileSync(statePath, JSON.stringify(state))
+    console.error("Retried before Retry-After expired")
+    process.exit(99)
+  }
   const http = Number(entry.http ?? 200)
   const failsHttp = args.includes("--fail") || args.includes("--fail-with-body")
   const retry = [408, 429, 500, 502, 503, 504].includes(http)
     || (args.includes("--retry-all-errors") && (entry.exit || (failsHttp && http >= 400)))
-  if (!retry) break
+  if (!retry || attempt === retries) break
+  const delay = /^\\d+$/.test(entry.retryAfter ?? "") ? Math.max(2, Number(entry.retryAfter)) : 2
+  if (delay > Number(args.includes("--retry-max-time") ? option("--retry-max-time") : Infinity)) break
+  state.waits.push(String(delay))
+  state.elapsed += delay
 }
 fs.writeFileSync(statePath, JSON.stringify(state))
 const body = typeof entry.body === "string" ? entry.body : JSON.stringify(entry.body)
 if (args.includes("--output")) fs.writeFileSync(option("--output"), body)
 else process.stdout.write(body)
+if (args.includes("--dump-header")) fs.writeFileSync(option("--dump-header"),
+  "HTTP/1.1 " + (entry.http ?? 200) + "\\r\\n" + (entry.retryAfter === undefined ? "" : "rEtRy-AfTeR: " + entry.retryAfter + "\\r\\n") + "\\r\\n")
 if (args.includes("--write-out")) process.stdout.write(String(entry.http ?? 200))
 process.exitCode = entry.exit ?? ((args.includes("--fail") || args.includes("--fail-with-body")) && Number(entry.http) >= 400 ? 22 : 0)
 `, { mode: 0o755 })
@@ -77,6 +88,7 @@ const fs = require("node:fs")
 const statePath = ${JSON.stringify(statePath)}
 const state = JSON.parse(fs.readFileSync(statePath))
 state.waits.push(process.argv[2])
+state.elapsed += Number(process.argv[2])
 fs.writeFileSync(statePath, JSON.stringify(state))
 `, { mode: 0o755 })
   writeFileSync(join(directory, "node"), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
@@ -95,6 +107,7 @@ fs.writeFileSync(statePath, JSON.stringify(state))
 function followed(result, posts = 1) {
   assert.equal(result.status, 0, result.stdout + result.stderr)
   assert.equal(result.counts.post, posts)
+  assert.equal(result.calls[0].route, "baseline")
   assert.ok(result.counts.poll >= 1)
   assert.match(result.stdout, /Render deploy status: live/)
   assert.match(result.output, new RegExp(`log_url=https://dashboard.render.com/web/.+/deploys/${id}`))
@@ -117,18 +130,37 @@ for (const job of ["production", "staging"]) {
     assert.equal(result.counts.list, 1)
   })
 
-  test(`${job}: a lost POST is resent only after the recent deploys exclude it`, t => {
-    const result = replay(t, job, {
-      post: [transient, created],
-      list: [response([...fixture.recent, ...recent({ commit: fixture.recent[1].deploy.commit })])],
-      poll: [live],
+  for (const exit of [28, 52, 55]) {
+    test(`${job}: curl ${exit} after sending POST only reconciles`, t => {
+      followed(replay(t, job, { post: [{ ...transient, exit }], list: [response([]), response(recent())], poll: [live] }))
     })
-    followed(result, 2)
-    assert.deepEqual(result.calls.map(call => call.route), ["post", "list", "post", "poll"])
+  }
+
+  for (const exit of [6, 7]) {
+    test(`${job}: curl ${exit} before sending POST can retry`, t => {
+      followed(replay(t, job, { post: [{ ...transient, exit }, created], poll: [live] }), 2)
+    })
+  }
+
+  test(`${job}: repeated pre-connection failures stop after four POST attempts`, t => {
+    const result = replay(t, job, { post: Array(4).fill({ ...transient, exit: 7 }) })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.post, 4)
+    assert.equal(result.counts.list ?? 0, 0)
   })
 
-  for (const http of [429, 500, 501, 503]) {
-    test(`${job}: HTTP ${http} on POST is reconciled before any resend`, t => {
+  test(`${job}: a POST completing after the first empty snapshot is followed without resending`, t => {
+    const result = replay(t, job, {
+      post: [transient, created],
+      list: [response([]), response(recent())],
+      poll: [live],
+    })
+    followed(result)
+    assert.equal(result.counts.list, 2)
+  })
+
+  for (const http of [500, 501, 503]) {
+    test(`${job}: HTTP ${http} on POST is reconciled without any resend`, t => {
       followed(replay(t, job, { post: [response({ message: "temporary failure" }, http)], list: [response(recent())], poll: [live] }))
     })
   }
@@ -156,11 +188,13 @@ for (const job of ["production", "staging"]) {
     followed(replay(t, job, { post: [transient], list: [transient, response(recent())], poll: [live] }))
   })
 
-  test(`${job}: persistent POST failures have a bounded number of attempts`, t => {
+  test(`${job}: unrecovered ambiguous POST stops with operator guidance after bounded read-only reconciliation`, t => {
     const result = replay(t, job, { post: Array(20).fill(transient), list: Array(20).fill(response([])) })
     assert.notEqual(result.status, 0)
-    assert.ok(result.counts.post >= 2 && result.counts.post <= 4)
-    assert.equal(result.counts.list, result.counts.post)
+    assert.equal(result.counts.post, 1)
+    assert.equal(result.counts.list, 4)
+    assert.match(result.stderr, new RegExp(`check.*deploys.*before.*dispatch`, "i"))
+    assert.ok(result.stderr.includes(sha))
   })
 
   test(`${job}: a queued response preserves the existing refusal to guess a deploy ID`, t => {
@@ -178,12 +212,79 @@ for (const job of ["production", "staging"]) {
     assert.equal(result.output, "")
   })
 
-  test(`${job}: reconciliation follows pagination before resending`, t => {
+  test(`${job}: reconciliation follows pagination without resending`, t => {
     const page = Array.from({ length: 100 }, () => fixture.recent[1])
     const result = replay(t, job, { post: [transient], list: [response(page), response(recent())], poll: [live] })
     followed(result)
     assert.equal(result.counts.list, 2)
     assert.ok(result.calls.findLast(call => call.route === "list").args.includes(`cursor=${fixture.recent[1].cursor}`))
+  })
+
+  test(`${job}: a historical-only same-commit deploy is never reused even with a recent timestamp`, t => {
+    const history = recent()
+    const result = replay(t, job, {
+      baseline: [response(history)], post: [transient],
+      list: Array(4).fill(response(history)), poll: [live],
+    })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.post, 1)
+    assert.equal(result.counts.poll ?? 0, 0)
+  })
+
+  for (const historicalFirst of [true, false]) {
+    test(`${job}: selects the new same-commit deploy with historicalFirst=${historicalFirst}`, t => {
+      const history = recent({ id: "dep-historical" })
+      const entries = historicalFirst ? [...history, ...recent()] : [...recent(), ...history]
+      followed(replay(t, job, { baseline: [response(history)], post: [transient], list: [response(entries)], poll: [live] }))
+    })
+  }
+
+  for (const route of ["post", "poll", "baseline"]) {
+    test(`${job}: HTTP 429 on ${route} waits for Retry-After before trying again`, t => {
+      const sequences = { post: [created], poll: [live], baseline: [response([])], list: Array(4).fill(response([])) }
+      const success = route === "post" ? created : route === "poll" ? live : response([])
+      sequences[route] = [{ ...response({ message: "rate limit exceeded" }, 429), retryAfter: "7" }, { ...success, notBefore: 7 }]
+      const result = replay(t, job, sequences)
+      followed(result, route === "post" ? 2 : 1)
+      assert.ok(result.waits.includes("7"))
+    })
+  }
+
+  test(`${job}: POST 429 uses the fallback delay for missing or invalid Retry-After`, t => {
+    for (const retryAfter of [undefined, "invalid", "-1"]) {
+      const result = replay(t, job, {
+        post: [{ ...response({}, 429), retryAfter }, { ...created, notBefore: 2 }], poll: [live],
+      })
+      followed(result, 2)
+      assert.deepEqual(result.waits, ["2"])
+    }
+  })
+
+  test(`${job}: Retry-After beyond the 60-second budget stops without retrying early`, t => {
+    for (const route of ["post", "baseline"]) {
+      const result = replay(t, job, { [route]: [{ ...response({}, 429), retryAfter: "61" }] })
+      assert.notEqual(result.status, 0)
+      assert.equal(result.counts[route], 1)
+      assert.deepEqual(result.waits, [])
+    }
+  })
+
+  test(`${job}: a failed baseline read stops before sending any POST`, t => {
+    const result = replay(t, job, { baseline: [response({}, 401)] })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.post ?? 0, 0)
+  })
+
+  test(`${job}: baseline and reconciliation scan every page before selecting an identity`, t => {
+    const history = recent({ id: "dep-historical" })
+    const page = Array.from({ length: 100 }, () => fixture.recent[1])
+    const result = replay(t, job, {
+      baseline: [response(page), response(history)], post: [transient],
+      list: [response([...page.slice(0, 98), ...recent(), ...history]), response([])], poll: [live],
+    })
+    followed(result)
+    assert.equal(result.counts.baseline, 2)
+    assert.equal(result.counts.list, 2)
   })
 
   test(`${job}: malformed reconciliation data never permits another POST`, t => {
@@ -223,4 +324,12 @@ test("staging: idempotent service PATCH retries a lost connection and 503, but f
   const denied = replay(t, "staging", { patch: [response({ message: "Unauthorized" }, 401)] }, "Select staging branch")
   assert.notEqual(denied.status, 0)
   assert.equal(denied.counts.patch, 1)
+})
+
+test("staging: service PATCH honors Retry-After", t => {
+  const result = replay(t, "staging", { patch: [
+    { ...response({}, 429), retryAfter: "7" }, { ...response(fixture.service), notBefore: 7 },
+  ] }, "Select staging branch")
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  assert.deepEqual(result.waits, ["7"])
 })
