@@ -196,7 +196,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    public async Task ChoiceAnswer_ModerationRefusal_DoesNotReserveOrDispatch(bool flagged, bool unavailable)
+    public async Task ChoiceAnswer_ModerationResult_DoesNotReserveOrDispatch(bool flagged, bool unavailable)
     {
         SetupUserAndPayGate();
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
@@ -208,7 +208,11 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var result = await CreateHandler().Handle(new(UserId, "Morning", BlockAnswer: new(block.Id, ["a"])), default);
 
-        result.IsFailure.Should().BeTrue();
+        result.IsSuccess.Should().Be(!unavailable);
+        if (unavailable)
+            result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable);
+        else
+            result.Value.AiMessage.Should().NotBeNullOrWhiteSpace();
         await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);

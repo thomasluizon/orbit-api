@@ -110,6 +110,7 @@ public static class ErrorMessages
     public static readonly AppError AiEmptyResponse = From(ErrorCodes.AiEmptyResponse);
     public static readonly AppError AiNoOutput = From(ErrorCodes.AiEmptyResponse);
     public static readonly AppError AiUnavailable = From(ErrorCodes.AiUnavailable);
+    public static readonly AppError ContentModerationRefused = From(ErrorCodes.ContentModerationRefused);
     public static readonly AppError AiRetrospectiveUnavailable = From(ErrorCodes.AiUnavailable);
     public static readonly AppError AiGoalReviewUnavailable = From(ErrorCodes.AiUnavailable);
     public static readonly AppError AiTagSuggestionUnavailable = From(ErrorCodes.AiUnavailable);

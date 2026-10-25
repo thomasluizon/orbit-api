@@ -115,6 +115,7 @@ public static class ErrorCodes
     public const string NoGoalsData = "NO_GOALS_DATA";
     public const string AiEmptyResponse = "AI_EMPTY_RESPONSE";
     public const string AiUnavailable = "AI_UNAVAILABLE";
+    public const string ContentModerationRefused = "CONTENT_MODERATION_REFUSED";
     public const string AiNoActiveConversation = "AI_NO_ACTIVE_CONVERSATION";
     public const string InvalidChatHistory = "INVALID_CHAT_HISTORY";
     public const string InvalidClientContext = "INVALID_CLIENT_CONTEXT";

@@ -210,6 +210,11 @@ public partial class ProcessUserChatCommandHandler(
         try
         {
             response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
+            if (response.ErrorCode == ErrorCodes.ContentModerationRefused)
+            {
+                recording.Enabled = false;
+                response = await HandleModeratedTurnAsync(request, cancellationToken);
+            }
             return response.IsSuccess && evalTrace is not null
                 ? Result.Success(response.Value with { EvalTrace = evalTrace.Build() })
                 : response;
@@ -267,7 +272,21 @@ public partial class ProcessUserChatCommandHandler(
         var check = await moderation.CheckTextAsync(input, cancellationToken);
         if (check.Unavailable)
             return Result.Failure(ErrorMessages.AiUnavailable);
-        return check.Flagged ? Result.Failure("This input was refused by content moderation.") : Result.Success();
+        return check.Flagged ? Result.Failure(ErrorMessages.ContentModerationRefused) : Result.Success();
+    }
+
+    private async Task<Result<ChatResponse>> HandleModeratedTurnAsync(
+        ProcessUserChatCommand request, CancellationToken cancellationToken)
+    {
+        var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var message = ErrorCopy.Resolve(ErrorCodes.ContentModerationRefused, LocaleHelper.IsPortuguese(user?.Language));
+        if (request.StreamSink is not null)
+        {
+            await request.StreamSink(ChatStreamEvent.Reset());
+            await request.StreamSink(ChatStreamEvent.Delta(message));
+        }
+        return Result.Success(new ChatResponse(message, [], CorrelationId: request.CorrelationId,
+            Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(message)] : null));
     }
 
     private CancellationTokenSource CreateBlockTurnCancellation(CancellationToken token, DateTime? answeredAtUtc)

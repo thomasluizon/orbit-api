@@ -142,6 +142,7 @@ public static partial class ErrorCopy
         ("chat.bulk.iconsAlreadyPresent", "All your habits already have an icon.", "Todos os seus hábitos já têm ícone."),
         ("chat.bulk.noChanges", "No habits need changes.", "Nenhum hábito precisa de alterações."),
         (ErrorCodes.AiUnavailable, "Astra is not answering right now. Try again in a moment.", "A Astra não está respondendo agora. Tente de novo em instantes."),
+        (ErrorCodes.ContentModerationRefused, "I can't help with harming yourself or others, or hiding it. I can help you step away from a conflict and plan a safe next step.", "Não posso ajudar a machucar você ou outras pessoas, nem a esconder isso. Posso ajudar você a se afastar de um conflito e pensar em um próximo passo seguro."),
         (ErrorCodes.AiEmptyResponse, "Astra did not return an answer. Ask again.", "A Astra não devolveu uma resposta. Pergunte de novo."),
         (ErrorCodes.AiNoActiveConversation, "That conversation is no longer open. Start a new one.", "Essa conversa não está mais aberta. Comece outra."),
         (ErrorCodes.AiSummaryDisabled, "The daily summary is turned off. Turn it on in settings.", "O resumo diário está desativado. Ative nas configurações."),
