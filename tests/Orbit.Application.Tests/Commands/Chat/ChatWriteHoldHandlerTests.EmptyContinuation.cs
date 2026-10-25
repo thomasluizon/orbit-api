@@ -201,9 +201,15 @@ public sealed partial class ChatWriteHoldHandlerTests
 
         var result = await CreateHandler().Handle(new(_userId, "Create a daily Journal habit"), default);
 
-        result.IsSuccess.Should().Be(!expired);
-        if (expired)
+        result.IsSuccess.Should().Be(!expired || !unavailable);
+        if (expired && unavailable)
             result.ErrorCode.Should().Be(error.Code);
+        else if (expired)
+        {
+            result.Value.AiMessage.Should().Be("I couldn't prepare an answer. Please try again.");
+            result.Value.PendingOperations.Should().BeNullOrEmpty();
+            result.Value.Actions.Should().BeEmpty();
+        }
         else
         {
             result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pendingId);
@@ -216,7 +222,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     [InlineData("AI_EMPTY_RESPONSE", "Review my routines")]
     [InlineData("AI_UNAVAILABLE", "Post lunch: take vitamin D (once a week) Before bed: take rosuvastatin (everyday)")]
     [InlineData("AI_DAILY_BUDGET_EXCEEDED", "Post lunch: take vitamin D (once a week) Before bed: take rosuvastatin (everyday)")]
-    public async Task EmptyContinuation_WithoutRecoverableWorkPreservesTypedFailure(string errorCode, string message)
+    public async Task EmptyContinuation_WithoutRecoverableWorkRecoversOnlyEmptyCompletion(string errorCode, string message)
     {
         ParentAccount("en");
         ScriptToolCall("{}", "query_habits");
@@ -226,8 +232,18 @@ public sealed partial class ChatWriteHoldHandlerTests
 
         var result = await CreateHandler().Handle(new(_userId, message), default);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(errorCode);
+        if (errorCode == ErrorCodes.AiEmptyResponse)
+        {
+            result.IsSuccess.Should().BeTrue();
+            result.Value.AiMessage.Should().Be("I couldn't prepare an answer. Please try again.");
+            result.Value.PendingOperations.Should().BeNullOrEmpty();
+            result.Value.Actions.Should().BeEmpty();
+        }
+        else
+        {
+            result.IsFailure.Should().BeTrue();
+            result.ErrorCode.Should().Be(errorCode);
+        }
         _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
