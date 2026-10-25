@@ -75,6 +75,8 @@ public class HabitScheduleCompatibilityTests
         }
         typeof(Habit).GetProperty("DueDate").Should().BeNull();
         model.FindProperty("DueDate").Should().BeNull();
+        model.GetProperties().Select(property => property.GetColumnName()).Should()
+            .NotContain(["IsGeneral", "IsFlexible", "DueDate"]);
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 

@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -14,7 +16,7 @@ internal static class PostgresTestDatabase
 {
     internal const string ConnectionVariable = "ORBIT_POSTGRES_TEST_CONNECTION";
 
-    internal static async Task WithDatabase(Func<OrbitDbContext, Task> operation)
+    internal static async Task WithDatabase(Func<OrbitDbContext, Task> operation, string? targetMigration = null)
     {
         var connection = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable(ConnectionVariable))
         {
@@ -38,7 +40,7 @@ internal static class PostgresTestDatabase
 
         try
         {
-            await db.Database.MigrateAsync();
+            await db.GetService<IMigrator>().MigrateAsync(targetMigration);
             await operation(db);
         }
         finally
