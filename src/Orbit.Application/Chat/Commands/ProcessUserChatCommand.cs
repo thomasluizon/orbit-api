@@ -233,7 +233,6 @@ public partial class ProcessUserChatCommandHandler(
         if (request.BlockAnswer is not null)
         {
             recording.Enabled = true;
-            ModerationResult? flaggedInput = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
                 data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
@@ -243,24 +242,17 @@ public partial class ProcessUserChatCommandHandler(
                     recording.Enabled = !prepared.IsReplay;
                     recording.MessageAllowanceConsumed = prepared.MessageAllowanceConsumed;
                 }, recording.ToolCalls.Add);
-            var response = await answerService.ExecuteAsync(request, prepared =>
-                prepared.Crisis != CrisisLocales.None
-                    ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
-                async (_, token) =>
+            return await answerService.ExecuteAsync(request, prepared =>
+            {
+                if (prepared.ModeratedInput is { } flaggedInput)
                 {
-                    var check = await ModerateInputAsync(request, token);
-                    if (check.IsFailure)
-                        return check;
-                    if (!check.Value.Flagged)
-                        return Result.Success();
-                    flaggedInput = check.Value;
-                    return Result.Failure(ErrorMessages.ContentModerationRefused);
-                });
-            if (flaggedInput is null)
-                return response;
-            recording.Enabled = false;
-            return await HandleModeratedTurnAsync(request, flaggedInput, cancellationToken);
+                    recording.Enabled = false;
+                    return HandleModeratedTurnAsync(request, flaggedInput, cancellationToken);
+                }
+                return prepared.Crisis != CrisisLocales.None
+                    ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc);
+            }, cancellationToken, (_, token) => ModerateInputAsync(request, token));
         }
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None)
