@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Notifications.Validators;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -111,5 +112,45 @@ public class SubscribePushCommandValidatorTests
         var result = _validator.TestValidate(command);
 
         result.ShouldHaveValidationErrorFor(x => x.UserId);
+    }
+    [Theory]
+    [InlineData("https://dm3p.notify.windows.com/?token=channel", true)]
+    [InlineData("https://notify.windows.com.attacker.org/", false)]
+    [InlineData("https://fcm.googleapis.com/channel", false)]
+    public void Validate_Wns_EnforcesProviderPolicy(string endpoint, bool allowed)
+    {
+        var command = ValidCommand() with { Endpoint = endpoint, P256dh = "wns", DeviceId = Guid.NewGuid() };
+        var result = _validator.TestValidate(command);
+        if (allowed)
+            result.ShouldNotHaveAnyValidationErrors();
+        else
+            result.ShouldHaveValidationErrorFor(x => x.Endpoint).WithErrorCode(DomainErrors.WnsEndpointInvalid.Code);
+    }
+
+    [Fact]
+    public void Validate_Wns_RequiresDeviceId()
+    {
+        var command = ValidCommand() with { Endpoint = "https://dm3p.notify.windows.com/?token=channel", P256dh = "wns" };
+        _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.DeviceId).WithErrorCode(DomainErrors.PushDeviceIdInvalid.Code);
+        _validator.TestValidate(command with { DeviceId = Guid.Empty }).ShouldHaveValidationErrorFor(x => x.DeviceId).WithErrorCode(DomainErrors.PushDeviceIdInvalid.Code);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("org.useorbit.desktop")]
+    [InlineData("org.useorbit.desktop.staging")]
+    public void Validate_Apns_AcceptsExistingIosOrDesktopTopic(string? topic)
+    {
+        _validator.TestValidate(ValidCommand() with { Endpoint = "token", P256dh = "apns", ApnsTopic = topic })
+            .ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Validate_Topic_RejectsOtherAppsAndTransports()
+    {
+        _validator.TestValidate(ValidCommand() with { Endpoint = "token", P256dh = "apns", ApnsTopic = "org.attacker.app" })
+            .ShouldHaveValidationErrorFor(x => x.ApnsTopic).WithErrorCode(DomainErrors.PushApnsTopicInvalid.Code);
+        _validator.TestValidate(ValidCommand() with { ApnsTopic = "org.useorbit.desktop" })
+            .ShouldHaveValidationErrorFor(x => x.ApnsTopic).WithErrorCode(DomainErrors.PushApnsTopicInvalid.Code);
     }
 }

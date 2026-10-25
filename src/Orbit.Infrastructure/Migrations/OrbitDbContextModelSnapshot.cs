@@ -1971,6 +1971,10 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ApnsTopic")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("Auth")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1978,7 +1982,11 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DeviceId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Endpoint")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -1987,6 +1995,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<Guid>("UserId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -1995,6 +2004,10 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "DeviceId", "P256dh")
+                        .IsUnique()
+                        .HasFilter("\"DeviceId\" IS NOT NULL");
 
                     b.ToTable("PushSubscriptions");
                 });

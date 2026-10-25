@@ -1,0 +1,8 @@
+{
+  "token_type": "Bearer",
+  "expires_in": "86399",
+  "ext_expires_in": "86399",
+  "expires_on": "1653771789",
+  "not_before": "1653685089",
+  "access_token": "documented-test-access-token"
+}

@@ -182,14 +182,74 @@ public sealed class PushSubscriptionAccountSwitchTests : IDisposable
         CountFor(_secondAccount).Should().Be(0);
     }
 
-    private async Task<Result> Subscribe(Guid userId, string endpoint, string p256dh, string auth)
+    [Fact]
+    public async Task WnsChannelRenewal_ReplacesSameDevice_PreservesOtherDevices_AndSignOutRevokes()
+    {
+        var deviceId = Guid.NewGuid();
+        const string oldChannel = "https://dm3p.notify.windows.com/?token=old";
+        const string newChannel = "https://dm3p.notify.windows.com/?token=new";
+        const string otherChannel = "https://dm3p.notify.windows.com/?token=other";
+        (await Subscribe(_firstAccount, oldChannel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_firstAccount, otherChannel, "wns", "wns", deviceId: Guid.NewGuid())).IsSuccess.Should().BeTrue();
+        Guid id;
+        using (var before = _factory.CreateContext())
+            id = before.PushSubscriptions.Single(s => s.Endpoint == oldChannel).Id;
+
+        for (var round = 0; round < 3; round++)
+            (await Subscribe(_firstAccount, newChannel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        using (var after = _factory.CreateContext())
+        {
+            after.PushSubscriptions.Single(s => s.DeviceId == deviceId).Id.Should().Be(id);
+            after.PushSubscriptions.Any(s => s.Endpoint == oldChannel).Should().BeFalse();
+        }
+        CountFor(_firstAccount).Should().Be(2);
+        (await Unsubscribe(_firstAccount, newChannel, null, null)).IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("apns", "org.useorbit.desktop", "token")]
+    [InlineData("wns", null, "https://dm3p.notify.windows.com/?token=channel")]
+    public async Task DesktopAccountTransfer_AndDelayedSignOut_PreserveCurrentOwner(string transport, string? topic, string endpoint)
+    {
+        var deviceId = Guid.NewGuid();
+        (await Subscribe(_firstAccount, endpoint, transport, transport, topic, deviceId)).IsSuccess.Should().BeTrue();
+        (await Subscribe(_secondAccount, endpoint, transport, transport, topic, deviceId)).IsSuccess.Should().BeTrue();
+        (await Unsubscribe(_firstAccount, endpoint, null, null)).IsSuccess.Should().BeTrue();
+        CountFor(_firstAccount).Should().Be(0);
+        CountFor(_secondAccount).Should().Be(1);
+        (await Unsubscribe(_secondAccount, endpoint, null, null)).IsSuccess.Should().BeTrue();
+        CountFor(_secondAccount).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task WnsClaimExistingChannel_AtDeviceCap_PreservesOtherDevices()
+    {
+        for (var index = 0; index < AppConstants.MaxPushSubscriptionsPerUser - 1; index++)
+            (await Subscribe(_firstAccount, $"https://dm3p.notify.windows.com/?token=other-{index}", "wns", "wns", deviceId: Guid.NewGuid())).IsSuccess.Should().BeTrue();
+        var deviceId = Guid.NewGuid();
+        (await Subscribe(_firstAccount, "https://dm3p.notify.windows.com/?token=old", "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+        const string channel = "https://dm3p.notify.windows.com/?token=new";
+        (await Subscribe(_secondAccount, channel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        (await Subscribe(_firstAccount, channel, "wns", "wns", deviceId: deviceId)).IsSuccess.Should().BeTrue();
+
+        CountFor(_firstAccount).Should().Be(AppConstants.MaxPushSubscriptionsPerUser);
+        CountFor(_secondAccount).Should().Be(0);
+        using var verification = _factory.CreateContext();
+        verification.PushSubscriptions.Count(s => s.Endpoint.Contains("token=other-")).Should().Be(AppConstants.MaxPushSubscriptionsPerUser - 1);
+        verification.PushSubscriptions.Any(s => s.Endpoint.EndsWith("token=old")).Should().BeFalse();
+    }
+
+    private async Task<Result> Subscribe(Guid userId, string endpoint, string p256dh, string auth, string? apnsTopic = null, Guid? deviceId = null)
     {
         await using var context = _factory.CreateContext();
         var handler = new SubscribePushCommandHandler(
             new GenericRepository<PushSubscription>(context),
             new UnitOfWork(context, new DatabaseConnectionSettings()));
 
-        return await handler.Handle(new SubscribePushCommand(userId, endpoint, p256dh, auth), CancellationToken.None);
+        return await handler.Handle(new SubscribePushCommand(userId, endpoint, p256dh, auth, apnsTopic, deviceId), CancellationToken.None);
     }
 
     private async Task<Result> Unsubscribe(Guid userId, string endpoint, string? p256dh, string? auth, bool releaseOtherAccount = false)

@@ -20,5 +20,21 @@ public class SubscribePushCommandValidator : AbstractValidator<SubscribePushComm
             .WithErrorCode(ErrorCodes.PushEndpointInvalid);
         RuleFor(x => x.P256dh).NotEmpty().MaximumLength(500);
         RuleFor(x => x.Auth).NotEmpty().MaximumLength(500);
+        RuleFor(x => x.Endpoint)
+            .Must((command, endpoint) => PushSubscription.ClassifyTransport(command.P256dh) != PushTransport.Wns
+                || WnsEndpointPolicy.IsAllowed(endpoint))
+            .WithMessage(ErrorMessages.PushEndpointInvalid.Message)
+            .WithErrorCode(DomainErrors.WnsEndpointInvalid.Code);
+        RuleFor(x => x.ApnsTopic)
+            .Must((command, topic) => PushSubscription.IsAllowedApnsTopic(topic)
+                && (topic is null || PushSubscription.ClassifyTransport(command.P256dh) == PushTransport.Apns))
+            .WithMessage(ErrorMessages.PushEndpointInvalid.Message)
+            .WithErrorCode(DomainErrors.PushApnsTopicInvalid.Code);
+        RuleFor(x => x.DeviceId)
+            .Must((command, deviceId) => deviceId != Guid.Empty
+                && (deviceId is not null || PushSubscription.ClassifyTransport(command.P256dh) != PushTransport.Wns)
+                && (deviceId is null || PushSubscription.ClassifyTransport(command.P256dh) is PushTransport.Wns or PushTransport.Apns))
+            .WithMessage(ErrorMessages.PushEndpointInvalid.Message)
+            .WithErrorCode(DomainErrors.PushDeviceIdInvalid.Code);
     }
 }

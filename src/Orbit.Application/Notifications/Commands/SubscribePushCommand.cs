@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -11,7 +12,9 @@ public record SubscribePushCommand(
     Guid UserId,
     string Endpoint,
     string P256dh,
-    string Auth) : IRequest<Result>;
+    string Auth,
+    string? ApnsTopic = null,
+    Guid? DeviceId = null) : IRequest<Result>;
 
 public class SubscribePushCommandHandler(
     IGenericRepository<PushSubscription> pushSubscriptionRepository,
@@ -30,6 +33,10 @@ public class SubscribePushCommandHandler(
             return Result.Failure(ErrorMessages.PushEndpointInvalid);
         }
 
+        var result = PushSubscription.Create(request.UserId, request.Endpoint, request.P256dh, request.Auth, request.ApnsTopic, request.DeviceId);
+        if (result.IsFailure)
+            return result.PropagateError();
+
         var existing = await pushSubscriptionRepository.FindOneTrackedAsync(
             s => s.Endpoint == request.Endpoint,
             cancellationToken: cancellationToken);
@@ -37,9 +44,19 @@ public class SubscribePushCommandHandler(
         if (existing is not null)
             return await ClaimExisting(existing, request, cancellationToken);
 
-        var result = PushSubscription.Create(request.UserId, request.Endpoint, request.P256dh, request.Auth);
-        if (result.IsFailure)
-            return result.PropagateError();
+        if (request.DeviceId is not null)
+        {
+            var device = await pushSubscriptionRepository.FindOneTrackedAsync(
+                s => s.UserId == request.UserId && s.DeviceId == request.DeviceId && s.P256dh == request.P256dh,
+                cancellationToken: cancellationToken);
+            if (device is not null)
+            {
+                var renewal = device.RenewRegistration(request.Endpoint, request.Auth, request.ApnsTopic, request.DeviceId);
+                if (renewal.IsFailure)
+                    return renewal;
+                return await SaveRegistration(cancellationToken);
+            }
+        }
 
         var subscription = result.Value;
         await pushSubscriptionRepository.AddAsync(subscription, cancellationToken);
@@ -48,14 +65,12 @@ public class SubscribePushCommandHandler(
 
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return await SaveRegistration(cancellationToken);
         }
         catch (Exception exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             return Result.Success();
         }
-
-        return Result.Success();
     }
 
     /// <summary>
@@ -68,7 +83,7 @@ public class SubscribePushCommandHandler(
         SubscribePushCommand request,
         CancellationToken cancellationToken)
     {
-        if (existing.UserId == request.UserId)
+        if (existing.UserId == request.UserId && request.DeviceId is null && request.ApnsTopic is null)
             return Result.Success();
 
         if (!existing.MatchesCredentials(request.P256dh, request.Auth))
@@ -78,10 +93,41 @@ public class SubscribePushCommandHandler(
         if (transfer.IsFailure)
             return transfer;
 
-        EvictOldestBeyondCap(await GetPersistedUserSubscriptions(request.UserId, cancellationToken), existing);
+        IReadOnlyList<PushSubscription> previous = [];
+        if (request.DeviceId is not null || request.ApnsTopic is not null)
+        {
+            var renewal = existing.RenewRegistration(request.Endpoint, request.Auth, request.ApnsTopic, request.DeviceId);
+            if (renewal.IsFailure)
+                return renewal;
+            if (request.DeviceId is not null)
+            {
+                previous = (await pushSubscriptionRepository.FindTrackedAsync(
+                    s => s.UserId == request.UserId && s.DeviceId == request.DeviceId
+                        && s.P256dh == request.P256dh && s.Id != existing.Id,
+                    cancellationToken)).ToList();
+                pushSubscriptionRepository.RemoveRange(previous);
+            }
+        }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        var subscriptions = await GetPersistedUserSubscriptions(request.UserId, cancellationToken);
+        var removedIds = previous.Select(subscription => subscription.Id).ToHashSet();
+        EvictOldestBeyondCap(subscriptions.Where(subscription => !removedIds.Contains(subscription.Id)).ToList(), existing);
+
+        return await SaveRegistration(cancellationToken);
+    }
+
+    private async Task<Result> SaveRegistration(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.DiscardChanges();
+            return Result.Failure(ErrorMessages.ConcurrentUpdateConflict);
+        }
     }
 
     private async Task<IReadOnlyList<PushSubscription>> GetPersistedUserSubscriptions(Guid userId, CancellationToken cancellationToken)

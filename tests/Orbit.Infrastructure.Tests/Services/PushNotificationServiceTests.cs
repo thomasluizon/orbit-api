@@ -66,7 +66,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     }
 
     private PushNotificationService CreateService(StubHttpMessageHandler handler) =>
-        new(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance, new HttpClient(handler), Substitute.For<IApnsPushSender>());
+        new(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance, new HttpClient(handler), Substitute.For<IApnsPushSender>(), Substitute.For<IWnsPushSender>());
 
     private async Task<PushSubscription> SeedWebPushSubscription(string endpoint)
     {
@@ -77,7 +77,7 @@ public sealed class PushNotificationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Apns_MissingConfiguration_WarnsAndFcmStillDelivers()
+    public async Task Apns_MissingConfiguration_IsQuietAndFcmStillDelivers()
     {
         _dbContext.PushSubscriptions.AddRange(
             PushSubscription.Create(_userId, "fcm-device-token", "fcm", "auth").Value,
@@ -98,13 +98,125 @@ public sealed class PushNotificationServiceTests : IDisposable
             var apnsLogger = Substitute.For<ILogger<ApnsPushSender>>();
             using var sender = new ApnsPushSender(new HttpClient(), Options.Create(new ApnsSettings()), apnsLogger, TimeProvider.System);
             var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
-                NullLogger<PushNotificationService>.Instance, new HttpClient(), sender);
+                NullLogger<PushNotificationService>.Instance, new HttpClient(), sender, Substitute.For<IWnsPushSender>());
             (await service.TrySendToUserAsync(_userId, "Title", "Body", "/today")).Should().BeTrue();
             fcmHandler.CallCount.Should().Be(1);
-            apnsLogger.ReceivedCalls().Should().Contain(call => call.GetMethodInfo().Name == "Log" && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning);
+            apnsLogger.ReceivedCalls().Should().NotContain(call => call.GetMethodInfo().Name == "Log" && (LogLevel)call.GetArguments()[0]! >= LogLevel.Warning);
             (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(2);
         }
         finally { app.Delete(); }
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Gone, 0)]
+    [InlineData(HttpStatusCode.NotFound, 0)]
+    [InlineData(HttpStatusCode.Forbidden, 1)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, 1)]
+    public async Task Wns_Response_PrunesOnlyGoneChannels(HttpStatusCode status, int remaining)
+    {
+        const string endpoint = "https://dm3p.notify.windows.com/?token=channel";
+        _dbContext.PushSubscriptions.Add(PushSubscription.Create(_userId, endpoint, "wns", "wns", deviceId: Guid.NewGuid()).Value);
+        await _dbContext.SaveChangesAsync();
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host == "login.microsoftonline.com"
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"access_token\":\"test-token\",\"expires_in\":3599}") }
+            : new HttpResponseMessage(status));
+        using var sender = new WnsPushSender(new HttpClient(handler), Options.Create(new WnsSettings
+        {
+            TenantId = "11111111-1111-1111-1111-111111111111",
+            ClientId = "22222222-2222-2222-2222-222222222222",
+            ClientSecret = "secret"
+        }), NullLogger<WnsPushSender>.Instance, TimeProvider.System);
+        var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
+            NullLogger<PushNotificationService>.Instance, new HttpClient(), Substitute.For<IApnsPushSender>(), sender);
+        (await service.TrySendToUserAsync(_userId, "Title", "Body", "/")).Should().BeFalse();
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(remaining);
+    }
+
+    [Theory]
+    [InlineData("org.useorbit.desktop", false)]
+    [InlineData("org.useorbit.desktop.staging", true)]
+    public async Task DesktopTransports_PreserveWebPushContent_ForBothLocalesAndAllDestinations(string desktopTopic, bool sandbox)
+    {
+        _dbContext.PushSubscriptions.AddRange(
+            PushSubscription.Create(_userId, "ios-token", "apns", "apns").Value,
+            PushSubscription.Create(_userId, "mac-token", "apns", "apns", desktopTopic).Value,
+            PushSubscription.Create(_userId, "https://dm3p.notify.windows.com/?token=channel", "wns", "wns", deviceId: Guid.NewGuid()).Value);
+        await _dbContext.SaveChangesAsync();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var apnsPayloads = new List<string>();
+        var topics = new List<string>();
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            request.RequestUri!.Host.Should().Be(sandbox ? "api.sandbox.push.apple.com" : "api.push.apple.com");
+            topics.Add(request.Headers.GetValues("apns-topic").Single());
+            apnsPayloads.Add(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        using var apns = new ApnsPushSender(new HttpClient(handler), Options.Create(new ApnsSettings
+        {
+            KeyId = "KEY",
+            TeamId = "TEAM",
+            PrivateKey = key.ExportPkcs8PrivateKeyPem(),
+            Topic = "org.useorbit.app",
+            DesktopTopic = desktopTopic,
+            UseSandbox = sandbox
+        }), NullLogger<ApnsPushSender>.Instance, TimeProvider.System);
+        var wns = Substitute.For<IWnsPushSender>();
+        wns.SendAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(WnsDeliveryOutcome.Delivered);
+        var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
+            NullLogger<PushNotificationService>.Instance, new HttpClient(), apns, wns);
+        foreach (var locale in new[] { "en", "pt-BR" })
+        {
+            var goal = Goal.Create(_userId, "Ler 📚", 10, "books").Value;
+            var contents = new[]
+            {
+                PeriodCloseNotificationService.BuildNotification(9, locale),
+                StreakFreezeAutoActivationService.BuildNotification(12, locale),
+                (goal.Title, GoalDeadlineNotificationService.FormatDeadlineBody(goal, 3, 1, locale)),
+                ("Astra", locale == "en" ? "Time to read 📚" : "Hora de ler 📚"),
+                (new string('a', 300) + "\n", new string('é', 500) + "\t")
+            };
+            foreach (var (title, body) in contents)
+                foreach (var url in new string?[] { null, "/", "/progress", "/chat", "/profile", "/calendar-sync", "/calendar-sync?mode=review", "/progress?wrapped=month&year=2026&month=9" })
+                {
+                    apnsPayloads.Clear();
+                    topics.Clear();
+                    wns.ClearReceivedCalls();
+                    (await service.TrySendToUserAsync(_userId, title, body, url)).Should().BeTrue();
+                    var safeTitle = PushNotificationService.SanitizeForDelivery(title, PushNotificationService.MaxTitleBytes);
+                    var safeBody = PushNotificationService.SanitizeForDelivery(body, PushNotificationService.MaxBodyBytes);
+                    var webPayload = PushNotificationService.CreateWebPushPayload(safeTitle, safeBody, url);
+                    await wns.Received(1).SendAsync("https://dm3p.notify.windows.com/?token=channel", webPayload, Arg.Any<CancellationToken>());
+                    topics.Should().BeEquivalentTo(new[] { "org.useorbit.app", desktopTopic });
+                    apnsPayloads.Should().HaveCount(2);
+                    foreach (var payload in apnsPayloads)
+                    {
+                        using var document = JsonDocument.Parse(payload);
+                        var alert = document.RootElement.GetProperty("aps").GetProperty("alert");
+                        alert.GetProperty("title").GetString().Should().Be(safeTitle);
+                        alert.GetProperty("body").GetString().Should().Be(safeBody);
+                        document.RootElement.GetProperty("body").GetProperty("url").GetString().Should().Be(url);
+                    }
+                }
+        }
+    }
+
+    [Fact]
+    public async Task Apns_ExplicitTopicOutsideConfiguredEnvironment_IsInert()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var handler = new StubHttpMessageHandler(_ => throw new InvalidOperationException("No send expected"));
+        using var sender = new ApnsPushSender(new HttpClient(handler), Options.Create(new ApnsSettings
+        {
+            KeyId = "KEY",
+            TeamId = "TEAM",
+            PrivateKey = key.ExportPkcs8PrivateKeyPem(),
+            Topic = "org.useorbit.app",
+            DesktopTopic = "org.useorbit.desktop"
+        }), NullLogger<ApnsPushSender>.Instance, TimeProvider.System);
+        (await sender.SendAsync("token", "Title", "Body", null, default, "org.useorbit.desktop.staging"))
+            .Should().Be(ApnsDeliveryOutcome.Retained);
+        handler.CallCount.Should().Be(0);
     }
 
     private sealed class FcmHttpClientFactory(HttpMessageHandler handler) : Google.Apis.Http.HttpClientFactory
@@ -134,7 +246,7 @@ public sealed class PushNotificationServiceTests : IDisposable
             PrivateKey = key.ExportPkcs8PrivateKeyPem()
         }), NullLogger<ApnsPushSender>.Instance, TimeProvider.System);
         var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
-            NullLogger<PushNotificationService>.Instance, new HttpClient(), sender);
+            NullLogger<PushNotificationService>.Instance, new HttpClient(), sender, Substitute.For<IWnsPushSender>());
 
         (await service.TrySendToUserAsync(_userId, "Title", "Body", "/today")).Should().BeFalse();
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(remaining);

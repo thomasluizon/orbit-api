@@ -49,6 +49,9 @@ public static class DomainErrors
     public static readonly AppError MaxTagsPerHabit = new("MAX_TAGS_PER_HABIT", "A habit can have at most {0} tags.");
 
     public static readonly AppError PushEndpointRequired = new("PUSH_ENDPOINT_REQUIRED", "Endpoint is required.");
+    public static readonly AppError WnsEndpointInvalid = new("WNS_ENDPOINT_INVALID", "Endpoint must use the Windows Push Notification Service.");
+    public static readonly AppError PushApnsTopicInvalid = new("PUSH_APNS_TOPIC_INVALID", "APNs topic must identify an Orbit desktop app and use the APNs transport.");
+    public static readonly AppError PushDeviceIdInvalid = new("PUSH_DEVICE_ID_INVALID", "A nonempty device ID is required for WNS and is supported only for native desktop subscriptions.");
     public static readonly AppError PushEndpointInvalid = new("PUSH_ENDPOINT_INVALID", "Endpoint must use a supported Web Push service.");
     public static readonly AppError PushP256dhRequired = new("PUSH_P256DH_REQUIRED", "P256dh key is required.");
     public static readonly AppError PushAuthKeyRequired = new("PUSH_AUTH_KEY_REQUIRED", "Auth key is required.");

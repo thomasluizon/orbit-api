@@ -28,13 +28,15 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
         _settings = settings.Value;
         _logger = logger;
         _time = time;
-        if (!_settings.IsConfigured)
-            _logger.LogWarning("APNs is disabled because its signing key or topic is not configured");
     }
 
-    public async Task<ApnsDeliveryOutcome> SendAsync(string deviceToken, string title, string body, string? url, CancellationToken cancellationToken)
+    public async Task<ApnsDeliveryOutcome> SendAsync(string deviceToken, string title, string body, string? url, CancellationToken cancellationToken, string? topic = null)
     {
-        if (!_settings.IsConfigured)
+        if (!_settings.IsConfigured || (topic is not null && topic != _settings.DesktopTopic))
+            return ApnsDeliveryOutcome.Retained;
+
+        var deliveryTopic = topic ?? _settings.Topic;
+        if (string.IsNullOrWhiteSpace(deliveryTopic))
             return ApnsDeliveryOutcome.Retained;
 
         await _concurrency.WaitAsync(cancellationToken);
@@ -48,7 +50,7 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
                 Content = JsonContent.Create(new { aps = new { alert = new { title, body }, sound = "default" }, body = new { url } })
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("bearer", GetProviderToken());
-            request.Headers.Add("apns-topic", _settings.Topic);
+            request.Headers.Add("apns-topic", deliveryTopic);
             request.Headers.Add("apns-push-type", "alert");
             using var response = await _http.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.OK)

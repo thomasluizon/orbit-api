@@ -19,7 +19,8 @@ public partial class PushNotificationService(
     IOptions<VapidSettings> vapidSettings,
     ILogger<PushNotificationService> logger,
     HttpClient httpClient,
-    IApnsPushSender apnsSender) : IPushNotificationService
+    IApnsPushSender apnsSender,
+    IWnsPushSender wnsSender) : IPushNotificationService
 {
     private readonly VapidSettings _settings = vapidSettings.Value;
 
@@ -39,6 +40,7 @@ public partial class PushNotificationService(
         CancellationToken cancellationToken = default)
     {
         var subscriptions = await dbContext.PushSubscriptions
+            .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
@@ -58,19 +60,30 @@ public partial class PushNotificationService(
 
         foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Apns))
         {
-            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken);
+            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken, sub.ApnsTopic);
             if (outcome == ApnsDeliveryOutcome.Stale)
                 staleSubscriptions.Add(sub);
             delivered |= outcome == ApnsDeliveryOutcome.Delivered;
         }
 
+        foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Wns))
+        {
+            var outcome = await wnsSender.SendAsync(sub.Endpoint, CreateWebPushPayload(safeTitle, safeBody, url), cancellationToken);
+            if (outcome == WnsDeliveryOutcome.Stale)
+                staleSubscriptions.Add(sub);
+            delivered |= outcome == WnsDeliveryOutcome.Delivered;
+        }
+
         if (webPushSubs.Count > 0)
             delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
 
-        if (staleSubscriptions.Count > 0)
+        foreach (var stale in staleSubscriptions)
         {
-            dbContext.PushSubscriptions.RemoveRange(staleSubscriptions);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.PushSubscriptions
+                .Where(s => s.Id == stale.Id && s.UserId == stale.UserId && s.Endpoint == stale.Endpoint
+                    && s.P256dh == stale.P256dh && s.Auth == stale.Auth && s.ApnsTopic == stale.ApnsTopic
+                    && s.DeviceId == stale.DeviceId && s.CreatedAtUtc == stale.CreatedAtUtc)
+                .ExecuteDeleteAsync(cancellationToken);
         }
 
         return delivered;
