@@ -1,6 +1,8 @@
 # Canonical habit schedule persistence verification
 
-Use the existing PostgreSQL fixture path with an existing disposable database, through `PGSERVICE` or standard PostgreSQL environment variables. The worker must not start a database or API server. Never put credentials in command text or evidence. This proof executes the installed production functions on temporary tables and rolls back every fixture row.
+The automated trigger tests reuse the PostgreSQL database fixture extracted from `OAuthPostgresRetryTests`. Set the existing `ORBIT_POSTGRES_TEST_CONNECTION` variable to a disposable PostgreSQL server with database creation permission, then run `dotnet test tests/Orbit.Infrastructure.Tests --filter FullyQualifiedName~HabitSchedulePostgresTests`. The fixture creates an isolated database, applies the real migrations, executes the production EF writes and removes its database afterward. It starts no server. Without the variable these tests are explicitly skipped, not counted as PostgreSQL proof.
+
+The manual function proof below uses an existing disposable database through `PGSERVICE` or standard PostgreSQL environment variables. The worker must not start a database or API server. Never put credentials in command text or evidence. This proof executes the installed production functions on temporary tables and rolls back every fixture row.
 
 With repository migrations applied through `TrackOAuthClientIdentity`, run:
 

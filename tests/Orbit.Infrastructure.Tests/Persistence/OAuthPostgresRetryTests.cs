@@ -1,15 +1,9 @@
 using System.Data.Common;
 using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Npgsql;
-using Npgsql.EntityFrameworkCore.PostgreSQL;
 using NSubstitute;
-using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Models;
@@ -23,8 +17,6 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public partial class OAuthPostgresRetryTests
 {
-    private const string ConnectionVariable = "ORBIT_POSTGRES_TEST_CONNECTION";
-
     [PostgresFact]
     public Task DesktopHandoff_ConcurrentRedeems_CreateExactlyOneSession() =>
         WithDatabase(async db =>
@@ -127,45 +119,6 @@ public partial class OAuthPostgresRetryTests
             return Task.CompletedTask;
         });
 
-    private static async Task WithDatabase(Func<OrbitDbContext, Task> operation)
-    {
-        var connection = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable(ConnectionVariable))
-        {
-            Database = $"orbit_oauth_test_{Guid.NewGuid():N}",
-            Pooling = false
-        };
-        var builder = WebApplication.CreateBuilder();
-        builder.Configuration.Sources.Clear();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["ConnectionStrings:DefaultConnection"] = connection.ConnectionString
-        });
-        builder.Services.AddHttpContextAccessor();
-        builder.AddOrbitDatabase();
-        await using var provider = builder.Services.BuildServiceProvider();
-        await using var scope = provider.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var strategy = db.Database.CreateExecutionStrategy().Should().BeOfType<NpgsqlRetryingExecutionStrategy>().Subject;
-        strategy.MaxRetryCount.Should().Be(3);
-        strategy.MaxRetryDelay.Should().Be(TimeSpan.FromSeconds(5));
-
-        try
-        {
-            await db.Database.MigrateAsync();
-            await operation(db);
-        }
-        finally
-        {
-            await db.Database.EnsureDeletedAsync();
-        }
-    }
-
-    private sealed class PostgresFactAttribute : FactAttribute
-    {
-        public PostgresFactAttribute()
-        {
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ConnectionVariable)))
-                Skip = $"Set {ConnectionVariable} to a disposable PostgreSQL server with database creation permission.";
-        }
-    }
+    private static Task WithDatabase(Func<OrbitDbContext, Task> operation) =>
+        PostgresTestDatabase.WithDatabase(operation);
 }
