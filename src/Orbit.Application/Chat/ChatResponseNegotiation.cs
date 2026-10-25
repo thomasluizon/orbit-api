@@ -8,6 +8,26 @@ namespace Orbit.Application.Chat;
 
 internal static class ChatResponseNegotiation
 {
+    public static async Task<ChatResponse> RecoverEmptyAnswerAsync(ProcessUserChatCommand request,
+        string? language, ChatResponse? response, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var message = LocaleHelper.IsPortuguese(language)
+            ? "Não consegui preparar uma resposta. Tente novamente."
+            : "I couldn't prepare an answer. Please try again.";
+        if (request.StreamSink is not null)
+        {
+            await request.StreamSink(ChatStreamEvent.Reset());
+            await request.StreamSink(ChatStreamEvent.Delta(message));
+        }
+        return (response ?? new ChatResponse(null, [], CorrelationId: request.CorrelationId)) with
+        {
+            AiMessage = message,
+            FollowUps = null,
+            Parts = request.ClientContext?.SupportsParts == true ? [new ChatTextPart(message)] : null
+        };
+    }
+
     public static ChatResponse ForAllowance(ChatResponse response, AgentClientContext? client, bool consumed)
     {
         bool? allowance = client?.SupportsMessageAllowance == true ? consumed : null;

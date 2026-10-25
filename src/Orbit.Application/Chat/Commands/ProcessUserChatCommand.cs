@@ -341,7 +341,8 @@ public partial class ProcessUserChatCommandHandler(
             {
                 logger.LogWarning("Empty AI completion at round {RoundIndex} for {UserId} {CorrelationId}",
                     telemetry.RoundCount, request.UserId, request.CorrelationId);
-                return Result.Success(await RecoverEmptyAnswerAsync(request, context.User?.Language, null, cancellationToken));
+                return request.BlockAnswer is not null ? result
+                    : Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.User?.Language, null, cancellationToken));
             }
             if (result.IsSuccess)
             {
@@ -368,7 +369,7 @@ public partial class ProcessUserChatCommandHandler(
                 }).ToDictionary(group => group.Key, group => group.Count());
                 logger.LogWarning("Empty composed AI answer at round {RoundIndex}; output kinds {OutputKinds} for {UserId} {CorrelationId}",
                     telemetry.RoundCount, JsonSerializer.Serialize(outputKinds), request.UserId, request.CorrelationId);
-                return Result.Success(await RecoverEmptyAnswerAsync(request, context.User?.Language, result.Value, cancellationToken));
+                return Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.User?.Language, result.Value, cancellationToken));
             }
             return result;
         }
@@ -376,26 +377,6 @@ public partial class ProcessUserChatCommandHandler(
         {
             CaptureMessageAnalytics(request.UserId, plan, telemetry);
         }
-    }
-
-    private static async Task<ChatResponse> RecoverEmptyAnswerAsync(ProcessUserChatCommand request,
-        string? language, ChatResponse? response, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var message = LocaleHelper.IsPortuguese(language)
-            ? "Não consegui preparar uma resposta. Tente novamente."
-            : "I couldn't prepare an answer. Please try again.";
-        if (request.StreamSink is not null)
-        {
-            await request.StreamSink(ChatStreamEvent.Reset());
-            await request.StreamSink(ChatStreamEvent.Delta(message));
-        }
-        return (response ?? new ChatResponse(null, [], CorrelationId: request.CorrelationId)) with
-        {
-            AiMessage = message,
-            FollowUps = null,
-            Parts = request.ClientContext?.SupportsParts == true ? [new ChatTextPart(message)] : null
-        };
     }
 
     private static bool HasDisplayableAnswer(ChatResponse response) =>
