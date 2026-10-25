@@ -7,17 +7,18 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    internal sealed class ConversationRecordingState
+    internal sealed class ChatTurnState
     {
         public DateTime CreatedAtUtc { get; } = DateTime.UtcNow;
         public string? UserContent { get; set; }
         public bool Enabled { get; set; }
         public bool UsedModel { get; set; }
+        public bool MessageAllowanceConsumed { get; set; }
         public List<ConversationToolCall> ToolCalls { get; } = [];
     }
 
     private void RecordConversationSafely(ProcessUserChatCommand request,
-        ConversationRecordingState recording, Result<ChatResponse>? response)
+        ChatTurnState recording, Result<ChatResponse>? response)
     {
         if (!recording.Enabled || conversationRecorder is null)
             return;

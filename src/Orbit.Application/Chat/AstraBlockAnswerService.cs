@@ -15,7 +15,8 @@ namespace Orbit.Application.Chat;
 
 public sealed record PreparedAstraBlockAnswer(
     string Message, ChatResponse? Response = null, CrisisLocales Crisis = CrisisLocales.None,
-    DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false);
+    DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false,
+    bool MessageAllowanceConsumed = false);
 
 public sealed class AstraBlockAnswerService(
     IIssuedAstraBlockStore store,
@@ -196,6 +197,7 @@ public sealed class AstraBlockAnswerService(
                 var user = await users.GetByIdAsync(request.UserId, token);
                 ChatResponse? response = null;
                 DateOnly? reservedAllowanceDate = null;
+                var messageAllowanceConsumed = false;
                 if (definition.Form == AstraBlockKinds.PickList && crisis == CrisisLocales.None)
                 {
                     response = await BuildPickListResponseAsync(request, definition, answer, user, token);
@@ -205,13 +207,14 @@ public sealed class AstraBlockAnswerService(
                     var reservation = await payGate.TryConsumeAiMessage(request.UserId, unitOfWork, token);
                     if (reservation.IsFailure)
                         throw new AnswerRejectedException(reservation.PropagateError<PreparedAstraBlockAnswer>());
+                    messageAllowanceConsumed = true;
                     reservedAllowanceDate = (await users.GetByIdAsync(request.UserId, token))?.AiMessagesLocalDate;
                 }
                 await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
                     IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
                     response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
-                    answeredAtUtc, reservedAllowanceDate));
+                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed));
             }, ct);
         }
         catch (AnswerRejectedException exception)

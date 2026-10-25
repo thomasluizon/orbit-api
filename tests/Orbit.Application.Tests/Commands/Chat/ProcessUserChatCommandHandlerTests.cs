@@ -522,11 +522,12 @@ public partial class ProcessUserChatCommandHandlerTests
 
         var result = await handler.Handle(
             new ProcessUserChatCommand(UserId, "O que e um mau habito?",
-                ClientContext: new AgentClientContext(SupportsParts: supportsParts)),
+                ClientContext: new AgentClientContext(SupportsParts: supportsParts, SupportsMessageAllowance: true)),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Resposta em cache");
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
         result.Value.Parts.Should().BeNull();
         await _payGate.DidNotReceive()
             .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());

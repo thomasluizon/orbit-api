@@ -15898,6 +15898,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsMessageAllowance": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -17683,6 +17689,12 @@
             "items": {
               "$ref": "#/components/schemas/ChatFollowUp"
             }
+          },
+          "messageAllowanceConsumed": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

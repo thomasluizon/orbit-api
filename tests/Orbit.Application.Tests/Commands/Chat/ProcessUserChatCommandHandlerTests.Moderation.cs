@@ -15,6 +15,68 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData(null, false)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(null, true)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Moderation_Unavailable_StillFailsClosed(bool? supportsAllowance, bool stream)
+    {
+        SetupUserAndPayGate();
+        EnableRecording();
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(false, true, []));
+        var streamed = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new(UserId, "screen this input",
+            ClientContext: supportsAllowance is null ? null : new(SupportsMessageAllowance: supportsAllowance),
+            StreamSink: stream ? item => { streamed.Add(item); return Task.CompletedTask; }
+        : null), default);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.AiUnavailable);
+        streamed.Should().BeEmpty();
+        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _payGate.ReceivedCalls().Should().BeEmpty();
+        _aiIntentService.ReceivedCalls().Should().BeEmpty();
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
+    [Theory]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    public async Task Moderation_LegacyClient_ReturnsLocalizedTypedError(string language, bool stream)
+    {
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        EnableRecording();
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(true, false, ["violence"]));
+        var streamed = new List<ChatStreamEvent>();
+
+        var result = await CreateHandler().Handle(new(UserId, "screen this input",
+            StreamSink: stream ? item => { streamed.Add(item); return Task.CompletedTask; }
+        : null), default);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.ContentModerationRefused);
+        result.Error.Should().Be(language == "pt-BR"
+            ? "Não posso ajudar com isso, mas posso ajudar com seus hábitos e metas."
+            : "I can't help with that, but I can help with your habits and goals.");
+        streamed.Should().BeEmpty();
+        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _payGate.ReceivedCalls().Should().BeEmpty();
+        _aiIntentService.ReceivedCalls().Should().BeEmpty();
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
+    [Theory]
     [InlineData("en", null, false)]
     [InlineData("pt-BR", null, false)]
     [InlineData("en", null, true)]
@@ -45,7 +107,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var streamed = new List<ChatStreamEvent>();
         var history = new List<ChatHistoryMessage> { new("user", "Earlier message") };
         var request = new ProcessUserChatCommand(UserId, "screen this input", History: history,
-            ClientContext: new AgentClientContext(SupportsParts: true), CorrelationId: "moderated-turn",
+            ClientContext: new AgentClientContext(SupportsParts: true, SupportsMessageAllowance: true), CorrelationId: "moderated-turn",
             StreamSink: stream ? item => { streamed.Add(item); return Task.CompletedTask; }
         : null,
             BlockAnswer: form is not null ? new(block.Id, ["b"]) : null);
@@ -53,6 +115,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateHandler().Handle(request, default);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
         var expected = language == "pt-BR"
             ? "Não posso ajudar com isso, mas posso ajudar com seus hábitos e metas."
             : "I can't help with that, but I can help with your habits and goals.";
@@ -82,16 +145,17 @@ public partial class ProcessUserChatCommandHandlerTests
         _goalRepo.ReceivedCalls().Should().BeEmpty();
     }
 
-    public static TheoryData<string, string, string?, bool> SelfHarmModerationCases
+    public static TheoryData<string, string, string?, bool, bool> SelfHarmModerationCases
     {
         get
         {
-            var cases = new TheoryData<string, string, string?, bool>();
+            var cases = new TheoryData<string, string, string?, bool, bool>();
             foreach (var category in new[] { "self-harm", "self-harm/intent", "self-harm/instructions" })
                 foreach (var language in new[] { "en", "pt-BR" })
                     foreach (var form in new string?[] { null, "choice", "pickList" })
                         foreach (var stream in new[] { false, true })
-                            cases.Add(category, language, form, stream);
+                            foreach (var supportsAllowance in new[] { false, true })
+                                cases.Add(category, language, form, stream, supportsAllowance);
             return cases;
         }
     }
@@ -99,7 +163,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [MemberData(nameof(SelfHarmModerationCases))]
     public async Task Moderation_SelfHarmCategory_ReturnsCrisisReplyWithoutSideEffects(
-        string category, string language, string? form, bool stream)
+        string category, string language, string? form, bool stream, bool supportsAllowance)
     {
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetLanguage(language);
@@ -119,6 +183,7 @@ public partial class ProcessUserChatCommandHandlerTests
         CrisisSupportGuard.Detect(message).Should().Be(CrisisLocales.None);
 
         var result = await CreateHandler().Handle(new(UserId, message,
+            ClientContext: new(SupportsMessageAllowance: supportsAllowance),
             CorrelationId: "moderated-crisis",
             StreamSink: stream ? item => { streamed.Add(item); return Task.CompletedTask; }
         : null,
@@ -127,6 +192,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var locales = language == "pt-BR" ? CrisisLocales.Portuguese : CrisisLocales.English;
         var expected = CrisisSupportGuard.EnsureResources(CrisisSupportGuard.FallbackMessage(locales), locales, null);
         result.IsSuccess.Should().BeTrue();
+        result.Value.MessageAllowanceConsumed.Should().Be(supportsAllowance ? false : null);
         result.Value.AiMessage.Should().Be(expected);
         result.Value.CorrelationId.Should().Be("moderated-crisis");
         result.Value.Actions.Should().BeEmpty();
@@ -155,34 +221,61 @@ public partial class ProcessUserChatCommandHandlerTests
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(true, false, ["violence"]));
 
-        var result = await CreateHandler().Handle(new(UserId, "screen this input"), default);
+        var result = await CreateHandler().Handle(new(UserId, "screen this input",
+            ClientContext: new(SupportsMessageAllowance: true)), default);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("I can't help with that, but I can help with your habits and goals.");
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task Moderation_PhraseGuardAndCategoryMatch_ReturnsSingleCrisisReply()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Moderation_PhraseGuardAndCategoryMatch_ReturnsSingleCrisisReply(bool supportsAllowance, bool stream)
     {
         SetupUserAndPayGate();
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(true, false, ["self-harm/intent"]));
 
-        var result = await CreateHandler().Handle(new(UserId, "I want to hurt myself"), default);
+        var streamed = new List<ChatStreamEvent>();
+        var result = await CreateHandler().Handle(new(UserId, "I want to hurt myself",
+            ClientContext: new(SupportsMessageAllowance: supportsAllowance),
+            StreamSink: stream ? item => { streamed.Add(item); return Task.CompletedTask; }
+        : null), default);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.MessageAllowanceConsumed.Should().Be(supportsAllowance ? false : null);
         result.Value.AiMessage.Should().Be(CrisisSupportGuard.EnglishSupport + "\n\n" + CrisisSupportGuard.EnglishResource);
+        if (stream)
+            streamed.Should().Equal(ChatStreamEvent.Reset(), ChatStreamEvent.Delta(result.Value.AiMessage));
+        else
+            streamed.Should().BeEmpty();
         await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
         _payGate.ReceivedCalls().Should().BeEmpty();
     }
 
+    public static TheoryData<string, string, bool, bool> RemainingMessageCases
+    {
+        get
+        {
+            var cases = new TheoryData<string, string, bool, bool>();
+            foreach (var (message, category) in new[] { ("screen this input", "violence"),
+                ("I feel like disappearing forever", "self-harm/intent"), ("I want to hurt myself", "self-harm/intent") })
+                foreach (var supportsAllowance in new[] { false, true })
+                    foreach (var stream in new[] { false, true })
+                        cases.Add(message, category, supportsAllowance, stream);
+            return cases;
+        }
+    }
+
     [Theory]
-    [InlineData("screen this input", "violence")]
-    [InlineData("I feel like disappearing forever", "self-harm/intent")]
-    [InlineData("I want to hurt myself", "self-harm/intent")]
-    public async Task Moderation_OneServerMessageRemaining_NextBenignMessageIsAccepted(string message, string category)
+    [MemberData(nameof(RemainingMessageCases))]
+    public async Task Moderation_OneServerMessageRemaining_NextBenignMessageIsAccepted(
+        string message, string category, bool supportsAllowance, bool stream)
     {
         var user = User.Create("Alex", "alex@test.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
@@ -192,9 +285,21 @@ public partial class ProcessUserChatCommandHandlerTests
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(true, false, [category]));
 
-        var declined = await handler.Handle(new(UserId, message), default);
+        var request = new ProcessUserChatCommand(UserId, message,
+            ClientContext: new(SupportsMessageAllowance: supportsAllowance),
+            StreamSink: stream ? _ => Task.CompletedTask : null);
+        var declined = await handler.Handle(request, default);
 
-        declined.IsSuccess.Should().BeTrue();
+        if (supportsAllowance || category != "violence")
+        {
+            declined.IsSuccess.Should().BeTrue();
+            declined.Value.MessageAllowanceConsumed.Should().Be(supportsAllowance ? false : null);
+        }
+        else
+        {
+            declined.IsFailure.Should().BeTrue();
+            declined.ErrorCode.Should().Be(ErrorCodes.ContentModerationRefused);
+        }
         user.AiMessagesUsedToday.Should().Be(4);
         _aiIntentService.ReceivedCalls().Should().BeEmpty();
         await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
@@ -202,25 +307,31 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(new ModerationResult(false, false, []));
         SetupAiResponse(new AiResponse { TextMessage = "Allowed" });
 
-        var next = await handler.Handle(new(UserId, "Hello"), default);
+        var next = await handler.Handle(request with { Message = "Hello" }, default);
 
         next.IsSuccess.Should().BeTrue();
         next.Value.AiMessage.Should().Be("Allowed");
+        next.Value.MessageAllowanceConsumed.Should().Be(supportsAllowance ? true : null);
         user.AiMessagesUsedToday.Should().Be(5);
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Moderation_Clean_KeepsNormalTurnAndAllowance()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Moderation_Clean_KeepsNormalTurnAndAllowance(bool? supportsAllowance)
     {
         SetupUserAndPayGate();
         EnableRecording();
         SetupAiResponse(new AiResponse { TextMessage = "Allowed" });
 
-        var result = await CreateHandler().Handle(new(UserId, "Hello"), default);
+        var result = await CreateHandler().Handle(new(UserId, "Hello",
+            ClientContext: supportsAllowance is null ? null : new(SupportsMessageAllowance: supportsAllowance)), default);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Allowed");
+        result.Value.MessageAllowanceConsumed.Should().Be(supportsAllowance == true ? true : null);
         await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());

@@ -280,7 +280,8 @@ public record AgentClientContext(
     IReadOnlyList<string>? PartKinds = null,
     bool? SupportsDatedHabitListCard = null,
     bool? SupportsHabitHistoryCard = null,
-    bool? SupportsFollowUpContext = null);
+    bool? SupportsFollowUpContext = null,
+    bool? SupportsMessageAllowance = null);
 
 public record AgentContextSnapshot(
     string Plan,

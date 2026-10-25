@@ -8,8 +8,15 @@ namespace Orbit.Application.Chat;
 
 internal static class ChatResponseNegotiation
 {
+    public static ChatResponse ForAllowance(ChatResponse response, AgentClientContext? client, bool consumed)
+    {
+        bool? allowance = client?.SupportsMessageAllowance == true ? consumed : null;
+        return response.MessageAllowanceConsumed == allowance ? response : response with { MessageAllowanceConsumed = allowance };
+    }
+
     public static ChatResponse ForClient(ChatResponse response, AgentClientContext? client, IReadOnlyList<string> flags)
     {
+        response = ForAllowance(response, client, response.MessageAllowanceConsumed ?? false);
         if (response.Parts is null) return response;
         var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AstraPartsDisabled);
         var negotiated = new List<ChatResponsePart>();
