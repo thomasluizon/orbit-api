@@ -93,8 +93,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
         if (enforce)
         {
-            result.IsFailure.Should().BeTrue();
-            result.ErrorCode.Should().Be(ErrorCodes.AiEmptyResponse);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.AiMessage.Should().Be("I couldn't prepare an answer. Please try again.");
         }
         else
         {
@@ -103,7 +103,7 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         receivedModelSink.Should().Be(!enforce);
         events.Where(item => item.Type == "delta").Select(item => item.Text)
-            .Should().Equal(enforce ? Array.Empty<string>() : new[] { invented });
+            .Should().Equal(enforce ? new[] { result.Value.AiMessage } : new[] { invented });
         var warnings = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
             && (LogLevel)call.GetArguments()[0]! == LogLevel.Warning).ToArray();
         warnings.Should().HaveCount(enforce ? 2 : 1);

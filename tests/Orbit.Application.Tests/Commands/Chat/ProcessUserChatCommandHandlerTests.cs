@@ -4206,7 +4206,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData(" \n ")]
-    public async Task Handle_EmptyTextMessage_FailsWithEmptyResponse(string? text)
+    public async Task Handle_EmptyTextMessage_ReturnsRecoveryAnswer(string? text)
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = text, ToolCalls = null });
@@ -4215,8 +4215,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var command = new ProcessUserChatCommand(UserId, "Hello");
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(ErrorCodes.AiEmptyResponse);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("I couldn't prepare an answer. Please try again.");
     }
 
     [Fact]
