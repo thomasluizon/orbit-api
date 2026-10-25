@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -53,8 +54,7 @@ public class SubscribePushCommandHandler(
                 var renewal = device.RenewRegistration(request.Endpoint, request.Auth, request.ApnsTopic, request.DeviceId);
                 if (renewal.IsFailure)
                     return renewal;
-                await unitOfWork.SaveChangesAsync(cancellationToken);
-                return Result.Success();
+                return await SaveRegistration(cancellationToken);
             }
         }
 
@@ -65,14 +65,12 @@ public class SubscribePushCommandHandler(
 
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return await SaveRegistration(cancellationToken);
         }
         catch (Exception exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
             return Result.Success();
         }
-
-        return Result.Success();
     }
 
     /// <summary>
@@ -115,8 +113,21 @@ public class SubscribePushCommandHandler(
         var removedIds = previous.Select(subscription => subscription.Id).ToHashSet();
         EvictOldestBeyondCap(subscriptions.Where(subscription => !removedIds.Contains(subscription.Id)).ToList(), existing);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        return await SaveRegistration(cancellationToken);
+    }
+
+    private async Task<Result> SaveRegistration(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.DiscardChanges();
+            return Result.Failure(ErrorMessages.ConcurrentUpdateConflict);
+        }
     }
 
     private async Task<IReadOnlyList<PushSubscription>> GetPersistedUserSubscriptions(Guid userId, CancellationToken cancellationToken)

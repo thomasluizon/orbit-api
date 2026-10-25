@@ -1986,6 +1986,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Endpoint")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -1994,6 +1995,7 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<Guid>("UserId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");

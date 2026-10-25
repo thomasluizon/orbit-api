@@ -40,6 +40,7 @@ public partial class PushNotificationService(
         CancellationToken cancellationToken = default)
     {
         var subscriptions = await dbContext.PushSubscriptions
+            .AsNoTracking()
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
 
@@ -76,10 +77,13 @@ public partial class PushNotificationService(
         if (webPushSubs.Count > 0)
             delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
 
-        if (staleSubscriptions.Count > 0)
+        foreach (var stale in staleSubscriptions)
         {
-            dbContext.PushSubscriptions.RemoveRange(staleSubscriptions);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.PushSubscriptions
+                .Where(s => s.Id == stale.Id && s.UserId == stale.UserId && s.Endpoint == stale.Endpoint
+                    && s.P256dh == stale.P256dh && s.Auth == stale.Auth && s.ApnsTopic == stale.ApnsTopic
+                    && s.DeviceId == stale.DeviceId && s.CreatedAtUtc == stale.CreatedAtUtc)
+                .ExecuteDeleteAsync(cancellationToken);
         }
 
         return delivered;
