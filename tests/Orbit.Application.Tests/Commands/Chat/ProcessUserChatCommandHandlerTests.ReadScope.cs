@@ -67,7 +67,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateHandler(tool).Handle(new(UserId, "Show two past days",
             ClientContext: new AgentClientContext(SupportsHabitListCard: true)), default);
 
-        result.IsSuccess.Should().Be(hasText);
+        result.IsSuccess.Should().BeTrue();
         if (hasText)
         {
             result.Value.AiMessage.Should().Be("Here are the requested days.");
@@ -75,7 +75,7 @@ public partial class ProcessUserChatCommandHandlerTests
             result.Value.Operations!.Count(operation => operation.OperationId == "query_habits").Should().Be(2);
         }
         else
-            result.ErrorCode.Should().Be(ErrorCodes.AiEmptyResponse);
+            result.Value.AiMessage.Should().Be("I couldn't prepare an answer. Please try again.");
         await _operationExecutor.Received(2).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
             request.OperationId == "query_habits"), Arg.Any<CancellationToken>());
     }

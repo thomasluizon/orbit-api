@@ -337,6 +337,13 @@ public partial class ProcessUserChatCommandHandler(
         try
         {
             var result = await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+            if (result.IsFailure && result.ErrorCode == ErrorCodes.AiEmptyResponse)
+            {
+                logger.LogWarning("Empty AI completion at round {RoundIndex} for {UserId} {CorrelationId}",
+                    telemetry.RoundCount, request.UserId, request.CorrelationId);
+                return request.BlockAnswer is not null ? result
+                    : Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.User?.Language, null, cancellationToken));
+            }
             if (result.IsSuccess)
             {
                 var readable = ChatResponseNegotiation.ForPendingPreview(result.Value,
@@ -362,8 +369,7 @@ public partial class ProcessUserChatCommandHandler(
                 }).ToDictionary(group => group.Key, group => group.Count());
                 logger.LogWarning("Empty composed AI answer at round {RoundIndex}; output kinds {OutputKinds} for {UserId} {CorrelationId}",
                     telemetry.RoundCount, JsonSerializer.Serialize(outputKinds), request.UserId, request.CorrelationId);
-                return Result.Failure<ChatResponse>(new AppError(ErrorCodes.AiEmptyResponse,
-                    ErrorCopy.Resolve(ErrorCodes.AiEmptyResponse, LocaleHelper.IsPortuguese(context.User?.Language))));
+                return Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.User?.Language, result.Value, cancellationToken));
             }
             return result;
         }

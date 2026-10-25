@@ -59,7 +59,12 @@ public sealed class AstraBlockAnswerService(
             {
                 var recovery = await CompleteCommittedAsync(request, prepared.AnsweredAtUtc!.Value);
                 completed = recovery is not null;
-                return recovery is null ? result : Result.Success(recovery);
+                if (recovery is not null)
+                    return Result.Success(recovery);
+                if (result.ErrorCode != ErrorCodes.AiEmptyResponse)
+                    return result;
+                var user = await users.GetByIdAsync(request.UserId, ct);
+                result = Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, user?.Language, null, ct));
             }
             await unitOfWork.ExecuteInTransactionAsync(async token =>
             {

@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Application.Tests.Common;
@@ -81,13 +82,17 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("continuation", "en")]
-    [InlineData("cancel", "en")]
-    [InlineData("budget", "en")]
-    [InlineData("completion", "en")]
-    [InlineData("serialization", "en")]
-    [InlineData("continuation", "pt-BR")]
-    public async Task ChoiceAnswer_CommittedHabitThenFailure_ReplaysWithoutCreatingAgain(string failure, string language)
+    [InlineData("continuation", "en", false)]
+    [InlineData("cancel", "en", false)]
+    [InlineData("budget", "en", false)]
+    [InlineData("completion", "en", false)]
+    [InlineData("serialization", "en", false)]
+    [InlineData("continuation", "pt-BR", false)]
+    [InlineData("empty", "en", false)]
+    [InlineData("empty", "pt-BR", false)]
+    [InlineData("empty", "en", true)]
+    [InlineData("empty", "pt-BR", true)]
+    public async Task ChoiceAnswer_CommittedHabitThenFailure_ReplaysWithoutCreatingAgain(string failure, string language, bool supportsParts)
     {
         var user = User.Create("Alex", "retry@example.com").Value;
         user.SetLanguage(language);
@@ -130,27 +135,38 @@ public partial class ProcessUserChatCommandHandlerTests
                     ? Result.Success(new AiResponse { ReportedTokenCount = AppConstants.MaxAiRequestTotalTokens + 1 })
                     : failure is "completion" or "serialization"
                         ? Result.Success(new AiResponse { TextMessage = "Created." })
-                        : Result.Failure<AiResponse>(ErrorMessages.AiUnavailable)));
-        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]));
+                        : Result.Failure<AiResponse>(failure == "empty" ? ErrorMessages.AiEmptyResponse : ErrorMessages.AiUnavailable)));
+        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]),
+            ClientContext: new(SupportsParts: supportsParts));
 
         var first = await handler.Handle(request, default);
         await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         var retry = await handler.Handle(request, default);
 
         first.IsSuccess.Should().BeTrue();
+        first.Value.Actions.Should().ContainSingle(action => action.Type == "CreateHabit" && action.Status == ActionStatus.Success);
         first.Value.AiMessage.Should().Be(language == "pt-BR"
             ? "Salvei as mudanças listadas aqui, mas não consegui terminar minha resposta."
             : "I saved the changes listed here, but I couldn't finish my reply.");
-        first.Value.Actions.Should().ContainSingle(action => action.Type == "CreateHabit" && action.Status == ActionStatus.Success);
+        retry.IsSuccess.Should().BeTrue();
         retry.Value.Should().BeEquivalentTo(first.Value);
+        block.CommittedResponseJson.Should().NotBeNull();
+        block.ResponseJson.Should().Be(block.CommittedResponseJson);
         user.GetAiMessagesUsedToday(Today).Should().Be(1);
         await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
-    [InlineData("en", "I couldn't finish my reply, and nothing changes until you approve.")]
-    [InlineData("pt-BR", "Não consegui terminar minha resposta, e nada muda até você aprovar.")]
-    public async Task ChoiceAnswer_PendingWriteThenFailure_ReplaysWithoutClaimingChangesWereSaved(string language, string message)
+    [InlineData("en", "I couldn't finish my reply, and nothing changes until you approve.", false, false)]
+    [InlineData("pt-BR", "Não consegui terminar minha resposta, e nada muda até você aprovar.", false, false)]
+    [InlineData("en", "I couldn't finish my reply, and nothing changes until you approve.", true, false)]
+    [InlineData("pt-BR", "Não consegui terminar minha resposta, e nada muda até você aprovar.", true, false)]
+    [InlineData("en", "I couldn't finish my reply, and nothing changes until you approve.", true, true)]
+    [InlineData("pt-BR", "Não consegui terminar minha resposta, e nada muda até você aprovar.", true, true)]
+    public async Task ChoiceAnswer_PendingWriteThenFailure_ReplaysWithoutClaimingChangesWereSaved(
+        string language, string message, bool empty, bool supportsParts)
     {
         var user = User.Create("Alex", "retry@example.com").Value;
         user.SetLanguage(language);
@@ -169,17 +185,85 @@ public partial class ProcessUserChatCommandHandlerTests
             pending.CapabilityId, "delete_habit", ParseArguments("{}"), AgentExecutionSurface.Chat, pending.ConfirmationRequirement));
         SetupAiResponse(ToolResponse("delete_habit", "write", "{}"));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
-        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]));
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(empty ? ErrorMessages.AiEmptyResponse : ErrorMessages.AiUnavailable));
+        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]),
+            ClientContext: new(SupportsParts: supportsParts));
 
         var first = await handler.Handle(request, default);
         var replay = await handler.Handle(request, default);
 
         first.IsSuccess.Should().BeTrue();
+        first.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pending.Id);
         first.Value.AiMessage.Should().Be(message);
         first.Value.Actions.Should().BeEmpty();
+        replay.IsSuccess.Should().BeTrue();
         replay.Value.Should().BeEquivalentTo(first.Value);
         replay.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pending.Id);
+        block.CommittedResponseJson.Should().NotBeNull();
+        block.ResponseJson.Should().Be(block.CommittedResponseJson);
+        user.GetAiMessagesUsedToday(Today).Should().Be(1);
+        await _operationExecutor.Received(1).ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en", false, false)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, false)]
+    public async Task ChoiceAnswer_EmptyCompletionWithoutCheckpoint_ReplaysLocalizedFallback(
+        string language, bool continuation, bool supportsParts)
+    {
+        var user = User.Create("Alex", "retry@example.com").Value;
+        user.SetLanguage(language);
+        var quota = CreateRealPayGate(user);
+        var block = RetryChoice();
+        var tool = ReadTool("query_habits", new ToolResult(true, Payload: new { habits = Array.Empty<object>() }));
+        if (continuation)
+        {
+            SetupAiResponse(ToolResponse(tool.Name, "read", "{}"));
+            _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+                .Returns(Result.Failure<AiResponse>(ErrorMessages.AiEmptyResponse));
+        }
+        else
+            _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+                .Returns(Result.Failure<AiResponse>(ErrorMessages.AiEmptyResponse));
+        var handler = CreateHandler(quota, tool);
+        var events = new List<ChatStreamEvent>();
+        var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]),
+            ClientContext: new(SupportsParts: supportsParts), CorrelationId: "empty-choice",
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; });
+
+        var first = await handler.Handle(request, default);
+        var replay = await handler.Handle(request, default);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.AiMessage.Should().Be(language == "pt-BR"
+            ? "Não consegui preparar uma resposta. Tente novamente."
+            : "I couldn't prepare an answer. Please try again.");
+        first.Value.Actions.Should().BeEmpty();
+        first.Value.PendingOperations.Should().BeNullOrEmpty();
+        first.Value.CorrelationId.Should().Be("empty-choice");
+        if (supportsParts)
+            first.Value.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(first.Value.AiMessage!));
+        else
+            first.Value.Parts.Should().BeNull();
+        replay.IsSuccess.Should().BeTrue();
+        replay.Value.Should().BeEquivalentTo(first.Value);
+        block.CommittedResponseJson.Should().BeNull();
+        block.ResponseJson.Should().NotBeNull();
+        user.GetAiMessagesUsedToday(Today).Should().Be(1);
+        events.TakeLast(2).Should().Equal(ChatStreamEvent.Reset(), ChatStreamEvent.Delta(first.Value.AiMessage!));
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.ReceivedWithAnyArgs(continuation ? 1 : 0).ContinueWithToolResultsAsync(default!, default!, default, default);
+        await _operationExecutor.Received(continuation ? 1 : 0).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(operation => operation.OperationId == tool.Name), Arg.Any<CancellationToken>());
+        await _operationExecutor.DidNotReceive().ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(operation => operation.OperationId != tool.Name), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -59,7 +59,7 @@ public class ChatEmptySuccessTests
 
     [Theory]
     [MemberData(nameof(EmptyReplies))]
-    public async Task Endpoints_EmptyAfterCompositionOrGrounding_ReturnEmptyResponseFailure(
+    public async Task Endpoints_EmptyAfterCompositionOrGrounding_ReturnLocalizedAnswer(
         bool stream, bool composition, string language, string text, bool enforceGrounding, bool successfulRead)
     {
         var logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
@@ -75,20 +75,19 @@ public class ChatEmptySuccessTests
             var events = (await new StreamReader(body).ReadToEndAsync()).Split('\n')
                 .Where(line => line.StartsWith("data: ", StringComparison.Ordinal))
                 .Select(line => JsonSerializer.Deserialize<JsonElement>(line[6..])).ToArray();
-            events.Should().NotContain(item => item.GetProperty("type").GetString() == "final");
-            events[^1].GetProperty("type").GetString().Should().Be("error");
-            events[^1].GetProperty("code").GetString().Should().Be(ErrorCodes.AiEmptyResponse);
-            events[^1].GetProperty("error").GetString().Should().Be(ErrorCopy.Resolve(ErrorCodes.AiEmptyResponse, language == "pt-BR"));
+            events.Should().NotContain(item => item.GetProperty("type").GetString() == "error");
+            events.Should().Contain(item => item.GetProperty("type").GetString() == "final");
+            Encoding.UTF8.GetString(body.ToArray()).Should().Contain(language == "pt-BR" ? "resposta" : "answer");
         }
         else
         {
             var result = await controller.ProcessChat("Which habits did I complete most in the last 3 weeks?", null, null,
                 default, clientContext: client);
-            var failure = result.Should().BeOfType<ObjectResult>().Subject;
-            failure.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-            var json = JsonSerializer.SerializeToElement(failure.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            json.GetProperty("errorCode").GetString().Should().Be(ErrorCodes.AiEmptyResponse);
-            json.GetProperty("error").GetString().Should().Be(ErrorCopy.Resolve(ErrorCodes.AiEmptyResponse, language == "pt-BR"));
+            var success = result.Should().BeOfType<OkObjectResult>().Subject;
+            var json = JsonSerializer.SerializeToElement(success.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            json.GetProperty("aiMessage").GetString().Should().Be(language == "pt-BR"
+                ? "Não consegui preparar uma resposta. Tente novamente."
+                : "I couldn't prepare an answer. Please try again.");
         }
         var warnings = logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
             && call.GetArguments()[0] is LogLevel.Warning).Select(call => call.GetArguments()[2]).ToArray();
