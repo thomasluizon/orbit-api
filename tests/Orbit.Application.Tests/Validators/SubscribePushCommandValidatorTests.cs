@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Notifications.Validators;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -123,15 +124,15 @@ public class SubscribePushCommandValidatorTests
         if (allowed)
             result.ShouldNotHaveAnyValidationErrors();
         else
-            result.ShouldHaveValidationErrorFor(x => x.Endpoint);
+            result.ShouldHaveValidationErrorFor(x => x.Endpoint).WithErrorCode(DomainErrors.WnsEndpointInvalid.Code);
     }
 
     [Fact]
     public void Validate_Wns_RequiresDeviceId()
     {
         var command = ValidCommand() with { Endpoint = "https://dm3p.notify.windows.com/?token=channel", P256dh = "wns" };
-        _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.DeviceId);
-        _validator.TestValidate(command with { DeviceId = Guid.Empty }).ShouldHaveValidationErrorFor(x => x.DeviceId);
+        _validator.TestValidate(command).ShouldHaveValidationErrorFor(x => x.DeviceId).WithErrorCode(DomainErrors.PushDeviceIdInvalid.Code);
+        _validator.TestValidate(command with { DeviceId = Guid.Empty }).ShouldHaveValidationErrorFor(x => x.DeviceId).WithErrorCode(DomainErrors.PushDeviceIdInvalid.Code);
     }
 
     [Theory]
@@ -148,8 +149,8 @@ public class SubscribePushCommandValidatorTests
     public void Validate_Topic_RejectsOtherAppsAndTransports()
     {
         _validator.TestValidate(ValidCommand() with { Endpoint = "token", P256dh = "apns", ApnsTopic = "org.attacker.app" })
-            .ShouldHaveValidationErrorFor(x => x.ApnsTopic);
+            .ShouldHaveValidationErrorFor(x => x.ApnsTopic).WithErrorCode(DomainErrors.PushApnsTopicInvalid.Code);
         _validator.TestValidate(ValidCommand() with { ApnsTopic = "org.useorbit.desktop" })
-            .ShouldHaveValidationErrorFor(x => x.ApnsTopic);
+            .ShouldHaveValidationErrorFor(x => x.ApnsTopic).WithErrorCode(DomainErrors.PushApnsTopicInvalid.Code);
     }
 }

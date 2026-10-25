@@ -389,6 +389,9 @@ public static partial class ErrorCopy
 
         foreach (var (code, sourceCode) in new[]
         {
+            (DomainErrors.WnsEndpointInvalid.Code, ErrorCodes.PushEndpointInvalid),
+            (DomainErrors.PushApnsTopicInvalid.Code, ErrorCodes.PushEndpointInvalid),
+            (DomainErrors.PushDeviceIdInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (ErrorCodes.AstraBlockNotFound, ErrorCodes.ClarificationNotFound),
             (ErrorCodes.AstraBlockInvalidated, ErrorCodes.ClarificationNotFound),
             (ErrorCodes.AstraBlockExpired, ErrorCodes.ClarificationNotFound),
