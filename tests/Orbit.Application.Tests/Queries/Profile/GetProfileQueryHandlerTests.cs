@@ -89,7 +89,8 @@ public class GetProfileQueryHandlerTests
     {
         var user = CreateTestUser();
         typeof(User).GetProperty(nameof(User.AdRewardsClaimedToday))!.SetValue(user, 2);
-        typeof(User).GetProperty(nameof(User.LastAdRewardLocalDate))!.SetValue(user, Today.AddDays(storedDaysAgo));
+        typeof(User).GetField("_lastAdRewardLocalDate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(user, Today.AddDays(storedDaysAgo));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         StubFreezeRepoEmpty();
 

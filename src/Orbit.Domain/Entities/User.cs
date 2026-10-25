@@ -8,6 +8,8 @@ namespace Orbit.Domain.Entities;
 public partial class User : Entity
 {
     private TimeProvider _timeProvider = TimeProvider.System;
+    private DateTime? _lastAdRewardAt = null;
+    private DateOnly? _lastAdRewardLocalDate = null;
     private const int DefaultStreakDaysPerFreeze = 7;
 
     [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
@@ -74,8 +76,8 @@ public partial class User : Entity
     public int Level { get; private set; } = 1;
     public string? ReferralCouponId { get; private set; }
     public int AdRewardBonusMessages { get; private set; } = 0;
-    public DateTime? LastAdRewardAt { get; private set; }
-    public DateOnly? LastAdRewardLocalDate { get; private set; }
+    public DateTime? LastAdRewardAt => _lastAdRewardAt;
+    public DateOnly? LastAdRewardLocalDate => _lastAdRewardLocalDate;
     public int AdRewardsClaimedToday { get; private set; } = 0;
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;

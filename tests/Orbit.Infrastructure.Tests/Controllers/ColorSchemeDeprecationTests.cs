@@ -15,7 +15,7 @@ public class ColorSchemeDeprecationTests
         MemberInfo[] members =
         [
             typeof(ProfileController).GetMethod(nameof(ProfileController.SetColorScheme))!,
-            typeof(ProfileController.SetColorSchemeRequest),
+            typeof(ProfileController).GetNestedType("SetColorSchemeRequest")!,
             typeof(ProfileController.ApplyOnboardingRequest).GetProperty("ColorScheme")!,
             typeof(ApplyOnboardingCommand).GetProperty("ColorScheme")!
         ];

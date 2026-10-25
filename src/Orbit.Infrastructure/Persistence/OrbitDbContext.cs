@@ -726,6 +726,8 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 
             entity.Property(u => u.ColorScheme).HasMaxLength(50);
+            entity.Property(u => u.LastAdRewardAt).HasField("_lastAdRewardAt");
+            entity.Property(u => u.LastAdRewardLocalDate).HasField("_lastAdRewardLocalDate");
             entity.Property(u => u.Language).HasMaxLength(10);
             entity.Property(u => u.SignupLanguage).HasMaxLength(10);
             entity.Property(u => u.ThemePreference).HasMaxLength(10);

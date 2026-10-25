@@ -697,7 +697,8 @@ public class UserTests
             user.IncrementAiMessageCount(today);
         typeof(User).GetProperty(nameof(User.AdRewardBonusMessages))!.SetValue(user, 5);
         typeof(User).GetProperty(nameof(User.AdRewardsClaimedToday))!.SetValue(user, 1);
-        typeof(User).GetProperty(nameof(User.LastAdRewardLocalDate))!.SetValue(user, today);
+        typeof(User).GetField("_lastAdRewardLocalDate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(user, today);
 
         user.ResetAccount();
 
