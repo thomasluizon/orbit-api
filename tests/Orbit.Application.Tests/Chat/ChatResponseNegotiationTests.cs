@@ -143,6 +143,23 @@ public sealed class ChatResponseNegotiationTests
         result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be("Readable answer");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Replay_PendingPreviewWithoutPartsHasReadableFallback(bool nullParts)
+    {
+        var pending = new PendingAgentOperation(Guid.NewGuid(), "habits.write", "Create", "create_habit",
+            AgentRiskClass.High, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(5),
+            Items: [new("item", null, "Reading", [], "state")]);
+        var stored = Replay(new(null, [], PendingOperations: [pending], Parts: nullParts ? null : []));
+        var result = ChatResponseNegotiation.ForClient(stored, null, []);
+
+        result.Parts.Should().BeNull();
+        result.AiMessage.Should().Contain("Reading").And.Contain("approving").And.NotContain("create_habit");
+        result.PendingOperations.Should().BeEquivalentTo([pending]);
+        ChatResponseNegotiation.ForClient(stored, new(SupportsParts: true), []).AiMessage.Should().BeNullOrEmpty();
+    }
+
     private static ChatResponse Replay(ChatResponse response) => JsonSerializer.Deserialize<ChatResponse>(
         JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), ChatStreamEvent.SerializerOptions)!;
 }

@@ -13,6 +13,11 @@ leads with the requested supported kind. Confirm legacy and missing-kind fallbac
 Keep global activation off until #26 records passing English and Portuguese real-pipeline
 composition cases and #1620 supports the consumer contract.
 
+Pending-write text fallback does not require `astra_block_first`. Verify clients without
+parts support and accounts with `astra_parts_disabled` receive readable approval text,
+including after a blank narrative or preview recovery. Supported parts clients receive the
+preview without repeated prose. Compare the final stream event with recorded history.
+
 Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
 build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and
 existing model-call telemetry. Do not attach prompt/completion text or arguments.
