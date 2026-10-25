@@ -352,7 +352,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Crie Academia."), default);
 
         result.Value.PendingOperations.Should().ContainSingle();
-        result.Value.AiMessage.Should().BeNull();
+        result.Value.AiMessage.Should().Contain("Academia").And.Contain("aprovar");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 

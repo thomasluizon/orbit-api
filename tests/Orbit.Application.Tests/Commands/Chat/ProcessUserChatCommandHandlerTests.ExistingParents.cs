@@ -27,7 +27,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Create a weekly vitamin D habit."), default);
 
         result.Value.PendingOperations.Should().ContainSingle();
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().Contain("Take vitamin D").And.NotContain("99");
         result.Value.GroundingFacts.Facts.Should().NotContain(fact => fact.Value == "99"
             || fact.Kind == "EntityName" && (fact.Value == "BEFORE BED" || fact.Value == "POST LUNCH"));
         var warnings = _logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log"
@@ -75,7 +75,9 @@ public partial class ProcessUserChatCommandHandlerTests
             pending.Items[index].FieldOptions.Should().BeNull();
             held.Single().Arguments.GetProperty("habits")[index].GetProperty("parent_habit_id").GetGuid().Should().Be(parents[index].Id);
         }
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().NotBeNullOrWhiteSpace();
+        foreach (var item in pending.Items!)
+            result.Value.AiMessage.Should().Contain(item.EntityName);
         result.Value.Parts.Should().BeNullOrEmpty();
     }
 
