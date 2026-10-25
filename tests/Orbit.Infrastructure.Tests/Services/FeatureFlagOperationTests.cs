@@ -140,7 +140,7 @@ public class FeatureFlagOperationTests
     private static async Task<ClaimsPrincipal> AuthenticateAsync(Guid userId, bool oauthFamily,
         IReadOnlyList<string>? scopes = null, bool isReadOnly = false)
     {
-        var (key, rawKey) = ApiKey.Create(userId, "Claude.ai", scopes ?? AgentScopes.ClaudeDefaultScopes,
+        var (key, rawKey) = ApiKey.Create(userId, oauthFamily ? ApiKey.ConnectorName : "Manual key", scopes ?? AgentScopes.ClaudeDefaultScopes,
             isReadOnly: isReadOnly, oauthFamilyId: oauthFamily ? Guid.NewGuid() : null).Value;
         var run = await ApiKeyAuthenticationHandlerTests.RunHandler($"Bearer {rawKey}", candidates: [key]);
         run.Result.Succeeded.Should().BeTrue();

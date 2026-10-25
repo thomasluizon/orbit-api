@@ -35,7 +35,7 @@ public class OAuthRefreshRaceTests
         using var database = new SqliteOrbitDbContextFactory();
         var db = database.Context;
         var user = User.Create("Refresh", "refresh@example.com").Value;
-        var key = ApiKey.Create(user.Id, "Claude.ai", [AgentScopes.ReadHabits]).Value.Entity;
+        var key = LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(user.Id, scopes: [AgentScopes.ReadHabits]).Entity;
         db.AddRange(user, key);
         await db.SaveChangesAsync();
         var store = new OAuthAuthorizationStore(new OAuthStateStore(db, TimeProvider.System), TimeProvider.System);
@@ -83,7 +83,7 @@ public class OAuthRefreshRaceTests
         using var database = new SqliteOrbitDbContextFactory();
         var db = database.Context;
         var user = User.Create("Refresh", "refresh@example.com").Value;
-        var first = ApiKey.Create(user.Id, "Claude.ai", [AgentScopes.ReadHabits]).Value.Entity;
+        var first = LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(user.Id, scopes: [AgentScopes.ReadHabits]).Entity;
         var unrelated = ApiKey.Create(user.Id, "Other client", [AgentScopes.ReadHabits]).Value.Entity;
         db.AddRange(user, first, unrelated);
         await db.SaveChangesAsync();
