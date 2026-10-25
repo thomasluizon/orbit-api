@@ -1,6 +1,8 @@
 using FluentValidation.TestHelper;
+using FluentAssertions;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Validators;
@@ -53,6 +55,31 @@ public class CreateApiKeyValidatorTests
     {
         var result = _validator.TestValidate(ValidCommand() with { Name = new string('a', 50) });
         result.ShouldNotHaveValidationErrorFor(x => x.Name);
+    }
+
+    [Theory]
+    [InlineData("Claude.ai")]
+    [InlineData("claude.ai")]
+    [InlineData("CLAUDE.AI")]
+    [InlineData("  cLaUdE.aI  ")]
+    [InlineData("\tClaude.ai\r\n")]
+    public void Validate_ConnectorName_ReturnsTypedLocalizedError(string name)
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Name = name });
+
+        result.ShouldHaveValidationErrorFor(x => x.Name)
+            .WithErrorCode("VALIDATION_API_KEY_NAME_RESERVED").Only();
+        var error = result.Errors.Single();
+        error.LocalizedMessage(false).Should().Contain("Claude.ai");
+        error.LocalizedMessage(true).Should().Contain("Claude.ai").And.NotBe(error.LocalizedMessage(false));
+    }
+
+    [Theory]
+    [InlineData("Claude.ai personal")]
+    [InlineData("My Claude.ai")]
+    public void Validate_OtherNameContainingConnectorName_NoError(string name)
+    {
+        _validator.TestValidate(ValidCommand() with { Name = name }).ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]

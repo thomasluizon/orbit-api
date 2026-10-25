@@ -168,12 +168,16 @@ public class McpConfirmationGateTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task StepUpTool_AfterTheFourRecoveryToolsRun_RunsInsteadOfBeingRefused(bool connector)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task StepUpTool_AfterTheFourRecoveryToolsRun_RunsInsteadOfBeingRefused(bool connector, bool legacy)
     {
         if (connector)
-            _user = await OAuthConnectorConfirmationTests.Authenticate(_userId, Guid.NewGuid(), scopes: [AgentScopes.ManageApiKeys]);
+            _user = await OAuthConnectorConfirmationTests.Authenticate(_userId, legacy ? null : Guid.NewGuid(),
+                scopes: [AgentScopes.ManageApiKeys], legacy: legacy);
+        if (legacy)
+            _user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var refusal = await InvokeManageApiKeysAsync(confirmationToken: null);
         refusal.ToolOutput.Should().Contain("Step-up verification required");
 

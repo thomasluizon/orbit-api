@@ -7,6 +7,31 @@ public class ApiKeyTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
+    [Theory]
+    [InlineData("Claude.ai")]
+    [InlineData("claude.ai")]
+    [InlineData("CLAUDE.AI")]
+    [InlineData("  cLaUdE.aI  ")]
+    [InlineData("\tClaude.ai\r\n")]
+    public void Create_ManualConnectorName_ReturnsTypedFailure(string name)
+    {
+        var result = ApiKey.Create(ValidUserId, name);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("API_KEY_NAME_RESERVED");
+    }
+
+    [Fact]
+    public void Create_OAuthConnectorName_RemainsAvailableToOAuthIssuer()
+    {
+        var familyId = Guid.NewGuid();
+        var result = ApiKey.Create(ValidUserId, "Claude.ai", oauthFamilyId: familyId);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Entity.Name.Should().Be("Claude.ai");
+        result.Value.Entity.OAuthFamilyId.Should().Be(familyId);
+    }
+
     [Fact]
     public void Create_ValidatesAndPreservesOAuthClientIdentity()
     {

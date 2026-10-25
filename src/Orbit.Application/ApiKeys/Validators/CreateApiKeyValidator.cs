@@ -1,6 +1,7 @@
 using Orbit.Application.Common;
 using FluentValidation;
 using Orbit.Application.ApiKeys.Commands;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.ApiKeys.Validators;
@@ -16,7 +17,9 @@ public class CreateApiKeyValidator : AbstractValidator<CreateApiKeyCommand>
             .NotEmpty()
             .WithCopy(ValidationErrorCodes.ApiKeyNameRequired)
             .MaximumLength(50)
-            .WithCopy(ValidationErrorCodes.ApiKeyNameLength);
+            .WithCopy(ValidationErrorCodes.ApiKeyNameLength)
+            .Must(name => !ApiKey.IsConnectorName(name))
+            .WithCopy(ValidationErrorCodes.ApiKeyNameReserved);
 
         RuleForEach(x => x.Scopes)
             .NotEmpty()

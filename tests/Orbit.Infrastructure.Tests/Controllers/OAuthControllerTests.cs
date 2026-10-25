@@ -1313,7 +1313,7 @@ public class OAuthControllerTests : IDisposable
         var (verifier, challenge) = GeneratePkce();
         var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
 
-        var priorKey = ApiKey.Create(UserId, "Claude.ai", AgentScopes.ClaudeDefaultScopes).Value.Entity;
+        var priorKey = LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(UserId, scopes: AgentScopes.ClaudeDefaultScopes).Entity;
         _apiKeyRepo.FindTrackedAsync(
                 Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(),
                 Arg.Any<CancellationToken>())

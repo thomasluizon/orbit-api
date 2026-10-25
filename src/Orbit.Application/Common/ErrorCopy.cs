@@ -43,6 +43,7 @@ public static partial class ErrorCopy
         (ErrorCodes.MaxApiKeys, "You can keep {0} active API keys. Revoke one to create another.", "Você pode manter {0} chaves de API ativas. Revogue uma para criar outra."),
         (DomainErrors.ApiKeyNameRequired.Code, "Enter a name for the API key.", "Digite um nome para a chave de API."),
         (DomainErrors.ApiKeyNameTooLong.Code, "An API key name fits 50 characters. Shorten it.", "Um nome de chave de API cabe em 50 caracteres. Encurte."),
+        (DomainErrors.ApiKeyNameReserved.Code, "Claude.ai is reserved for the Claude connector. Choose another name for this API key.", "Claude.ai é reservado para o conector do Claude. Escolha outro nome para esta chave de API."),
         (DomainErrors.ApiKeyExpiryInPast.Code, "Pick an expiry date in the future.", "Escolha uma data de validade no futuro."),
         (DomainErrors.ApiKeyScopesInvalid.Code, "Pick at least one permission for this key.", "Escolha pelo menos uma permissão para esta chave."),
     ];
