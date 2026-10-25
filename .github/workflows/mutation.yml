@@ -2,7 +2,7 @@ name: Mutation Testing
 
 on:
   pull_request:
-    branches: [main, redesign/main]
+    branches: [main]
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
