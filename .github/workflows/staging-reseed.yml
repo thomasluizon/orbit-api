@@ -21,7 +21,7 @@ concurrency:
 jobs:
   reseed:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: render-operations
     timeout-minutes: 60
     env:
@@ -29,6 +29,7 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       TF_VAR_staging_environment_id: ${{ vars.STAGING_ENVIRONMENT_ID }}
       TF_VAR_staging_api_service_id: ${{ vars.STAGING_API_SERVICE_ID }}
+      STAGING_CARRY_DIRECTORY: ${{ runner.temp }}/staging-data-carry
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -51,6 +52,7 @@ jobs:
           STAGING_RESEED_STEP: Read staging database age
         run: |
           database_id="$(terraform -chdir=infra/staging-database output -raw staging_postgres_id)"
+          echo "database_id=${database_id}" >> "$GITHUB_OUTPUT"
           created_at="$(curl --fail --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             "https://api.render.com/v1/postgres/${database_id}" \
@@ -61,6 +63,43 @@ jobs:
           else
             echo 'replace=false' >> "$GITHUB_OUTPUT"
           fi
+      - name: Install PostgreSQL 17 client tools
+        if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Install PostgreSQL 17 client tools
+        run: |
+          curl --fail --silent --show-error --max-time 30 \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc --output "$RUNNER_TEMP/postgresql.asc"
+          sudo install --mode=644 "$RUNNER_TEMP/postgresql.asc" /usr/share/keyrings/postgresql.asc
+          echo 'deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_restore --version
+      - name: Allow runner access for the data backup
+        if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Allow runner access for the data backup
+          STAGING_POSTGRES_ID: ${{ steps.age.outputs.database_id }}
+          STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-backup-access
+        run: bash .github/scripts/staging-postgres-access.sh open
+      - name: Back up staging data
+        if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Back up staging data
+        run: |
+          PGDATABASE="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
+          export PGDATABASE
+          python3 .github/scripts/staging-reseed-data.py backup
+      - name: Restore operator access after the data backup
+        if: always() && steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Restore operator access after the data backup
+          STAGING_POSTGRES_ID: ${{ steps.age.outputs.database_id }}
+          STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-backup-access
+        run: bash .github/scripts/staging-postgres-access.sh restore
       - name: Replace staging database and refresh its API connection
         id: replace
         if: steps.age.outputs.replace == 'true'
@@ -98,6 +137,14 @@ jobs:
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-migration-access
         run: bash .github/scripts/staging-postgres-access.sh open
+      - name: Restore and verify staging data
+        if: steps.age.outputs.replace == 'true'
+        env:
+          STAGING_RESEED_STEP: Restore and verify staging data
+        run: |
+          PGDATABASE="$(terraform -chdir=infra/staging-database output -raw staging_external_connection_string)"
+          export PGDATABASE
+          python3 .github/scripts/staging-reseed-data.py restore
       - name: Apply migrations to the replacement database
         if: steps.age.outputs.replace == 'true'
         env:
@@ -206,3 +253,8 @@ jobs:
           STAGING_POSTGRES_ID: ${{ steps.replace.outputs.database_id }}
           STAGING_ACCESS_MARKER: ${{ runner.temp }}/staging-seed-access
         run: bash .github/scripts/staging-postgres-access.sh restore
+      - name: Delete local staging data
+        if: always()
+        env:
+          STAGING_RESEED_STEP: Delete local staging data
+        run: rm -rf -- "$STAGING_CARRY_DIRECTORY"
