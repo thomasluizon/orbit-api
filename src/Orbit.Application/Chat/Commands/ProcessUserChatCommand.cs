@@ -338,7 +338,11 @@ public partial class ProcessUserChatCommandHandler(
         {
             var result = await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
             if (result.IsFailure && result.ErrorCode == ErrorCodes.AiEmptyResponse)
+            {
+                logger.LogWarning("Empty AI completion at round {RoundIndex} for {UserId} {CorrelationId}",
+                    telemetry.RoundCount, request.UserId, request.CorrelationId);
                 return Result.Success(await RecoverEmptyAnswerAsync(request, context.User?.Language, null, cancellationToken));
+            }
             if (result.IsSuccess && !HasDisplayableAnswer(result.Value))
             {
                 var outputKinds = (result.Value.Parts ?? []).GroupBy(part => part switch
