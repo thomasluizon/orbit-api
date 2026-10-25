@@ -210,11 +210,6 @@ public partial class ProcessUserChatCommandHandler(
         try
         {
             response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
-            if (response.ErrorCode == ErrorCodes.ContentModerationRefused)
-            {
-                recording.Enabled = false;
-                response = await HandleModeratedTurnAsync(request, cancellationToken);
-            }
             return response.IsSuccess && evalTrace is not null
                 ? Result.Success(response.Value with { EvalTrace = evalTrace.Build() })
                 : response;
@@ -231,6 +226,7 @@ public partial class ProcessUserChatCommandHandler(
         if (request.BlockAnswer is not null)
         {
             recording.Enabled = true;
+            ModerationResult? flaggedInput = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
                 data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
@@ -239,11 +235,24 @@ public partial class ProcessUserChatCommandHandler(
                     recording.UserContent = prepared.Message;
                     recording.Enabled = !prepared.IsReplay;
                 }, recording.ToolCalls.Add);
-            return await answerService.ExecuteAsync(request, prepared =>
+            var response = await answerService.ExecuteAsync(request, prepared =>
                 prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
                     : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc), cancellationToken,
-                (_, token) => ModerateInputAsync(request, token));
+                async (_, token) =>
+                {
+                    var check = await ModerateInputAsync(request, token);
+                    if (check.IsFailure)
+                        return check;
+                    if (!check.Value.Flagged)
+                        return Result.Success();
+                    flaggedInput = check.Value;
+                    return Result.Failure(ErrorMessages.ContentModerationRefused);
+                });
+            if (flaggedInput is null)
+                return response;
+            recording.Enabled = false;
+            return await HandleModeratedTurnAsync(request, flaggedInput, cancellationToken);
         }
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None)
@@ -258,6 +267,8 @@ public partial class ProcessUserChatCommandHandler(
         var inputCheck = await ModerateInputAsync(request, cancellationToken);
         if (inputCheck.IsFailure)
             return inputCheck.PropagateError<ChatResponse>();
+        if (inputCheck.Value.Flagged)
+            return await HandleModeratedTurnAsync(request, inputCheck.Value, cancellationToken);
         await execution.UnitOfWork.ExecuteInTransactionAsync(async token =>
         {
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
@@ -266,20 +277,24 @@ public partial class ProcessUserChatCommandHandler(
         return await HandleTurnAsync(request, recording, evalTrace, cancellationToken);
     }
 
-    private async Task<Result> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
+    private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
     {
         var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
         var check = await moderation.CheckTextAsync(input, cancellationToken);
         if (check.Unavailable)
-            return Result.Failure(ErrorMessages.AiUnavailable);
-        return check.Flagged ? Result.Failure(ErrorMessages.ContentModerationRefused) : Result.Success();
+            return Result.Failure<ModerationResult>(ErrorMessages.AiUnavailable);
+        return Result.Success(check);
     }
 
     private async Task<Result<ChatResponse>> HandleModeratedTurnAsync(
-        ProcessUserChatCommand request, CancellationToken cancellationToken)
+        ProcessUserChatCommand request, ModerationResult check, CancellationToken cancellationToken)
     {
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
-        var message = ErrorCopy.Resolve(ErrorCodes.ContentModerationRefused, LocaleHelper.IsPortuguese(user?.Language));
+        var isPortuguese = LocaleHelper.IsPortuguese(user?.Language);
+        if (check.Categories.Any(category => category is "self-harm" or "self-harm/intent" or "self-harm/instructions"))
+            return await HandleCrisisTurnAsync(request,
+                isPortuguese ? CrisisLocales.Portuguese : CrisisLocales.English, captureMessage: true);
+        var message = ErrorCopy.Resolve(ErrorCodes.ContentModerationRefused, isPortuguese);
         if (request.StreamSink is not null)
         {
             await request.StreamSink(ChatStreamEvent.Reset());
