@@ -24693,6 +24693,19 @@
           },
           "auth": {
             "type": "string"
+          },
+          "apnsTopic": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deviceId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },

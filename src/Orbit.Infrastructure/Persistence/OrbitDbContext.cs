@@ -290,6 +290,9 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(s => s.UserId);
             entity.HasIndex(s => s.Endpoint).IsUnique();
+            entity.Property(s => s.ApnsTopic).HasMaxLength(255);
+            entity.HasIndex(s => new { s.UserId, s.DeviceId, s.P256dh }).IsUnique()
+                .HasFilter("\"DeviceId\" IS NOT NULL");
             entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }

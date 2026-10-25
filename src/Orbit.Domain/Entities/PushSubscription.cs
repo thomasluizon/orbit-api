@@ -15,12 +15,18 @@ public class PushSubscription : Entity
     /// </summary>
     public const string FcmSentinel = "fcm";
     public const string ApnsSentinel = "apns";
+    public const string WnsSentinel = "wns";
+
+    public static bool IsAllowedApnsTopic(string? topic) =>
+        topic is null or "org.useorbit.desktop" or "org.useorbit.desktop.staging";
 
     public Guid UserId { get; private set; }
     public string Endpoint { get; private set; } = null!;
     public string P256dh { get; private set; } = null!;
     public string Auth { get; private set; } = null!;
     public DateTime CreatedAtUtc { get; private set; }
+    public string? ApnsTopic { get; private set; }
+    public Guid? DeviceId { get; private set; }
 
     public PushTransport Transport => ClassifyTransport(P256dh);
 
@@ -29,6 +35,7 @@ public class PushSubscription : Entity
         {
             FcmSentinel => PushTransport.Fcm,
             ApnsSentinel => PushTransport.Apns,
+            WnsSentinel => PushTransport.Wns,
             _ => PushTransport.WebPush
         };
 
@@ -38,7 +45,9 @@ public class PushSubscription : Entity
         Guid userId,
         string endpoint,
         string p256dh,
-        string auth)
+        string auth,
+        string? apnsTopic = null,
+        Guid? deviceId = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<PushSubscription>(DomainErrors.UserIdRequired);
@@ -55,12 +64,24 @@ public class PushSubscription : Entity
         if (ClassifyTransport(p256dh) == PushTransport.WebPush && !WebPushEndpointPolicy.IsAllowed(endpoint))
             return Result.Failure<PushSubscription>(DomainErrors.PushEndpointInvalid);
 
+        if (ClassifyTransport(p256dh) == PushTransport.Wns && !WnsEndpointPolicy.IsAllowed(endpoint))
+            return Result.Failure<PushSubscription>(DomainErrors.WnsEndpointInvalid);
+
+        if (!IsAllowedApnsTopic(apnsTopic) || (apnsTopic is not null && ClassifyTransport(p256dh) != PushTransport.Apns))
+            return Result.Failure<PushSubscription>(DomainErrors.PushApnsTopicInvalid);
+
+        if (deviceId == Guid.Empty || (ClassifyTransport(p256dh) == PushTransport.Wns && deviceId is null)
+            || (deviceId is not null && ClassifyTransport(p256dh) is not (PushTransport.Wns or PushTransport.Apns)))
+            return Result.Failure<PushSubscription>(DomainErrors.PushDeviceIdInvalid);
+
         return Result.Success(new PushSubscription
         {
             UserId = userId,
             Endpoint = endpoint,
             P256dh = p256dh,
             Auth = auth,
+            ApnsTopic = apnsTopic,
+            DeviceId = deviceId,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -72,9 +93,23 @@ public class PushSubscription : Entity
     /// credential Firebase issues to one app install, so the matched token plus the FCM sentinel is the proof.
     /// </summary>
     public bool MatchesCredentials(string p256dh, string auth) =>
-        Transport is PushTransport.Fcm or PushTransport.Apns
+        Transport is PushTransport.Fcm or PushTransport.Apns or PushTransport.Wns
             ? ClassifyTransport(p256dh) == Transport
             : FixedTimeEquals(P256dh, p256dh) && FixedTimeEquals(Auth, auth);
+
+    public Result RenewRegistration(string endpoint, string auth, string? apnsTopic, Guid? deviceId)
+    {
+        var registration = Create(UserId, endpoint, P256dh, auth, apnsTopic, deviceId);
+        if (registration.IsFailure)
+            return Result.Failure(registration.Error, registration.ErrorCode!);
+
+        Endpoint = endpoint;
+        Auth = auth;
+        ApnsTopic = apnsTopic;
+        DeviceId = deviceId;
+        CreatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
+    }
 
     /// <summary>
     /// Moves this device's subscription to the account now registering it, so the previous account

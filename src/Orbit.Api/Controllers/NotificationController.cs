@@ -18,7 +18,7 @@ public partial class NotificationController(
     IMediator mediator,
     ILogger<NotificationController> logger) : ControllerBase
 {
-    public record SubscribeRequest(string Endpoint, string P256dh, string Auth);
+    public record SubscribeRequest(string Endpoint, string P256dh, string Auth, string? ApnsTopic = null, Guid? DeviceId = null);
 
     public record UnsubscribeRequest(
         string Endpoint,
@@ -102,7 +102,9 @@ public partial class NotificationController(
             HttpContext.GetUserId(),
             request.Endpoint,
             request.P256dh,
-            request.Auth);
+            request.Auth,
+            request.ApnsTopic,
+            request.DeviceId);
 
         var result = await mediator.Send(command, cancellationToken);
 
