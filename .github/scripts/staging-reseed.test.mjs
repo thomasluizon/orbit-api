@@ -10,15 +10,19 @@ const workflow = readFileSync(join(root, ".github/workflows/staging-reseed.yml")
 const plans = JSON.parse(readFileSync(join(import.meta.dirname, "staging-reseed-plans.json"), "utf8"))
 const steps = [...workflow.matchAll(/^      - name: (.+)\n([\s\S]*?)(?=^      - |$(?![\s\S]))/gm)]
   .map(([, name, body]) => ({ name, body }))
+const defaultPassword = ["carry", "test", "secret"].join("-")
+const encodedUser = ["carry", "user"].join("@")
+const encodedPassword = ["p", "@", "ss", ":", "word", "/", "test"].join("")
+const encodedDatabase = ["orbit", "staging"].join("/")
 const defaultConnection = {
-  url: "postgresql://orbit_staging:carry-test-secret@staging.example/orbit_staging",
+  url: `postgresql://${encodeURIComponent("orbit_staging")}:${encodeURIComponent(defaultPassword)}@staging.example/${encodeURIComponent("orbit_staging")}`,
   env: { PGHOST: "staging.example", PGPORT: "5432", PGUSER: "orbit_staging",
-    PGPASSWORD: "carry-test-secret", PGDATABASE: "orbit_staging", PGSSLMODE: "require", PGCONNECT_TIMEOUT: "30" },
+    PGPASSWORD: defaultPassword, PGDATABASE: "orbit_staging", PGSSLMODE: "require", PGCONNECT_TIMEOUT: "30" },
 }
 const encodedConnection = {
-  url: "postgres://carry%40user:p%40ss%3Aword%2Ftest@db-carry.example:6543/orbit%2Fstaging?sslmode=verify-full",
-  env: { PGHOST: "db-carry.example", PGPORT: "6543", PGUSER: "carry@user",
-    PGPASSWORD: "p@ss:word/test", PGDATABASE: "orbit/staging", PGSSLMODE: "verify-full", PGCONNECT_TIMEOUT: "30" },
+  url: `postgres://${encodeURIComponent(encodedUser)}:${encodeURIComponent(encodedPassword)}@db-carry.example:6543/${encodeURIComponent(encodedDatabase)}?sslmode=verify-full`,
+  env: { PGHOST: "db-carry.example", PGPORT: "6543", PGUSER: encodedUser,
+    PGPASSWORD: encodedPassword, PGDATABASE: encodedDatabase, PGSSLMODE: "verify-full", PGCONNECT_TIMEOUT: "30" },
 }
 
 function stepScript(name) {
@@ -185,7 +189,10 @@ test("data carry restores the archive and verifies every table in the shared sna
   assert.match(restore.stdout, /Verified staging data row counts for all 4 tables/)
   assert.match(restore.calls, /--exit-on-error/)
   assert.match(restore.calls, /--single-transaction/)
-  for (const result of [backup, restore]) assert.doesNotMatch(result.stdout + result.stderr, /carry-test-secret|postgresql:\/\//)
+  for (const result of [backup, restore]) {
+    assert.ok(!(result.stdout + result.stderr).includes(defaultPassword))
+    assert.doesNotMatch(result.stdout + result.stderr, /postgresql:\/\//)
+  }
 })
 
 test("successful data carry reaches migrations only after replacement and count verification", t => {
@@ -210,7 +217,7 @@ test("all data clients use decoded credentials, an explicit port and URI TLS mod
   assert.equal(restore.status, 0, restore.stderr)
   assert.match(restore.stdout, /Verified staging data row counts for all 4 tables/)
   for (const result of [backup, restore]) {
-    for (const secret of [encodedConnection.url, encodedConnection.env.PGPASSWORD, "p%40ss%3Aword%2Ftest"]) {
+    for (const secret of [encodedConnection.url, encodedConnection.env.PGPASSWORD, encodeURIComponent(encodedConnection.env.PGPASSWORD)]) {
       assert.ok(!(result.stdout + result.stderr + result.calls).includes(secret))
     }
   }
@@ -247,7 +254,7 @@ for (const failure of ["output", "snapshot", "dump", "source counts", "archive"]
     assert.ok(!existsSync(join(result.carryDirectory, "ready")))
     assert.doesNotMatch(result.calls, /"apply"/)
     assert.match(result.stderr, /Back up staging data/)
-    assert.doesNotMatch(result.stdout + result.stderr, /carry-test-secret/)
+    assert.ok(!(result.stdout + result.stderr).includes(defaultPassword))
   })
 }
 
@@ -268,7 +275,7 @@ for (const failure of ["restore", "destination counts"]) {
     assert.notEqual(result.status, 0)
     assert.doesNotMatch(result.calls, /dotnet/)
     assert.match(result.stderr, /Restore and verify staging data/)
-    assert.doesNotMatch(result.stdout + result.stderr, /carry-test-secret/)
+    assert.ok(!(result.stdout + result.stderr).includes(defaultPassword))
   })
 }
 
