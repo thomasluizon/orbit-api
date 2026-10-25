@@ -109,6 +109,11 @@ jobs:
       COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Require healthy staging commit
         env:
           FORCE_UNSTAGED: ${{ inputs.force_unstaged }}
@@ -137,14 +142,12 @@ jobs:
           set -euo pipefail
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
+          source .github/scripts/render-release.sh
+          step_started=$(jq -n 'now')
           payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
           response_file=$(mktemp)
-          http_status=$(curl --fail-with-body --silent --show-error \
-            --output "$response_file" --write-out '%{http_code}' \
-            --request POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data "$payload")
+          trap 'rm -f "$response_file"' EXIT
+          http_status=$(render_start_deploy "$payload" "$response_file" "$step_started")
           case "$http_status" in
             201) deploy_id=$(jq -er '.id' < "$response_file") ;;
             202)
@@ -161,9 +164,7 @@ jobs:
           echo "Render deploy: $log_url"
 
           for attempt in {1..640}; do
-            response=$(curl --fail-with-body --silent --show-error \
-              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id" \
-              --header "Authorization: Bearer $RENDER_API_KEY")
+            response=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id")
             status=$(jq -er '.status' <<< "$response")
             echo "Render deploy status: $status (poll $attempt)"
             case "$status" in
@@ -181,11 +182,6 @@ jobs:
           echo "::error::Render deploy $deploy_id timed out. Logs: $log_url"
           exit 1
 
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -194,9 +190,8 @@ jobs:
         run: |
           set -euo pipefail
           node tools/verify-release-health.mjs 'https://api.useorbit.org/health'
-          live_commit=$(curl --fail-with-body --silent --show-error --get \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
+          source .github/scripts/render-release.sh
+          live_commit=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" --get \
             --data-urlencode 'status=live' --data-urlencode 'limit=1' |
             jq -er '.[0].deploy.commit.id')
           if [ "$live_commit" != "$COMMIT_SHA" ]; then
@@ -241,6 +236,11 @@ jobs:
       COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Select staging branch
         env:
           RELEASE_BRANCH: ${{ inputs.branch }}
@@ -249,9 +249,8 @@ jobs:
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
           payload=$(jq -cn --arg branch "$RELEASE_BRANCH" '{branch: $branch, autoDeploy: "no"}')
-          response=$(curl --fail-with-body --silent --show-error \
-            --request PATCH "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
+          source .github/scripts/render-release.sh
+          response=$(render_request PATCH "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
             --header 'Content-Type: application/json' \
             --data "$payload")
           jq -e --arg branch "$RELEASE_BRANCH" '.branch == $branch and .autoDeploy == "no"' <<< "$response"
@@ -262,14 +261,12 @@ jobs:
           set -euo pipefail
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
+          source .github/scripts/render-release.sh
+          step_started=$(jq -n 'now')
           payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
           response_file=$(mktemp)
-          http_status=$(curl --fail-with-body --silent --show-error \
-            --output "$response_file" --write-out '%{http_code}' \
-            --request POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data "$payload")
+          trap 'rm -f "$response_file"' EXIT
+          http_status=$(render_start_deploy "$payload" "$response_file" "$step_started")
           case "$http_status" in
             201) deploy_id=$(jq -er '.id' < "$response_file") ;;
             202)
@@ -286,9 +283,7 @@ jobs:
           echo "Render deploy: $log_url"
 
           for attempt in {1..640}; do
-            response=$(curl --fail-with-body --silent --show-error \
-              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id" \
-              --header "Authorization: Bearer $RENDER_API_KEY")
+            response=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$deploy_id")
             status=$(jq -er '.status' <<< "$response")
             echo "Render deploy status: $status (poll $attempt)"
             case "$status" in
@@ -306,11 +301,6 @@ jobs:
           echo "::error::Render deploy $deploy_id timed out. Logs: $log_url"
           exit 1
 
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -319,9 +309,8 @@ jobs:
         run: |
           set -euo pipefail
           node tools/verify-release-health.mjs 'https://api-staging.useorbit.org/health'
-          live_commit=$(curl --fail-with-body --silent --show-error --get \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
-            --header "Authorization: Bearer $RENDER_API_KEY" \
+          source .github/scripts/render-release.sh
+          live_commit=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" --get \
             --data-urlencode 'status=live' --data-urlencode 'limit=1' |
             jq -er '.[0].deploy.commit.id')
           if [ "$live_commit" != "$COMMIT_SHA" ]; then
