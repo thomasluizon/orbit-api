@@ -25,6 +25,7 @@ using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Authentication;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -54,10 +55,14 @@ public class OAuthConnectorConfirmationTests : IDisposable
     }
 
     internal static async Task<ClaimsPrincipal> Authenticate(Guid userId, Guid? familyId,
-        bool readOnly = false, IReadOnlyList<string>? scopes = null)
+        bool readOnly = false, IReadOnlyList<string>? scopes = null, bool legacy = false)
     {
-        var (key, raw) = ApiKey.Create(userId, familyId.HasValue ? ApiKey.ConnectorName : "Manual key", scopes ?? [AgentScopes.DeleteHabits, AgentScopes.ReadHabits],
-            isReadOnly: readOnly, oauthFamilyId: familyId).Value;
+        var (key, raw) = legacy
+            ? LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(userId, readOnly, scopes)
+            : ApiKey.Create(userId, familyId.HasValue ? ApiKey.ConnectorName : "Manual key", scopes ?? [AgentScopes.DeleteHabits, AgentScopes.ReadHabits],
+                isReadOnly: readOnly, oauthFamilyId: familyId).Value;
+        if (legacy)
+            key = LegacyConnectorCredentialMigrationTests.MigrateCredential(key);
         var run = await ApiKeyAuthenticationHandlerTests.RunHandler($"Bearer {raw}", candidates: [key]);
         run.Result.Succeeded.Should().BeTrue();
         return run.Result.Principal!;
@@ -80,10 +85,13 @@ public class OAuthConnectorConfirmationTests : IDisposable
         user.GetAgentAuthMethod().ToString().Should().Be(connector ? "OAuth" : "ApiKey");
     }
 
-    [Fact]
-    public async Task Connector_DeleteConfirmRetry_DeletesHabitAndAuditsOAuth()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Connector_DeleteConfirmRetry_DeletesHabitAndAuditsOAuth(bool legacy)
     {
-        var user = await Authenticate(_userId, Guid.NewGuid());
+        var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), legacy: legacy);
+        user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "QA habit", FrequencyUnit.Day, 1,
             new DateOnly(2026, 1, 1))).Value;
         _db.Habits.Add(habit);
@@ -131,10 +139,13 @@ public class OAuthConnectorConfirmationTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task ConnectorConfirmation_IsBoundToUserOperationArgumentsAndSingleUse()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConnectorConfirmation_IsBoundToUserOperationArgumentsAndSingleUse(bool legacy)
     {
-        var user = await Authenticate(_userId, Guid.NewGuid());
+        var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), legacy: legacy);
+        user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var context = Context(user, "delete_habit:original");
         var decision = _policy.Evaluate(context);
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
@@ -177,9 +188,43 @@ public class OAuthConnectorConfirmationTests : IDisposable
     }
 
     [Fact]
-    public async Task ForeignConnector_CannotConfirmAnotherUsersPendingOperation()
+    public async Task LegacyAndNewFamilyCredentials_CanConfirmTheirUsersPendingOperation()
     {
-        var user = await Authenticate(_userId, Guid.NewGuid());
+        var legacy = await Authenticate(_userId, null, legacy: true);
+        var newer = await Authenticate(_userId, Guid.NewGuid());
+        foreach (var user in new[] { legacy, newer })
+        {
+            var context = Context(user, $"delete_habit:{user.FindFirst("api_key_id")!.Value}");
+            var pending = _policy.Evaluate(context).PendingOperation!;
+            var confirmation = Payload<PendingAgentOperationConfirmation>(
+                _tools.ConfirmAgentOperation(user, pending.Id.ToString()));
+
+            _policy.Evaluate(context with { ConfirmationToken = confirmation.ConfirmationToken })
+                .Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        }
+    }
+
+    [Fact]
+    public async Task UnverifiedStoredKeyWithConnectorName_KeepsManualKeyRefusal()
+    {
+        var (key, raw) = LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(_userId);
+        typeof(ApiKey).GetProperty(nameof(ApiKey.Id))!.SetValue(key, Guid.NewGuid());
+        key = LegacyConnectorCredentialMigrationTests.MigrateCredential(key);
+        var run = await ApiKeyAuthenticationHandlerTests.RunHandler($"Bearer {raw}", candidates: [key]);
+
+        run.Result.Succeeded.Should().BeTrue();
+        var user = run.Result.Principal!;
+        user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.ApiKey);
+        AssertError(_tools.ConfirmAgentOperation(user, Guid.NewGuid().ToString()), "interactive_confirmation_required");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ForeignConnector_CannotConfirmAnotherUsersPendingOperation(bool legacy)
+    {
+        var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), legacy: legacy);
+        user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var pending = _policy.Evaluate(Context(user, "delete_habit:owner")).PendingOperation!;
         var foreign = await Authenticate(Guid.NewGuid(), Guid.NewGuid());
         var result = _tools.ConfirmAgentOperation(foreign, pending.Id.ToString());
@@ -205,14 +250,18 @@ public class OAuthConnectorConfirmationTests : IDisposable
     }
 
     [Theory]
-    [InlineData("confirm")]
-    [InlineData("issue")]
-    [InlineData("verify")]
-    public async Task ReadOnlyConnector_CannotApproveAnyWrite(string action)
+    [InlineData("confirm", false)]
+    [InlineData("issue", false)]
+    [InlineData("verify", false)]
+    [InlineData("confirm", true)]
+    [InlineData("issue", true)]
+    [InlineData("verify", true)]
+    public async Task ReadOnlyConnector_CannotApproveAnyWrite(string action, bool legacy)
     {
         var writable = await Authenticate(_userId, Guid.NewGuid());
         var pending = _policy.Evaluate(Context(writable, "delete_habit:read-only")).PendingOperation!;
-        var user = await Authenticate(_userId, Guid.NewGuid(), readOnly: true);
+        var user = await Authenticate(_userId, legacy ? null : Guid.NewGuid(), readOnly: true, legacy: legacy);
+        user.GetAgentAuthMethod().Should().Be(AgentAuthMethod.OAuth);
         var id = pending.Id.ToString();
         object? result = action switch
         {
@@ -226,15 +275,21 @@ public class OAuthConnectorConfirmationTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task InvalidOAuthCredential_CannotAuthenticateToConfirm(bool revoked)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task InvalidOAuthCredential_CannotAuthenticateToConfirm(bool revoked, bool legacy)
     {
-        var (key, raw) = ApiKey.Create(_userId, "Claude.ai", oauthFamilyId: Guid.NewGuid()).Value;
+        var (key, raw) = legacy
+            ? LegacyConnectorCredentialMigrationTests.CreateLegacyCredential(_userId)
+            : ApiKey.Create(_userId, "Claude.ai", oauthFamilyId: Guid.NewGuid()).Value;
         if (revoked)
             key.Revoke();
         else
             typeof(ApiKey).GetProperty(nameof(ApiKey.ExpiresAtUtc))!.SetValue(key, DateTime.UtcNow.AddMinutes(-1));
+        if (legacy)
+            key = LegacyConnectorCredentialMigrationTests.MigrateCredential(key);
         var run = await ApiKeyAuthenticationHandlerTests.RunHandler($"Bearer {raw}", candidates: [key]);
         run.Result.Succeeded.Should().BeFalse();
         run.Result.Principal.Should().BeNull();
