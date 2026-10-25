@@ -31,10 +31,13 @@ render_request() (
   return 22
 )
 
-render_list_deploys() {
-  local response count cursor='' page entries='[]'
+render_list_deploys() (
+  set -euo pipefail
+  local response count cursor='' entries_file
   local -a query
-  for page in {1..100}; do
+  entries_file=$(mktemp)
+  trap 'rm -f "$entries_file"' EXIT
+  while true; do
     query=(--get --data-urlencode 'limit=100')
     if [ -n "$cursor" ]; then query+=(--data-urlencode "cursor=$cursor"); fi
     response=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" "${query[@]}") || return "$?"
@@ -43,19 +46,28 @@ render_list_deploys() {
       | map(if (.deploy.id | type) != "string" or (.deploy.id | length) == 0
           then error("Missing Render deploy identity") else . end)
     ' <<< "$response") || return "$?"
-    entries=$(jq -cn --argjson entries "$entries" --argjson page "$response" '$entries + $page') || return "$?"
     count=$(jq -er 'length' <<< "$response") || return "$?"
-    if [ "$count" -lt 100 ]; then printf '%s\n' "$entries"; return 0; fi
+    if [ "$count" -lt 100 ]; then
+      printf '%s\n' "$response" >> "$entries_file"
+      jq -cs 'add' < "$entries_file"
+      return "$?"
+    fi
     cursor=$(jq -er '.[-1].cursor | select(type == "string" and length > 0)' <<< "$response") || return "$?"
+    jq -s --arg cursor "$cursor" '
+      if any(.[]; .[-1].cursor == $cursor)
+      then error("Render deploy listing repeated its cursor") else empty end
+    ' < "$entries_file" || return "$?"
+    printf '%s\n' "$response" >> "$entries_file"
   done
-  echo "::error::Render deploy listing exceeded its limit of $page pages" >&2
-  return 1
-}
+)
 
-render_find_deploy() {
-  local step_started=$1 existing_ids=$2 response
-  response=$(render_list_deploys) || return "$?"
-  jq -r --arg sha "$COMMIT_SHA" --argjson started "$step_started" --argjson existing "$existing_ids" '
+render_find_deploy() (
+  set -euo pipefail
+  local step_started=$1 existing_ids_file=$2 response_file
+  response_file=$(mktemp)
+  trap 'rm -f "$response_file"' EXIT
+  render_list_deploys > "$response_file" || return "$?"
+  jq -r --arg sha "$COMMIT_SHA" --argjson started "$step_started" --slurpfile existing "$existing_ids_file" '
       def created_epoch:
         (capture("^(?<seconds>[^.]+)(?:\\.(?<fraction>[0-9]+))?Z$") // error("Invalid Render deploy creation time"))
         | (.seconds + "Z" | fromdateiso8601) + (("0." + (.fraction // "0")) | tonumber);
@@ -66,10 +78,10 @@ render_find_deploy() {
           then error("Missing Render deploy identity, commit or creation time") else . end
         | (.createdAt | created_epoch) as $created
         | select(.commit.id == $sha and $created > $started)
-        | .id | select(. as $id | $existing | index($id) | not)] | unique
+        | .id | select(. as $id | $existing[0] | index($id) | not)] | unique
       | if length > 1 then error("Multiple Render deploys match this release") else .[0] // empty end
-    ' <<< "$response"
-}
+    ' < "$response_file"
+)
 
 render_post_retry_delay() {
   jq -Rrs '
@@ -82,10 +94,12 @@ render_post_retry_delay() {
 
 render_start_deploy() (
   set -euo pipefail
-  local deploy_payload=$1 response_file=$2 step_started=$3 http_status curl_status deploy_id attempt existing_ids headers_file delay
-  existing_ids=$(render_list_deploys | jq -ce '[.[].deploy.id]') || return "$?"
-  headers_file=$(mktemp)
-  trap 'rm -f "$headers_file"' EXIT
+  local deploy_payload=$1 response_file=$2 step_started=$3 http_status curl_status deploy_id attempt existing_ids_file headers_file delay directory
+  directory=$(mktemp -d)
+  trap 'rm -rf "$directory"' EXIT
+  existing_ids_file="$directory/existing-ids.json"
+  headers_file="$directory/headers"
+  render_list_deploys | jq -ce '[.[].deploy.id]' > "$existing_ids_file" || return "$?"
   for attempt in {1..4}; do
     curl_status=0
     http_status=$(curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 \
@@ -117,7 +131,7 @@ render_start_deploy() (
   # https://render.com/docs/deploys#deploy-pipeline documents overlapping deploy cancellation; a negative snapshot cannot authorize a second POST.
   echo "::warning::Render deploy outcome is ambiguous for $COMMIT_SHA (HTTP $http_status, curl $curl_status); reconciling without another POST" >&2
   for attempt in {1..4}; do
-    deploy_id=$(render_find_deploy "$step_started" "$existing_ids") || return "$?"
+    deploy_id=$(render_find_deploy "$step_started" "$existing_ids_file") || return "$?"
     if [ -n "$deploy_id" ]; then
       jq -cn --arg id "$deploy_id" '{id: $id}' > "$response_file"
       printf '201\n'

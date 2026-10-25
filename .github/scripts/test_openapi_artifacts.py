@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -27,6 +28,8 @@ class PublicationTests(unittest.TestCase):
         cache.parent.mkdir(parents=True)
         cache.write_text('\n'.join(str(guard.artifact_path(r, self.repo)) for r in self.rows))
         self.git('init', '-q')
+        self.git('config', 'gc.auto', '0')
+        self.git('config', 'maintenance.auto', 'false')
         self.git('config', 'user.name', 'Contract guard')
         self.git('config', 'user.email', 'contract@example.com')
         self.commit()
@@ -126,6 +129,15 @@ class PublicationTests(unittest.TestCase):
     def test_freshness_accepts_complete_deterministic_output(self):
         result = self.run_guard('freshness')
         self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_temporary_repository_commits_do_not_launch_automatic_housekeeping(self):
+        trace = self.repo / 'git-trace.json'
+        with mock.patch.dict(os.environ, {'GIT_TRACE2_EVENT': str(trace)}):
+            self.git('commit', '--allow-empty', '-qm', 'Housekeeping isolation')
+        children = [event['argv'] for line in trace.read_text().splitlines()
+                    if (event := json.loads(line))['event'] == 'child_start']
+        housekeeping = [args for args in children if args[1:2] in (['maintenance'], ['gc'])]
+        self.assertEqual([], housekeeping)
 
     def test_generator_cannot_silently_deregister_an_existing_stream(self):
         cache = self.repo / 'src/Orbit.Api/obj/Orbit.Api.OpenApiFiles.cache'

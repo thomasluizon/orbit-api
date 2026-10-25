@@ -18,6 +18,13 @@ const recent = (overrides = {}) => [{
   ...fixture.recent[0],
   deploy: { ...fixture.deploy, createdAt: new Date(Date.now() + 60_000).toISOString(), ...overrides },
 }]
+const history = Array.from({ length: 600 }, (_, index) => ({
+  ...fixture.recent[1],
+  deploy: { ...fixture.recent[1].deploy, id: `${fixture.recent[1].deploy.id}-${index}` },
+  cursor: `${fixture.recent[1].cursor}-${index}`,
+}))
+const pages = entries => Array.from({ length: Math.floor(entries.length / 100) + 1 },
+  (_, index) => response(entries.slice(index * 100, (index + 1) * 100)))
 
 function script(job, name) {
   const source = workflow.split(`\n  ${job}:\n`)[1].split(/\n  \w+:\n/)[0]
@@ -118,6 +125,44 @@ function followed(result, posts = 1) {
 }
 
 for (const job of ["production", "staging"]) {
+  test(`${job}: a large deploy history completes the baseline and permits one POST`, t => {
+    const result = replay(t, job, { baseline: pages(history), post: [created], poll: [live] })
+    followed(result)
+    assert.equal(result.counts.baseline, 7)
+  })
+
+  test(`${job}: a large deploy history reconciles a lost POST response and excludes baseline identities`, t => {
+    const historical = recent({ id: "dep-historical" })
+    const result = replay(t, job, {
+      baseline: pages([...history, ...historical]), post: [transient],
+      list: pages([...history, ...historical, ...recent()]), poll: [live],
+    })
+    followed(result)
+    assert.equal(result.counts.baseline, 7)
+    assert.equal(result.counts.list, 7)
+  })
+
+  test(`${job}: a large deploy history rejects matches on different pages without another POST`, t => {
+    const result = replay(t, job, {
+      baseline: pages(history), post: [transient],
+      list: pages([...recent(), ...history, ...recent({ id: "dep-other" })]),
+    })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.post, 1)
+    assert.equal(result.counts.list, 7)
+    assert.equal(result.counts.poll ?? 0, 0)
+    assert.match(result.stderr, /Multiple Render deploys match this release/)
+  })
+
+  test(`${job}: repeated pagination cursors stop the baseline before any POST`, t => {
+    const page = history.slice(0, 100)
+    const result = replay(t, job, { baseline: [response(page), response(page)] })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.baseline, 2)
+    assert.equal(result.counts.post ?? 0, 0)
+    assert.match(result.stderr, /Render deploy listing repeated its cursor/)
+  })
+
   test(`${job}: the first status poll can lose its connection and still follow the deploy to live`, t => {
     const result = replay(t, job, { post: [created], poll: [transient, response({ ...fixture.deploy, status: "build_in_progress" }), live] })
     followed(result)
