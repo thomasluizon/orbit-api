@@ -12,7 +12,7 @@ public partial class ProcessUserChatCommandHandler
     {
         private readonly List<ChatEvalToolCall> _calls = [];
 
-        public ChatEvalTrace Build() => new(traceId, _calls.ToArray());
+        public ChatEvalTrace Build(ChatTurnTiming? timing = null) => new(traceId, _calls.ToArray(), timing);
 
         private void Add(AiToolCall call, string status, AiToolCallResult? result, bool omitData)
         {

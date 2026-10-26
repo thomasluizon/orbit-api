@@ -66,13 +66,14 @@ public sealed class AstraBlockAnswerService(
                 var user = await users.GetByIdAsync(request.UserId, ct);
                 result = Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, user?.Language, null, ct));
             }
-            await unitOfWork.ExecuteInTransactionAsync(async token =>
-            {
-                await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
-                if (!await store.CompleteAnswerAsync(request.BlockAnswer!.BlockId, request.UserId,
-                        prepared.AnsweredAtUtc!.Value, JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions), token))
-                    throw new InvalidOperationException("Block answer reservation was lost.");
-            }, CancellationToken.None);
+            using (ChatTurnTimer.Measure(ChatPhase.Save))
+                await unitOfWork.ExecuteInTransactionAsync(async token =>
+                {
+                    await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
+                    if (!await store.CompleteAnswerAsync(request.BlockAnswer!.BlockId, request.UserId,
+                            prepared.AnsweredAtUtc!.Value, JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions), token))
+                        throw new InvalidOperationException("Block answer reservation was lost.");
+                }, CancellationToken.None);
             completed = true;
             await CaptureAnsweredAsync(request, CancellationToken.None);
             return result;
@@ -219,9 +220,10 @@ public sealed class AstraBlockAnswerService(
                     messageAllowanceConsumed = true;
                     reservedAllowanceDate = (await users.GetByIdAsync(request.UserId, token))?.AiMessagesLocalDate;
                 }
-                await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
-                    IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
-                    response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
+                using (ChatTurnTimer.Measure(ChatPhase.Save))
+                    await store.RecordAnswerAsync(block.Id, request.UserId, answeredAtUtc,
+                        IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
+                        response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
                     answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed));
             }, ct);
@@ -235,13 +237,16 @@ public sealed class AstraBlockAnswerService(
     private async Task<ChatResponse> BuildPickListResponseAsync(ProcessUserChatCommand request,
         AstraBlockDefinition definition, AstraBlockAnswer answer, User? user, CancellationToken token)
     {
+        using var compositionPhase = ChatTurnTimer.Measure(ChatPhase.Composition);
         var chosen = definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).ToArray();
         var arguments = AskTool.BuildBulkArguments(definition.Action!, chosen);
-        var preview = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
-            request.UserId, "bulk_" + definition.Action,
-            arguments, AgentExecutionSurface.Chat,
-            request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
-            CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
+        AgentExecuteOperationResponse preview;
+        using (ChatTurnTimer.Measure(ChatPhase.ToolCall))
+            preview = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+                request.UserId, "bulk_" + definition.Action,
+                arguments, AgentExecutionSurface.Chat,
+                request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
+                CorrelationId: request.CorrelationId, IncludeChangePreview: true, PreviewOnly: true), token);
         observeTool?.Invoke(new ConversationToolCall("block-preview", "bulk_" + definition.Action,
             arguments.Clone(), preview.Operation.Status == AgentOperationStatus.Succeeded,
             preview.Operation.PolicyReason ?? (preview.Operation.Status == AgentOperationStatus.Succeeded

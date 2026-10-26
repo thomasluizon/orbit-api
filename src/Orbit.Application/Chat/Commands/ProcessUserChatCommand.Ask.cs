@@ -12,6 +12,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<ToolCallOutcome> ExecuteAskCallAsync(AiToolCall call, ProcessUserChatCommand request,
         ToolExecutionAccumulator results, CancellationToken ct)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         ToolCallOutcome Failed(string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
             error + " Ask in plain text instead."), null, null, null, null);
         var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);

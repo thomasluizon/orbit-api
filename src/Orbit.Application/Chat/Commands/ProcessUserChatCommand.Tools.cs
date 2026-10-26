@@ -122,6 +122,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<Result<ChatResponse>> CompleteFailedToolTurnAsync(ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results, ToolLoopResult loop, CancellationToken ct)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
         ct.ThrowIfCancellationRequested();
         if (request.BlockAnswer is null && loop.ProviderError is { } error)
         {
@@ -420,7 +421,8 @@ public partial class ProcessUserChatCommandHandler
                     ? new[] { operation } : []).ToArray();
                 if (outcome.ActionResult is { Status: ActionStatus.Success } || outcome.PendingOperation is not null)
                 {
-                    await execution.UnitOfWork.SaveChangesAsync(token);
+                    using (ChatTurnTimer.Measure(ChatPhase.Save))
+                        await execution.UnitOfWork.SaveChangesAsync(token);
                     var user = await data.UserRepository.GetByIdAsync(request.UserId, token);
                     var line = CommittedWriteMessage(GetUserLanguage(user), actions.Length > 0);
                     var recovery = new ChatResponse(line, actions, PendingOperations: pending, CorrelationId: request.CorrelationId,
@@ -490,6 +492,7 @@ public partial class ProcessUserChatCommandHandler
         CancellationToken cancellationToken,
         AgentExecuteOperationRequest? correctionRequest = null)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         var tool = ai.ToolRegistry.GetTool(call.Name);
         if (tool is null)
         {
