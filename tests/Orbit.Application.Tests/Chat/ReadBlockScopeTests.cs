@@ -217,6 +217,9 @@ public sealed class ReadBlockScopeTests
         var tool = new GetDailySummaryTool(mediator, _dates);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, null), default);
+        await mediator.Received(1).Send(Arg.Is<GetDailySummaryQuery>(q => !q.GenerateNarrative
+            && q.DateFrom == _day && q.DateTo == _day), Arg.Any<CancellationToken>());
+        mediator.ClearReceivedCalls();
         _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_day.AddDays(100));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
         var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
