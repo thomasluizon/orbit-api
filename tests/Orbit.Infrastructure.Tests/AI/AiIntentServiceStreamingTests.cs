@@ -233,13 +233,13 @@ public class AiIntentServiceStreamingTests
     [InlineData(true, "Here is your habit ranking.")]
     [InlineData(false, "Aqui está o ranking dos seus hábitos.")]
     [InlineData(true, "Aqui está o ranking dos seus hábitos.")]
-    public async Task ToolRounds_PreserveFramingAndTerminalReadDirective(bool streaming, string sentence)
+    public async Task ToolRounds_PreserveFramingAndTerminalReadArgument(bool streaming, string sentence)
     {
-        var text = sentence + "\n" + TerminalReadDirective.Marker;
+        var text = sentence;
         var firstResponse = ResponsesTestData.Response(text);
-        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", "get_habit_ranking", BinaryData.FromString("{}")));
+        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", "get_habit_ranking", BinaryData.FromString("{\"orbit_read_complete\":true}")));
         var nextResponse = ResponsesTestData.Response(text);
-        nextResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_2", "get_habit_ranking", BinaryData.FromString("{}")));
+        nextResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_2", "get_habit_ranking", BinaryData.FromString("{\"orbit_read_complete\":true}")));
         string Body(ResponseResult response) => streaming
             ? ResponsesTestData.Stream(response, text)
             : ModelReaderWriter.Write(response).ToString();
@@ -252,7 +252,7 @@ public class AiIntentServiceStreamingTests
 
         first.IsSuccess.Should().BeTrue();
         first.Value.TextMessage.Should().Be(text);
-        TerminalReadDirective.IsComplete(first.Value.TextMessage).Should().BeTrue();
+        TerminalReadDirective.IsComplete(first.Value).Should().BeTrue();
         first.Value.ToolCalls.Should().ContainSingle().Which.Id.Should().Be("call_1");
         first.Value.ConversationContext.Should().NotBeNull();
         handler.RequestBodies.Should().ContainSingle();
@@ -262,7 +262,7 @@ public class AiIntentServiceStreamingTests
 
         next.IsSuccess.Should().BeTrue();
         next.Value.TextMessage.Should().Be(text);
-        TerminalReadDirective.IsComplete(next.Value.TextMessage).Should().BeTrue();
+        TerminalReadDirective.IsComplete(next.Value).Should().BeTrue();
         next.Value.ToolCalls.Should().ContainSingle().Which.Id.Should().Be("call_2");
         next.Value.ConversationContext.Should().NotBeNull();
         handler.RequestBodies.Should().HaveCount(2);

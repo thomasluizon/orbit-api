@@ -90,7 +90,14 @@ public partial class ProcessUserChatCommandHandler
 
         var toolDeclarations = ai.ToolRegistry.GetAll()
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
-            .Select(tool => (object)new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() })
+            .Select(tool => (object)new
+            {
+                name = tool.Name,
+                description = tool.Description,
+                parameters = UsesComposition(request, context) && tool.IsReadOnly
+                    ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema())
+                    : tool.GetParameterSchema()
+            })
             .ToList();
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);

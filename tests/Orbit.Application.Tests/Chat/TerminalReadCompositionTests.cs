@@ -46,8 +46,8 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             call.Arg<AiToolRequest>().DynamicContext.Should().Contain(TerminalReadDirective.Instruction);
             return completion.RunAsync(UserId, _ => Task.FromResult(Result.Success(
-                ToolResponse(tool.Name, "ranking", "{}") with
-                { TextMessage = text + "\n" + TerminalReadDirective.Marker })), default, "{}");
+                ToolResponse(tool.Name, "ranking", "{\"orbit_read_complete\":true}") with
+                { TextMessage = text })), default, "{}");
         });
 
         var result = await CreateHandler(tool).Handle(new(UserId,
@@ -92,7 +92,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate(user);
         EnableComposition();
         var tool = ReadTool("query_habits", missingBlock ? new ToolResult(true) : new ToolResult(false, Error: "Read failed"));
-        SetupAiResponse(ToolResponse(tool.Name, "read", "{}") with { TextMessage = TerminalReadDirective.Marker });
+        SetupAiResponse(ToolResponse(tool.Name, "read", "{\"orbit_read_complete\":true}"));
         ContinueWithReadDirective("No result.");
 
         var result = await CreateHandler(tool).Handle(new(UserId, "Show habits", ClientContext: new(
@@ -123,7 +123,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(disabled ? [FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraPartsDisabled] : [FeatureFlagKeys.AstraBlockFirst]);
         var ranking = await ProduceRankingAsync();
         var tool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));
-        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{}") with { TextMessage = TerminalReadDirective.Marker });
+        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{\"orbit_read_complete\":true}"));
         ContinueWithReadDirective("[[orbit:ranking]]");
 
         var result = await CreateHandler(tool).Handle(new(UserId, "Rank my habits", ClientContext: new(
@@ -140,8 +140,10 @@ public partial class ProcessUserChatCommandHandlerTests
                 Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task TerminalRead_ComposesIndependentReadsInOrder()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TerminalRead_ComposesIndependentReadsInOrder(bool complete)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -151,10 +153,12 @@ public partial class ProcessUserChatCommandHandlerTests
         UseProductionReadExecutor(habits, goals);
         SetupAiResponse(new AiResponse
         {
-            TextMessage = "Here are your habits and goals.\n" + TerminalReadDirective.Marker,
-            ToolCalls = [new(habits.Name, "habits", ParseArguments("{}")), new(goals.Name, "goals", ParseArguments("{}"))],
+            TextMessage = "Here are your habits and goals.",
+            ToolCalls = [new(habits.Name, "habits", ParseArguments("{\"orbit_read_complete\":true}")),
+                new(goals.Name, "goals", ParseArguments(complete ? "{\"orbit_read_complete\":true}" : "{\"orbit_read_complete\":false}"))],
             ConversationContext = TestConversationContext
         });
+        ContinueWithReadDirective("No additional data.");
 
         var result = await handler.Handle(new(UserId, "Show habits and goals", ClientContext: new(
             SupportsParts: true, PartKinds: ["habitList", "goalList"], SupportsHabitListCard: true,
@@ -163,7 +167,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("habitList", "goalList");
         result.Value.Parts![0].Should().BeOfType<ChatTextPart>();
-        await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+        await _aiIntentService.Received(complete ? 0 : 1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -180,8 +184,8 @@ public partial class ProcessUserChatCommandHandlerTests
         UseProductionReadExecutor(habits, goals);
         SetupAiResponse(new AiResponse
         {
-            TextMessage = "Here are your habits and goals.\n" + TerminalReadDirective.Marker,
-            ToolCalls = [new(habits.Name, "habits", ParseArguments("{}")), new(goals.Name, "goals", ParseArguments("{}"))],
+            TextMessage = "Here are your habits and goals.",
+            ToolCalls = [new(habits.Name, "habits", ParseArguments("{\"orbit_read_complete\":true}")), new(goals.Name, "goals", ParseArguments("{\"orbit_read_complete\":true}"))],
             ConversationContext = TestConversationContext
         });
         ContinueWithReadDirective("Narrative cannot replace a missing read.");
@@ -200,14 +204,14 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task TerminalRead_UnmarkedOrDisabledCompositionKeepsContinuation(bool enabled)
+    public async Task TerminalRead_IncompletePlanOrDisabledCompositionKeepsContinuation(bool enabled)
     {
         SetupUserAndPayGate();
         if (enabled) EnableComposition();
         var ranking = await ProduceRankingAsync();
         var tool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));
-        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{}") with
-        { TextMessage = "Here is your habit ranking." + (enabled ? "" : TerminalReadDirective.Marker) });
+        SetupAiResponse(ToolResponse(tool.Name, "ranking", enabled ? "{\"orbit_read_complete\":false}" : "{\"orbit_read_complete\":true}") with
+        { TextMessage = "Here is your habit ranking." });
         ContinueWithReadDirective("[[orbit:ranking]]\nThere were 99 completions.");
 
         var result = await CreateHandler(tool).Handle(new(UserId, "Rank my habits", ClientContext: new(

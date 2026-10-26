@@ -53,8 +53,7 @@ public partial class ProcessUserChatCommandHandlerTests
             var handler = CreateHandler(tool);
             UseProductionReadExecutor(tool);
             SetupAiResponse(ToolResponse(toolName, "family", JsonSerializer.Serialize(new
-            { habit_id = Guid.NewGuid(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })) with
-            { TextMessage = TerminalReadDirective.Marker });
+            { orbit_read_complete = true, habit_id = Guid.NewGuid(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
             ContinueWithReadDirective("Model prose before the answer.\n[[orbit:read:family]]");
             var client = new AgentClientContext(SupportsParts: mode != "legacy",
                 PartKinds: mode == "missing" ? ["unknown"] : [kind],
@@ -196,9 +195,9 @@ public partial class ProcessUserChatCommandHandlerTests
         EnableComposition();
         var ranking = await ProduceRankingAsync();
         var tool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));
-        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{}") with
+        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{\"orbit_read_complete\":true}") with
         {
-            TextMessage = sentence + "\n[[orbit:complete]]"
+            TextMessage = sentence
         });
         ContinueWithReadDirective("Read has 1 completion.\nRead leads the ranking.");
         var result = await CreateHandler(tool).Handle(new(UserId, "Rank my habits", ClientContext: new(

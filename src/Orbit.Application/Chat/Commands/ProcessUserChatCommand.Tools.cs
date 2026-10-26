@@ -174,9 +174,7 @@ public partial class ProcessUserChatCommandHandler
 
         if (askCall is not null)
             orderedCalls.Add(askCall);
-        orderedCalls = orderedCalls.Select(call => ai.ToolRegistry.GetTool(call.Name) is { } tool
-            ? call with { Args = OptionalToolArguments.OmitOptionalNulls(call.Args, tool.GetParameterSchema()) }
-            : call).ToList();
+        orderedCalls = orderedCalls.Select(NormalizeExecutionArguments).ToList();
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
@@ -231,6 +229,14 @@ public partial class ProcessUserChatCommandHandler
             Correction: correction);
     }
 
+    private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool
+        ? call with
+        {
+            Args = OptionalToolArguments.OmitOptionalNulls(
+            tool.IsReadOnly ? TerminalReadDirective.ExecutionArguments(call.Args) : call.Args, tool.GetParameterSchema())
+        }
+        : call;
+
     private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
@@ -243,7 +249,7 @@ public partial class ProcessUserChatCommandHandler
     private bool IsDeclaredTerminalReadRound(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, int iteration) =>
         iteration == 1 && UsesComposition(request, context) && request.BlockAnswer is null
-        && TerminalReadDirective.IsComplete(response.TextMessage)
+        && TerminalReadDirective.IsComplete(response)
         && response.ToolCalls!.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true);
 
     private AiResponse? RecoverBudgetDeniedContinuation(string? errorCode, ProcessUserChatCommand request,
