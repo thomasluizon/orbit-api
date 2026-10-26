@@ -431,7 +431,8 @@ public static partial class ServiceCollectionExtensions
             schema.Type = JsonSchemaType.Integer | JsonSchemaType.Null;
             schema.Pattern = null;
         }
-        if (context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
+        if (type.IsDefined(typeof(ObsoleteAttribute), false)
+            || context.JsonPropertyInfo?.AttributeProvider?.IsDefined(typeof(ObsoleteAttribute), false) == true)
             schema.Deprecated = true;
         return Task.CompletedTask;
     }

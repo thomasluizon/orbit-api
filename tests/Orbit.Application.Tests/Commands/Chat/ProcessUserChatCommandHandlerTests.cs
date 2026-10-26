@@ -232,10 +232,11 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Tag>().AsReadOnly());
 
-        _checklistTemplateRepo.FindAsync(
+        _checklistTemplateRepo.ProjectAsync(
             Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(),
+            Arg.Any<Func<IQueryable<ChecklistTemplate>, IQueryable<string>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<ChecklistTemplate>().AsReadOnly());
+            .Returns(Array.Empty<string>());
 
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new List<string>().AsReadOnly());
@@ -2234,7 +2235,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ProUser_AppliesFreshStreakValueBeforeBuildingPromptContext()
+    public async Task Handle_ReadTurn_KeepsGoalIndexWithoutRefreshingProgress()
     {
         var proUser = User.Create("Alex", "alex@test.com").Value;
         proUser.StartTrial(DateTime.UtcNow.AddDays(5));
@@ -2259,11 +2260,12 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "How am I doing?"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.DidNotReceiveWithAnyArgs().ComputeFreshValuesAsync(default, default, default);
+        await _goalRepo.Received(1).FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(), null, Arg.Any<CancellationToken>());
         _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null &&
             request.ActiveGoals.Count == 1 &&
-            request.ActiveGoals[0].CurrentValue == 4));
+            request.ActiveGoals[0].CurrentValue == 0));
         streakGoal.Status.Should().Be(GoalStatus.Active);
     }
 
@@ -2309,6 +2311,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.GoalList!.Items.Should().HaveCount(2);
         result.Value.GoalList.Items.Should().Contain(item => item.Title == "Read books" && item.Current == 3);
         result.Value.GoalList.Items.Should().Contain(item => item.Title == "Save money" && item.Current == 7);
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
         _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null && request.ActiveGoals.Count == 2));
         _catalogService.Received(1).BuildDynamicSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>

@@ -15,6 +15,35 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class AuthUserStoreTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SignIn_PreservesLegacyAdRewardDatesWithoutSetters(bool hasLegacyReward)
+    {
+        using var database = new SqliteOrbitDbContextFactory();
+        var context = database.Context;
+        var store = new AuthUserStore(context);
+        var original = await store.UpsertAsync(Candidate("Original", "pt-BR"), CancellationToken.None);
+        await context.SaveChangesAsync();
+        DateTime? rewardedAt = hasLegacyReward ? new DateTime(2026, 4, 3, 15, 0, 0, DateTimeKind.Utc) : null;
+        DateOnly? rewardedOn = hasLegacyReward ? new DateOnly(2026, 4, 3) : null;
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"Users\" SET \"LastAdRewardAt\" = {rewardedAt}, \"LastAdRewardLocalDate\" = {rewardedOn} WHERE \"Id\" = {original.Id}");
+        context.ChangeTracker.Clear();
+
+        var returning = await store.UpsertAsync(Candidate("Replacement", "en"), CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        returning.LastAdRewardAt.Should().Be(rewardedAt);
+        returning.LastAdRewardLocalDate.Should().Be(rewardedOn);
+        context.ChangeTracker.Clear();
+        var reloaded = await context.Users.SingleAsync();
+        reloaded.LastAdRewardAt.Should().Be(rewardedAt);
+        reloaded.LastAdRewardLocalDate.Should().Be(rewardedOn);
+        typeof(User).GetProperty(nameof(User.LastAdRewardAt))!.SetMethod.Should().BeNull();
+        typeof(User).GetProperty(nameof(User.LastAdRewardLocalDate))!.SetMethod.Should().BeNull();
+    }
+
     [Fact]
     public async Task NewAndExistingAccounts_ExecuteIdenticalSqlInOrder()
     {

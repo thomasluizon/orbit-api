@@ -30,6 +30,7 @@ public partial class ProfileController(
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetClockFormatRequest([property: JsonRequired] bool Uses24HourClock);
     public record SetThemePreferenceRequest(string? ThemePreference);
+    [Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
     public record SetColorSchemeRequest(string? ColorScheme);
     public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
     public record ApplyOnboardingRequest(
@@ -37,6 +38,7 @@ public partial class ProfileController(
         ApplyLogInput? FirstLog,
         ApplyGoalInput? Goal,
         int? WeekStartDay,
+        [property: Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
         string? ColorScheme);
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
@@ -194,6 +196,7 @@ public partial class ProfileController(
     }
 
     [HttpPut("color-scheme")]
+    [Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
