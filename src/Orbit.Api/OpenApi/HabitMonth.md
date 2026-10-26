@@ -39,6 +39,17 @@ instance marked Completed as a positive log: the existing instance projection al
 uses that state for skips. No grid aggregation or replacement schedule engine is
 introduced in chat. The complete month is returned without sampling or paging.
 
+The model continuation receives only the inclusive window, user-local today and
+one summary per habit, including nested children: identity, title, scheduled,
+completed, skipped and missed day counts. Counts use the calendar's dates and
+logs, with positive logs taking precedence over skips on the same day. Future
+and current unlogged dates are not missed. Positive logs for habits being reduced
+are reported as slip days, never completions or missed days. Flexible habits are
+identified; their day counts describe calendar cells, not frequency targets.
+The complete `CalendarMonthResponse` stays in the block, refresh and legacy text
+fallback. The existing model payload cap and other tools' drop behavior apply
+without changes.
+
 ## Refresh contract for the paired UI
 
 Tracks thomasluizon/orbit-tickets#1748. Refresh with
