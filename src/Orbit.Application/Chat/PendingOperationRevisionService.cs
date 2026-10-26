@@ -89,7 +89,7 @@ public sealed partial class PendingOperationRevisionService(
         if (request.Items.Any(item => !offered.ContainsKey(item.ItemId)))
             return Failure("item_not_offered");
 
-        if (EditError(request.Items, offered) is { } editError)
+        if (EditError(request.Items, offered, _ => execution.OperationId) is { } editError)
             return Failure(editError);
 
         var expectedFingerprint = AgentOperationFingerprint.Compute(
@@ -114,13 +114,10 @@ public sealed partial class PendingOperationRevisionService(
         if (revisedPreviewResult.IsFailure)
             return PreparationFailure(revisedPreviewResult);
         var revisedPreview = revisedPreviewResult.Value;
-        if (revisedPreview?.Items is null || revisedPreview.Items.Count != request.Items.Count
-            || revisedPreview.Items.Any(item => !offered.TryGetValue(item.ItemId, out var previous)
-                || execution.OperationId != BulkCreateHabits
-                    && item.StateFingerprint != previous.StateFingerprint))
+        if (!await IsValidRevisionAsync(userId, execution, request, original, revisedPreview, cancellationToken))
             return Failure("stale_preview");
 
-        var revisedJson = (revisedPreview.ExecutionArguments ?? revised.Value).GetRawText();
+        var revisedJson = (revisedPreview!.ExecutionArguments ?? revised.Value).GetRawText();
         var revisedFingerprint = AgentOperationFingerprint.Compute(execution.OperationId, revisedJson);
         if (!store.Revise(userId, pendingOperationId, expectedFingerprint, revisedJson,
             revisedFingerprint, revisedPreview.PreviewFingerprint!))
@@ -133,13 +130,28 @@ public sealed partial class PendingOperationRevisionService(
         execution.RequiresReproposal ? "pending_operation_schema_changed"
         : !CanRevisePlacement(execution, request) ? "placement_not_supported" : null;
 
+    private async Task<bool> IsValidRevisionAsync(Guid userId, PendingAgentOperationExecution execution,
+        RevisePendingOperationRequest request, PendingOperationChangePreview original,
+        PendingOperationChangePreview? revised, CancellationToken ct)
+    {
+        if (revised?.Items is null || revised.Items.Count != request.Items.Count)
+            return false;
+        var offered = original.Items!.ToDictionary(item => item.ItemId, StringComparer.Ordinal);
+        if (revised.Items.Any(item => !offered.ContainsKey(item.ItemId))) return false;
+        if (execution.OperationId is BulkCreateHabits or "create_habit" or "create_sub_habit"
+            || revised.Items.All(item => item.StateFingerprint == offered[item.ItemId].StateFingerprint))
+            return true;
+        var current = await previewer.PreviewAsync(userId, execution.OperationId, execution.Arguments, ct, request.ClientContext);
+        return current.IsSuccess && current.Value?.PreviewFingerprint == original.PreviewFingerprint;
+    }
+
     private static bool CanRevisePlacement(PendingAgentOperationExecution execution, RevisePendingOperationRequest request) =>
         request.ClientContext?.SupportsPendingOperationPlacement == true
         || !PendingOperationPlacementNegotiation.RequiresSupport(execution.OperationId, execution.Arguments)
             && request.Items.All(item => item.Placement is null);
 
     private static string? EditError(IReadOnlyList<RevisedPendingOperationItem> items,
-        IReadOnlyDictionary<string, PendingOperationItem> offered)
+        IReadOnlyDictionary<string, PendingOperationItem> offered, Func<string, string> operationForItem)
     {
         foreach (var item in items)
         {
@@ -153,7 +165,9 @@ public sealed partial class PendingOperationRevisionService(
             var allowed = offered[item.ItemId].Fields.Where(field => field.IsEditable)
                 .Select(field => field.Field)
                 .ToHashSet(StringComparer.Ordinal);
-            if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)))
+            if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)
+                && (offered[item.ItemId].Fields.Any(existing => existing.Field == field.Name)
+                    || !PendingOperationChangePreviewer.CanReviseHabitField(operationForItem(item.ItemId), field.Name))))
                 return "field_not_offered";
             foreach (var choice in offered[item.ItemId].FieldOptions ?? [])
                 if (edits.TryGetProperty(choice.Field, out var selected)
@@ -345,6 +359,9 @@ public sealed partial class PendingOperationRevisionService(
     {
         if (root["habits"] is not JsonArray habits)
             return false;
+        var clearSharedParent = root.ContainsKey(ParentHabitId) && selected.Any(item =>
+            item.Edits is { ValueKind: JsonValueKind.Object } edits
+            && edits.TryGetProperty(ParentHabitId, out var parent) && parent.ValueKind == JsonValueKind.Null);
         var revisedHabits = new JsonArray();
         foreach (var item in selected)
         {
@@ -356,7 +373,7 @@ public sealed partial class PendingOperationRevisionService(
             if (habit is null)
                 return false;
             var copy = (JsonObject)habit.DeepClone();
-            if (!copy.ContainsKey(ParentHabitId) && root[ParentHabitId] is { } sharedParent)
+            if (clearSharedParent && !copy.ContainsKey(ParentHabitId) && root[ParentHabitId] is { } sharedParent)
                 copy[ParentHabitId] = sharedParent.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
@@ -372,11 +389,12 @@ public sealed partial class PendingOperationRevisionService(
             }
             if (item.Edits is { ValueKind: JsonValueKind.Object } changed && changed.TryGetProperty(HabitId, out _))
                 copy.Remove(HabitHeadingParents.ExistingCandidatesField);
-            copy["preview_item_id"] = item.ItemId;
+            if (copy.ContainsKey("preview_item_id") || item.ItemId != revisedHabits.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                copy["preview_item_id"] = item.ItemId;
             revisedHabits.Add(copy);
         }
         root["habits"] = revisedHabits;
-        root.Remove(ParentHabitId);
+        if (clearSharedParent) root.Remove(ParentHabitId);
         return true;
     }
 
@@ -495,6 +513,7 @@ public sealed partial class PendingOperationRevisionService(
 
     private static void ReviseClearField(JsonObject target, JsonProperty field)
     {
+        if (!target.ContainsKey("clear_fields") && field.Value.ValueKind != JsonValueKind.Null) return;
         var clears = target["clear_fields"] as JsonArray ?? [];
         for (var index = clears.Count - 1; index >= 0; index--)
             if (clears[index]?.GetValue<string>() == field.Name) clears.RemoveAt(index);

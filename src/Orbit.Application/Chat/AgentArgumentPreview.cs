@@ -67,7 +67,8 @@ public static class AgentArgumentPreview
                 FormatValue(property.Value),
                 ResolveValueType(property.Name, property.Value),
                 property.Value.Clone(),
-                IsEditable(property.Name) && AgentArgumentSchema.Declares(editableSchema, property.Name)
+                (IsEditable(property.Name) || PendingOperationChangePreviewer.CanReviseHabitField(operationId, property.Name))
+                    && AgentArgumentSchema.Declares(editableSchema, property.Name)
                     && AgentEditableArguments.IsConsumed(operationId, arguments, property.Name)
                     && !(operationId == "skip_habit" && property.Name == "date"
                         && target?.CurrentValues.GetValueOrDefault("frequency_unit") == string.Empty)))
