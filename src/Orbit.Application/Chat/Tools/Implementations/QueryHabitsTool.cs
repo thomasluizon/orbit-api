@@ -28,6 +28,7 @@ public class QueryHabitsTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.DaySchema(),
             search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
             date = new { type = JsonSchemaTypes.String, description = "Schedule on YYYY-MM-DD or today, including done entries. Null is_completed returns the full schedule." },
             include_overdue = new { type = JsonSchemaTypes.Boolean, description = "Include overdue entries with date. Default: true for today, false otherwise." },

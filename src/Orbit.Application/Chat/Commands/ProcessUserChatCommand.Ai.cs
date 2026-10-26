@@ -134,6 +134,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyCollection<string> activeToolNames)
     {
         var client = request.ClientContext;
+        prompt = string.Join(Environment.NewLine, prompt, RelativeReadPeriod.Instruction);
         if (activeToolNames.Contains("get_habit_month"))
             prompt = string.Join(Environment.NewLine, prompt,
                 "get_habit_month returns habitMonth. For a supported habitMonth kind, use its exact readDirective; the server preserves the complete Calendário data. Write at most one short sentence without figures, then its block. For unsupported clients, use only its returned habit facts in text.");

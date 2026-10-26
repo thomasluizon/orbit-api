@@ -18,6 +18,8 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
             generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Generate optional narrative. Exact refresh sets false." },
             period = new
             {

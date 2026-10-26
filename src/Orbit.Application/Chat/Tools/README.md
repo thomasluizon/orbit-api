@@ -88,14 +88,36 @@ Tracks thomasluizon/orbit-tickets#1616.
 
 ## Period metric definitions
 
-`get_period_analytics` requires `date_from`, `date_to` and `metric`. Dates are
+`get_period_analytics` requires `metric` and either `relative_period` or explicit
+`date_from` and `date_to`. Dates are
 inclusive user-local days, resolved before the query is issued. `habit_id`, `search`,
 `tag` and `is_bad_habit` optionally constrain the source. Existing record, date and
 schedule aggregates include root habits; an explicitly selected child is measured
 independently. `completedHabits` includes independent children using only their own
 logs, never inheriting completion from a parent or child. A calendar-month
-request supplies the month's first and last days. The existing retrospective enums
+request uses `this_month` or `last_month`, or explicit dates for a named month. The existing retrospective enums
 keep their rolling definitions; `month` still means the last 30 days.
+
+Relative period selectors include `today`, `yesterday`, `this_week`, `last_week`,
+`this_month`, `last_month` and `last_7_days`. Counted rolling windows use
+`last_n_days` or `last_n_weeks` with `period_count`. Current weeks and months run
+from the account's calendar boundary through its local today. Previous weeks and
+months are complete. Week boundaries honor the account's week-start preference.
+Comparisons use `baseline_relative_period` and optional `baseline_period_count`.
+Relative selectors override model-supplied absolute dates and are removed before
+issuing the query, so read metadata, paging and refresh retain the exact absolute scope.
+
+The shared read resolver also applies these selectors to `get_retrospective`,
+`get_daily_summary`, `get_habit_metrics`, `get_habit_history`, `get_habit_month`,
+`get_calendar_overview` and `get_habit_ranking`. Calendar event instants are derived
+from the resolved local days in the account's timezone. Ranking converts its end
+to the existing exclusive-end contract and retains its server-resolved month windows.
+`query_goals`, `review_goals` and `get_gamification_overview` expose current goal
+and lifetime account-streak snapshots rather than selectable period totals. Their
+server-captured `as_of` anchor already uses the account's local today. Period habit
+streak questions use `get_period_analytics` or `get_habit_metrics`.
+`query_habits` accepts the single-day selectors `today` and `yesterday`; a dated
+habit list represents one day rather than a multi-day period.
 
 | Metric | Unit | Definition |
 | --- | --- | --- |

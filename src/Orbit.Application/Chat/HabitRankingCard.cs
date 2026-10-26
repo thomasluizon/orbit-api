@@ -16,7 +16,7 @@ public static class HabitRankingCardBuilder
         + "For most completed habits, including 'Which habits did I complete most in the last 3 weeks?' "
         + "and 'Quais hábitos eu mais concluí nas últimas 3 semanas?', call get_habit_ranking before emitting a directive. "
         + "Last N weeks means N*7 local days ending today, inclusive, unless complete calendar weeks are explicitly requested. "
-        + "For 3 weeks use date_from=today-20 days and date_to_exclusive=today+1 day. Do not ask to choose rolling or calendar weeks. "
+        + "For 3 weeks use relative_period=last_n_weeks and period_count=3. Do not ask to choose rolling or calendar weeks. "
         + "A window longer than the recorded history still uses all available records in that window.";
 
     public static bool IsSupported(AgentClientContext? client) => client?.SupportsParts == true

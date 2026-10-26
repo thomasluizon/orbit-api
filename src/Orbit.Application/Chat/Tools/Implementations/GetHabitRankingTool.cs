@@ -12,8 +12,8 @@ public sealed class GetHabitRankingTool(IMediator mediator) : IAiTool
     public bool IsReadOnly => true;
     public string Description => "Read the full positive recurring-habit ranking by completion log count, including children. "
         + "Use this for most completed habits or ranking de hábitos, never retrospective consistency highlights. "
-        + "Resolve the requested window first; ask for dates if unspecified. Last N weeks or últimas N semanas means "
-        + "N*7 local days ending today inclusive: date_from=today-(N*7-1), date_to_exclusive=today+1. "
+        + "Use relative_period for relative phrases; ask for dates if unspecified. Last N weeks or últimas N semanas uses "
+        + "relative_period=last_n_weeks with period_count=N, resolved by the server into N*7 local days ending today inclusive. "
         + "Do not ask rolling versus calendar weeks unless complete calendar weeks were requested. "
         + "Last six months or últimos 6 meses means "
         + "rolling_months with months=6, not 180 days. Explicit complete calendar months use complete_months.";
@@ -23,6 +23,8 @@ public sealed class GetHabitRankingTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
             date_from = new { type = JsonSchemaTypes.String, description = "Inclusive local start date YYYY-MM-DD. Use with date_to_exclusive, or use window and months." },
             date_to_exclusive = new { type = JsonSchemaTypes.String, description = "Exclusive local end date YYYY-MM-DD; an inclusive requested end must advance by one day." },
             window = new { type = JsonSchemaTypes.String, @enum = new[] { "rolling_months", "complete_months" } },

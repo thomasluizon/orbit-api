@@ -29,6 +29,8 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
             as_of = new { type = JsonSchemaTypes.String },
             calendar_ids = new { type = new[] { JsonSchemaTypes.Array, "null" }, items = new { type = JsonSchemaTypes.String } },
             date_from = new { type = JsonSchemaTypes.String },

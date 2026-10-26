@@ -439,7 +439,7 @@ public partial class AgentOperationExecutor(
             }
         }
 
-        if (readBlocks is not null && tool.IsReadOnly && ReadBlockFactory.Supports(tool.Name))
+        if (readBlocks is not null && tool.IsReadOnly && ResolvesReadArguments(tool.Name))
             execution = execution with
             {
                 Arguments = await readBlocks.ResolveAsync(tool.Name,
@@ -451,6 +451,9 @@ public partial class AgentOperationExecutor(
 
         return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, executionCancellationToken);
     }
+
+    private static bool ResolvesReadArguments(string tool) =>
+        ReadBlockFactory.Supports(tool) || RelativeReadPeriod.Supports(tool);
 
     private static bool RequiresArgumentCheck(string operationId, JsonElement arguments)
     {

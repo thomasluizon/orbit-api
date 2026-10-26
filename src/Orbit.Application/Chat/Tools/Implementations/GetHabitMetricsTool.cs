@@ -17,6 +17,8 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
             habit_id = new { type = JsonSchemaTypes.String, description = "The GUID of the habit to read metrics for." },
             date_from = new { type = JsonSchemaTypes.String, description = "Absolute start of period metrics. Lifetime fields keep their existing meaning." },
             date_to = new { type = JsonSchemaTypes.String, description = "Absolute end of period metrics." }
