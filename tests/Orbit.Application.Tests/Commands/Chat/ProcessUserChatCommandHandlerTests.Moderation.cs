@@ -15,13 +15,25 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public async Task Moderation_OverlapsContextAndGatesModel(bool flagged, bool unavailable)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    public async Task Moderation_OverlapsContextAndGatesModel(bool flagged, bool unavailable, bool blockAnswer)
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse { TextMessage = "Allowed" });
+        AstraBlockAnswer? answer = null;
+        if (blockAnswer)
+        {
+            _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+            var block = IssuedAstraBlock.Create(UserId, new("choice", "When?", [new("a", "Morning"), new("b", "Evening")], []));
+            answer = new(block.Id, ["b"]);
+            _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+            _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        }
         var check = new TaskCompletionSource<ModerationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var contextStarted = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = new TaskCompletionSource<IReadOnlyList<Habit>>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -35,7 +47,7 @@ public partial class ProcessUserChatCommandHandlerTests
             });
 
         using var cancellation = new CancellationTokenSource();
-        var turn = CreateHandler().Handle(new(UserId, "Hello", ClientContext: new(SupportsMessageAllowance: true)), cancellation.Token);
+        var turn = CreateHandler().Handle(new(UserId, "Hello", ClientContext: new(SupportsMessageAllowance: true), BlockAnswer: answer), cancellation.Token);
         try
         {
             var token = await contextStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));

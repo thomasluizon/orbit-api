@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Domain.Entities;
+using Orbit.Application.Chat;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -9,6 +10,13 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class SystemPromptBuilderTests
 {
+    [Fact]
+    public void BuildStatic_KeepsSharedHabitGuidanceOnce()
+    {
+        var prompt = new SystemPromptBuilder().BuildStatic(new PromptBuildRequest([]));
+        prompt.Split(HabitModelInstructions.All, StringSplitOptions.None).Should().HaveCount(2);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]

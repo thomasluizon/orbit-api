@@ -4,7 +4,7 @@ namespace Orbit.Application.Chat;
 
 public enum ChatPhase
 {
-    Moderation, ContextLoad, PromptBuild, InputTokenCount, ModelCall, ToolCall, Save, Composition, Budget
+    Moderation, ContextLoad, PromptBuild, ModelCall, ToolCall, Save, Composition, Budget
 }
 
 /// <summary>
@@ -97,7 +97,6 @@ public sealed class ChatTurnTimer : IDisposable
         ChatPhase.Moderation => "moderation",
         ChatPhase.ContextLoad => "context_load",
         ChatPhase.PromptBuild => "prompt_build",
-        ChatPhase.InputTokenCount => "input_token_count",
         ChatPhase.ModelCall => "model_call",
         ChatPhase.ToolCall => "tool_call",
         ChatPhase.Save => "save",
