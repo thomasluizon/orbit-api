@@ -53,7 +53,7 @@ public static class AccountChangeSet
     }
 
     public static async Task<PendingOperationChangePreview?> PreviewAsync(Guid userId, JsonElement arguments,
-        IPendingOperationChangePreviewer previewer, CancellationToken ct)
+        IPendingOperationChangePreviewer previewer, CancellationToken ct, AgentClientContext? clientContext = null)
     {
         var members = Read(arguments);
         if (members is null) return null;
@@ -62,7 +62,7 @@ public static class AccountChangeSet
         for (var index = 0; index < members.Count; index++)
         {
             var member = members[index];
-            var result = await previewer.PreviewAsync(userId, member.OperationId, member.Arguments, ct);
+            var result = await previewer.PreviewAsync(userId, member.OperationId, member.Arguments, ct, clientContext);
             if (result.IsFailure || result.Value?.Items is not { Count: > 0 } children) return null;
             items.AddRange(children.Select(item => item with { ItemId = $"{index}/{item.ItemId}" }));
             normalized.Add(member with

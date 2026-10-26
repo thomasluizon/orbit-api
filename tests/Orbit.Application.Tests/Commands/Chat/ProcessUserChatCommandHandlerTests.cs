@@ -3315,7 +3315,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsHabitListCard: true, SupportsGoalListCard: true, SupportsMetricsCard: true,
                 SupportsPeriodInsightCard: true, SupportsDaySummaryCard: true, SupportsStreakCard: true,
                 SupportsCalendarCard: true, SupportsRecordListCard: true, SupportsAccountRowsCard: true,
-                SupportsFollowUps: true)), CancellationToken.None);
+                SupportsFollowUps: true, SupportsPendingOperationPlacement: true)), CancellationToken.None);
 
         var expected = new List<string> { "dynamic prompt", "dynamic supplement",
             HabitPlacementContext.Build([], "Show goals calendar notifications and my week") };

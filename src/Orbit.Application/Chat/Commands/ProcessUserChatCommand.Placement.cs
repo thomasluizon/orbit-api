@@ -10,6 +10,7 @@ public partial class ProcessUserChatCommandHandler
 {
     private async Task<Result<ChatResponse>?> TryHandlePlacementTurnAsync(ProcessUserChatCommand request, CancellationToken ct)
     {
+        if (request.ClientContext?.SupportsPendingOperationPlacement != true) return null;
         var normalized = HabitNameMatcher.Normalize(request.Message).Trim(' ', '.', '!');
         var match = Regex.Match(normalized,
             @"^(?:(?:please|por favor) )?(?:make (?:it|them)|change (?:it|them) to|use|switch to|coloque como|coloca como|mude para|muda para|transforme em|transforma em|faca (?:dele|deles)|faca como) (?:a |an |um |uma |em )?(?<placement>checklist items?|checklist|(?:item|itens) (?:de|da|na) lista|sub habits?|subhabits?|sub habitos?|(?:new |separate |standalone |top level )habit|habito (?:novo|separado|independente|principal))(?: instead| no lugar| em vez disso)?$",
@@ -24,7 +25,7 @@ public partial class ProcessUserChatCommandHandler
         foreach (var pending in execution.PendingOperationStore.GetAwaiting(request.UserId)
             .Where(pending => pending.Surface == AgentExecutionSurface.Chat && !pending.RequiresReproposal))
         {
-            var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, ct);
+            var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, ct, request.ClientContext);
             if (preview.IsSuccess && preview.Value?.Items?.Any(item => item.Placement is not null) == true)
                 candidates.Add((pending, preview.Value));
         }
@@ -35,7 +36,7 @@ public partial class ProcessUserChatCommandHandler
             new RevisePendingOperationRequestValidator(), ai.ToolRegistry);
         var revised = await service.ReviseAsync(request.UserId, stored.PendingOperationId,
             new(original.PreviewFingerprint!, original.Items!.Select(item => new RevisedPendingOperationItem(
-                item.ItemId, Placement: item.Placement is not null ? placement : null)).ToArray()), ct);
+                item.ItemId, Placement: item.Placement is not null ? placement : null)).ToArray(), request.ClientContext), ct);
         if (!revised.IsSuccess || revised.Preview is not { } updated)
             return Result.Failure<ChatResponse>(revised.Error ?? "invalid_revision");
         var capability = ai.CatalogService.GetCapability(stored.CapabilityId);

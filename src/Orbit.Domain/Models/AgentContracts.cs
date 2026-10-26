@@ -230,7 +230,8 @@ public record AgentExecuteOperationRequest(
     string? CorrelationId = null,
     bool IncludeChangePreview = false,
     Func<Task>? OnExecutionStarted = null,
-    bool PreviewOnly = false);
+    bool PreviewOnly = false,
+    AgentClientContext? ClientContext = null);
 
 public record AgentOperationResult(
     string OperationId,
@@ -292,7 +293,8 @@ public record AgentClientContext(
     bool? SupportsDatedHabitListCard = null,
     bool? SupportsHabitHistoryCard = null,
     bool? SupportsFollowUpContext = null,
-    bool? SupportsMessageAllowance = null);
+    bool? SupportsMessageAllowance = null,
+    bool? SupportsPendingOperationPlacement = null);
 
 public record AgentContextSnapshot(
     string Plan,

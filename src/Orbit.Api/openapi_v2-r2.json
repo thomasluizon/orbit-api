@@ -456,6 +456,13 @@
             }
           },
           {
+            "name": "clientContext",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "api-version",
             "in": "header",
             "required": true,
@@ -592,6 +599,13 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "clientContext",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -16100,6 +16114,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsPendingOperationPlacement": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -18790,6 +18810,16 @@
         "properties": {
           "confirmationToken": {
             "type": "string"
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
           }
         }
       },
@@ -24464,6 +24494,16 @@
             "items": {
               "$ref": "#/components/schemas/RevisedPendingOperationItem"
             }
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
           }
         }
       },

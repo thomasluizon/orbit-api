@@ -683,7 +683,8 @@ public partial class ProcessUserChatCommandHandler
             request.ConfirmationToken,
             request.CorrelationId,
             IncludeChangePreview: request.ClientContext?.SupportsPendingOperationChanges == true,
-            OnExecutionStarted: onExecutionStarted), cancellationToken);
+            OnExecutionStarted: onExecutionStarted,
+            ClientContext: request.ClientContext), cancellationToken);
     }
 
     private void LogToolCallOutcome(AiToolCall call, AgentOperationResult operationResult)

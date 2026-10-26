@@ -48,7 +48,7 @@ public partial class AgentOperationExecutor
             return (null, "unsupported_by_policy");
         var ownership = await targetOwnershipService.GetDenialReasonAsync(operation.Id, execution.Request.UserId, member.Arguments, ct);
         if (ownership is not null) return (null, ownership);
-        var error = await ValidateChangeSetMemberAsync(execution.Request.UserId, member, ct);
+        var error = await ValidateChangeSetMemberAsync(execution.Request.UserId, member, ct, execution.Request.ClientContext);
         if (error is not null) return (null, error);
         var request = execution.Request with { OperationId = operation.Id, Arguments = member.Arguments, ConfirmationToken = null };
         var context = new OperationExecutionContext(request, operation, capability, member.Arguments,
@@ -66,9 +66,9 @@ public partial class AgentOperationExecutor
                 == (member.SourceFingerprint ?? AgentOperationFingerprint.Compute(member.OperationId, member.Arguments.GetRawText()));
     }
 
-    private async Task<string?> ValidateChangeSetMemberAsync(Guid userId, AccountChangeSet.Member member, CancellationToken ct)
+    private async Task<string?> ValidateChangeSetMemberAsync(Guid userId, AccountChangeSet.Member member, CancellationToken ct, AgentClientContext? clientContext)
     {
-        var current = await changePreviewer.PreviewAsync(userId, member.OperationId, member.Arguments, ct);
+        var current = await changePreviewer.PreviewAsync(userId, member.OperationId, member.Arguments, ct, clientContext);
         if (current.IsFailure || current.Value?.PreviewFingerprint != member.PreviewFingerprint
             || current.Value.Items is not { Count: > 0 } items)
             return "stale_preview";

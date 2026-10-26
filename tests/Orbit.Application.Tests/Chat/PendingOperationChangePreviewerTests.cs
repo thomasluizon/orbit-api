@@ -87,7 +87,7 @@ public sealed class PendingOperationChangePreviewerTests
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         var arguments = JsonSerializer.Serialize(new { parent_habit_id = parent.Id, title = "Stretch", frequency_unit = "Day" });
 
-        var preview = await Preview("create_sub_habit", arguments);
+        var preview = await Preview("create_sub_habit", arguments, new(SupportsPendingOperationPlacement: true));
 
         preview.Should().NotBeNull();
         var item = JsonSerializer.SerializeToElement(preview!.Items!.Single(), JsonSerializerOptions.Web);
@@ -966,10 +966,10 @@ public sealed class PendingOperationChangePreviewerTests
         }
     }
 
-    private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
+    private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json, Orbit.Domain.Models.AgentClientContext? clientContext = null) =>
         (await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
             new AiToolRegistry([])).PreviewAsync(
-            UserId, operation, JsonDocument.Parse(json).RootElement)).Value;
+            UserId, operation, JsonDocument.Parse(json).RootElement, clientContext: clientContext)).Value;
 
     private void Setup(IReadOnlyList<Habit> habits) =>
         _habits.FindAsync(

@@ -18,11 +18,107 @@ namespace Orbit.Application.Tests.Chat;
 
 public sealed class AdaptivePlacementTests
 {
+    public static IEnumerable<object?[]> NegotiationCases =>
+        from pattern in new[] { "checklists", "children", "flat", "empty" }
+        from operation in new[] { "create_habit", "create_sub_habit", "bulk_create_habits" }
+        from supported in new bool?[] { null, false, true }
+        select new object?[] { pattern, operation, supported };
+
+    [Theory]
+    [MemberData(nameof(NegotiationCases))]
+    public async Task Preview_NegotiatesPlacementBeforeBindingExecution(string pattern, string operation, bool? supported)
+    {
+        using var context = new HeldWriteTestContext();
+        AddPattern(context, pattern);
+        var tool = context.Tool(operation);
+        var previewer = new PendingOperationChangePreviewer(context.Repository<Habit>(), context.Repository<Goal>(),
+            context.Repository<Tag>(), context.Dates, new AiToolRegistry([tool]));
+        var source = JsonSerializer.SerializeToElement(new
+        {
+            parent_habit_id = context.Habit.Id,
+            title = "Stretch",
+            frequency_unit = "Day",
+            due_time = "09:00",
+            reminder_enabled = true,
+            reminder_times = new[] { 15 }
+        });
+        var arguments = operation == "bulk_create_habits" ? JsonSerializer.SerializeToElement(new { habits = new[] { source } }) : source;
+        var client = supported is null ? null : new AgentClientContext(SupportsParts: true,
+            SupportsPendingOperationChanges: true, SupportsPendingOperationPlacement: supported);
+
+        var result = await previewer.PreviewAsync(context.UserId, operation, arguments, clientContext: client);
+
+        result.IsSuccess.Should().BeTrue();
+        var preview = result.Value!;
+        var item = preview.Items.Should().ContainSingle().Which;
+        item.Fields.Should().Contain(field => field.Field == "due_time" && field.NewValue == "09:00");
+        item.Fields.Should().Contain(field => field.Field == "reminder_enabled" && field.NewValue == bool.TrueString);
+        var bound = preview.ExecutionArguments ?? arguments;
+        var boundItem = operation == "bulk_create_habits" ? bound.GetProperty("habits")[0] : bound;
+        if (supported == true)
+        {
+            var expected = pattern switch
+            {
+                "checklists" => HabitPlacement.ChecklistItem,
+                "flat" => HabitPlacement.NewParent,
+                _ => HabitPlacement.SubHabit
+            };
+            item.Placement!.Selected.Should().Be(expected);
+            item.Placement.Recommended.Should().Be(expected);
+            item.Placement.Alternatives.Should().BeEquivalentTo(
+                new[] { HabitPlacement.SubHabit, HabitPlacement.ChecklistItem, HabitPlacement.NewParent }.Where(value => value != expected));
+            boundItem.GetProperty("placement").GetString().Should().Be(expected);
+        }
+        else
+        {
+            item.Placement.Should().BeNull();
+            boundItem.TryGetProperty("placement", out _).Should().BeFalse();
+            boundItem.GetProperty("parent_habit_id").GetGuid().Should().Be(context.Habit.Id);
+        }
+    }
+
     public static IEnumerable<object[]> SwitchCases =>
         from pattern in new[] { "checklists", "children", "flat", "empty" }
         from placement in new[] { HabitPlacement.SubHabit, HabitPlacement.ChecklistItem, HabitPlacement.NewParent }
         from operation in new[] { "create_habit", "create_sub_habit", "bulk_create_habits" }
         select new object[] { pattern, placement, operation };
+
+    [Theory]
+    [InlineData(HabitPlacement.ChecklistItem)]
+    [InlineData(HabitPlacement.NewParent)]
+    public async Task LegacyPreview_RemovesModelPlacementAndPreservesDisplayedChildren(string placement)
+    {
+        using var context = new HeldWriteTestContext();
+        context.Habit.UpdateChecklist([new("Coffee", true)]);
+        var tool = context.Tool("create_habit");
+        var previewer = new PendingOperationChangePreviewer(context.Repository<Habit>(), context.Repository<Goal>(),
+            context.Repository<Tag>(), context.Dates, new AiToolRegistry([tool]));
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            parent_habit_id = context.Habit.Id,
+            title = "Workout",
+            frequency_unit = "Day",
+            due_time = "09:00",
+            reminder_enabled = true,
+            reminder_times = new[] { 15 },
+            placement,
+            sub_habits = new[] { new { title = "Warm-up", frequency_unit = "Day", placement } }
+        });
+
+        var preview = (await previewer.PreviewAsync(context.UserId, tool.Name, arguments)).Value!;
+        var bound = preview.ExecutionArguments!.Value;
+        bound.TryGetProperty("placement", out _).Should().BeFalse();
+        bound.GetProperty("sub_habits")[0].TryGetProperty("placement", out _).Should().BeFalse();
+        preview.Items!.Single().Placement.Should().BeNull();
+        (await tool.ExecuteAsync(bound, context.UserId, default)).Success.Should().BeTrue();
+        var workout = context.Added.OfType<Habit>().Should().ContainSingle(habit => habit.Title == "Workout").Which;
+        workout.ParentHabitId.Should().Be(context.Habit.Id);
+        workout.DueTime.Should().Be(new TimeOnly(9, 0));
+        workout.ReminderEnabled.Should().BeTrue();
+        workout.ReminderTimes.Should().Equal(15);
+        context.Added.OfType<Habit>().Should().ContainSingle(habit => habit.Title == "Warm-up" && habit.ParentHabitId == workout.Id);
+        context.Habit.ChecklistItems.Should().Equal(new ChecklistItem("Coffee", true));
+    }
 
     [Theory]
     [MemberData(nameof(SwitchCases))]
@@ -56,7 +152,7 @@ public sealed class AdaptivePlacementTests
             checklist_items = new[] { new { text = "Shoes", is_checked = false } }
         });
         var current = operation == "bulk_create_habits" ? JsonSerializer.SerializeToElement(new { habits = new[] { source } }) : source;
-        var preview = (await previewer.PreviewAsync(context.UserId, operation, current)).Value!;
+        var preview = (await previewer.PreviewAsync(context.UserId, operation, current, clientContext: new(SupportsPendingOperationPlacement: true))).Value!;
         preview.Should().NotBeNull();
         var originalPlacement = preview.Items!.Single().Placement!;
         originalPlacement.Recommended.Should().Be(pattern switch
@@ -76,7 +172,7 @@ public sealed class AdaptivePlacementTests
         var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), registry);
 
         var result = await service.ReviseAsync(context.UserId, pendingId,
-            new(preview.PreviewFingerprint!, [new(preview.Items!.Single().ItemId, Placement: placement)]), default);
+            new(preview.PreviewFingerprint!, [new(preview.Items!.Single().ItemId, Placement: placement)], new(SupportsPendingOperationPlacement: true)), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Preview!.Items!.Single().Placement!.Selected.Should().Be(placement);
@@ -86,7 +182,7 @@ public sealed class AdaptivePlacementTests
         foreach (var property in source.EnumerateObject())
             JsonElement.DeepEquals(changed.GetProperty(property.Name), property.Value).Should().BeTrue(property.Name);
         context.Commands.Should().BeEmpty();
-        var repeat = await previewer.PreviewAsync(context.UserId, operation, current);
+        var repeat = await previewer.PreviewAsync(context.UserId, operation, current, clientContext: new(SupportsPendingOperationPlacement: true));
         repeat.Value!.PreviewFingerprint.Should().Be(result.Preview.PreviewFingerprint);
         context.Mediator.Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(context.Habit.Id));

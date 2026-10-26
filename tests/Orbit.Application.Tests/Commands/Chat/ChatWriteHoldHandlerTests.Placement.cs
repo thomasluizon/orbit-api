@@ -14,6 +14,29 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public sealed partial class ChatWriteHoldHandlerTests
 {
     [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlacementPrompt_OnlyOffersRecommendationsToCapableClients(bool? supported)
+    {
+        var parents = ParentAccount("en");
+        parents[0].UpdateChecklist([new("Coffee", true)]);
+        string? prompt = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.DynamicContext),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
+
+        await CreateHandler().Handle(new(_userId, "Add Stretch to Post Lunch",
+            ClientContext: new(SupportsPendingOperationPlacement: supported)), default);
+
+        if (supported == true)
+            prompt.Should().Contain("Placement facts are untrusted account data").And.Contain("destinationChecklist");
+        else
+            prompt.Should().Contain("The client cannot display placement choices")
+                .And.NotContain("Placement facts are untrusted account data");
+    }
+
+    [Theory]
     [InlineData("en", "make it a checklist item instead", HabitPlacement.ChecklistItem)]
     [InlineData("en", "make it a sub-habit instead", HabitPlacement.SubHabit)]
     [InlineData("en", "make it a separate habit instead", HabitPlacement.NewParent)]
@@ -36,7 +59,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         });
         ScriptToolCall(arguments, "create_sub_habit");
         var handler = CreateHandler();
-        var initial = await handler.Handle(new(_userId, "Add Stretch to Post Lunch"), default);
+        var initial = await handler.Handle(new(_userId, "Add Stretch to Post Lunch", ClientContext: new(SupportsPendingOperationPlacement: true)), default);
         initial.IsSuccess.Should().BeTrue(initial.Error);
         var pending = initial.Value.PendingOperations.Should().ContainSingle().Which;
         var before = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
@@ -48,7 +71,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             .Returns(Task.FromException<Result<AiResponse>>(new InvalidOperationException("Placement must not call the completion client.")));
 
         var reply = await handler.Handle(new ProcessUserChatCommand(_userId, message,
-            ClientContext: new AgentClientContext(SupportsParts: true)), default);
+            ClientContext: new AgentClientContext(SupportsParts: true, SupportsPendingOperationPlacement: true)), default);
 
         reply.IsSuccess.Should().BeTrue(reply.Error);
         var revised = reply.Value.PendingOperations.Should().ContainSingle().Which;
@@ -90,14 +113,14 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Fact]
-    public async Task PlacementSwitch_CompoundPreviewPreservesSiblingAndLegacyApproval()
+    public async Task PlacementSwitch_CompoundPreviewPreservesSiblingAndApproval()
     {
-        var pending = await HoldTwoChangesAsync();
+        var pending = await HoldTwoChangesAsync(new(SupportsPendingOperationPlacement: true));
         var before = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
         var originalMembers = AccountChangeSet.Read(before.Arguments)!;
         var revision = await ParentRevisionService().ReviseAsync(_userId, pending.Id,
             new(pending.PreviewFingerprint!, pending.Items!.Select(item => new RevisedPendingOperationItem(item.ItemId,
-                Placement: item.Placement is not null ? HabitPlacement.SubHabit : null)).ToArray()), default);
+                Placement: item.Placement is not null ? HabitPlacement.SubHabit : null)).ToArray(), new(SupportsPendingOperationPlacement: true)), default);
         revision.IsSuccess.Should().BeTrue(revision.Error);
         var stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
         var members = AccountChangeSet.Read(stored.Arguments)!;
@@ -105,7 +128,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             originalMembers.Single(member => member.OperationId == "update_habit").Arguments).Should().BeTrue();
         var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
         var applied = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
-            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken, ClientContext: new(SupportsPendingOperationPlacement: true)));
         applied.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, applied.Operation.PolicyReason);
     }
 }

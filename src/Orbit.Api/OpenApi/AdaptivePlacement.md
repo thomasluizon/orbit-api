@@ -3,7 +3,23 @@
 Tracks thomasluizon/orbit-tickets#1758. Deploy this API before the consumer in
 thomasluizon/orbit-tickets#1759 advertises placement controls.
 
-Creation items with a resolved existing destination append optional `placement`.
+Clients opt in with `clientContext.supportsPendingOperationPlacement: true` only
+when they can render the selected placement, destination, reason and alternatives,
+and distinguish retained draft settings from the changes approval will execute.
+`supportsParts`, `partKinds` and `supportsPendingOperationChanges` do not imply
+placement support. Omitted, null or false placement support retains the legacy
+creation under the displayed parent, without adaptive placement metadata or
+recommendations. Model-supplied placement cannot override that default.
+
+The consumer in thomasluizon/orbit-tickets#1759 must send this `clientContext` on
+chat JSON requests and in the existing multipart `clientContext` field. Send it
+also in the JSON bodies of pending preview `revise` and `execute` requests. On
+`preview/refresh` and `confirm`, send the same JSON object as the URL-encoded
+`clientContext` query parameter. Each request declares the capabilities of its
+requesting client, including requests for a preview created on another device.
+
+Placement-capable creation items with a resolved existing destination append
+optional `placement`.
 It contains `selected`, `recommended`, `reasonKey`, localized `reason` entries for
 `en` and `pt-BR`, the other two `alternatives`, and `destinationId` and
 `destinationName`. Values are `sub_habit`, `checklist_item` and `new_parent`.
@@ -25,7 +41,8 @@ item ID and the current `previewFingerprint`, just as for existing revisions:
 ```json
 {
   "previewFingerprint": "<current preview fingerprint>",
-  "items": [{ "itemId": "0", "placement": "checklist_item" }]
+  "items": [{ "itemId": "0", "placement": "checklist_item" }],
+  "clientContext": { "supportsPendingOperationPlacement": true }
 }
 ```
 
@@ -42,8 +59,14 @@ switches back to an independently tracked habit before approval.
 Simple English and Portuguese placement sentences use the same server revision
 path before completion. The handler retains sibling items and compound operations.
 A stale fingerprint, unavailable destination or invalid choice does not revise the
-hold. Existing clients can ignore the appended response field and approve using
-the existing confirmation token and stored arguments.
+hold. A client without placement support cannot revise, confirm or execute a
+stored non-default placement, including members of a compound preview. Revision
+returns `placement_not_supported`; confirmation and execution return HTTP 400
+validation errors. The operation gateway also rejects such approvals. The client
+must refresh the preview with its own capabilities and show the refreshed changes
+before approving. Refresh binds new arguments and a new fingerprint, invalidating
+any previous confirmation token. Existing clients keep using their unchanged
+confirmation and execution requests for legacy previews.
 
 The reason keys are `chat.placement.destinationChecklist`,
 `chat.placement.destinationSubHabits`, `chat.placement.accountChecklists`,
