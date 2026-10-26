@@ -22079,6 +22079,15 @@
           "streakScope": {
             "type": "string",
             "default": "period"
+          },
+          "completedHabits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },

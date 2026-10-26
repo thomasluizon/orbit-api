@@ -9,16 +9,24 @@ namespace Orbit.Application.Habits.Services;
 public static class PeriodAnalyticsCalculator
 {
     public static readonly IReadOnlyList<string> Metrics =
-        ["positiveLogRecords", "distinctLoggedDates", "metScheduledDates", "scheduledDates"];
+        ["completedHabits", "positiveLogRecords", "distinctLoggedDates", "metScheduledDates", "scheduledDates"];
 
     public static int Value(PeriodHabitMetrics metrics, string metric) => metric switch
     {
+        "completedHabits" => metrics.CompletedHabits ?? throw new ArgumentException("Completed habit count is unavailable.", nameof(metrics)),
         "positiveLogRecords" => metrics.PositiveLogRecords,
         "distinctLoggedDates" => metrics.DistinctLoggedDates,
         "metScheduledDates" => metrics.MetScheduledDates,
         "scheduledDates" => metrics.ScheduledDates,
         _ => throw new ArgumentException("Unsupported count metric.", nameof(metric))
     };
+
+    public static int CountCompletedHabits(IReadOnlyList<Habit> habits, ReadWindow window) => habits
+        .Where(h => !h.IsDeleted && !h.IsBadHabit
+            && h.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
+            && h.Logs.Any(l => !l.IsDeleted && !l.IsSlip && l.Value > 0
+                && l.Date >= window.From && l.Date <= window.To))
+        .Select(h => h.Id).Distinct().Count();
 
     public static (PeriodHabitMetrics Metrics, CompletionSeries Series) Calculate(
         IReadOnlyList<Habit> habits, ReadWindow window, TimeZoneInfo zone, int weekStartDay)
@@ -78,7 +86,7 @@ public static class PeriodAnalyticsCalculator
         var denominator = scheduled.Values.Sum();
         var numerator = met.Values.Sum();
         return (new(window, records, loggedDates.Count, numerator, denominator,
-            denominator == 0 ? null : 100m * numerator / denominator, current, best),
+            denominator == 0 ? null : 100m * numerator / denominator, current, best, CompletedHabits: CountCompletedHabits(habits, window)),
             new(daily ? "day" : "week", points));
     }
 }
