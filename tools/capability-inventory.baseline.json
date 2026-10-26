@@ -3759,6 +3759,7 @@
             "type": "string",
             "required": true,
             "values": [
+              "completedHabits",
               "distinctLoggedDates",
               "metScheduledDates",
               "positiveLogRecords",
@@ -6429,6 +6430,16 @@
         "parameters": []
       },
       {
+        "name": "get_period_analytics",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "PeriodAnalyticsReadRequest",
+            "required": true
+          }
+        ]
+      },
+      {
         "name": "get_profile",
         "parameters": []
       },
@@ -7970,6 +7981,9 @@
           "direct": [
             {
               "tool": "get_habit_metrics"
+            },
+            {
+              "tool": "get_period_analytics"
             }
           ],
           "viaOperations": [

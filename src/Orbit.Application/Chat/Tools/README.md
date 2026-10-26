@@ -90,19 +90,23 @@ Tracks thomasluizon/orbit-tickets#1616.
 
 `get_period_analytics` requires `date_from`, `date_to` and `metric`. Dates are
 inclusive user-local days, resolved before the query is issued. `habit_id`, `search`,
-`tag` and `is_bad_habit` optionally constrain the source. An aggregate includes root
-habits; an explicitly selected child is measured independently. A calendar-month
+`tag` and `is_bad_habit` optionally constrain the source. Existing record, date and
+schedule aggregates include root habits; an explicitly selected child is measured
+independently. `completedHabits` includes independent children using only their own
+logs, never inheriting completion from a parent or child. A calendar-month
 request supplies the month's first and last days. The existing retrospective enums
 keep their rolling definitions; `month` still means the last 30 days.
 
 | Metric | Unit | Definition |
 | --- | --- | --- |
+| `completedHabits` | `habits` | Distinct nondeleted positive recurring or flexible habits with at least one positive, nondeleted, nonslip log in the window. Includes ended and completed habits; excludes tasks, General items and bad habits. |
 | `positiveLogRecords` | `records` | Number of nondeleted positive log records in the window, including unscheduled records. |
 | `distinctLoggedDates` | `days` | Number of distinct local dates with positive records across the selected habits. |
 | `metScheduledDates` | `days` | Number of scheduled habit/date pairs with a positive record on that date. |
 | `scheduledDates` | `days` | Scheduled habit/date pairs, bounded by account-local creation, recurrence and end dates. General and bad habits have no positive-adherence denominator. |
 
-`PeriodHabitMetrics` contains `window: { from, to }`, all four counts,
+`PeriodHabitMetrics` contains `window: { from, to }`, the four existing counts,
+optional nullable `completedHabits`,
 `completionRate` (0 through 100, null without scheduled dates), `currentStreak`,
 `bestStreak` and `streakScope: "period"`. These streaks count consecutive dates
 with positive activity inside the requested window. Current streak ends at the
@@ -124,9 +128,23 @@ settings as well as habit and log sources. The metrics block
 retains its lifetime `totalCompletions`, `currentStreak` and `bestStreak`, while
 `periodMetrics` and its series carry the explicitly scoped facts.
 
+For "how many habits did I complete" and "quantos hábitos concluí", select
+`completedHabits` with unit `habits`. For "how many times" and "quantas vezes",
+select `positiveLogRecords` with unit `records`. Supported period answers contain
+at most one short sentence without figures, then the block; figures belong only
+in the block. MCP exposes the same `get_period_analytics` query through a typed
+`query` object with camelCase fields and the same inclusive dates and metric names.
+
 ## Total and comparison blocks
 
 Both new kinds require `supportsParts: true` and their exact kind in `partKinds`.
+When `metric` is `completedHabits` and `unit` is `habits`, both kinds additionally
+require optional `clientContext.supportsCompletedHabitsMetric: true`. Omission,
+null or false preserves a readable server-generated text answer instead of an
+unsupported block, including replayed answers. Other period metrics retain their
+existing negotiation. Deploy the API before the paired consumer in
+thomasluizon/orbit-tickets#1763 accepts these metric and unit values and advertises
+the capability.
 `AstraPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
 floor requirement. Without advertisement, tools can still ground ordinary text.
 Successful focused analytics survive an unavailable AI continuation: advertised
@@ -141,7 +159,10 @@ Supplying both `baseline_from` and `baseline_to` produces `periodComparison`:
 `metric`, `unit`, `current`, `baseline`, `currentValue`, `baselineValue`,
 `absoluteDelta`, nullable `relativeDelta`, nullable `habitId` and `read`.
 `current` and `baseline` are complete `PeriodHabitMetrics` values with their own
-windows and denominators. Absolute delta is current minus baseline. Relative delta
+windows and denominators. The optional `completedHabits` count is available on
+`periodTotal.metrics`, `periodComparison.current` and `periodComparison.baseline`.
+A missing or null count from an older producer means unknown, not zero.
+Absolute delta is current minus baseline. Relative delta
 is that delta divided by baseline, expressed as a ratio rather than a percentage.
 A zero baseline yields null. A decrease yields a negative delta. These calculations
 have no dependency on optional AI narrative generation.

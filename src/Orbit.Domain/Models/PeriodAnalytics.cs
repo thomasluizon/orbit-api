@@ -17,7 +17,7 @@ public sealed record ReadWindow
 public sealed record PeriodHabitMetrics(
     ReadWindow Window, int PositiveLogRecords, int DistinctLoggedDates,
     int MetScheduledDates, int ScheduledDates, decimal? CompletionRate,
-    int CurrentStreak, int BestStreak, string StreakScope = "period");
+    int CurrentStreak, int BestStreak, string StreakScope = "period", int? CompletedHabits = null);
 
 public sealed record PeriodMetricBucket(DateOnly StartDate, DateOnly EndDate, int Scheduled, int Completed, int? CompletionRate);
 public sealed record PeriodMetricSeries(string Granularity, IReadOnlyList<PeriodMetricBucket> Points);

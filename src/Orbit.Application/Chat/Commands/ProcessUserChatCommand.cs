@@ -537,7 +537,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
-        if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink)
+        if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink
+            && !HasOnlySupportedPeriodReads(request, context, executionResults))
             foreach (var item in bufferedStream) await streamSink(item);
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
