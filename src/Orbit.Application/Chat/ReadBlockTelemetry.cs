@@ -30,6 +30,7 @@ public static class ReadBlockTelemetry
         DaySummaryCard card => (card.Read, "daySummary", null),
         StreakCard card => (card.Read, "streak", null),
         GamificationCard card => (card.Read, "gamification", null),
+        HabitMonthCard card => (card.Read, "habitMonth", null),
         CalendarCard card => (card.Read, "calendar", null),
         RecordListCard card => (card.Read, "recordList", null),
         AccountRowsCard card => (card.Read, "accountRows", null),

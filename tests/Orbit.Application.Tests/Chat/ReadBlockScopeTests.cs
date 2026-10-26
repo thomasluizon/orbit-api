@@ -401,6 +401,45 @@ public sealed class ReadBlockScopeTests
             q.AsOf == _day && q.DateTo == _day.AddDays(1) && !q.UseCurrentSelection && q.CalendarIds!.Single() == "calendar"), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task HabitMonth_RefreshRetainsAbsolutePeriodAcrossLocalMonthBoundary(string language)
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new CalendarMonthResponse([], [])));
+        var handler = new GetHabitMonthQueryHandler(mediator, _dates);
+        mediator.Send(Arg.Any<GetHabitMonthQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<GetHabitMonthQuery>(), call.Arg<CancellationToken>()));
+        var tool = new GetHabitMonthTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name,
+            JsonSerializer.SerializeToElement(new { language }), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var read = initial.Operation.ReadBlock!;
+        read.Kind.Should().Be("habitMonth");
+        read.Read.Scope.GetProperty("date_from").GetString().Should().Be("2026-04-01");
+        read.Read.Scope.GetProperty("date_to").GetString().Should().Be("2026-04-30");
+        var month = read.Block.Should().BeOfType<HabitMonthCard>().Subject;
+        month.Read.Should().Be(read.Read);
+        ReadBlockRefreshResponse.From(read).Block.Should().BeSameAs(month);
+        _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 5, 1));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var refreshed = await refresh.Handle(new(_userId, read.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["habitMonth"])), default);
+        refreshed.IsSuccess.Should().BeTrue();
+        refreshed.Value.Read.QueryId.Should().Be(read.Read.QueryId);
+        refreshed.Value.Read.Scope.GetProperty("date_from").GetString().Should().Be("2026-04-01");
+        refreshed.Value.Read.Scope.GetProperty("date_to").GetString().Should().Be("2026-04-30");
+        await mediator.Received(2).Send(Arg.Is<GetCalendarMonthQuery>(q => q.UserId == _userId
+            && q.DateFrom == new DateOnly(2026, 4, 1) && q.DateTo == new DateOnly(2026, 4, 30)), Arg.Any<CancellationToken>());
+        mediator.ClearReceivedCalls();
+        var denied = await refresh.Handle(new(_userId, read.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["calendar"], SupportsCalendarCard: true)), default);
+        denied.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+        mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
     private AgentOperationExecutor Executor(IAiTool tool) => CreateExecutor(tool, _blocks);
 
     [Theory]

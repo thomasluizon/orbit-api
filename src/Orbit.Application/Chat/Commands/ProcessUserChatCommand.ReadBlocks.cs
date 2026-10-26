@@ -177,6 +177,7 @@ public partial class ProcessUserChatCommandHandler
         GoalListCard card => card.Items.Count == 0 ? "0 goals" : string.Join("\n", card.Items.Select(item => $"{item.Title}: {item.Current}/{item.Target} {item.Unit}")),
         DaySummaryCard card => $"{card.Date:yyyy-MM-dd}: {card.Done}/{card.Due}",
         StreakCard card => $"Streak: {card.CurrentStreak}; level: {card.Level}; XP: {card.TotalXp}",
+        HabitMonthCard card => HabitMonthCardBuilder.Readable(card),
         CalendarCard card => string.Join("\n", new[] { $"{card.Events.Count} events; sync: {card.Sync?.Status}" }
             .Concat(card.Events.Select(item => $"{item.Start}: {item.Title}"))),
         PeriodInsightCard card => $"{card.DateFrom:yyyy-MM-dd} to {card.DateTo:yyyy-MM-dd}: {card.TotalCompletions}/{card.TotalScheduled}; {card.CompletionRate}%",
@@ -201,12 +202,12 @@ public partial class ProcessUserChatCommandHandler
     private static bool HasOnlySuccessfulFocusedReads(ToolExecutionAccumulator results) =>
         results.QueryReads.Count > 0 && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
-            && operation.OperationId is "get_period_analytics" or "get_habit_metrics");
+            && operation.OperationId is "get_period_analytics" or "get_habit_metrics" or "get_habit_month");
 
     private ResponseCards EnsureFocusedReadResults(ResponseCards cards, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results)
     {
-        foreach (var read in results.QueryReads.Values.Where(read => read.Read.QueryFamily is "get_period_analytics" or "get_habit_metrics"))
+        foreach (var read in results.QueryReads.Values.Where(read => read.Read.QueryFamily is "get_period_analytics" or "get_habit_metrics" or "get_habit_month"))
         {
             var present = cards.Parts?.OfType<ChatBlockPart>().Any(part => ReadBlockTelemetry.Describe(part.Block).Read?.QueryId == read.Read.QueryId) == true
                 || cards.MetricsCard?.Read?.QueryId == read.Read.QueryId;
@@ -232,7 +233,7 @@ public partial class ProcessUserChatCommandHandler
     private ChatResponse CompleteFocusedReadsWithoutNarrative(ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results)
     {
-        var cards = EnsureFocusedReadResults(new ResponseCards(null), request, context, results);
+        var cards = ComposeHabitMonth(EnsureFocusedReadResults(new ResponseCards(null), request, context, results), request, context, results);
         CaptureReadMetadata(request.UserId, cards);
         return new ChatResponse(cards.AiMessage, [], results.OperationResults, CorrelationId: request.CorrelationId,
             Parts: cards.Parts);
@@ -255,6 +256,9 @@ public partial class ProcessUserChatCommandHandler
         if (client?.SupportsParts == true && client.PartKinds?.Contains(kind, StringComparer.Ordinal) != true) return false;
         return kind switch
         {
+            "habitMonth" => client?.SupportsParts == true
+                && client.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
+                && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
             "periodTotal" or "periodComparison" => client?.SupportsParts == true
                 && client.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
                 && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraPeriodBlocksDisabled),

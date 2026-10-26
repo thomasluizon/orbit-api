@@ -10,6 +10,7 @@ namespace Orbit.Application.Chat;
 [JsonDerivedType(typeof(DaySummaryCard))]
 [JsonDerivedType(typeof(StreakCard))]
 [JsonDerivedType(typeof(CalendarCard))]
+[JsonDerivedType(typeof(HabitMonthCard))]
 [JsonDerivedType(typeof(RecordListCard))]
 [JsonDerivedType(typeof(AccountRowsCard))]
 [JsonDerivedType(typeof(PeriodTotalCard))]

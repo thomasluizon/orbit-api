@@ -3553,6 +3553,31 @@
         ]
       },
       {
+        "name": "get_habit_month",
+        "parameters": [
+          {
+            "name": "date_from",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "date_to",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "language",
+            "type": "string",
+            "required": false,
+            "values": [
+              "en",
+              "pt",
+              "pt-BR"
+            ]
+          }
+        ]
+      },
+      {
         "name": "get_habit_ranking",
         "parameters": [
           {
@@ -8062,6 +8087,9 @@
               "tool": "get_habit_history"
             },
             {
+              "tool": "get_habit_month"
+            },
+            {
               "tool": "query_habits"
             }
           ],
@@ -8086,6 +8114,10 @@
           "viaOperations": [
             {
               "tool": "get_habit_history",
+              "via": "execute_agent_operation_v2"
+            },
+            {
+              "tool": "get_habit_month",
               "via": "execute_agent_operation_v2"
             },
             {

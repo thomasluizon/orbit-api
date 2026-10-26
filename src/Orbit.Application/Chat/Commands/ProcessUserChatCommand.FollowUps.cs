@@ -44,6 +44,7 @@ public partial class ProcessUserChatCommandHandler
         MetricsCard card => card.SurfaceId,
         PeriodInsightCard card => card.SurfaceId,
         StreakCard card => card.SurfaceId,
+        HabitMonthCard card => card.SurfaceId,
         CalendarCard card => card.SurfaceId,
         RecordListCard card when card.SurfaceId is not null && ChatFollowUp.IsTarget(card.SurfaceId) => card.SurfaceId,
         AccountRowsCard card => card.SurfaceId,

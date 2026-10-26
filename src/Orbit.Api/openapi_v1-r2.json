@@ -22756,6 +22756,9 @@
             "$ref": "#/components/schemas/ReadBlockCardCalendarCard"
           },
           {
+            "$ref": "#/components/schemas/ReadBlockCardHabitMonthCard"
+          },
+          {
             "$ref": "#/components/schemas/ReadBlockCardRecordListCard"
           },
           {
@@ -23047,6 +23050,58 @@
             "type": [
               "null",
               "string"
+            ]
+          }
+        }
+      },
+      "ReadBlockCardHabitMonthCard": {
+        "required": [
+          "dateFrom",
+          "dateTo",
+          "today",
+          "weekStartDay",
+          "calendar"
+        ],
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "today": {
+            "type": "string",
+            "format": "date"
+          },
+          "weekStartDay": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "calendar": {
+            "$ref": "#/components/schemas/CalendarMonthResponse"
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "calendar"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
             ]
           }
         }

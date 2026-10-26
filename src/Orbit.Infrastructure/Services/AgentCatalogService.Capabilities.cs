@@ -174,7 +174,7 @@ public partial class AgentCatalogService
                 IsMutation: false,
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                ChatToolNames: ["query_habits", "get_habit_history"],
+                ChatToolNames: ["query_habits", "get_habit_history", "get_habit_month"],
                 McpToolNames: ["list_habits", "get_habit", "get_habit_logs", "get_all_habit_logs"],
                 ControllerActionKeys:
                 [
