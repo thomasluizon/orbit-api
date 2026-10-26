@@ -25,7 +25,9 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("Mostre meu calendário de hábitos deste mês", "pt-BR", false)]
     [InlineData("Mostre meu mês", "pt-BR", true)]
     [InlineData("Como foi meu mês dia a dia?", "pt-BR", true)]
-    public async Task HabitMonth_ProductionReadProducesNegotiatedGridAndOneSentence(string message, string language, bool composition)
+    [InlineData("Show my habit calendar for this month", "en", true, true)]
+    public async Task HabitMonth_ProductionReadProducesNegotiatedGridAndOneSentence(string message, string language,
+        bool composition, bool longTitles = false)
     {
         var user = User.Create("Alex", "alex@test.com").Value;
         user.SetLanguage("pt-BR");
@@ -36,7 +38,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var end = new DateOnly(2026, 10, 31);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
         var habits = Enumerable.Range(0, 38).Select(index => Habit.Create(new(HabitSchedule.Recurring,
-            UserId, $"Daily habit {index:D2}", FrequencyUnit.Day, 1, start)).Value).ToList();
+            UserId, longTitles ? $"Daily habit {index:D2}".PadRight(AppConstants.MaxHabitTitleLength, '\u6f22')
+                : $"Daily habit {index:D2}", FrequencyUnit.Day, 1, start)).Value).ToList();
         var child = Habit.Create(new(HabitSchedule.Flexible, UserId, "Read", FrequencyUnit.Month, 20,
             start, ParentHabitId: habits[0].Id)).Value;
         var grandchild = Habit.Create(new(HabitSchedule.Recurring, UserId, "Reduce scrolling", FrequencyUnit.Day,
@@ -90,7 +93,13 @@ public partial class ProcessUserChatCommandHandlerTests
         model.RootElement.GetProperty("dateFrom").GetString().Should().Be("2026-10-01");
         model.RootElement.GetProperty("dateTo").GetString().Should().Be("2026-10-31");
         var summaries = model.RootElement.GetProperty("habits").EnumerateArray().ToArray();
-        summaries.Should().HaveCount(40);
+        (summaries.Length + model.RootElement.GetProperty("omittedHabits").GetInt32()).Should().Be(40);
+        if (longTitles)
+        {
+            model.RootElement.GetProperty("omittedHabits").GetInt32().Should().BePositive();
+            month.Calendar.Habits.Should().OnlyContain(habit => habit.Title.Length == AppConstants.MaxHabitTitleLength);
+        }
+        else summaries.Should().HaveCount(40);
         var daily = summaries.Single(row => row.GetProperty("id").GetGuid() == habits[0].Id);
         daily.GetProperty("scheduled").GetInt32().Should().Be(31);
         daily.GetProperty("completed").GetInt32().Should().Be(10);
