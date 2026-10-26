@@ -47,6 +47,10 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([read, walk]);
+        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(1)(
+                new[] { read, walk }.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToList());
         var tokens = new HabitRankingTokenService(Options.Create(new JwtSettings
         {
             SecretKey = "three-week-ranking-test-signing-secret",
