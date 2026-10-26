@@ -51,16 +51,19 @@ public sealed partial class PendingOperationChangePreviewer(
         Guid userId,
         string operationId,
         JsonElement arguments,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AgentClientContext? clientContext = null)
     {
         if (operationId == AccountChangeSet.OperationName)
-            return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken));
+            return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken, clientContext));
         if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
             arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
         if (await HasMissingSearchAsync(userId, operationId, arguments, cancellationToken))
             return Result.Success<PendingOperationChangePreview?>(null);
         if (RequiresEmojiInference(operationId, arguments))
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
+        if (operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits)
+            return Result.Success(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext));
         return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
     }
 

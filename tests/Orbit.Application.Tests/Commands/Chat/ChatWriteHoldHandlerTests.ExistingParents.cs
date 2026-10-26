@@ -26,6 +26,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     public async Task ExistingParents_SingleCreateApprovalSavesThePreviewedChild(string language)
     {
         var parents = ParentAccount(language);
+        parents[0].UpdateChecklist([new("Coffee", true)]);
         ScriptToolCall("""{"title":"Take vitamin D","frequency_unit":"Week","frequency_quantity":1,"due_time":"13:00","emoji":"💊"}""");
         var held = await CreateHandler().Handle(new(_userId, "Post lunch: take vitamin D (once a week)"), default);
         var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
@@ -37,10 +38,12 @@ public sealed partial class ChatWriteHoldHandlerTests
         var approved = await _executor.ExecuteAsync(new(_userId, execution.OperationId, execution.Arguments,
             execution.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
 
+        await _mediator.DidNotReceive().Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>());
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.ParentHabitId == parents[0].Id
             && habit.Title == "Take vitamin D" && habit.FrequencyUnit == FrequencyUnit.Week
             && habit.FrequencyQuantity == 1 && habit.DueTime == new TimeOnly(13, 0) && habit.Emoji == "💊"), Arg.Any<CancellationToken>());
+        parents[0].ChecklistItems.Should().ContainSingle(item => item.Text == "Coffee" && item.IsChecked);
     }
 
     [Theory]
@@ -347,6 +350,10 @@ public sealed partial class ChatWriteHoldHandlerTests
 
     private void UseParentHabits(Habit[] habits)
     {
+        var existingSteps = habits.Where(parent => parent.ParentHabitId is null
+            && habits.All(child => child.ParentHabitId != parent.Id)).Select(parent => Habit.Create(new HabitCreateParams(
+                HabitSchedule.Recurring, _userId, "Existing step", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value).ToArray();
+        habits = [.. habits, .. existingSteps];
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
