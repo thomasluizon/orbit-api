@@ -294,7 +294,8 @@ public record AgentClientContext(
     bool? SupportsHabitHistoryCard = null,
     bool? SupportsFollowUpContext = null,
     bool? SupportsMessageAllowance = null,
-    bool? SupportsPendingOperationPlacement = null);
+    bool? SupportsPendingOperationPlacement = null,
+    bool? SupportsCompletedHabitsMetric = null);
 
 public record AgentContextSnapshot(
     string Plan,

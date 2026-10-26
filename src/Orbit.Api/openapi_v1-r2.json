@@ -16001,6 +16001,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsCompletedHabitsMetric": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

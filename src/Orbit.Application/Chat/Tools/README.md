@@ -138,6 +138,13 @@ in the block. MCP exposes the same `get_period_analytics` query through a typed
 ## Total and comparison blocks
 
 Both new kinds require `supportsParts: true` and their exact kind in `partKinds`.
+When `metric` is `completedHabits` and `unit` is `habits`, both kinds additionally
+require optional `clientContext.supportsCompletedHabitsMetric: true`. Omission,
+null or false preserves a readable server-generated text answer instead of an
+unsupported block, including replayed answers. Other period metrics retain their
+existing negotiation. Deploy the API before the paired consumer in
+thomasluizon/orbit-tickets#1763 accepts these metric and unit values and advertises
+the capability.
 `AstraPeriodBlocksDisabled` suppresses them. They have no legacy directive or fleet
 floor requirement. Without advertisement, tools can still ground ordinary text.
 Successful focused analytics survive an unavailable AI continuation: advertised

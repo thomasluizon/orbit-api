@@ -165,6 +165,8 @@ public partial class ProcessUserChatCommandHandler
 
     internal static bool ReadSubtypeEnabled(object block, AgentClientContext? client) => block switch
     {
+        PeriodTotalCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
+        PeriodComparisonCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
         RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
         _ => true

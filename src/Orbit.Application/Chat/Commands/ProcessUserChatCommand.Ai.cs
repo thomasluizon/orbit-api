@@ -135,7 +135,10 @@ public partial class ProcessUserChatCommandHandler
                 "For how many habits did I complete this week or quantos hábitos concluí esta semana, call get_period_analytics with metric completedHabits. "
                 + "For how many times did I complete habits or quantas vezes concluí hábitos, use positiveLogRecords. "
                 + "Habits are distinct positive recurring habits, including independently logged children; tasks and slips do not count as habits. "
-                + "For a supported periodTotal or periodComparison block, write at most one short sentence in the person's language without figures, then the block.");
+                + "For a supported periodTotal or periodComparison block, write at most one short sentence in the person's language without figures, then the block. "
+                + "Period blocks with metric completedHabits and unit habits also require supportsCompletedHabitsMetric, in addition to supportsParts and their advertised kind. "
+                + $"Completed habits metric supported: {client?.SupportsCompletedHabitsMetric == true}. "
+                + "For an unsupported metric, answer from the queried facts in text.");
         if (client?.SupportsParts == true && client.PartKinds is { Count: > 0 })
             prompt = string.Join(Environment.NewLine, prompt,
                 "When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. "

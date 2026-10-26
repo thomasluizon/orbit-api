@@ -132,6 +132,44 @@ public sealed class ChatResponseNegotiationTests
             .Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>();
     }
 
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Replay_CompletedHabitsRequiresMetricCapability(bool compare, bool? capability)
+    {
+        var window = new ReadWindow(new(2026, 4, 1), new(2026, 4, 7));
+        var current = new PeriodHabitMetrics(window, 5, 3, 3, 7, null, 0, 0, CompletedHabits: 3);
+        var baseline = current with { Window = new(new(2026, 3, 25), new(2026, 3, 31)), CompletedHabits = 1 };
+        var kind = compare ? "periodComparison" : "periodTotal";
+        object block = compare
+            ? new PeriodComparisonCard("completedHabits", "habits", current, baseline, 3, 1, 2, 2)
+            : new PeriodTotalCard("completedHabits", "habits", 3, current, new("day", []));
+        var response = Replay(new(null, [], Parts: [new ChatBlockPart(kind, block)]));
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: [kind], SupportsCompletedHabitsMetric: capability);
+
+        var result = ChatResponseNegotiation.ForClient(response, client, []);
+
+        if (capability == true)
+        {
+            result.AiMessage.Should().BeNull();
+            result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be(kind);
+            foreach (var unsupported in new[] { client with { PartKinds = [] }, client with { SupportsParts = false } })
+                ChatResponseNegotiation.ForClient(response, unsupported, []).AiMessage.Should().Contain("3 habits");
+            ChatResponseNegotiation.ForClient(response, client, [FeatureFlagKeys.AstraPeriodBlocksDisabled])
+                .AiMessage.Should().Contain("3 habits");
+        }
+        else
+        {
+            result.AiMessage.Should().Contain("3 habits");
+            if (compare) result.AiMessage.Should().Contain("1 habits").And.Contain("delta 2 habits");
+            result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
+        }
+    }
+
     [Fact]
     public void Negotiation_PreservesLegacyAndTextOnlyResponses()
     {
