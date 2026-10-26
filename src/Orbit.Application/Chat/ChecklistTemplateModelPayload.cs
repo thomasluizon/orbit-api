@@ -5,7 +5,11 @@ namespace Orbit.Application.Chat;
 internal sealed record ChecklistTemplateModelPayload(int TotalCount,
     IReadOnlyList<ChecklistTemplateModelRow> Templates, int OmittedTemplates)
 {
-    public string Instruction => "Every template identity is listed. Names may be shortened. Item texts may be incomplete; compare items length with itemCount. "
+    private const int MinNameLength = 16;
+
+    public string Instruction => (OmittedTemplates == 0 ? "Every template identity is listed. "
+            : "Only listed templates have model facts; do not infer facts about omitted templates. ")
+        + "Names may be shortened. Item texts may be incomplete; compare items length with itemCount. "
         + "Before replacing or appending items, call get_checklist_templates with template_id to read the complete template if any items are missing. "
         + "Do not infer missing items. Complete items remain in the checklist-template application response. Emit the read directive instead of repeating records.";
 
@@ -15,11 +19,16 @@ internal sealed record ChecklistTemplateModelPayload(int TotalCount,
         var rows = templates.Select(template => new ChecklistTemplateModelRow(
             template.Id, ModelPayloadBudget.ShortName(template.Name), template.Items.Count, [])).ToList();
         var payload = new ChecklistTemplateModelPayload(templates.Count, rows, 0);
-        while (!ModelPayloadBudget.Fits(payload, reservedCharacters: 1) && nameLength > 0)
+        while (!ModelPayloadBudget.Fits(payload, reservedCharacters: 1) && nameLength > MinNameLength)
         {
             nameLength /= 2;
             for (var index = 0; index < rows.Count; index++)
                 rows[index] = rows[index] with { Name = ModelPayloadBudget.ShortName(templates[index].Name, nameLength) };
+        }
+        while (!ModelPayloadBudget.Fits(payload, reservedCharacters: 1) && rows.Count > 0)
+        {
+            rows.RemoveAt(rows.Count - 1);
+            payload = payload with { OmittedTemplates = templates.Count - rows.Count };
         }
         for (var index = 0; index < rows.Count; index++)
         {

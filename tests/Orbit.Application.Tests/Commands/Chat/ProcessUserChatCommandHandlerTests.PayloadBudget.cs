@@ -46,6 +46,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(true, true)]
     [InlineData(true, false, 1)]
     [InlineData(true, false, 11)]
+    [InlineData(true, false, 400)]
     public async Task TemplatePayloadBudget_ProductionReadSurvivesModelHandoff(bool supports, bool escapedNames = false, int total = 40)
     {
         SetupUserAndPayGate();
@@ -87,11 +88,14 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             var model = sent.Payload.Should().BeOfType<ChecklistTemplateModelPayload>().Subject;
             model.TotalCount.Should().Be(total);
-            model.OmittedTemplates.Should().Be(0);
-            model.Templates.Select(row => row.Id).Should().Equal(full.Select(template => template.Id));
+            model.OmittedTemplates.Should().Be(total - model.Templates.Count);
+            if (total <= 40) model.OmittedTemplates.Should().Be(0);
+            model.Templates.Should().NotBeEmpty();
+            model.Templates.Select(row => row.Id).Should().Equal(full.Take(model.Templates.Count).Select(template => template.Id));
             model.Templates.Should().OnlyContain(row => row.ItemCount == 10);
+            model.Templates.Should().OnlyContain(row => row.Name.Length >= Math.Min(16, full.Single(template => template.Id == row.Id).Name.Length));
             model.Templates.Should().OnlyContain(row => row.Name.Length <= 64 && !char.IsHighSurrogate(row.Name[row.Name.Length - 1]));
-            model.Templates.SelectMany(row => row.Items).Should().NotBeEmpty();
+            if (model.OmittedTemplates == 0) model.Templates.SelectMany(row => row.Items).Should().NotBeEmpty();
             foreach (var row in model.Templates)
                 row.Items.Should().Equal(full.Single(template => template.Id == row.Id).Items.Take(row.Items.Count));
         }
