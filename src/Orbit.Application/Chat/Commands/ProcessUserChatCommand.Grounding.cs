@@ -23,7 +23,7 @@ public partial class ProcessUserChatCommandHandler
         context.ActiveHabits.Select(habit => habit.Title)
             .Concat(context.ActiveGoals.Select(goal => goal.Title))
             .Concat(context.UserTags.Select(tag => tag.Name))
-            .Concat(context.ChecklistTemplates.Select(template => template.Name)).ToArray(),
+            .Concat(context.ChecklistTemplateNames).ToArray(),
         GetUserLanguage(context.User));
 
     private static async Task<string?> GetGroundedCachedFaqAnswerAsync(
