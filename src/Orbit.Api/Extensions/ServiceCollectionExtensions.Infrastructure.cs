@@ -95,6 +95,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<WaitlistSettings>(
             builder.Configuration.GetSection(WaitlistSettings.SectionName));
         AddBotProtection(builder, httpTimeout);
+        AddOnboardingServices(builder);
         builder.Services.Configure<MarketingSettings>(
             builder.Configuration.GetSection(MarketingSettings.SectionName));
         builder.Services.AddSingleton<IWaitlistConfirmationTokenService, WaitlistConfirmationTokenService>();
@@ -257,8 +258,13 @@ public static partial class ServiceCollectionExtensions
             ?? [];
         var landingOrigins = builder.Configuration.GetSection("Cors:LandingOrigins").Get<string[]>()
             ?? [];
+        var onboardingOrigins = builder.Configuration.GetSection("OnboardingSecurity:AllowedOrigins").Get<string[]>() ?? [];
         builder.Services.AddCors(options =>
         {
+            options.AddPolicy("Onboarding", policy => policy.WithOrigins(onboardingOrigins)
+                .WithHeaders("Content-Type", "api-version", "X-Orbit-Install-Id")
+                .WithExposedHeaders("X-Orbit-Install-Id")
+                .WithMethods("POST", "OPTIONS"));
             options.AddDefaultPolicy(policy =>
             {
                 policy.WithOrigins(firstPartyOrigins)

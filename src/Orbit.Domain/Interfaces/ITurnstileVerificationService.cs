@@ -1,6 +1,6 @@
 namespace Orbit.Domain.Interfaces;
 
-public sealed record TurnstileVerificationResult(bool Success, string[] ErrorCodes);
+public sealed record TurnstileVerificationResult(bool Success, string[] ErrorCodes, string? Hostname = null);
 
 public interface ITurnstileVerificationService
 {

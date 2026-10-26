@@ -11933,6 +11933,267 @@
         }
       }
     },
+    "/api/onboarding/challenge": {
+      "post": {
+        "tags": [
+          "Onboarding"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingChallenge"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingChallenge"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingChallenge"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/onboarding/install": {
+      "post": {
+        "tags": [
+          "Onboarding"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingInstall"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingInstall"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingInstall"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/onboarding/suggest-setup": {
+      "post": {
+        "tags": [
+          "Onboarding"
+        ],
+        "parameters": [
+          {
+            "name": "X-Orbit-Install-Id",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestSetupRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestSetupRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestSetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitSetupSuggestion"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitSetupSuggestion"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitSetupSuggestion"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FallbackResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ai/proactive/current": {
       "get": {
         "tags": [
@@ -17748,6 +18009,17 @@
           }
         }
       },
+      "ChallengeRequest": {
+        "required": [
+          "platform"
+        ],
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string"
+          }
+        }
+      },
       "ChatEvalToolCall": {
         "required": [
           "id",
@@ -18963,6 +19235,21 @@
           }
         }
       },
+      "EnrollmentRequest": {
+        "required": [
+          "challenge",
+          "attestation"
+        ],
+        "type": "object",
+        "properties": {
+          "challenge": {
+            "type": "string"
+          },
+          "attestation": {
+            "$ref": "#/components/schemas/OnboardingAttestation"
+          }
+        }
+      },
       "EventTicketResponse": {
         "required": [
           "ticket",
@@ -18997,6 +19284,17 @@
                 "$ref": "#/components/schemas/AgentClientContext"
               }
             ]
+          }
+        }
+      },
+      "FallbackResponse": {
+        "required": [
+          "code"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
           }
         }
       },
@@ -21244,6 +21542,83 @@
           }
         }
       },
+      "HabitSetupSuggestion": {
+        "required": [
+          "emoji",
+          "frequencyUnit",
+          "frequencyQuantity",
+          "days",
+          "isFlexible",
+          "flexibleTarget",
+          "dueTime",
+          "subHabits",
+          "checklistItems"
+        ],
+        "type": "object",
+        "properties": {
+          "emoji": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequencyUnit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FrequencyUnit"
+              }
+            ]
+          },
+          "frequencyQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            }
+          },
+          "isFlexible": {
+            "type": "boolean"
+          },
+          "flexibleTarget": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "dueTime": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subHabits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checklistItems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "HabitSuggestionDraft": {
         "required": [
           "id",
@@ -21962,6 +22337,59 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "OnboardingAttestation": {
+        "required": [
+          "platform",
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "keyId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OnboardingChallenge": {
+        "required": [
+          "challenge",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "challenge": {
+            "type": "string"
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OnboardingInstall": {
+        "required": [
+          "installId",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "installId": {
+            "type": "string"
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -25691,6 +26119,37 @@
           }
         }
       },
+      "SuggestSetupRequest": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": "en"
+          },
+          "attestation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OnboardingAttestation"
+              }
+            ]
+          }
+        }
+      },
       "SuggestTagsRequest": {
         "required": [
           "title",
@@ -27180,6 +27639,9 @@
     },
     {
       "name": "OAuth"
+    },
+    {
+      "name": "Onboarding"
     },
     {
       "name": "ProactiveAstra"

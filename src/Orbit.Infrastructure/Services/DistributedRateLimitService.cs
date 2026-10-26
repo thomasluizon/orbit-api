@@ -93,7 +93,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
 
         var now = clock.GetUtcNow().UtcDateTime;
         var leaseEndsAtUtc = now.Add(leaseDuration);
-        await DeleteExpiredLeasesAsync(policyName, partitionKey, now, cancellationToken);
+        await DeleteExpiredLeasesAsync(policyName, now, cancellationToken);
 
         var existingLease = await dbContext.DistributedRateLimitBuckets
             .AsNoTracking()
@@ -158,13 +158,11 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
 
     private async Task DeleteExpiredLeasesAsync(
         string policyName,
-        string partitionKey,
         DateTime now,
         CancellationToken cancellationToken)
     {
         var expiredLeases = dbContext.DistributedRateLimitBuckets
             .Where(bucket => bucket.PolicyName == policyName &&
-                             bucket.PartitionKey == partitionKey &&
                              bucket.WindowStartUtc == LeaseWindowStartUtc &&
                              bucket.WindowEndsAtUtc <= now);
 

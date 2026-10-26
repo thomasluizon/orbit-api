@@ -11,6 +11,7 @@
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="FileSignatures" Version="7.3.0" />
     <PackageReference Include="FirebaseAdmin" Version="3.7.0" />
+    <PackageReference Include="Google.Apis.PlayIntegrity.v1" Version="1.76.0.4270" />
     <PackageReference Include="Hangfire.Core" Version="1.8.25" />
     <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.77.0.4284" />
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.77.0.4285" />
@@ -24,6 +25,8 @@
     <PackageReference Include="PostHog" Version="2.15.8" />
     <PackageReference Include="Stripe.net" Version="52.4.2" />
     <PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
+    <PackageReference Include="System.Formats.Cbor" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -41,6 +44,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Email\Templates\**" />
     <EmbeddedResource Include="Certificates\AppleRootCA-G3.cer" />
+    <EmbeddedResource Include="Certificates\AppleAppAttestationRootCA.pem" />
   </ItemGroup>
 
 </Project>

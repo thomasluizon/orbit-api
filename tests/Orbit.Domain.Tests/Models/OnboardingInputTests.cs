@@ -11,6 +11,8 @@ public class OnboardingInputTests
     [InlineData("", "en")]
     [InlineData("Read\nbooks", "en")]
     [InlineData("https://example.com", "en")]
+    [InlineData("Read example.com every day", "en")]
+    [InlineData("Read www.example.test every day", "en")]
     [InlineData("Read", "pt")]
     public void InvalidInput_IsRefused(string? title, string language)
         => OnboardingInput.Create(title, language).IsFailure.Should().BeTrue();
