@@ -175,6 +175,8 @@ resource "render_env_group" "production_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["production"].value } },
+    { for key, value in local.onboarding_api_values["production"] : key => { value = value } },
+    { OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_production.value } },
     { Auth__BffForwardingSecret = { value = aws_ssm_parameter.bff_forwarding_secret["production"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["production"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["production"].value } },
@@ -192,6 +194,8 @@ resource "render_env_group" "staging_api" {
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["staging"].value }
     },
     { BotProtection__SecretKey = { value = aws_ssm_parameter.turnstile_secret["staging"].value } },
+    { for key, value in local.onboarding_api_values["staging"] : key => { value = value } },
+    { OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_staging.value } },
     { Auth__BffForwardingSecret = { value = aws_ssm_parameter.bff_forwarding_secret["staging"].value } },
     { Ses__AccessKeyId = { value = aws_ssm_parameter.api_ses_access_key_id["staging"].value } },
     { Ses__SecretAccessKey = { value = aws_ssm_parameter.api_ses_secret_access_key["staging"].value } },

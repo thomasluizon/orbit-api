@@ -394,6 +394,30 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "OnboardingIpCallsPerHour",
+                            Description = "Hourly anonymous onboarding call limit per IP address",
+                            Value = "10"
+                        },
+                        new
+                        {
+                            Key = "OnboardingInstallCallsPerHour",
+                            Description = "Hourly anonymous onboarding call limit per verified install",
+                            Value = "10"
+                        },
+                        new
+                        {
+                            Key = "OnboardingCallsPerDay",
+                            Description = "Global daily anonymous onboarding call limit",
+                            Value = "1000"
+                        },
+                        new
+                        {
+                            Key = "OnboardingTokensPerDay",
+                            Description = "Global daily anonymous onboarding token limit",
+                            Value = "16384000"
+                        },
+                        new
+                        {
                             Key = "RequireApiKeyCreationStepUp",
                             Description = "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet",
                             Value = "false"
