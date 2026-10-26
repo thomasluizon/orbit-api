@@ -24,6 +24,12 @@ public class ErrorCopyTests
 
     private static readonly string EnDash = ((char)0x2013).ToString();
 
+    /// <summary>
+    /// Product terms the shipped pt-BR client uses unchanged (its "tags" and "xp" strings), so the
+    /// fallback copies them instead of inventing a translation the app never shows.
+    /// </summary>
+    private static readonly HashSet<string> SameInBothLanguages = ["chat.read.tags", "chat.read.xp"];
+
     private static readonly Regex BareCodePattern = new("[A-Z]{2,}_[A-Z_]+", RegexOptions.None, TimeSpan.FromSeconds(1));
     private static readonly Regex PlaceholderPattern = new(@"\{[A-Za-z0-9]+\}", RegexOptions.None, TimeSpan.FromSeconds(1));
 
@@ -115,7 +121,18 @@ public class ErrorCopyTests
     {
         english.Should().NotBeNullOrWhiteSpace($"{code} needs English copy");
         portuguese.Should().NotBeNullOrWhiteSpace($"{code} needs pt-BR copy");
+        if (SameInBothLanguages.Contains(code)) return;
         portuguese.Should().NotBe(english, $"{code} must be translated, not copied");
+    }
+
+    [Fact]
+    public void EveryTermKeptInBothLanguagesIsAnIdenticalCatalogEntry()
+    {
+        var identical = EveryCopyEntry()
+            .Where(row => Equals(row[1], row[2]))
+            .Select(row => (string)row[0])
+            .ToHashSet();
+        identical.Should().BeEquivalentTo(SameInBothLanguages);
     }
 
     [Theory]
