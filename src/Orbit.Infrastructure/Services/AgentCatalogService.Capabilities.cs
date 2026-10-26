@@ -72,6 +72,8 @@ public partial class AgentCatalogService
                     "ChatController.ProcessChat",
                     "ChatController.ProcessChatStream",
                     "ChatController.RefreshReadBlock",
+                    "ChatController.RefineHabitSuggestion",
+                    "ChatController.PreviewHabitSuggestion",
                     "ChatController.Transcribe",
                     "AiController.ConfirmPendingOperation",
                     "AiController.RefreshPendingOperationPreview",
@@ -174,7 +176,7 @@ public partial class AgentCatalogService
                 IsMutation: false,
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                ChatToolNames: ["query_habits", "get_habit_history", "get_habit_month"],
+                ChatToolNames: ["query_habits", "get_habit_history", "get_habit_month", "suggest_habits"],
                 McpToolNames: ["list_habits", "get_habit", "get_habit_logs", "get_all_habit_logs"],
                 ControllerActionKeys:
                 [

@@ -9,6 +9,19 @@ public class AstraBehaviourPromptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void HabitSuggestions_UsePersonalDraftsInsteadOfAProseList(bool composition)
+    {
+        var prompt = Build(composition);
+
+        prompt.Should().Contain("suggest_habits").And.Contain("habitSuggestions");
+        prompt.Should().Contain("suggest").And.Contain("recommend").And.Contain("sugira").And.Contain("ideias");
+        prompt.Should().Contain("existingHabitId");
+        prompt.Should().Contain("one short sentence without figures");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void HabitMonth_UsesHabitCalendarAndReservesGoogleForEvents(bool composition)
     {
         var prompt = Build(composition);

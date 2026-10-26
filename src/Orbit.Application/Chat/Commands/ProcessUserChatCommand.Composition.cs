@@ -19,7 +19,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
-            && (operation.ReadBlock is not null || operation.Payload is HabitRankingResponse));
+            && (operation.ReadBlock is not null || operation.Payload is HabitRankingResponse or HabitSuggestionsCard));
 
     private ChatResponse CompleteCompositionWithoutNarrative(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
@@ -66,6 +66,7 @@ public partial class ProcessUserChatCommandHandler
     private ResponseCards ComposeAnswerCore(ParsedResponseDirectives parsed, bool truncated, string? language,
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
+        if (SuggestionAnswer(results) is { } suggestions) return suggestions;
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)
@@ -97,7 +98,7 @@ public partial class ProcessUserChatCommandHandler
         return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday, results) : cards;
     }
 
-    private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyAsync(
+    private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyCoreAsync(
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults,
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
