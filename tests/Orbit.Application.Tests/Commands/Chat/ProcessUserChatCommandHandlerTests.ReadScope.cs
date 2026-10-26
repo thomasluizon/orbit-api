@@ -89,6 +89,30 @@ public partial class ProcessUserChatCommandHandlerTests
         await CreateHandler().Handle(new(UserId, "My week",
             ClientContext: new AgentClientContext(SupportsMetricsCard: true)), default);
         await _mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.Gamification.Queries.GetRecapQuery>(), Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.DidNotReceiveWithAnyArgs().ComputeFreshValuesAsync(default, default, default);
+        await _goalRepo.Received(1).FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
+            null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReadTurn_LoadsTemplateNamesWithoutChecklistItems()
+    {
+        SetupUserAndPayGate();
+        var template = ChecklistTemplate.Create(UserId, "Morning routine", ["Drink water", "Stretch"]).Value;
+        _checklistTemplateRepo.FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([template]);
+        _checklistTemplateRepo.ProjectAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(),
+                Arg.Any<Func<IQueryable<ChecklistTemplate>, IQueryable<string>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<ChecklistTemplate>, IQueryable<string>>>(1)(
+                new[] { template }.Where(call.ArgAt<Expression<Func<ChecklistTemplate, bool>>>(0).Compile()).AsQueryable()).ToList());
+        SetupAiResponse(new AiResponse { TextMessage = "Here are your habits." });
+
+        var result = await CreateHandler().Handle(new(UserId, "Show my habits"), default);
+
+        result.IsSuccess.Should().BeTrue();
+        _catalogService.Received(1).BuildDynamicSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>
+            snapshot.ChecklistTemplateNames != null && snapshot.ChecklistTemplateNames.SequenceEqual(new[] { template.Name })));
+        await _checklistTemplateRepo.DidNotReceiveWithAnyArgs().FindAsync(default!, default);
     }
 
     [Fact]

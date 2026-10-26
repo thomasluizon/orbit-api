@@ -34,6 +34,10 @@ public partial class ProcessUserChatCommandHandlerTests
             _productAnalytics, NullLogger<GetHabitRankingQueryHandler>.Instance);
         _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([habit]);
+        _habitRepo.ProjectAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(1)(
+                new[] { habit }.Where(call.ArgAt<System.Linq.Expressions.Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToList());
         return (await handler.Handle(new GetHabitRankingQuery(UserId, Today, Today.AddDays(1)), default)).Value;
     }
 
