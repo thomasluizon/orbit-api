@@ -51,9 +51,9 @@ public static partial class ErrorCopy
     /// <summary>Habits, sub-habits, logging and skipping.</summary>
     private static readonly (string Code, string En, string PtBr)[] Habits =
     [
-        (DomainErrors.ChecklistItemRequired.Code, "Enter a checklist item.", "Digite um item para a lista."),
+        (DomainErrors.ChecklistItemRequired.Code, "Enter a checklist item.", "Digite um item do checklist."),
         (DomainErrors.ChecklistItemTooLong.Code, "Shorten the checklist item.", "Encurte o item da lista."),
-        (DomainErrors.ChecklistFull.Code, "This checklist is full.", "Esta lista está cheia."),
+        (DomainErrors.ChecklistFull.Code, "This checklist is full.", "Este checklist está cheio."),
         (ErrorCodes.HabitNotFound, "That habit is not here any more. It may have been deleted on another device.", "Esse hábito não está mais aqui. Ele pode ter sido excluído em outro aparelho."),
         (ErrorCodes.HabitLimitReached, "You've reached the {0} habit limit.", "Você chegou ao limite de {0} hábitos."),
         (ErrorCodes.ParentHabitNotFound, "We could not find the habit this sits under. Pick another one.", "Não encontramos o hábito principal. Escolha outro."),

@@ -52,11 +52,11 @@ public static class HabitPlacementRecommendation
         var count = (reason == "destinationChecklist" ? checklist : children).ToString(CultureInfo.InvariantCulture);
         var (en, pt) = reason switch
         {
-            "destinationChecklist" when checklist == 1 => ("You already keep a checklist item here.", "Você já tem um item na lista aqui."),
-            "destinationChecklist" => ($"You already keep {count} checklist items here.", $"Você já tem {count} itens na lista aqui."),
+            "destinationChecklist" when checklist == 1 => ("You already keep a checklist item here.", "Você já tem um item no checklist aqui."),
+            "destinationChecklist" => ($"You already keep {count} checklist items here.", $"Você já tem {count} itens no checklist aqui."),
             "destinationSubHabits" when children == 1 => ("You already keep a sub-habit here.", "Você já tem um sub-hábito aqui."),
             "destinationSubHabits" => ($"You already keep {count} sub-habits here.", $"Você já tem {count} sub-hábitos aqui."),
-            "accountChecklists" => ("You usually organize your habits with checklists.", "Você costuma organizar seus hábitos com listas."),
+            "accountChecklists" => ("You usually organize your habits with checklists.", "Você costuma organizar seus hábitos com checklists."),
             "accountSubHabits" => ("You usually organize your habits with sub-habits.", "Você costuma organizar seus hábitos com sub-hábitos."),
             "accountFlat" => ("You usually keep your habits separate.", "Você costuma manter seus hábitos separados."),
             _ => ("Sub-habits let you track each part of your routine.", "Sub-hábitos permitem acompanhar cada parte da sua rotina.")
