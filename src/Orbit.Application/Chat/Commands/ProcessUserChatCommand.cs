@@ -301,7 +301,10 @@ public partial class ProcessUserChatCommandHandler(
             if (completedCheck.Value.Flagged)
                 return (completedCheck, null);
         }
-        var contextTask = LoadChatContextAsync(request, contextCancellation.Token);
+        var contextTask = execution.UnitOfWork.HasActiveTransaction
+            ? execution.UnitOfWork.ExecuteInSavepointAsync(
+                token => LoadChatContextAsync(request, token), contextCancellation.Token)
+            : LoadChatContextAsync(request, contextCancellation.Token);
         Result<ModerationResult> inputCheck;
         try
         {
