@@ -9,12 +9,16 @@ public sealed class GetPeriodAnalyticsTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_period_analytics";
     public bool IsReadOnly => true;
-    public string Description => "Read exact-period totals or comparisons without AI narrative. Logs store counts, never measured quantities: for minutes, pages or litres use the closest named count metric and explain its unit. Calendar months require their exact first and last dates. Use completedHabits (unit habits) for how many habits did I complete or quantos hábitos concluí: distinct positive recurring habits, including independent children, excluding tasks and slips. Use positiveLogRecords (unit records) for how many times or quantas vezes. For supported period blocks, write at most one short sentence in the person's language without figures, then the block.";
+    public string Description => "Read exact-period totals or comparisons without AI narrative. Use relative_period for relative phrases and baseline_relative_period for the comparison; absolute dates are for explicitly named dates. Logs store counts, never measured quantities: for minutes, pages or litres use the closest named count metric and explain its unit. Use completedHabits (unit habits) for how many habits did I complete or quantos hábitos concluí: distinct positive recurring habits, including independent children, excluding tasks and slips. Use positiveLogRecords (unit records) for how many times or quantas vezes. For supported period blocks, write at most one short sentence in the person's language without figures, then the block.";
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.Schema,
+            period_count = RelativeReadPeriod.CountSchema,
+            baseline_relative_period = RelativeReadPeriod.Schema,
+            baseline_period_count = RelativeReadPeriod.CountSchema,
             date_from = new { type = JsonSchemaTypes.String },
             date_to = new { type = JsonSchemaTypes.String },
             baseline_from = new { type = JsonSchemaTypes.String },
@@ -25,7 +29,7 @@ public sealed class GetPeriodAnalyticsTool(IMediator mediator) : IAiTool
             tag = new { type = JsonSchemaTypes.String },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean }
         },
-        required = new[] { "date_from", "date_to", "metric" }
+        required = new[] { "metric" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)

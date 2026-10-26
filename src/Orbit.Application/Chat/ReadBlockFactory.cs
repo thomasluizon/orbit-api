@@ -27,8 +27,10 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
     public async Task<JsonElement> ResolveAsync(string tool, JsonElement args, Guid userId, CancellationToken ct)
     {
         var node = JsonNode.Parse(args.GetRawText())!.AsObject();
-        ValidateDates(args);
         var today = await dates.GetUserTodayAsync(userId, ct);
+        await RelativeReadPeriod.ResolveAsync(tool, node, today, dates, userId, ct);
+        args = JsonSerializer.SerializeToElement(node);
+        ValidateDates(args);
         string Iso(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         if (tool == "query_habits" && node["date"]?.GetValue<string>() is { } date)
         {
@@ -93,7 +95,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
 
     private static void ValidateDates(JsonElement args)
     {
-        foreach (var key in new[] { "date", "date_from", "date_to", "baseline_from", "baseline_to", "as_of" })
+        foreach (var key in new[] { "date", "date_from", "date_to", "date_to_exclusive", "baseline_from", "baseline_to", "as_of" })
         {
             if (!args.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null) continue;
             if (value.ValueKind != JsonValueKind.String) throw new ArgumentException("Read dates must be strings.");

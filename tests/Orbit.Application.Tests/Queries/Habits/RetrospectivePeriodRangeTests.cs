@@ -61,4 +61,53 @@ public class RetrospectivePeriodRangeTests
     [InlineData(null)]
     public void IsKnownPeriod_UnknownPeriod_ReturnsFalse(string? period) =>
         RetrospectivePeriodRange.IsKnownPeriod(period).Should().BeFalse();
+
+    [Theory]
+    [InlineData("2026-10-26", 1, "2026-10-26", "2026-10-19", "2026-10-25")]
+    [InlineData("2026-10-26", 0, "2026-10-25", "2026-10-18", "2026-10-24")]
+    [InlineData("2026-11-01", 1, "2026-10-26", "2026-10-19", "2026-10-25")]
+    [InlineData("2026-11-01", 0, "2026-11-01", "2026-10-25", "2026-10-31")]
+    [InlineData("2026-10-28", 1, "2026-10-26", "2026-10-19", "2026-10-25")]
+    [InlineData("2026-10-28", 0, "2026-10-25", "2026-10-18", "2026-10-24")]
+    public void Resolve_RelativeWeeks_UseCalendarBoundaries(string day, int start, string currentFrom,
+        string previousFrom, string previousTo)
+    {
+        var today = DateOnly.Parse(day);
+        RetrospectivePeriodRange.Resolve("this_week", today, start)
+            .Should().Be((DateOnly.Parse(currentFrom), today));
+        RetrospectivePeriodRange.Resolve("last_week", today, start)
+            .Should().Be((DateOnly.Parse(previousFrom), DateOnly.Parse(previousTo)));
+    }
+
+    [Theory]
+    [InlineData("today", "2026-10-26", "2026-10-26", "2026-10-26")]
+    [InlineData("yesterday", "2026-01-01", "2025-12-31", "2025-12-31")]
+    [InlineData("this_month", "2026-10-26", "2026-10-01", "2026-10-26")]
+    [InlineData("last_month", "2026-01-01", "2025-12-01", "2025-12-31")]
+    [InlineData("last_month", "2024-03-01", "2024-02-01", "2024-02-29")]
+    [InlineData("last_7_days", "2026-10-26", "2026-10-20", "2026-10-26")]
+    public void Resolve_RelativeDaysAndMonths_HaveExplicitMeaning(string period, string day, string from, string to)
+    {
+        RetrospectivePeriodRange.IsKnownPeriod(period).Should().BeTrue();
+        RetrospectivePeriodRange.Resolve(period, DateOnly.Parse(day), 1)
+            .Should().Be((DateOnly.Parse(from), DateOnly.Parse(to)));
+    }
+
+    [Theory]
+    [InlineData("last_n_days", 21)]
+    [InlineData("last_n_weeks", 3)]
+    public void Resolve_CountedRollingPeriods_IncludeToday(string period, int count) =>
+        RetrospectivePeriodRange.Resolve(period, Today, 1, count).Should().Be((Today.AddDays(-20), Today));
+
+    [Theory]
+    [InlineData("last_n_days", null)]
+    [InlineData("last_n_weeks", 0)]
+    [InlineData("last_n_days", 3660)]
+    [InlineData("last_n_weeks", 523)]
+    [InlineData("this_week", 3)]
+    public void Resolve_InvalidPeriodCount_Throws(string period, int? count)
+    {
+        var resolve = () => RetrospectivePeriodRange.Resolve(period, Today, 1, count);
+        resolve.Should().Throw<ArgumentException>();
+    }
 }
