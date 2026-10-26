@@ -15,7 +15,7 @@ public record ProfileResponse(
     string Name,
     string Email,
     string? TimeZone,
-    /// <summary>Retained until thomasluizon/orbit-tickets#685 removes it after the MinSupportedVersion raise.</summary>
+    /// <summary>Required by published client schemas; retirement is tracked in thomasluizon/orbit-tickets#685.</summary>
     bool AiMemoryEnabled,
     bool AiSummaryEnabled,
     bool HasCompletedOnboarding,
@@ -42,7 +42,7 @@ public record ProfileResponse(
     int TotalXp,
     int Level,
     string LevelTitle,
-    /// <summary>Retained for installed clients until thomasluizon/orbit-tickets#765 removes this field.</summary>
+    /// <summary>Required by published client schemas; retirement is tracked in thomasluizon/orbit-tickets#685.</summary>
     int AdRewardsClaimedToday,
     int CurrentStreak,
     int LongestStreak,
