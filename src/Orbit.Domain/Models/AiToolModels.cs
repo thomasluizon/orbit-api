@@ -46,6 +46,8 @@ public sealed class AiConversationContext
     /// <summary>User attributed to each model round in this conversation.</summary>
     public Guid? UserId { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();
+    /// <summary>Earlier reads whose full payload is retained by the handler after staging a preview.</summary>
+    public IReadOnlyCollection<string> RetiredReadCallIds { get; set; } = [];
 }
 
 public record AiResponse
@@ -53,6 +55,8 @@ public record AiResponse
     public IReadOnlyList<AiToolCall>? ToolCalls { get; init; }
     public string? TextMessage { get; init; }
     public int ReportedTokenCount { get; init; }
+    /// <summary>Input-equivalent tokens with cached input weighted by the configured price ratio.</summary>
+    public int? RequestBudgetTokenCount { get; init; }
     public bool IsTruncated { get; init; }
     public bool HasToolCalls => ToolCalls is { Count: > 0 };
     public AiConversationContext? ConversationContext { get; init; }

@@ -37,9 +37,9 @@ using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
-public class AiInputBudgetTests(ITestOutputHelper output)
+public partial class AiInputBudgetTests(ITestOutputHelper output)
 {
-    private static IReadOnlyList<IAiTool> RegisteredTools() => new AiToolRegistry(typeof(IAiTool).Assembly.GetTypes()
+    internal static IReadOnlyList<IAiTool> RegisteredTools() => new AiToolRegistry(typeof(IAiTool).Assembly.GetTypes()
         .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type))
         .Select(CreateRegisteredTool)).GetAll();
 
@@ -210,7 +210,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), recorder);
     }
 
-    private static AiIntentService BuildService(HttpMessageHandler handler, IAiUsageRecorder? usage = null)
+    private static AiIntentService BuildService(HttpMessageHandler handler, IAiUsageRecorder? usage = null, AiSettings? settings = null)
     {
         var responses = new ResponsesClient(new ApiKeyCredential("test"), new ResponsesClientOptions
         {
@@ -219,7 +219,7 @@ public class AiInputBudgetTests(ITestOutputHelper output)
         });
         usage ??= Substitute.For<IAiUsageRecorder>();
         return new AiIntentService(AiBudgetTestDouble.Wrap(new AiCompletionClient(responses, NullLogger<AiCompletionClient>.Instance, usage)),
-            usage, NullLogger<AiIntentService>.Instance);
+            usage, NullLogger<AiIntentService>.Instance, settings is null ? null : Options.Create(settings));
     }
 
     private sealed class DailyWriteCapture : DbCommandInterceptor
