@@ -268,6 +268,7 @@ public partial class ProcessUserChatCommandHandler
         if (client?.SupportsParts == true && client.PartKinds?.Contains(kind, StringComparer.Ordinal) != true) return false;
         return kind switch
         {
+            "habitSuggestions" => SupportsSuggestionBlock(client),
             "habitMonth" => client?.SupportsParts == true
                 && client.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
                 && !flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraStatusBlocksDisabled),
@@ -285,6 +286,9 @@ public partial class ProcessUserChatCommandHandler
             _ => false
         };
     }
+
+    private static bool SupportsSuggestionBlock(AgentClientContext? client) => client?.SupportsParts == true
+        && client.PartKinds?.Contains("habitSuggestions", StringComparer.Ordinal) == true;
 
     private static ResponseCards ResponseFromRead(string? message, QueryReadBlock read) => read.Block switch
     {
