@@ -20,15 +20,16 @@ public sealed partial class PendingOperationRevisionService
         if (request.Items.Count == 0)
             return store.Cancel(userId, execution.PendingOperationId, expected)
                 ? new(true, null, null, null, Cancelled: true) : Failure("revision_conflict");
-        var members = AccountChangeSet.Read(execution.Arguments);
+        var members = AccountChangeSet.Read(original.Value.ExecutionArguments ?? execution.Arguments);
         if (members is null) return Failure("invalid_change_set");
         var revisedMembers = await ReviseChangeSetMembersAsync(userId, members, request, items, ct);
         if (revisedMembers is null) return Failure("invalid_revision");
         var revised = JsonSerializer.SerializeToElement(new { operations = revisedMembers, reservations = AccountChangeSet.Reservations(execution.Arguments) });
         var preview = await previewer.PreviewAsync(userId, execution.OperationId, revised, ct);
         if (preview.IsFailure || preview.Value?.Items?.Count != request.Items.Count) return Failure("invalid_revision");
-        var updated = store.Revise(userId, execution.PendingOperationId, expected, revised.GetRawText(),
-            AgentOperationFingerprint.Compute(execution.OperationId, revised.GetRawText()), preview.Value.PreviewFingerprint!);
+        var arguments = preview.Value.ExecutionArguments ?? revised;
+        var updated = store.Revise(userId, execution.PendingOperationId, expected, arguments.GetRawText(),
+            AgentOperationFingerprint.Compute(execution.OperationId, arguments.GetRawText()), preview.Value.PreviewFingerprint!);
         return updated ? new(true, null, execution.PendingOperationId, preview.Value) : Failure("revision_conflict");
     }
     private async Task<List<AccountChangeSet.Member>?> ReviseChangeSetMembersAsync(Guid userId,
@@ -60,7 +61,7 @@ public sealed partial class PendingOperationRevisionService
         var result = await previewer.PreviewAsync(userId, member.OperationId, arguments.Value, ct);
         if (result.IsFailure || result.Value?.Items?.Count != selected.Length
             || string.IsNullOrWhiteSpace(result.Value.PreviewFingerprint)) return null;
-        return member with { Arguments = arguments.Value, PreviewFingerprint = result.Value.PreviewFingerprint };
+        return member with { Arguments = result.Value.ExecutionArguments ?? arguments.Value, PreviewFingerprint = result.Value.PreviewFingerprint };
     }
 
 }

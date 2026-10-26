@@ -49,7 +49,8 @@ public partial class ProcessUserChatCommandHandler
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
-            ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
+            ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
+            HabitPlacementContext.Build(context.UserHabits, request.Message));
 
         var toolNames = ai.ToolRegistry.GetAll().Select(tool => tool.Name).ToArray();
 

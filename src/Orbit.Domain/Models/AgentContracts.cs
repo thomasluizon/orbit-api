@@ -155,7 +155,18 @@ public record PendingOperationItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<PendingOperationValidationError>? ValidationErrors = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<PendingOperationFieldOptions>? FieldOptions = null);
+    IReadOnlyList<PendingOperationFieldOptions>? FieldOptions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    PendingOperationPlacement? Placement = null);
+
+public record PendingOperationPlacement(
+    string Selected,
+    string Recommended,
+    string ReasonKey,
+    IReadOnlyDictionary<string, string> Reason,
+    IReadOnlyList<string> Alternatives,
+    Guid DestinationId,
+    string DestinationName);
 
 public record PendingOperationFieldOptions(string Field, bool Required, IReadOnlyList<PendingOperationFieldOption> Options);
 

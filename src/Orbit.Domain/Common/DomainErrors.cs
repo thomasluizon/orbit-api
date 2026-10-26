@@ -6,6 +6,9 @@ namespace Orbit.Domain.Common;
 /// </summary>
 public static class DomainErrors
 {
+    public static readonly AppError ChecklistItemRequired = new("CHECKLIST_ITEM_REQUIRED", "Enter a checklist item.");
+    public static readonly AppError ChecklistItemTooLong = new("CHECKLIST_ITEM_TOO_LONG", "Shorten the checklist item.");
+    public static readonly AppError ChecklistFull = new("CHECKLIST_FULL", "This checklist is full.");
     public static readonly AppError InvalidDatePhrase = new("INVALID_DATE_PHRASE", "A date phrase of up to 200 characters and a supported language are required.");
     public static readonly AppError InvalidStartDate = new("INVALID_START_DATE", "A valid start date requires a recurring habit and account date context.");
     public static readonly AppError UserIdRequired = new("USER_ID_REQUIRED", "User ID is required.");

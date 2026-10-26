@@ -420,6 +420,9 @@ public partial class ProcessUserChatCommandHandler(
         if (cachedFaqAnswer is not null)
             return Result.Success(ComposeCachedFaq(cachedFaqAnswer, request, composition));
 
+        if (await TryHandlePlacementTurnAsync(request, cancellationToken) is { } placementReply)
+            return placementReply;
+
         if (await TryHandlePendingParentTurnAsync(request, context, cancellationToken) is { } pendingReply)
             return pendingReply;
 

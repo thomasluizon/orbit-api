@@ -61,6 +61,8 @@ public sealed partial class PendingOperationChangePreviewer(
             return Result.Success<PendingOperationChangePreview?>(null);
         if (RequiresEmojiInference(operationId, arguments))
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
+        if (operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits)
+            return Result.Success(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken));
         return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
     }
 

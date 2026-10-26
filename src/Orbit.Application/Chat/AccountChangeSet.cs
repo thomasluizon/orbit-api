@@ -58,15 +58,23 @@ public static class AccountChangeSet
         var members = Read(arguments);
         if (members is null) return null;
         var items = new List<PendingOperationItem>();
+        var normalized = new List<Member>();
         for (var index = 0; index < members.Count; index++)
         {
             var member = members[index];
             var result = await previewer.PreviewAsync(userId, member.OperationId, member.Arguments, ct);
             if (result.IsFailure || result.Value?.Items is not { Count: > 0 } children) return null;
             items.AddRange(children.Select(item => item with { ItemId = $"{index}/{item.ItemId}" }));
+            normalized.Add(member with
+            {
+                Arguments = result.Value.ExecutionArguments ?? member.Arguments,
+                PreviewFingerprint = result.Value.PreviewFingerprint!
+            });
         }
+        var executionArguments = JsonSerializer.SerializeToElement(new { operations = normalized, reservations = Reservations(arguments) });
         var fingerprint = AgentOperationFingerprint.Compute(OperationName,
-            arguments.GetRawText() + JsonSerializer.Serialize(items));
-        return new PendingOperationChangePreview(items.SelectMany(item => item.Fields).ToArray(), items.Count, items, fingerprint);
+            executionArguments.GetRawText() + JsonSerializer.Serialize(items));
+        return new PendingOperationChangePreview(items.SelectMany(item => item.Fields).ToArray(), items.Count, items, fingerprint)
+        { ExecutionArguments = executionArguments };
     }
 }

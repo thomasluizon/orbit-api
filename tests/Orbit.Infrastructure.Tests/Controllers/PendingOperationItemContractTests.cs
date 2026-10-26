@@ -43,6 +43,7 @@ public sealed class PendingOperationItemContractTests
         item!.RemovesData.Should().BeNull();
         item.ValidationErrors.Should().BeNull();
         item.FieldOptions.Should().BeNull();
+        item.Placement.Should().BeNull();
     }
 
     [Theory]
@@ -62,7 +63,11 @@ public sealed class PendingOperationItemContractTests
             .Should().BeEquivalentTo("itemId", "entityId", "entityName", "fields", "stateFingerprint");
         var properties = schema.GetProperty("properties");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions");
+            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement");
+        properties.GetProperty("placement").GetProperty("oneOf").EnumerateArray()
+            .Any(value => value.TryGetProperty("$ref", out var reference)
+                && reference.GetString() == "#/components/schemas/PendingOperationPlacement").Should().BeTrue();
+        schema.GetProperty("required").EnumerateArray().Should().NotContain(field => field.GetString() == "placement");
         properties.GetProperty("fieldOptions").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("array", "null");
         properties.GetProperty("fieldOptions").GetProperty("items").GetProperty("$ref").GetString()

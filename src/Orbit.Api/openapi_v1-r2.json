@@ -21728,6 +21728,58 @@
               "$ref": "#/components/schemas/PendingOperationFieldOptions"
             },
             "description": "Only present for a required unresolved parent choice. Options contain exactly the matching parent habits and No parent; resolved or root items omit this field."
+          },
+          "placement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PendingOperationPlacement"
+              }
+            ]
+          }
+        }
+      },
+      "PendingOperationPlacement": {
+        "required": [
+          "selected",
+          "recommended",
+          "reasonKey",
+          "reason",
+          "alternatives",
+          "destinationId",
+          "destinationName"
+        ],
+        "type": "object",
+        "properties": {
+          "selected": {
+            "type": "string"
+          },
+          "recommended": {
+            "type": "string"
+          },
+          "reasonKey": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destinationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "destinationName": {
+            "type": "string"
           }
         }
       },
@@ -24192,7 +24244,13 @@
           "itemId": {
             "type": "string"
           },
-          "edits": { }
+          "edits": { },
+          "placement": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
         }
       },
       "RevisePendingOperationRequest": {

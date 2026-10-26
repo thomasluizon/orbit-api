@@ -9,7 +9,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
-public sealed record RevisedPendingOperationItem(string ItemId, JsonElement? Edits = null);
+public sealed record RevisedPendingOperationItem(string ItemId, JsonElement? Edits = null, string? Placement = null);
 
 public sealed record RevisePendingOperationRequest(
     string PreviewFingerprint,
@@ -119,7 +119,7 @@ public sealed partial class PendingOperationRevisionService(
                     && item.StateFingerprint != previous.StateFingerprint))
             return Failure("stale_preview");
 
-        var revisedJson = revised.Value.GetRawText();
+        var revisedJson = (revisedPreview.ExecutionArguments ?? revised.Value).GetRawText();
         var revisedFingerprint = AgentOperationFingerprint.Compute(execution.OperationId, revisedJson);
         if (!store.Revise(userId, pendingOperationId, expectedFingerprint, revisedJson,
             revisedFingerprint, revisedPreview.PreviewFingerprint!))
@@ -133,6 +133,9 @@ public sealed partial class PendingOperationRevisionService(
     {
         foreach (var item in items)
         {
+            if (item.Placement is { } placement && (offered[item.ItemId].Placement is not { } placementChoice
+                || placement != placementChoice.Selected && !placementChoice.Alternatives.Contains(placement, StringComparer.Ordinal)))
+                return "placement_not_offered";
             if (item.Edits is not { } edits || edits.ValueKind == JsonValueKind.Null)
                 continue;
             if (edits.ValueKind != JsonValueKind.Object)
@@ -203,7 +206,7 @@ public sealed partial class PendingOperationRevisionService(
         IReadOnlyList<RevisedPendingOperationItem> items, CancellationToken cancellationToken)
     {
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
-        if (edits.Count == 0)
+        if (edits.Count == 0 && items.All(item => item.Placement is null))
             return true;
         if (operationId == BulkCreateHabits)
             edits = edits.Where(edit => edit.Name != ParentHabitId).ToList();
@@ -290,7 +293,9 @@ public sealed partial class PendingOperationRevisionService(
             root["action"] = "delete_selected";
             return true;
         }
-        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits, operationId);
+        if (selected.Count != 1 || !ApplyEdits(root, selected[0].Edits, operationId)) return false;
+        ApplyPlacement(root, selected[0]);
+        return true;
     }
 
     private static bool BuildCalendarArguments(JsonObject root,
@@ -342,6 +347,7 @@ public sealed partial class PendingOperationRevisionService(
                 copy[ParentHabitId] = sharedParent.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
+            ApplyPlacement(copy, item);
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
                 && edits.TryGetProperty(ParentHabitId, out var parent))
             {
@@ -358,6 +364,12 @@ public sealed partial class PendingOperationRevisionService(
         root["habits"] = revisedHabits;
         root.Remove(ParentHabitId);
         return true;
+    }
+
+    private static void ApplyPlacement(JsonObject target, RevisedPendingOperationItem item)
+    {
+        if (item.Placement is { } placement)
+            target[HabitPlacementRecommendation.Argument] = placement;
     }
 
     private static bool BuildUpdatedHabitArguments(JsonObject root, string operationId,

@@ -16,6 +16,8 @@ public class StructuringStrategySection : IPromptSection
 
             When the user describes a routine, activity, or task with multiple parts, choose the right structure BEFORE calling create_habit. The wrong structure is one of the most common failure modes.
 
+            Follow the person's explicit placement choice first. Otherwise use the destination's actual checklist and sub-habits, then the supplied account pattern. These facts take precedence over the examples below. Recommend one placement in the approval preview with its reason and the other two alternatives; do not require a structure question before proposing it. A brand-new routine on an account with no structure defaults to sub-habits.
+
             ### Use `checklist_items` on a single habit when:
             - Items are atomic sub-steps done together in one execution (not independently tracked)
             - Items are a shopping list, packing list, prep list, or ingredient list
@@ -50,7 +52,7 @@ public class StructuringStrategySection : IPromptSection
 
             ### Anti-patterns to avoid:
             - Creating 3+ separate daily habits when the user described ONE routine with multiple steps
-            - Creating sub-habits for atomic prep steps (use checklist_items instead)
+            - Ignoring the destination's structure or the person's explicit placement choice
             - Creating a habit that lists items in the description but has no checklist_items
             - Asking multiple clarifying questions when one would unblock you
             - Silently guessing days of the week when the user did not specify them
