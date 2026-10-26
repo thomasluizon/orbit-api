@@ -28,6 +28,8 @@ Authenticated credentials are ignored before authentication for these routes.
    characters are refused. On success, replace the credential with the response's
    `X-Orbit-Install-Id` header. Each credential is single-use, including failed
    attempts. A fallback ends the Astra attempt rather than retrying a spent credential.
+   Credentials must retain the exact unpadded base64url encoding issued by the API;
+   alternate encodings are refused before attestation and replay tracking.
 
 For Android enrollment, set the standard Play Integrity `requestHash` to the
 unpadded base64url SHA-256 of the challenge's UTF-8 bytes. For iOS enrollment,
@@ -85,3 +87,9 @@ Apple verification follows [server validation](https://developer.apple.com/docum
 the [attestation format guide](https://developer.apple.com/documentation/devicecheck/attestation-object-validation-guide)
 and [receipt verification](https://developer.apple.com/documentation/devicecheck/assessing-fraud-risk).
 The attestation trust anchor is pinned from [Apple Private PKI](https://www.apple.com/certificateauthority/private/).
+
+The validation guide's published sample appends raw `example_server_challenge`
+bytes to its authenticator data to produce the published nonce. Its prose and the
+server validation procedure require the challenge's SHA-256 hash. This endpoint
+follows that hash procedure and refuses the incompatible sample. The checked
+sample fixture records the discrepancy without weakening challenge binding.

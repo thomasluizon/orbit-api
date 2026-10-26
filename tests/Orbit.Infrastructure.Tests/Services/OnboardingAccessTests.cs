@@ -42,11 +42,11 @@ public sealed class OnboardingAccessTests : IDisposable
         return new(Options.Create(settings), [verifier], limiter, limiter, appConfig ?? config, clock);
     }
 
-    private async Task<string> Enroll()
+    private async Task<string> Enroll(string clientIp = Ip)
     {
-        var challenge = await Service().ChallengeAsync("web", Ip, default);
+        var challenge = await Service().ChallengeAsync("web", clientIp, default);
         challenge.Should().NotBeNull();
-        var install = await Service().EnrollAsync(challenge!.Challenge, Proof, Ip, default);
+        var install = await Service().EnrollAsync(challenge!.Challenge, Proof, clientIp, default);
         install.Should().NotBeNull();
         return install!.InstallId;
     }
@@ -99,6 +99,7 @@ public sealed class OnboardingAccessTests : IDisposable
     }
 
     [Theory]
+    [InlineData(OnboardingAccessService.IpHourlyLimit, 1)]
     [InlineData(OnboardingAccessService.InstallHourlyLimit, 1)]
     [InlineData(OnboardingAccessService.DailyCallLimit, 1)]
     [InlineData(OnboardingAccessService.DailyTokenLimit, OnboardingAccessService.ReservedTokensPerCall)]
@@ -109,6 +110,32 @@ public sealed class OnboardingAccessTests : IDisposable
         var first = await Service().AuthorizeAsync(install, Proof, Input, Ip, default);
         first.Should().NotBeNull();
         (await Service().AuthorizeAsync(first!.InstallId, Proof, Input, Ip, default)).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(OnboardingAccessService.DailyCallLimit, 1)]
+    [InlineData(OnboardingAccessService.DailyTokenLimit, OnboardingAccessService.ReservedTokensPerCall)]
+    public async Task DailyBudgets_AreSharedAcrossIpAndInstallIds(string key, int limit)
+    {
+        config.GetAsync(key, 0, Arg.Any<CancellationToken>()).Returns(limit);
+        (await Service().AuthorizeAsync(await Enroll(), Proof, Input, Ip, default)).Should().NotBeNull();
+        const string otherIp = "192.0.2.2";
+        (await Service().AuthorizeAsync(await Enroll(otherIp), Proof, Input, otherIp, default)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task InvalidProofOnSetup_ConsumesCredentialWithoutReservingModelBudgets()
+    {
+        var install = await Enroll();
+        verifier.VerifyAsync(Arg.Any<OnboardingAttestation>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<uint>(),
+            Arg.Any<CancellationToken>()).Returns((VerifiedOnboardingAttestation?)null);
+
+        (await Service().AuthorizeAsync(install, Proof, Input, Ip, default)).Should().BeNull();
+        db.DistributedRateLimitBuckets.Should().NotContain(bucket => bucket.PolicyName == "onboarding-calls"
+            || bucket.PolicyName == "onboarding-tokens");
+        verifier.ClearReceivedCalls();
+        (await Service().AuthorizeAsync(install, Proof, Input, Ip, default)).Should().BeNull();
+        verifier.ReceivedCalls().Should().NotContain(call => call.GetMethodInfo().Name == "VerifyAsync");
     }
 
     [Theory]

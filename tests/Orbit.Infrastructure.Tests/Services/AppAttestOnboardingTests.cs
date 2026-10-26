@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -15,6 +16,40 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AppAttestOnboardingTests
 {
+    [Fact]
+    public async Task ApplePublishedSample_WithRawChallenge_IsRefusedByHashedChallengeProtocol()
+    {
+        using var fixture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory, "Fixtures", "AppAttest", "AppleValidationGuide.json")));
+        var settings = new OnboardingSecuritySettings
+        {
+            AppleTeamId = "1234567890",
+            AppleBundleId = "com.example.myapp",
+            AppleBundleVersions = ["1"],
+            AppleValidationCategories = [1]
+        };
+        var verifier = new AppAttestOnboardingVerifier(Options.Create(settings), new PublishedSampleClock());
+        var evidence = new OnboardingAttestation("ios", fixture.RootElement.GetProperty("attestationObject").GetString()!,
+            fixture.RootElement.GetProperty("keyId").GetString());
+        var reader = new CborReader(Convert.FromBase64String(evidence.Token));
+        reader.ReadStartMap();
+        byte[]? authenticatorData = null;
+        while (reader.PeekState() != CborReaderState.EndMap)
+        {
+            if (reader.ReadTextString() == "authData")
+                authenticatorData = reader.ReadByteString();
+            else
+                reader.SkipValue();
+        }
+        authenticatorData.Should().NotBeNull();
+        var challenge = Encoding.UTF8.GetBytes("example_server_challenge");
+        var publishedNonce = Convert.FromBase64String("h7fQbZOkKU5G8BHma2zEAPC6sgcpl2xhlYC0KuYL/24=");
+        SHA256.HashData(authenticatorData!.Concat(challenge).ToArray()).Should().Equal(publishedNonce);
+        SHA256.HashData(authenticatorData.Concat(SHA256.HashData(challenge)).ToArray()).Should().NotEqual(publishedNonce);
+
+        (await verifier.VerifyAsync(evidence, "example_server_challenge", null, 0, default)).Should().BeNull();
+    }
+
     [Fact]
     public async Task AttestationAndAssertion_ValidateChainNonceKeyAppIdAndCounter()
     {
@@ -73,6 +108,11 @@ public class AppAttestOnboardingTests
     {
         public static readonly DateTimeOffset Now = new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
         public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private sealed class PublishedSampleClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 4, 21, 18, 14, 0, TimeSpan.Zero);
     }
 
     private sealed class AttestFixture : IDisposable

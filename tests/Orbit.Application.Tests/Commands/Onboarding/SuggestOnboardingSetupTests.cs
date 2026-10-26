@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Onboarding.Commands;
 using Orbit.Application.Onboarding.Validators;
@@ -64,6 +65,19 @@ public class SuggestOnboardingSetupTests
         suggestions.ReceivedCalls().Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task QuotaStoreOutage_IsTypedLimitAndNeverReachesModel()
+    {
+        Allow();
+        access.AuthorizeAsync(Arg.Any<string>(), Arg.Any<OnboardingAttestation>(), Arg.Any<OnboardingInput>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<OnboardingAccess?>(new InvalidOperationException("unavailable quota store")));
+
+        (await Handler().Handle(Request(), default)).Code.Should().Be("ONBOARDING_LIMIT");
+        moderation.ReceivedCalls().Should().BeEmpty();
+        suggestions.ReceivedCalls().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -104,5 +118,26 @@ public class SuggestOnboardingSetupTests
         var result = await Handler().Handle(Request(), default);
         result.Code.Should().Be("ONBOARDING_UNAVAILABLE");
         result.Suggestion.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OutcomeLog_ContainsOnlyCountsLatencyAndCode()
+    {
+        Allow();
+        const string title = "Call Alice at 12345 every day";
+        suggestions.SuggestAsync(Arg.Any<OnboardingInput>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<HabitSetupSuggestion?>(new HttpRequestException(title)));
+        var logger = Substitute.For<ILogger<SuggestOnboardingSetupCommandHandler>>();
+        var handler = new SuggestOnboardingSetupCommandHandler(access, moderation, suggestions, logger);
+
+        (await handler.Handle(Request(title), default)).Code.Should().Be("ONBOARDING_UNAVAILABLE");
+
+        var log = logger.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "Log").GetArguments();
+        log[3].Should().BeNull();
+        var state = ((IEnumerable<KeyValuePair<string, object?>>)log[2]!).ToDictionary(item => item.Key, item => item.Value);
+        state.Keys.Should().BeEquivalentTo("OutcomeCode", "CallCount", "LatencyMs", "{OriginalFormat}");
+        state["OutcomeCode"].Should().Be("ONBOARDING_UNAVAILABLE");
+        state["CallCount"].Should().Be(1);
+        string.Join(" ", state.Values).Should().NotContain(title).And.NotContain("signed-install").And.NotContain("192.0.2.1");
     }
 }

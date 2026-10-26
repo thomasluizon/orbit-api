@@ -32,10 +32,12 @@ public sealed class SuggestOnboardingSetupCommandHandler(IOnboardingAccessServic
                 return result;
             if (request.Attestation is null || string.IsNullOrWhiteSpace(request.InstallId))
                 return result = OnboardingSetupResult.Limited;
+            result = OnboardingSetupResult.Limited;
             var authorization = await access.AuthorizeAsync(request.InstallId, request.Attestation, input.Value,
                 request.ClientIp, cancellationToken);
             if (authorization is null)
-                return result = OnboardingSetupResult.Limited;
+                return result;
+            result = OnboardingSetupResult.Unavailable;
             var checkedInput = await moderation.CheckTextAsync(input.Value.Title, cancellationToken);
             if (checkedInput.Flagged || checkedInput.Unavailable)
                 return result;
