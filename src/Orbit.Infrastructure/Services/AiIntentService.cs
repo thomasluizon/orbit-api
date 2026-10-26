@@ -183,6 +183,7 @@ public sealed partial class AiIntentService(
                 };
                 return Result.Success(new AiResponse
                 {
+                    TextMessage = round.Text,
                     ToolCalls = toolCalls,
                     ConversationContext = convCtx,
                     ReportedTokenCount = round.ReportedTokenCount,

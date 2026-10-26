@@ -507,6 +507,7 @@ public partial class ProcessUserChatCommandHandler(
         recording.UsedModel = true;
         var executionResults = new ToolExecutionAccumulator
         {
+            FirstRoundText = response.Value.TextMessage,
             AnsweredAtUtc = answeredAtUtc,
             Recording = recording,
             EvalTrace = evalTrace,
@@ -521,6 +522,7 @@ public partial class ProcessUserChatCommandHandler(
         var toolLoopResult = await RunToolCallLoopAsync(
             response.Value,
             request,
+            context,
             executionResults,
             userLanguage,
             aiStreamSink,

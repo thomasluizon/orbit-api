@@ -36,12 +36,28 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
 | Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
 
-Supported data blocks have no external prose by default. One short status may explain
+Supported data blocks may have one short framing sentence from the first model round before
+them. The sentence has no digits or result claims and never repeats the block. The server
+drops unsafe framing and keeps at most one sentence of at most 180 characters. Later model
+rounds cannot replace it. Choice questions stay in their blocks; pending previews retain
+their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
 from the typed result. Builder failure never becomes an empty success. Successful typed reads
 survive narrative outage. Empty lists carry an existing screen action in `relatedSurfaces`
 when applicable. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
+
+For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
+It is true only when the first round fully answers the request and false for prerequisite
+lookups or any remaining read or write. This signal travels in the structured tool call, so
+completion does not depend on assistant text accompanying a tool call. The server removes
+the argument before execution. The server skips continuation only when every call declares completion,
+every declared call ran, every tool is read-only, every result succeeded and has a typed block,
+and no clarification, write or pending operation remains. Invalid ranking projections cannot
+complete the round. A prerequisite lookup or a request needing another read or write declares
+false and keeps the tool loop. A failed terminal read or a missing projection requests
+continuation. Legacy clients without parts keep their existing readable path; unsupported
+block kinds use typed readable fallbacks. The parts and family kill flags still apply.
 
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
 preview/outcome before read parts and reports each operation once. Preview, edit, reject,

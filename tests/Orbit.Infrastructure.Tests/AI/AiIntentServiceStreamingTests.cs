@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using OpenAI.Responses;
+using Orbit.Application.Chat;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -221,9 +222,55 @@ public class AiIntentServiceStreamingTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.HasToolCalls.Should().BeTrue();
+        result.Value.TextMessage.Should().Be("Checking that for you");
         sink.Events.Should().HaveCount(2);
         sink.Events[0].Kind.Should().Be(AiStreamEventKind.Delta);
         sink.Events[^1].Kind.Should().Be(AiStreamEventKind.Reset);
+    }
+
+    [Theory]
+    [InlineData(false, "Here is your habit ranking.")]
+    [InlineData(true, "Here is your habit ranking.")]
+    [InlineData(false, "Aqui está o ranking dos seus hábitos.")]
+    [InlineData(true, "Aqui está o ranking dos seus hábitos.")]
+    public async Task ToolRounds_PreserveFramingAndTerminalReadArgument(bool streaming, string sentence)
+    {
+        var text = sentence;
+        var firstResponse = ResponsesTestData.Response(text);
+        firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", "get_habit_ranking", BinaryData.FromString("{\"orbit_read_complete\":true}")));
+        var nextResponse = ResponsesTestData.Response(text);
+        nextResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_2", "get_habit_ranking", BinaryData.FromString("{\"orbit_read_complete\":true}")));
+        string Body(ResponseResult response) => streaming
+            ? ResponsesTestData.Stream(response, text)
+            : ModelReaderWriter.Write(response).ToString();
+        var handler = new SequenceSseHandler(Body(firstResponse), Body(nextResponse));
+        var (service, sink) = BuildService(handler);
+        Func<AiStreamEvent, Task>? streamSink = streaming ? sink.Handle : null;
+
+        var first = await service.SendWithToolsAsync(new AiToolRequest("Rank my habits", "system",
+            [new { name = "get_habit_ranking" }]), streamSink);
+
+        first.IsSuccess.Should().BeTrue();
+        first.Value.TextMessage.Should().Be(text);
+        TerminalReadDirective.IsComplete(first.Value).Should().BeTrue();
+        first.Value.ToolCalls.Should().ContainSingle().Which.Id.Should().Be("call_1");
+        first.Value.ConversationContext.Should().NotBeNull();
+        handler.RequestBodies.Should().ContainSingle();
+
+        var next = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new AiToolCallResult("get_habit_ranking", "call_1", true, null, null, null)], streamSink);
+
+        next.IsSuccess.Should().BeTrue();
+        next.Value.TextMessage.Should().Be(text);
+        TerminalReadDirective.IsComplete(next.Value).Should().BeTrue();
+        next.Value.ToolCalls.Should().ContainSingle().Which.Id.Should().Be("call_2");
+        next.Value.ConversationContext.Should().NotBeNull();
+        handler.RequestBodies.Should().HaveCount(2);
+        if (streaming)
+            sink.Events.Select(item => item.Kind).Should().Equal(AiStreamEventKind.Delta, AiStreamEventKind.Reset,
+                AiStreamEventKind.Delta, AiStreamEventKind.Reset);
+        else
+            sink.Events.Should().BeEmpty();
     }
 
     [Fact]

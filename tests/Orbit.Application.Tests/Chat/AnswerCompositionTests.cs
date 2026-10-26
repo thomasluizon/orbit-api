@@ -53,7 +53,7 @@ public partial class ProcessUserChatCommandHandlerTests
             var handler = CreateHandler(tool);
             UseProductionReadExecutor(tool);
             SetupAiResponse(ToolResponse(toolName, "family", JsonSerializer.Serialize(new
-            { habit_id = Guid.NewGuid(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
+            { orbit_read_complete = true, habit_id = Guid.NewGuid(), date_from = Today.AddDays(-6).ToString("yyyy-MM-dd"), date_to = Today.ToString("yyyy-MM-dd") })));
             ContinueWithReadDirective("Model prose before the answer.\n[[orbit:read:family]]");
             var client = new AgentClientContext(SupportsParts: mode != "legacy",
                 PartKinds: mode == "missing" ? ["unknown"] : [kind],
@@ -188,20 +188,31 @@ public partial class ProcessUserChatCommandHandlerTests
         ChatStreamEvent.Final(replay).ToJson().Should().Be(ChatStreamEvent.Final(result).ToJson());
     }
 
-    [Fact]
-    public async Task Composition_RankingOmissionUsesProducedCompleteRanking()
+    [Theory]
+    [InlineData("Here is your habit ranking.")]
+    [InlineData("Aqui está o ranking dos seus hábitos.")]
+    public async Task Composition_RankingOmissionUsesProducedCompleteRanking(string sentence)
     {
         SetupUserAndPayGate();
         EnableComposition();
         var ranking = await ProduceRankingAsync();
         var tool = ReadTool("get_habit_ranking", new ToolResult(true, Payload: ranking));
-        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{}"));
+        SetupAiResponse(ToolResponse(tool.Name, "ranking", "{\"orbit_read_complete\":true}") with
+        {
+            TextMessage = sentence
+        });
         ContinueWithReadDirective("Read has 1 completion.\nRead leads the ranking.");
         var result = await CreateHandler(tool).Handle(new(UserId, "Rank my habits", ClientContext: new(
             SupportsParts: true, PartKinds: ["habitRanking"])), default);
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        result.Value.Parts.Should().HaveCount(2);
+        result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(sentence);
+        result.Value.Parts[1].Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<HabitRankingCard>().Which.Ranking.Should().Be(ranking);
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().Be(sentence);
     }
 
     [Fact]

@@ -10,7 +10,7 @@ public class GlobalRulesSection : IPromptSection
     public static string BuildFormat(PromptContext context)
     {
         return context.BlockFirstComposition
-            ? "10. FORMAT: Successful data answers lead with their typed block. The server selects the block from successful tool results. No prose is needed by default. Never repeat facts displayed by a block. Feature help, coaching and small talk use one to three short lines without headings or bullets unless steps were requested. Keep refusals and unavailable states short and functional. Suggestions for writes only propose an approval preview."
+            ? "10. FORMAT: Successful data answers use at most one short framing sentence from the first round, then the typed block. The sentence uses the current message's language and contains no figures or claims about the result. The server selects the block from successful tool results. Never repeat facts displayed by a block. Feature help, coaching and small talk use one to three short lines without headings or bullets unless steps were requested. Keep refusals and unavailable states short and functional. Suggestions for writes only propose an approval preview."
             : "10. FORMAT: Always use line breaks between items when listing habits, goals, or information. Use bullet points with newlines for readability. Keep responses concise and well-structured. Never output a wall of text. Conciseness applies to prose, never to lists: a listing answer must include every item.";
     }
 

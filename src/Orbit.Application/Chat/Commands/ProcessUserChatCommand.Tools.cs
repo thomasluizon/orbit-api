@@ -14,6 +14,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<ToolLoopResult> RunToolCallLoopAsync(
         AiResponse initialResponse,
         ProcessUserChatCommand request,
+        ChatContext context,
         ToolExecutionAccumulator executionResults,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
@@ -47,6 +48,7 @@ public partial class ProcessUserChatCommandHandler
             var roundResult = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
+                context,
                 executionResults,
                 iteration,
                 totalReportedTokens,
@@ -152,6 +154,7 @@ public partial class ProcessUserChatCommandHandler
     private async Task<ToolRoundResult> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
+        ChatContext context,
         ToolExecutionAccumulator executionResults,
         int iteration,
         long totalReportedTokens,
@@ -171,9 +174,7 @@ public partial class ProcessUserChatCommandHandler
 
         if (askCall is not null)
             orderedCalls.Add(askCall);
-        orderedCalls = orderedCalls.Select(call => ai.ToolRegistry.GetTool(call.Name) is { } tool
-            ? call with { Args = OptionalToolArguments.OmitOptionalNulls(call.Args, tool.GetParameterSchema()) }
-            : call).ToList();
+        orderedCalls = orderedCalls.Select(NormalizeExecutionArguments).ToList();
         var outcomesByCallId = correction is null
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
@@ -191,7 +192,14 @@ public partial class ProcessUserChatCommandHandler
         if (executionResults.AskBlock is not null)
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
 
-        if (hadToolFailure)
+        if (CanCompleteReadRound(aiResponse, request, context, executionResults, iteration,
+            orderedCalls, outcomesByCallId, toolResults))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
+        }
+
+        if (hadToolFailure && !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration))
         {
             if (!HasCorrectionAllowance(request, executionResults, iteration, totalReportedTokens))
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
@@ -217,8 +225,32 @@ public partial class ProcessUserChatCommandHandler
         }
 
         return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value,
+            HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
     }
+
+    private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool
+        ? call with
+        {
+            Args = OptionalToolArguments.OmitOptionalNulls(
+            tool.IsReadOnly ? TerminalReadDirective.ExecutionArguments(call.Args) : call.Args, tool.GetParameterSchema())
+        }
+        : call;
+
+    private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
+        IsDeclaredTerminalReadRound(response, request, context, iteration)
+        && calls.Count == response.ToolCalls!.Count
+        && outcomes.Count == calls.Count && toolResults.Count == calls.Count && toolResults.All(result => result.Success)
+        && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
+        && CanCompleteComposition(request, context, results);
+
+    private bool IsDeclaredTerminalReadRound(AiResponse response, ProcessUserChatCommand request,
+        ChatContext context, int iteration) =>
+        iteration == 1 && UsesComposition(request, context) && request.BlockAnswer is null
+        && TerminalReadDirective.IsComplete(response)
+        && response.ToolCalls!.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true);
 
     private AiResponse? RecoverBudgetDeniedContinuation(string? errorCode, ProcessUserChatCommand request,
         ToolExecutionAccumulator results, string? language, CancellationToken cancellationToken)

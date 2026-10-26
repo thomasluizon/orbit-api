@@ -19,7 +19,8 @@ public partial class ProcessUserChatCommandHandler
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
-            && (operation.ReadBlock is not null || operation.Payload is HabitRankingResponse or HabitSuggestionsCard));
+            && (operation.ReadBlock is not null || operation.Payload is HabitSuggestionsCard
+                || operation.Payload is HabitRankingResponse ranking && HabitRankingCardBuilder.Build(ranking) is not null));
 
     private ChatResponse CompleteCompositionWithoutNarrative(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
@@ -82,6 +83,9 @@ public partial class ProcessUserChatCommandHandler
         var status = CompositionStatus(results, hasOutcome, missingProjection, truncated, language);
         if (status is not null)
             parts.Add(new ChatTextPart(ShortText(status, 1)));
+        else if (!hasOutcome && results.AskBlock is null && parts.Count > 0 && parts.All(part => part is ChatBlockPart)
+            && FramingSentence(results.FirstRoundText, context, results) is { } sentence)
+            parts.Insert(0, new ChatTextPart(sentence));
         else if (parts.Count == 0 && !hasOutcome)
             parts.Add(new ChatTextPart(ShortText(parsed.VisibleText, 3,
                 Mentions(request.Message, "steps|passos|step by step|passo a passo"))));
@@ -156,6 +160,24 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool HasPendingWritePreview(ToolExecutionAccumulator results) => results.PendingOperations.Count > 0;
+
+    private static string? FramingSentence(string? text, ChatContext context, ToolExecutionAccumulator results)
+    {
+        var visible = FollowUpDirective.Parse(StripJsonWrapper(text)).VisibleText?.Trim();
+        if (string.IsNullOrWhiteSpace(visible)) return null;
+        var sentence = Regex.Match(visible, @"\A[^.!?\r\n]+[.!?]?", RegexOptions.None,
+            TimeSpan.FromSeconds(1)).Value.Trim();
+        if (sentence.Length is 0 or > 180 || sentence.Any(char.IsDigit)
+            || sentence.StartsWith('#') || sentence.StartsWith('-') || sentence.StartsWith('*')
+            || sentence.Contains('`') || sentence.Contains("[[", StringComparison.Ordinal)
+            || Mentions(sentence, "zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|hundred|thousand|dois|duas|três|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|cem|cento|mil"))
+            return null;
+        var names = context.ActiveHabits.Select(habit => habit.Title)
+            .Concat(context.ActiveGoals.Select(goal => goal.Title))
+            .Concat(TurnFactSet.FromToolResults(results.ToolResults).Facts
+                .Where(fact => fact.Kind == "EntityName").Select(fact => fact.Value));
+        return GroundednessChecker.Check(sentence, TurnFactSet.Empty, names).Count == 0 ? sentence : null;
+    }
 
     private async Task<ResponseCards> BuildReplyCardsAsync(ParsedResponseDirectives parsed, string? responseText,
         bool truncated, string? language, ProcessUserChatCommand request, ChatContext context,

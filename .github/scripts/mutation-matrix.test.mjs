@@ -285,7 +285,7 @@ function assertOneOwner(scopes, file, start, end) {
 test("nightly and manual runs keep the configured file set and thresholds", () => {
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
-  assert.equal(matrix.filter(({ project }) => project === "application").length, 11);
+  assert.equal(matrix.filter(({ project }) => project === "application").length, 12);
   for (const project of ["domain", "application"]) {
     const scopes = matrix.filter((scope) => scope.project === project);
     const config = JSON.parse(readFileSync(new URL(`../../stryker-config.${project}.json`, import.meta.url), "utf8"))["stryker-config"];
@@ -456,6 +456,7 @@ for (const [path, boundary] of [
   ["src/Orbit.Domain/Entities/Habit.cs", 31500],
   ["src/Orbit.Domain/Entities/HabitInvariants.cs", 2000],
   ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 18000],
+  ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 32000],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 10500],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 15000],
 ]) {
