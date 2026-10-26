@@ -199,12 +199,12 @@ test("SES MAIL FROM DNS stays on bounce subdomains and preserves Workspace mail 
   assert.match(dmarc, /v=DMARC1; p=reject; rua=mailto:contact@useorbit\.org/)
 })
 
-test("only staging switches its transactional sender to the Workspace primary address", () => {
+test("production and staging send transactional email from the Workspace primary address", () => {
   const production = block(configuration, "production_api_values = {")
   const staging = block(configuration, "staging_api_values = merge(")
 
-  assert.match(production, /Ses__FromEmail\s*=\s*"Orbit <noreply@send\.useorbit\.org>"/)
-  assert.match(staging, /Ses__FromEmail\s*=\s*"Orbit <contact@useorbit\.org>"/)
+  assert.match(production, /Ses__FromEmail\s*=\s*"Orbit <contact@useorbit\.org>"/)
+  assert.doesNotMatch(staging, /Ses__FromEmail\s*=/)
   assert.match(production, /Ses__MarketingFromEmail\s*=\s*"Orbit <news@updates\.useorbit\.org>"/)
   assert.doesNotMatch(staging, /Ses__MarketingFromEmail\s*=/)
 })
