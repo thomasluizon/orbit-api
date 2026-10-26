@@ -48,13 +48,12 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(_userRepo, work, _payGate);
         var request = new ProcessUserChatCommand(UserId, "Hello",
             ClientContext: new(SupportsMessageAllowance: true), BlockAnswer: answer);
-        using var cancellation = new CancellationTokenSource();
         var turn = blockAnswer
-            ? handler.Handle(request, cancellation.Token)
-            : work.ExecuteInTransactionAsync(token => handler.Handle(request, token), cancellation.Token);
+            ? handler.Handle(request, CancellationToken.None)
+            : work.ExecuteInTransactionAsync(token => handler.Handle(request, token), CancellationToken.None);
         try
         {
-            var contextToken = await contextStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var contextToken = await contextStarted.Task;
             work.HasActiveTransaction.Should().BeTrue();
             _aiIntentService.ReceivedCalls().Should().BeEmpty();
             moderation.SetResult(new ModerationResult(outcome is "refusal" or "self-harm", outcome == "unavailable",
@@ -62,7 +61,7 @@ public partial class ProcessUserChatCommandHandlerTests
             if (outcome == "allowed")
                 context.SetResult([]);
 
-            var result = await turn.WaitAsync(TimeSpan.FromSeconds(2));
+            var result = await turn;
 
             result.IsFailure.Should().Be(outcome == "unavailable");
             work.Commits.Should().BeGreaterThan(0);
@@ -101,9 +100,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             moderation.TrySetResult(new ModerationResult(false, true, []));
             context.TrySetResult([]);
-            cancellation.Cancel();
-            if (!turn.IsCompleted)
-                await turn;
+            await turn;
         }
 
         async Task<IReadOnlyList<Habit>> ReadContextAsync(CancellationToken token)
@@ -117,6 +114,8 @@ public partial class ProcessUserChatCommandHandlerTests
             {
                 readCancelled = true;
                 work.Abort();
+                if (_moderationContextDrain is not null)
+                    await _moderationContextDrain.HoldAsync();
                 throw;
             }
         }

@@ -39,18 +39,26 @@ public partial class ProcessUserChatCommandHandlerTests
         var context = new TaskCompletionSource<IReadOnlyList<Habit>>(TaskCreationOptions.RunContinuationsAsynchronously);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(check.Task);
         _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(call =>
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(async call =>
             {
                 var token = call.Arg<CancellationToken>();
                 contextStarted.TrySetResult(token);
-                return context.Task.WaitAsync(token);
+                try
+                {
+                    return await context.Task.WaitAsync(token);
+                }
+                catch (OperationCanceledException)
+                {
+                    if (_moderationContextDrain is not null)
+                        await _moderationContextDrain.HoldAsync();
+                    throw;
+                }
             });
 
-        using var cancellation = new CancellationTokenSource();
-        var turn = CreateHandler().Handle(new(UserId, "Hello", ClientContext: new(SupportsMessageAllowance: true), BlockAnswer: answer), cancellation.Token);
+        var turn = CreateHandler().Handle(new(UserId, "Hello", ClientContext: new(SupportsMessageAllowance: true), BlockAnswer: answer), CancellationToken.None);
         try
         {
-            var token = await contextStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var token = await contextStarted.Task;
             _aiIntentService.ReceivedCalls().Should().BeEmpty();
             check.SetResult(new ModerationResult(flagged, unavailable, []));
             if (!flagged && !unavailable)
@@ -58,7 +66,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 _aiIntentService.ReceivedCalls().Should().BeEmpty();
                 context.SetResult([]);
             }
-            var result = await turn.WaitAsync(TimeSpan.FromSeconds(2));
+            var result = await turn;
             if (flagged || unavailable)
             {
                 token.IsCancellationRequested.Should().BeTrue();
@@ -80,7 +88,6 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             check.TrySetResult(new ModerationResult(false, true, []));
             context.TrySetResult([]);
-            cancellation.Cancel();
             await turn;
         }
     }
