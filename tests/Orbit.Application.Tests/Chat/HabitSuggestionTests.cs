@@ -85,6 +85,8 @@ public class HabitSuggestionTests
         result.Value.Id.Should().Be(original.Id);
         result.Value.Title.Should().Be(original.Title);
         result.Value.DueTime.Should().Be(new TimeOnly(22, 30));
+        await moderation.Received(1).CheckTextAsync(Arg.Is<string>(input => input.Contains(original.Title)
+            && input.Contains("weekdays at 22:30")), Arg.Any<CancellationToken>());
         await _generator.Received(1).GenerateAsync(Arg.Is<HabitSuggestionRequest>(request =>
             request.Count == 1 && request.Original == original && request.Instruction == "weekdays at 22:30"), Arg.Any<CancellationToken>());
     }

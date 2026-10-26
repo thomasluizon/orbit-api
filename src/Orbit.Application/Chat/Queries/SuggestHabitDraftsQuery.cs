@@ -1,4 +1,5 @@
 using MediatR;
+using System.Text.Json;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
@@ -27,7 +28,7 @@ public sealed class RefineHabitSuggestionQueryHandler(HabitSuggestionService sug
 {
     public async Task<Result<HabitSuggestionDraft>> Handle(RefineHabitSuggestionQuery request, CancellationToken ct)
     {
-        var check = await moderation.CheckTextAsync(request.Instruction, ct);
+        var check = await moderation.CheckTextAsync(JsonSerializer.Serialize(new { request.Draft, request.Instruction }), ct);
         if (check.Unavailable) return Result.Failure<HabitSuggestionDraft>(ErrorMessages.AiUnavailable);
         if (check.Flagged) return Result.Failure<HabitSuggestionDraft>(ErrorMessages.ContentModerationRefused);
         var reservation = await payGate.TryConsumeAiMessage(request.UserId, unitOfWork, ct);
