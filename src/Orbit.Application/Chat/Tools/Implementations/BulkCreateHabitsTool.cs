@@ -29,7 +29,7 @@ public class BulkCreateHabitsTool(
     public string Name => ToolArgumentNames.BulkCreateHabits;
 
     public string Description =>
-        "Create multiple habits with inline sub-habits." + "\n" + HabitModelInstructions.All;
+        "Create multiple habits with inline sub-habits.";
 
     public object GetParameterSchema() => new
     {
@@ -40,7 +40,7 @@ public class BulkCreateHabitsTool(
             habits = new
             {
                 type = JsonSchemaTypes.Array,
-                description = HabitModelInstructions.Batch,
+                description = "The complete set of habits to create.",
                 items = HabitItemSchema(Orbit.Application.Common.AppConstants.MaxHabitDepth)
             }
         },
@@ -378,7 +378,7 @@ public class BulkCreateHabitsTool(
             [TitleProperty] = new { type = JsonSchemaTypes.String },
             ["description"] = new { type = JsonSchemaTypes.String },
             ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
-            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = HabitModelInstructions.Schedule + " Morning and evening routines imply Day/1; weekday routines use Day/1 with days. Propose that cadence without asking.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "OneTime for a dated task; Day, Week, Month or Year for recurrence.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
@@ -386,7 +386,7 @@ public class BulkCreateHabitsTool(
             ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date." },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
             ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline." },
-            ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
+            ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "True for ongoing reduction or slip tracking." },
             ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a general habit with no schedule. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },
             ["checklist_items"] = new

@@ -13,10 +13,10 @@ public class CreateSubHabitTool(IMediator mediator) : IAiTool, IArgumentCheckToo
 
     public string Name => "create_sub_habit";
     public int Order => 1;
-    public string Description => "Create a sub-habit under an existing parent with the complete habit fields, checklist, tags, goals and nested children. " + HabitModelInstructions.All;
+    public string Description => "Create a sub-habit under an existing parent with the complete habit fields, checklist, tags, goals and nested children. ";
     public object GetParameterSchema()
     {
-        var schema = JsonSerializer.SerializeToNode(BulkCreateHabitsTool.HabitItemSchema(AppConstants.MaxHabitDepth))!.AsObject();
+        var schema = JsonSerializer.SerializeToNode(BulkCreateHabitsTool.HabitItemSchema(AppConstants.MaxHabitDepth - 1))!.AsObject();
         schema["required"] = new JsonArray("parent_habit_id", "title");
         return schema;
     }
