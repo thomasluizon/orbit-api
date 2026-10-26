@@ -123,6 +123,7 @@ public partial class ProcessUserChatCommandHandler
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
         if (!composition)
             cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
+        cards = ComposePeriodAnalytics(cards, request, context, executionResults);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
@@ -134,7 +135,6 @@ public partial class ProcessUserChatCommandHandler
             cards = EnsureHabitRankingResult(cards, request, context, executionResults);
             cards = EnsureFocusedReadResults(cards, request, context, executionResults);
             cards = ComposeHabitMonth(cards, request, context, executionResults);
-            cards = ComposePeriodAnalytics(cards, request, context, executionResults);
         }
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };

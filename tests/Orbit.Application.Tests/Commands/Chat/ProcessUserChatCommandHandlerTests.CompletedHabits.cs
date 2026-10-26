@@ -8,6 +8,7 @@ using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
@@ -56,10 +57,20 @@ public partial class ProcessUserChatCommandHandlerTests
             baseline_from = compare ? from.AddDays(-7).ToString("yyyy-MM-dd") : null,
             baseline_to = compare ? from.AddDays(-1).ToString("yyyy-MM-dd") : null
         })));
-        ContinueWithReadDirective("You completed 99 habits.\n[[orbit:read:total]]\nThere were 99 records.");
+        const string narrative = "You completed 99 habits.\n[[orbit:read:total]]\nThere were 99 records.";
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                if (call.ArgAt<Func<AiStreamEvent, Task>?>(2) is { } sink)
+                    await sink(AiStreamEvent.Delta(narrative));
+                return Result.Success(new AiResponse { TextMessage = narrative });
+            });
+        var events = new List<ChatStreamEvent>();
         var kind = compare ? "periodComparison" : "periodTotal";
         var result = await handler.Handle(new(UserId, message,
-            ClientContext: new(SupportsParts: true, PartKinds: [kind])), default);
+            ClientContext: new(SupportsParts: true, PartKinds: [kind]),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue();
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
@@ -82,6 +93,7 @@ public partial class ProcessUserChatCommandHandlerTests
             card.Metrics.PositiveLogRecords.Should().Be(5);
         }
         result.Value.AiMessage.Should().BeNullOrEmpty();
+        events.Should().NotContain(item => item.Type == "delta", "period figures must appear only in their block");
         var request = _aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync")
             .GetArguments().OfType<AiToolRequest>().Single();
         request.DynamicContext.Should().Contain("how many habits did I complete this week")
