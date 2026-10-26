@@ -61,7 +61,7 @@ public class OnboardingControllerTests
         var context = new DefaultHttpContext();
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.1");
         context.Request.Headers["X-Forwarded-For"] = "spoofed";
-        var controller = new OnboardingController(sender) { ControllerContext = new ControllerContext { HttpContext = context } };
+        var controller = new OnboardingController(sender, new BffClientIpResolver(Options.Create(new BffForwardingSettings()))) { ControllerContext = new ControllerContext { HttpContext = context } };
         var response = await controller.SuggestSetup(new("Read", "en", new("web", "token")), "signed-id", default);
         response.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeSameAs(schedule);
         context.Response.Headers[OnboardingController.InstallHeader].ToString().Should().Be("next-id");
@@ -76,7 +76,7 @@ public class OnboardingControllerTests
         var sender = Substitute.For<ISender>();
         sender.Send(Arg.Any<SuggestOnboardingSetupCommand>(), Arg.Any<CancellationToken>())
             .Returns(new OnboardingSetupResult(null, null, code));
-        var controller = new OnboardingController(sender) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        var controller = new OnboardingController(sender, new BffClientIpResolver(Options.Create(new BffForwardingSettings()))) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
         var result = (ObjectResult)await controller.SuggestSetup(new("Read", "en", null), null, default);
         result.StatusCode.Should().Be(status);
         result.Value.Should().Be(new OnboardingController.FallbackResponse(code));

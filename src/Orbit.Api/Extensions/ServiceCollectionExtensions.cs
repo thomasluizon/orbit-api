@@ -400,6 +400,7 @@ public static partial class ServiceCollectionExtensions
     {
         builder.Services.Configure<BffForwardingSettings>(
             builder.Configuration.GetSection(BffForwardingSettings.SectionName));
+        builder.Services.AddScoped<BffClientIpResolver>();
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
         builder.Services.AddRateLimiter(options =>
         {

@@ -38,7 +38,7 @@ public class DistributedRateLimitFilterTests
     [InlineData(true)]
     public async Task AnswerPolicy_OnlyAppliesWhenBlockAnswerIsPresent(bool hasAnswer)
     {
-        var filter = new DistributedRateLimitFilter("ai-resolve", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger, blockAnswersOnly: true);
+        var filter = new DistributedRateLimitFilter("ai-resolve", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger, blockAnswersOnly: true);
         _service.TryAcquireAsync("ai-resolve", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 10, 10, DateTime.UtcNow.AddMinutes(1)));
         var (context, _) = CreateExecutingContext();
@@ -63,7 +63,7 @@ public class DistributedRateLimitFilterTests
         var provider = Substitute.For<IServiceProvider>();
         provider.GetService(typeof(IDistributedRateLimitService)).Returns(_service);
         provider.GetService(typeof(IAuthSessionService)).Returns(_authSessionService);
-        provider.GetService(typeof(IOptions<BffForwardingSettings>)).Returns(Options.Create(new BffForwardingSettings()));
+        provider.GetService(typeof(BffClientIpResolver)).Returns(new BffClientIpResolver(Options.Create(new BffForwardingSettings())));
         provider.GetService(typeof(ILogger<DistributedRateLimitFilter>)).Returns(_logger);
         var attribute = typeof(AuthController).GetMethod(action)!
             .GetCustomAttribute<DistributedRateLimitAttribute>()!;
@@ -81,7 +81,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("support", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
 
-        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -101,7 +101,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("chat", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
 
-        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -125,7 +125,7 @@ public class DistributedRateLimitFilterTests
         var failure = new OperationCanceledException(cancellation.Token);
         _service.TryAcquireAsync(policy, Arg.Any<string>(), cancellation.Token).ThrowsAsync(failure);
         var filter = new DistributedRateLimitFilter(policy, _service, _authSessionService,
-            Options.Create(new BffForwardingSettings()), _logger);
+            new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, _) = CreateExecutingContext();
         context.HttpContext.RequestAborted = cancellation.Token;
         var actionCalls = 0;
@@ -147,7 +147,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("support", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 3, 3, DateTime.UtcNow.AddHours(1)));
 
-        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -170,7 +170,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
 
-        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, _) = CreateExecutingContext(new AuthController.RefreshSessionRequest(refreshToken));
 
         await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
@@ -188,7 +188,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
 
-        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, httpContext) = CreateExecutingContext(new AuthController.RefreshSessionRequest(forgedToken));
         httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
 
@@ -375,7 +375,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(true, 10, 1, DateTime.UtcNow.AddMinutes(1)));
         var (context, _) = CreateAuthenticatedExecutingContext(userId);
         context.ActionArguments["request"] = new AuthController.SendCodeRequest("a@x.com");
-        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
 
         await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
 
@@ -521,7 +521,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(rejectIp, 10, 10, DateTime.UtcNow.AddMinutes(2)));
         _service.TryAcquireAsync("auth-ip", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(!rejectIp, 30, 30, DateTime.UtcNow.AddMinutes(5)));
-        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, http) = CreateExecutingContext(new AuthController.SendCodeRequest("a@x.com"));
         http.TraceIdentifier = "req_composite";
         var nextCalled = false;
@@ -548,7 +548,7 @@ public class DistributedRateLimitFilterTests
             .Returns(new DistributedRateLimitDecision(true, 10, 1, DateTime.UtcNow.AddMinutes(1)));
         _service.TryAcquireAsync("auth-ip", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
-        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, Options.Create(new BffForwardingSettings()), _logger);
+        var filter = new DistributedRateLimitFilter("auth", _service, _authSessionService, new BffClientIpResolver(Options.Create(new BffForwardingSettings())), _logger);
         var (context, _) = CreateExecutingContext(new AuthController.SendCodeRequest("a@x.com"));
         var nextCalled = false;
 
