@@ -1,4 +1,5 @@
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
@@ -23,6 +24,8 @@ public class GetDailySummaryQueryHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly ISummaryService _summaryService = Substitute.For<ISummaryService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _dates = Substitute.For<IUserDateService>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly GetDailySummaryQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -31,10 +34,13 @@ public class GetDailySummaryQueryHandlerTests
 
     public GetDailySummaryQueryHandlerTests()
     {
+        _dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new PaginatedResponse<HabitScheduleItem>([], 1, 100, 0, 0)));
         _summaryLogReader.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitSummaryLogFact>());
         _handler = new GetDailySummaryQueryHandler(
-            _habitRepo, _userRepo, _habitLogRepo, _summaryLogReader, _payGate, _summaryService, _cache);
+            _habitRepo, _userRepo, _habitLogRepo, _summaryLogReader, _payGate, _summaryService, _cache, _dates, _mediator);
     }
 
     private static User CreateTestUser()
@@ -500,7 +506,7 @@ public class GetDailySummaryQueryHandlerTests
     {
         var capturingCache = new CapturingCache();
         var handler = new GetDailySummaryQueryHandler(
-            _habitRepo, _userRepo, _habitLogRepo, _summaryLogReader, _payGate, _summaryService, capturingCache);
+            _habitRepo, _userRepo, _habitLogRepo, _summaryLogReader, _payGate, _summaryService, capturingCache, _dates, _mediator);
 
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo");

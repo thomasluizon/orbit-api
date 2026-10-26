@@ -1,4 +1,5 @@
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -72,7 +73,7 @@ public class QueryRoundTripCountTests
             new GenericRepository<User>(context),
             new GenericRepository<HabitLog>(context),
             new HabitSummaryLogReader(context),
-            payGate, summaryService, new MemoryCache(new MemoryCacheOptions()));
+            payGate, summaryService, new MemoryCache(new MemoryCacheOptions()), SummaryDates(today), SummarySchedule());
 
         counter.Reset();
         var result = await handler.Handle(new GetDailySummaryQuery(userId, today, today, "en"),
@@ -228,13 +229,29 @@ public class QueryRoundTripCountTests
             new GenericRepository<User>(factory.Context),
             new GenericRepository<HabitLog>(factory.Context),
             new HabitSummaryLogReader(factory.Context),
-            payGate, summaryService, new MemoryCache(new MemoryCacheOptions()));
+            payGate, summaryService, new MemoryCache(new MemoryCacheOptions()), SummaryDates(DateTo), SummarySchedule());
 
         counter.Reset();
         var result = await handler.Handle(new GetDailySummaryQuery(userId, DateFrom, DateTo, "en"),
             CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         return counter.CommandCount;
+    }
+
+    private static IUserDateService SummaryDates(DateOnly today)
+    {
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(today);
+        return dates;
+    }
+
+    private static IMediator SummarySchedule()
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.Success(
+                new Orbit.Application.Common.PaginatedResponse<HabitScheduleItem>([], 1, 100, 0, 0)));
+        return mediator;
     }
 
     private static async Task<int> CountExportHabitLogLoad(int habitCount)

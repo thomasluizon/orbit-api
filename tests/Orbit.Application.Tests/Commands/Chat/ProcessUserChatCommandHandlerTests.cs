@@ -448,7 +448,8 @@ public partial class ProcessUserChatCommandHandlerTests
     private static IAiTool SummaryReadTool(IReadOnlyList<Habit>? habits = null)
     {
         var (card, revision) = Orbit.Application.Habits.Services.DailySummaryReadProjection.Project(
-            habits ?? [], Today, Today, TimeZoneInfo.Utc, 1, 0);
+            habits ?? [], Today, Today, TimeZoneInfo.Utc, 1, 0,
+            Orbit.Application.Tests.Common.DailySummaryScheduleFixture.Project(habits ?? [], Today));
         return ReadTool("get_daily_summary", new ToolResult(true,
             Payload: new DailySummaryResponse("Summary", string.Empty, false, card, revision)));
     }
