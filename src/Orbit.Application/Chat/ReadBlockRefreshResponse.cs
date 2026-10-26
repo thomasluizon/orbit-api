@@ -30,3 +30,11 @@ public sealed record GamificationReadBlockRefreshResponse(string Kind, Gamificat
             ? new(read.Kind, card, read.Read)
             : throw new InvalidOperationException("A gamification refresh must carry a gamification card.");
 }
+
+public sealed record HabitMonthReadBlockRefreshResponse(string Kind, HabitMonthCard Block, ReadBlockMetadata Read)
+{
+    public static HabitMonthReadBlockRefreshResponse From(QueryReadBlock read) =>
+        read is { Kind: "habitMonth", Block: HabitMonthCard card }
+            ? new(read.Kind, card, read.Read)
+            : throw new InvalidOperationException("A habit month refresh must carry a habit month card.");
+}

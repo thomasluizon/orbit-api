@@ -9,6 +9,20 @@ public class AstraBehaviourPromptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void HabitMonth_UsesHabitCalendarAndReservesGoogleForEvents(bool composition)
+    {
+        var prompt = Build(composition);
+
+        prompt.Should().Contain("get_habit_month");
+        prompt.Should().Contain("habit calendar").And.Contain("calendário de hábitos");
+        prompt.Should().Contain("my month").And.Contain("meu mês");
+        prompt.Should().Contain("how did my month go day by day").And.Contain("como foi meu mês dia a dia");
+        prompt.Should().Contain("get_calendar_overview only for calendar events or meetings");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void AmbiguousTargets_AskBeforeAnyWriteEvenWhenAPreviewCouldBePrepared(bool composition)
     {
         var prompt = Build(composition);

@@ -85,6 +85,9 @@ public partial class ProcessUserChatCommandHandler
             parts.Add(new ChatTextPart(ShortText(parsed.VisibleText, 3,
                 Mentions(request.Message, "steps|passos|step by step|passo a passo"))));
 
+        if (candidates is [{ Block: HabitMonthCard month }] && !hasOutcome
+            && parts is [ChatBlockPart { Kind: "habitMonth" }])
+            parts.Insert(0, new ChatTextPart(HabitMonthCardBuilder.Introduction(month)));
         CaptureComposition(request, context, results, candidates, built, missingProjection, hasOutcome);
         var cards = new ResponseCards(JoinPartText(parts), Parts: parts)
         {
@@ -130,6 +133,7 @@ public partial class ProcessUserChatCommandHandler
         {
             cards = EnsureHabitRankingResult(cards, request, context, executionResults);
             cards = EnsureFocusedReadResults(cards, request, context, executionResults);
+            cards = ComposeHabitMonth(cards, request, context, executionResults);
         }
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
@@ -351,6 +355,7 @@ public partial class ProcessUserChatCommandHandler
         "metrics" => "metrics|m[eé]tricas|progress|progresso|statistics|estat[ií]sticas",
         "streak" => "streak|sequ[eê]ncia|level|n[ií]vel|achievements?|conquistas?",
         "daySummary" => "summary|overview|resumo|day summary|resumo do dia",
+        "habitMonth" => "habits?|h[aá]bitos?|month|m[eê]s|calend[aá]rio|calendar",
         "calendar" => "calendar|calend[aá]rio|events?|eventos?|sync|sincroniza[cç][aã]o",
         "periodInsight" => "recap|retrospectiv[ao]|resumo",
         "periodTotal" => "total|count|quantos|quantas|contagem",
