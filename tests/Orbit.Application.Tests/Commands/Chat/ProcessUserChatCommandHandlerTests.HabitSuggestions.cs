@@ -28,8 +28,14 @@ public partial class ProcessUserChatCommandHandlerTests
         var draft = new HabitSuggestionDraft(Guid.NewGuid(), "📖", language == "en" ? "Read" : "Ler", "Habit",
             FrequencyUnit.Day, 1, [], Today, new(22, 0), new(22, 15), null, [],
             language == "en" ? "A quiet pause before bed." : "Uma pausa tranquila antes de dormir.");
+        var drafts = new[]
+        {
+            draft,
+            draft with { Id = Guid.NewGuid(), Title = language == "en" ? "Dim the lights" : "Diminuir a luz", DueTime = new(22, 15), DueEndTime = new(22, 20) },
+            draft with { Id = Guid.NewGuid(), Title = language == "en" ? "Stretch" : "Alongar", DueTime = new(22, 20), DueEndTime = new(22, 30) }
+        };
         generator.GenerateAsync(Arg.Any<HabitSuggestionRequest>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success<IReadOnlyList<HabitSuggestionDraft>>([draft]));
+            .Returns(Result.Success<IReadOnlyList<HabitSuggestionDraft>>(drafts));
         var service = new HabitSuggestionService(_habitRepo, _goalRepo, _userDateService, generator);
         var queryHandler = new SuggestHabitDraftsQueryHandler(service);
         _mediator.Send(Arg.Any<SuggestHabitDraftsQuery>(), Arg.Any<CancellationToken>())
@@ -37,7 +43,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var tool = new SuggestHabitsTool(_mediator);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
-        SetupAiResponse(ToolResponse(tool.Name, "suggestions", JsonSerializer.Serialize(new { instruction = message, language, count = 1 })));
+        SetupAiResponse(ToolResponse(tool.Name, "suggestions", JsonSerializer.Serialize(new { instruction = message, language, count = 3 })));
         ContinueWithReadDirective("Keep a consistent bedtime. Avoid caffeine. Spend 30 minutes winding down.");
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitSuggestions"]);
         var result = await handler.Handle(new(UserId, message, ClientContext: client), default);
@@ -45,7 +51,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Subject;
         block.Kind.Should().Be("habitSuggestions");
-        block.Block.Should().BeOfType<HabitSuggestionsCard>().Which.Drafts.Should().Equal(draft);
+        block.Block.Should().BeOfType<HabitSuggestionsCard>().Which.Drafts.Should().Equal(drafts);
+        await generator.Received(1).GenerateAsync(Arg.Is<HabitSuggestionRequest>(request => request.Count == 3), Arg.Any<CancellationToken>());
         result.Value.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text
             .Should().Be(HabitSuggestionsPresentation.Introduction(language));
         result.Value.AiMessage.Should().NotMatchRegex("[0-9]").And.NotContain("caffeine");

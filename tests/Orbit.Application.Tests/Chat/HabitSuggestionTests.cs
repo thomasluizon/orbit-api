@@ -74,7 +74,8 @@ public class HabitSuggestionTests
     public async Task Refine_ReturnsOnlyTheRequestedDraftWithStableIdentity()
     {
         var original = Draft();
-        Generate(original with { Id = Guid.NewGuid(), DueTime = new(22, 30), DueEndTime = new(22, 40), Days = [DayOfWeek.Monday] });
+        var weekdays = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
+        Generate(original with { Id = Guid.NewGuid(), DueTime = new(22, 30), DueEndTime = new(22, 40), Days = weekdays });
         var payGate = Substitute.For<IPayGateService>();
         payGate.TryConsumeAiMessage(_userId, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         var moderation = Substitute.For<IContentModerationService>();
@@ -85,6 +86,7 @@ public class HabitSuggestionTests
         result.Value.Id.Should().Be(original.Id);
         result.Value.Title.Should().Be(original.Title);
         result.Value.DueTime.Should().Be(new TimeOnly(22, 30));
+        result.Value.Days.Should().Equal(weekdays);
         await moderation.Received(1).CheckTextAsync(Arg.Is<string>(input => input.Contains(original.Title)
             && input.Contains("weekdays at 22:30")), Arg.Any<CancellationToken>());
         await _generator.Received(1).GenerateAsync(Arg.Is<HabitSuggestionRequest>(request =>
