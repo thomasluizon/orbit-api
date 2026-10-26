@@ -12,7 +12,7 @@ internal sealed class EmailMessageComposer(string frontendBaseUrl)
     private const string FooterToken = "footer";
     private const string WarningToken = "warning";
 
-    private string LogoUrl => $"{frontendBaseUrl}/logo-no-bg.png";
+    private string LogoUrl => $"{frontendBaseUrl}/pwa-512x512.png";
 
     public EmailMessage ComposeWelcome(string userName, string language)
     {
