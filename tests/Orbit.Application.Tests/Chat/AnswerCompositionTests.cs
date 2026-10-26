@@ -78,6 +78,8 @@ public partial class ProcessUserChatCommandHandlerTests
                 result.Value.Parts.Should().BeNull();
                 if (kind == "daySummary")
                     result.Value.AiMessage.Should().Be("Here is what you finished and what is left for today.");
+                else if (kind is "periodTotal" or "periodComparison")
+                    result.Value.AiMessage.Should().Contain("Completions: 3").And.NotContain("Model prose");
                 else
                     result.Value.AiMessage.Should().Contain("Model prose");
             }

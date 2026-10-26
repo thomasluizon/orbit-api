@@ -73,14 +73,15 @@ internal sealed class ReadFallbackText(string? language, string? timeZone)
         if (row.ValueType == "date") return CalendarDate(row.Value, false, includeTime: false);
         if (row.Key == "weekStartDay" && int.TryParse(row.Value, CultureInfo.InvariantCulture, out var day) && day is >= 0 and <= 6)
             return _culture.DateTimeFormat.GetDayName((DayOfWeek)day);
-        if (row.ValueType is "enum" or "boolean") return Text(row.Value switch
+        if (row.ValueType is "enum" or "boolean") return row.Value switch
         {
-            "play" => "googlePlay",
-            "app_store" => "appStore",
-            "free" => "Free",
-            "pro" => "Pro",
-            _ => row.Value
-        });
+            "play" => "Google Play",
+            "stripe" => "Stripe",
+            "app_store" => "App Store",
+            "Pro" or "pro" => "Pro",
+            "free" => Text("Free"),
+            _ => Text(row.Value)
+        };
         return row.Value;
     }
 

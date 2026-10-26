@@ -67,7 +67,7 @@ public partial class ProcessUserChatCommandHandlerTests
         ChatStreamEvent.Final(ChatResponseNegotiation.ForClient(replay, client, [])).ToJson()
             .Should().Be(ChatStreamEvent.Final(result.Value).ToJson());
         var fallback = ChatResponseNegotiation.ForClient(replay, client with { PartKinds = [] }, []);
-        fallback.Parts.Should().HaveCount(kind == "daySummary" ? 2 : 1)
+        fallback.Parts.Should().HaveCount(1)
             .And.OnlyContain(part => part is ChatTextPart);
         fallback.AiMessage.Should().NotBeNullOrWhiteSpace().And.NotContain("Duplicated prose");
         var legacy = ChatResponseNegotiation.ForClient(replay, null, []);

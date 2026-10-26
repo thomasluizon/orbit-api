@@ -41,8 +41,8 @@ public partial class ProcessUserChatCommandHandlerTests
         parts.OfType<ChatBlockPart>().Should().ContainSingle()
             .Which.Block.Should().BeOfType<DaySummaryCard>();
         parts.OfType<ChatTextPart>().Should().ContainSingle()
-            .Which.Text.Should().Be("0 goals");
-        result.Value.AiMessage.Should().Be("0 goals");
+            .Which.Text.Should().Be("Goals: 0");
+        result.Value.AiMessage.Should().Be("Goals: 0");
         parts[summaryFirst ? 0 : 1].Should().BeOfType<ChatBlockPart>();
     }
 

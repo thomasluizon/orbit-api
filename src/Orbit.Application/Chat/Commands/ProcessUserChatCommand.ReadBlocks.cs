@@ -200,13 +200,18 @@ public partial class ProcessUserChatCommandHandler
     {
         if (!ShouldComposeReadFallbacks(request, context, results)) return cards;
         var reads = SelectCompositionReads(results.QueryReads.Values.ToList(), results)
+            .Where(read => request.ClientContext?.SupportsParts == true || !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
             .DistinctBy(read => read.Read.QueryId);
         var parts = reads.Select(read => request.ClientContext?.SupportsParts == true
                 && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
             ? (ChatResponsePart)new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)
             : new ChatTextPart(ReadFallback(read.Block, context.User?.Language, context.User?.TimeZone))).ToArray();
-        return new ResponseCards(JoinPartText(parts), Parts: request.ClientContext?.SupportsParts == true ? parts : null)
-        { ServerComposedText = true };
+        return cards with
+        {
+            AiMessage = JoinPartText(parts),
+            Parts = request.ClientContext?.SupportsParts == true ? parts : null,
+            ServerComposedText = true
+        };
     }
 
     private static bool HasOnlySuccessfulFocusedReads(ToolExecutionAccumulator results) =>

@@ -184,7 +184,7 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         result.Value.HabitList.Should().BeNull("dated interactions require their own explicit capability");
         result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
-        result.Value.AiMessage.Should().Contain("Historical task").And.Contain(past.ToString("yyyy-MM-dd"));
+        result.Value.AiMessage.Should().Contain("Historical task").And.Contain(past.ToString("MM/dd/yyyy")).And.NotMatchRegex(@"\d{4}-\d{2}-\d{2}");
         using var final = JsonDocument.Parse(ChatStreamEvent.Final(result.Value).ToJson());
         var response = final.RootElement.GetProperty("response");
         response.GetProperty("habitList").ValueKind.Should().Be(JsonValueKind.Null);
@@ -223,7 +223,7 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         result.Value.RecordLists.Should().BeNullOrEmpty("recordList alone does not advertise the habitHistory subtype");
         result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
-        result.Value.AiMessage.Should().Contain(day.ToString("yyyy-MM-dd")).And.Contain("1");
+        result.Value.AiMessage.Should().Contain(day.ToString("MM/dd/yyyy")).And.Contain("1").And.NotContain("habitHistory").And.NotMatchRegex(@"\d{4}-\d{2}-\d{2}");
         using var final = JsonDocument.Parse(ChatStreamEvent.Final(result.Value).ToJson());
         var response = final.RootElement.GetProperty("response");
         response.GetProperty("recordLists").ValueKind.Should().Be(JsonValueKind.Null);
@@ -289,8 +289,8 @@ public partial class ProcessUserChatCommandHandlerTests
             result.Value.Parts!.OfType<ChatBlockPart>().Single().Block.Should().BeOfType<PeriodTotalCard>()
                 .Which.Value.Should().Be(3);
         else
-            result.Value.AiMessage.Should().Contain("positiveLogRecords").And.Contain("3").And.Contain("records")
-                .And.Contain(Today.AddDays(-6).ToString("yyyy-MM-dd")).And.Contain(Today.ToString("yyyy-MM-dd"));
+            result.Value.AiMessage.Should().Contain("Completions: 3").And.NotContain("positiveLogRecords")
+                .And.Contain(Today.AddDays(-6).ToString("MM/dd/yyyy")).And.Contain(Today.ToString("MM/dd/yyyy"));
     }
 
     private void ContinueWithReadDirective(string directive) =>
