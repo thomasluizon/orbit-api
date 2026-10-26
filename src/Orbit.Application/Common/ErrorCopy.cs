@@ -196,8 +196,6 @@ public static partial class ErrorCopy
         (ErrorCodes.ReferralCapReached, "You have used every referral on this account.", "Você já usou todas as indicações desta conta."),
         (ErrorCodes.SelfReferral, "You cannot use your own referral code.", "Você não pode usar seu próprio código de indicação."),
         (ErrorCodes.AlreadyReferred, "This account already used a referral code.", "Esta conta já usou um código de indicação."),
-        (DomainErrors.ProUsersDoNotSeeAds.Code, "Pro accounts show no ads, so there is nothing to watch here.", "Contas Pro não mostram anúncios, então não há nada para assistir aqui."),
-        (DomainErrors.AdRewardLimitReached.Code, "You collected every ad reward for today. Come back tomorrow.", "Você já coletou todas as recompensas de anúncio de hoje. Volte amanhã."),
     ];
 
     /// <summary>Streaks, freezes and gamification.</summary>

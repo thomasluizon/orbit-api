@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Net;
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -12,6 +13,8 @@ using Orbit.Application.Subscriptions;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
@@ -57,7 +60,7 @@ public partial class SubscriptionControllerTests
     }
 
     [Fact]
-    public void ClaimAdReward_RouteRemainsAvailableAndDeprecated()
+    public void AdReward_WritePathIsAbsent()
     {
         var routes = typeof(SubscriptionController).GetMethods()
             .Where(method => method.GetCustomAttributes(typeof(HttpPostAttribute), false)
@@ -65,8 +68,29 @@ public partial class SubscriptionControllerTests
                 .Any(attribute => attribute.Template == "ad-reward"))
             .ToArray();
 
-        routes.Should().ContainSingle();
-        routes[0].GetCustomAttributes(typeof(ObsoleteAttribute), false).Should().ContainSingle();
+        routes.Should().BeEmpty();
+        typeof(SubscriptionController).GetMethod("ClaimAdReward").Should().BeNull();
+        var application = typeof(SubscriptionStatusResponse).Assembly;
+        application.GetType("Orbit.Application.Subscriptions.Commands.ClaimAdRewardCommand").Should().BeNull();
+        application.GetType("Orbit.Application.Subscriptions.Commands.ClaimAdRewardCommandHandler").Should().BeNull();
+        application.GetType("Orbit.Application.Subscriptions.AdRewardResponse").Should().BeNull();
+        typeof(User).GetMethod("GrantAdReward").Should().BeNull();
+        new AgentCatalogService().HasEquivalentControllerAction("SubscriptionController.ClaimAdReward")
+            .Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
+    public void GeneratedOpenApi_AdRewardRouteIsAbsent(string file)
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "../../../../..", "src/Orbit.Api", file));
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        document.RootElement.GetProperty("paths").TryGetProperty("/api/subscriptions/ad-reward", out _)
+            .Should().BeFalse();
     }
 
     [Fact]
@@ -375,29 +399,6 @@ public partial class SubscriptionControllerTests
                 query.CountryCode == "BR" &&
                 query.IpAddress == "127.0.0.1"),
             Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ClaimAdReward_Success_ReturnsOk()
-    {
-        _mediator.Send(Arg.Any<ClaimAdRewardCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(default(AdRewardResponse)!));
-
-        var result = await _controller.ClaimAdReward(CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task ClaimAdReward_PayGateFailure_Returns403()
-    {
-        _mediator.Send(Arg.Any<ClaimAdRewardCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure<AdRewardResponse>("Pro required"));
-
-        var result = await _controller.ClaimAdReward(CancellationToken.None);
-
-        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(403);
     }
 
     [Fact]

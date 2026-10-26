@@ -83,6 +83,27 @@ public class GetProfileQueryHandlerTests
     }
 
     [Theory]
+    [InlineData(0, 2)]
+    [InlineData(-1, 0)]
+    public async Task Handle_SerializedProfileRetainsLegacyAdRewardCount(int storedDaysAgo, int expectedCount)
+    {
+        var user = CreateTestUser();
+        typeof(User).GetProperty(nameof(User.AdRewardsClaimedToday))!.SetValue(user, 2);
+        typeof(User).GetField("_lastAdRewardLocalDate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(user, Today.AddDays(storedDaysAgo));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var payload = JsonSerializer.SerializeToElement(result.Value, JsonSerializerOptions.Web);
+        payload.GetProperty("adRewardsClaimedToday").GetInt32().Should().Be(expectedCount);
+        user.AdRewardsClaimedToday.Should().Be(2);
+        user.LastAdRewardLocalDate.Should().Be(Today.AddDays(storedDaysAgo));
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(2)]
     public async Task Handle_StaleStreak_ReturnsCalculatedValueIncludingFreezes(int calculatedStreak)

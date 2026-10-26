@@ -442,7 +442,7 @@ public class PayGateServiceTests
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        user.GrantAdReward(Today, 15);
+        typeof(User).GetProperty(nameof(User.AdRewardBonusMessages))!.SetValue(user, 15);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var limit = await _sut.GetAiMessageLimit(UserId);
