@@ -68,4 +68,23 @@ public partial class ProcessUserChatCommandHandlerTests
         var unsupported = ChatResponseNegotiation.ForClient(replay, client with { PartKinds = [] }, []);
         unsupported.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
     }
+    [Theory]
+    [InlineData("en", FrequencyUnit.Day, 1, "Every day")]
+    [InlineData("en", FrequencyUnit.Week, 2, "Every 2 weeks")]
+    [InlineData("en", FrequencyUnit.Month, 3, "Every 3 months")]
+    [InlineData("pt-BR", FrequencyUnit.Day, 1, "Todo dia")]
+    [InlineData("pt-BR", FrequencyUnit.Week, 2, "A cada 2 semanas")]
+    [InlineData("pt-BR", FrequencyUnit.Year, 1, "Todo ano")]
+    public void HabitSuggestions_LegacyTextNamesTheCadenceWithoutPluralNotation(string language, FrequencyUnit unit, int quantity, string cadence)
+    {
+        var draft = new HabitSuggestionDraft(Guid.NewGuid(), "📖", "Read", "Habit", unit, quantity, [],
+            new DateOnly(2026, 3, 9), new(22, 0), new(22, 15), null, [], "A quiet pause.");
+        var card = new HabitSuggestionsCard(language, [draft, draft with { Id = Guid.NewGuid(), ExistingHabitId = Guid.NewGuid() }]);
+
+        var text = HabitSuggestionsPresentation.Readable(card);
+
+        text.Should().Contain(cadence).And.NotContain("(s)").And.NotContain("(es)").And.NotContain("2026-03-09")
+            .And.Contain(language == "en" ? "3/9/2026" : "09/03/2026")
+            .And.Contain(language == "en" ? "(Adjust habit)" : "(Ajustar hábito)");
+    }
 }
