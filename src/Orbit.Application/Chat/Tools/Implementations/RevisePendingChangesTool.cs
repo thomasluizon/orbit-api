@@ -31,7 +31,10 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         required = new[] { "pending_operation_id", "items" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        ExecuteAsync(args, userId, ct, null);
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct, AgentClientContext? clientContext)
     {
         if (!Guid.TryParse(JsonArgumentParser.GetOptionalString(args, "pending_operation_id"), out var id))
             return new(false, Error: "pending_operation_not_found");
@@ -39,7 +42,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         var stored = store.GetExecution(userId, id);
         if (stored is null || !store.IsAwaitingConfirmation(userId, id)) return new(false, Error: "pending_operation_not_found");
         var previewer = services.GetRequiredService<IPendingOperationChangePreviewer>();
-        var original = await previewer.PreviewAsync(userId, stored.OperationId, stored.Arguments, ct);
+        var original = await previewer.PreviewAsync(userId, stored.OperationId, stored.Arguments, ct, clientContext);
         if (original.IsFailure || original.Value?.Items is not { } offered) return new(false, Error: "preview_unavailable");
         var edits = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         try
@@ -60,7 +63,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         var selected = offered.Where(item => !removed.Contains(item.ItemId)).Select(item =>
             new RevisedPendingOperationItem(item.ItemId, edits.TryGetValue(item.ItemId, out var change) ? change : null)).ToArray();
         var revision = await services.GetRequiredService<PendingOperationRevisionService>().ReviseAsync(userId, id,
-            new(original.Value.PreviewFingerprint!, selected), ct);
+            new(original.Value.PreviewFingerprint!, selected, clientContext), ct);
         if (!revision.IsSuccess || revision.Preview is not { } preview) return new(false, Error: revision.Error ?? "invalid_revision");
         var capability = services.GetRequiredService<IAgentCatalogService>().GetCapability(stored.CapabilityId)
             ?? throw new InvalidOperationException("The pending operation capability is missing.");

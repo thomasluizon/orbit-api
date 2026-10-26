@@ -15,7 +15,7 @@ public partial class ProcessUserChatCommandHandler
         var arguments = AccountChangeSet.BuildArguments(members.Select(member => member!));
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
-        var preview = await AccountChangeSet.PreviewAsync(request.UserId, arguments, previewer, ct);
+        var preview = await AccountChangeSet.PreviewAsync(request.UserId, arguments, previewer, ct, request.ClientContext);
         if (preview is null) return;
         var capability = ai.CatalogService.GetCapability(AccountChangeSet.CapabilityId)
             ?? throw new InvalidOperationException("The account changes capability is missing.");

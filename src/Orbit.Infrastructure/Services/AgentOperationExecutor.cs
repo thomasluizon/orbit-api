@@ -79,6 +79,10 @@ public partial class AgentOperationExecutor(
         if (ownershipDenialReason is not null)
             return await DenyOwnershipAsync(execution, ownershipDenialReason, cancellationToken);
 
+        if (operation.IsMutation && HasUnsupportedPlacementApproval(request, arguments))
+            return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
+                AgentPolicyDecisionStatus.Denied, capability, "placement_not_supported"), cancellationToken);
+
         if (operation.IsMutation && request.ConfirmationToken is { } token)
         {
             var confirmed = pendingOperationStore.GetConfirmedExecution(request.UserId, capability.Id,
@@ -89,7 +93,7 @@ public partial class AgentOperationExecutor(
             if (confirmed is not null && request.Surface == AgentExecutionSurface.Chat)
             {
                 var current = await changePreviewer.TryPreviewAsync(request.UserId, operation.Id,
-                    arguments, logger, cancellationToken);
+                    arguments, logger, cancellationToken, request.ClientContext);
                 if (string.IsNullOrWhiteSpace(confirmed.PreviewFingerprint) || current.IsFailure
                     || current.Value?.Items is not { Count: > 0 }
                     || current.Value.PreviewFingerprint != confirmed.PreviewFingerprint)
@@ -99,6 +103,11 @@ public partial class AgentOperationExecutor(
         }
         return await ExecuteWithPolicyAsync(execution, cancellationToken);
     }
+
+    private static bool HasUnsupportedPlacementApproval(AgentExecuteOperationRequest request, JsonElement arguments) =>
+        request.Surface == AgentExecutionSurface.Chat && request.ConfirmationToken is not null
+        && request.ClientContext?.SupportsPendingOperationPlacement != true
+        && PendingOperationPlacementNegotiation.RequiresSupport(request.OperationId, arguments);
 
     private static bool AsksClarificationFirst(IAiTool? tool, JsonElement arguments) =>
         tool is IClarificationPrecheckTool precheck && precheck.NeedsClarification(arguments);
@@ -293,7 +302,7 @@ public partial class AgentOperationExecutor(
         try
         {
             return await changePreviewer.TryPreviewAsync(execution.Request.UserId, execution.Operation.Id,
-                execution.Arguments, logger, cancellationToken);
+                execution.Arguments, logger, cancellationToken, execution.Request.ClientContext);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -493,6 +502,8 @@ public partial class AgentOperationExecutor(
         OperationExecutionContext execution,
         CancellationToken cancellationToken)
     {
+        if (tool is Orbit.Application.Chat.Tools.Implementations.RevisePendingChangesTool revisionTool)
+            return await revisionTool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken, execution.Request.ClientContext);
         if (tool is not IConcurrencyRetryableTool)
             return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
 

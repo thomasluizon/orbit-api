@@ -7,6 +7,7 @@ using Orbit.Domain.Entities;
 using Orbit.Application.Chat;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
@@ -176,8 +177,12 @@ public class PendingAgentOperationStore(
         return items.Where(item => item.ValueKind == JsonValueKind.Object
                 && item.TryGetProperty("title", out var title) && title.ValueKind == JsonValueKind.String)
             .Select(item => new PendingHabitCreation(item.GetProperty("title").GetString()!,
-                item.TryGetProperty("parent_habit_id", out _) ? ReadParent(item) : sharedParent)).ToArray();
+                IsNewParent(item) ? null : item.TryGetProperty("parent_habit_id", out _) ? ReadParent(item) : sharedParent)).ToArray();
     }
+
+    private static bool IsNewParent(JsonElement arguments) =>
+        arguments.TryGetProperty(HabitPlacementRecommendation.Argument, out var placement)
+        && placement.ValueKind == JsonValueKind.String && placement.GetString() == HabitPlacement.NewParent;
 
     private static Guid? ReadParent(JsonElement arguments) =>
         arguments.TryGetProperty("parent_habit_id", out var parent) && parent.ValueKind == JsonValueKind.String

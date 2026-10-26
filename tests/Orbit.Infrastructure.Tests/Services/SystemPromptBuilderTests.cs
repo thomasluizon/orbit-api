@@ -21,7 +21,8 @@ public class SystemPromptBuilderTests
             BlockFirstComposition: blockFirst);
         var prompt = builder.BuildStatic(request) + builder.BuildDynamic(request);
 
-        prompt.Should().Contain("one parent habit with sub_habits");
+        prompt.Should().Contain("account with no structure defaults to one parent with sub_habits");
+        prompt.Should().Contain("destination's checklist and sub-habits");
         prompt.Should().Contain("morning or evening routine implies Day/1");
         prompt.Should().Contain("Only ask when no usable preview can be proposed");
         prompt.Should().NotContain("Ask the user which they prefer if unclear");

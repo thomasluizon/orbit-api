@@ -155,7 +155,18 @@ public record PendingOperationItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<PendingOperationValidationError>? ValidationErrors = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<PendingOperationFieldOptions>? FieldOptions = null);
+    IReadOnlyList<PendingOperationFieldOptions>? FieldOptions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    PendingOperationPlacement? Placement = null);
+
+public record PendingOperationPlacement(
+    string Selected,
+    string Recommended,
+    string ReasonKey,
+    IReadOnlyDictionary<string, string> Reason,
+    IReadOnlyList<string> Alternatives,
+    Guid DestinationId,
+    string DestinationName);
 
 public record PendingOperationFieldOptions(string Field, bool Required, IReadOnlyList<PendingOperationFieldOption> Options);
 
@@ -219,7 +230,8 @@ public record AgentExecuteOperationRequest(
     string? CorrelationId = null,
     bool IncludeChangePreview = false,
     Func<Task>? OnExecutionStarted = null,
-    bool PreviewOnly = false);
+    bool PreviewOnly = false,
+    AgentClientContext? ClientContext = null);
 
 public record AgentOperationResult(
     string OperationId,
@@ -281,7 +293,8 @@ public record AgentClientContext(
     bool? SupportsDatedHabitListCard = null,
     bool? SupportsHabitHistoryCard = null,
     bool? SupportsFollowUpContext = null,
-    bool? SupportsMessageAllowance = null);
+    bool? SupportsMessageAllowance = null,
+    bool? SupportsPendingOperationPlacement = null);
 
 public record AgentContextSnapshot(
     string Plan,
