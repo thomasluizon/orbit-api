@@ -88,19 +88,6 @@ public partial class SubscriptionController(
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
-    [HttpPost("ad-reward")]
-    [Obsolete]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> ClaimAdReward(CancellationToken cancellationToken)
-    {
-        var command = new ClaimAdRewardCommand(HttpContext.GetUserId());
-        var result = await mediator.Send(command, cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v));
-    }
-
 #pragma warning disable S6932 // HandleWebhook preserves the raw Stripe body and Stripe-Signature header for webhook signature verification before dispatch. https://github.com/thomasluizon/orbit-tickets/issues/230
     [HttpPost("webhook")]
     [AllowAnonymous]

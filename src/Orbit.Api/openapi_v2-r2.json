@@ -12827,7 +12827,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/Profile/onboarding": {
@@ -14225,89 +14226,6 @@
             }
           }
         }
-      }
-    },
-    "/api/subscriptions/ad-reward": {
-      "post": {
-        "tags": [
-          "Subscription"
-        ],
-        "parameters": [
-          {
-            "name": "api-version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": true
       }
     },
     "/api/subscriptions/webhook": {
@@ -16715,7 +16633,8 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "deprecated": true
           }
         }
       },
@@ -24586,7 +24505,8 @@
               "string"
             ]
           }
-        }
+        },
+        "deprecated": true
       },
       "SetLanguageRequest": {
         "required": [
