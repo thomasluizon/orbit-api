@@ -42,7 +42,8 @@ public class SystemPromptBuilderTests
         var prompt = new SystemPromptBuilder().BuildDynamic(new PromptBuildRequest([], UserToday: new DateOnly(2026, 4, 3), BlockFirstComposition: blockFirst));
         if (blockFirst)
         {
-            prompt.Should().Contain("Successful data answers lead with their typed block");
+            prompt.Should().Contain("at most one short framing sentence from the first round, then the typed block");
+            prompt.Should().Contain("contains no figures or claims about the result");
             prompt.Should().NotContain("Use bullet points with newlines for readability");
         }
         else

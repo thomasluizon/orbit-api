@@ -137,7 +137,8 @@ public partial class ProcessUserChatCommandHandler
             + "For an unsupported subtype, answer from the queried facts in text.");
         if (UsesComposition(request, context))
             prompt = string.Join(Environment.NewLine, prompt,
-                "The server composes the leading answer block from successful typed reads; directives are optional. Call only the reads needed for the request. Additional blocks require explicitly requested distinct subjects. Put clarification in ask and every write in its existing approval preview. Do not repeat block facts in prose.");
+                "The server composes the answer blocks from successful typed reads, preceded by at most one short framing sentence from the first round. Call only the reads needed for the request. Additional blocks require explicitly requested distinct subjects. Put clarification in ask and every write in its existing approval preview. Do not repeat block facts in prose.",
+                TerminalReadDirective.Instruction);
         else if (client?.SupportsParts == true)
             prompt = string.Join(Environment.NewLine, prompt,
                 "Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");
