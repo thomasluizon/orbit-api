@@ -173,7 +173,7 @@ public sealed class PendingOperationRevisionServiceTests
         var original = (await previewer.PreviewAsync(_userId, "bulk_update_habits", arguments)).Value;
         var service = new PendingOperationRevisionService(_store, previewer,
             new RevisePendingOperationRequestValidator(), _tools);
-        using var edits = JsonDocument.Parse("{\"title\":\"Changed\"}");
+        using var edits = JsonDocument.Parse("{\"habit_id\":\"Changed\"}");
         var item = new RevisedPendingOperationItem(
             caseName == "unlisted_item" ? Guid.NewGuid().ToString() : habit.Id.ToString(),
             caseName == "forbidden_field" ? edits.RootElement.Clone() : null);

@@ -19,7 +19,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
-            && (operation.ReadBlock is not null || operation.Payload is HabitRankingResponse));
+            && (operation.ReadBlock is not null || operation.Payload is HabitRankingResponse or HabitSuggestionsCard));
 
     private ChatResponse CompleteCompositionWithoutNarrative(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
@@ -66,6 +66,7 @@ public partial class ProcessUserChatCommandHandler
     private ResponseCards ComposeAnswerCore(ParsedResponseDirectives parsed, bool truncated, string? language,
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
+        if (SuggestionAnswer(results) is { } suggestions) return suggestions;
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)
@@ -97,7 +98,7 @@ public partial class ProcessUserChatCommandHandler
         return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday, results) : cards;
     }
 
-    private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyAsync(
+    private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyCoreAsync(
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults,
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
@@ -111,13 +112,8 @@ public partial class ProcessUserChatCommandHandler
         var responseText = parsedResponse.CardText;
         if (aiResponse.IsTruncated)
             responseText = AppendTruncationNotice(responseText, language);
-        var cards = composition
-            ? ComposeAnswer(parsedResponse, aiResponse.IsTruncated, language, request, context, executionResults)
-            : request.ClientContext?.SupportsParts == true
-            ? await BuildResponsePartsAsync(parsedResponse, aiResponse.IsTruncated, language,
-                request, context, executionResults, cancellationToken)
-            : await TryBuildResponseCardsAsync(
-                responseText, request, context, executionResults, cancellationToken);
+        var cards = await BuildReplyCardsAsync(parsedResponse, responseText, aiResponse.IsTruncated, language,
+            request, context, executionResults, cancellationToken);
         if (!composition)
             cards = ApplyResolutionToCards(cards, executionResults, language);
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
@@ -125,10 +121,10 @@ public partial class ProcessUserChatCommandHandler
             cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
         cards = ComposePeriodAnalytics(cards, request, context, executionResults);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
-            composition ? request with { StreamSink = null } : request,
+            composition && !executionResults.IsPreviewDiscussion ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
         var aiMessage = cards.ServerComposedText ? cards.AiMessage : groundedReply.Message;
-        followUps = groundedReply.FollowUps;
+        followUps = executionResults.IsPreviewDiscussion ? null : groundedReply.FollowUps;
         cards = ApplyGroundingToCards(cards, aiMessage);
         if (!composition)
         {
@@ -160,8 +156,28 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool HasPendingWritePreview(ToolExecutionAccumulator results) => results.PendingOperations.Count > 0;
 
+    private async Task<ResponseCards> BuildReplyCardsAsync(ParsedResponseDirectives parsed, string? responseText,
+        bool truncated, string? language, ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, CancellationToken ct)
+    {
+        if (results.IsPreviewDiscussion)
+        {
+            var sentence = PreviewOpinionSentence(parsed.VisibleText);
+            return new ResponseCards(sentence,
+                Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(sentence)] : null);
+        }
+        if (UsesComposition(request, context))
+            return ComposeAnswer(parsed, truncated, language, request, context, results);
+        return request.ClientContext?.SupportsParts == true
+            ? await BuildResponsePartsAsync(parsed, truncated, language, request, context, results, ct)
+            : await TryBuildResponseCardsAsync(responseText, request, context, results, ct);
+    }
+
     private static bool SuppressPreviewNarrative(ToolExecutionAccumulator results) =>
-        HasPendingWritePreview(results) && !HasResolutionQuestion(results) && !results.HasBudgetRecovery;
+        HasPendingWritePreview(results) && !results.IsPreviewDiscussion && !HasResolutionQuestion(results) && !results.HasBudgetRecovery;
+
+    private static string PreviewOpinionSentence(string? text) => Regex.Split(ShortText(text, 1), @"(?<=[.!?])\s+",
+        RegexOptions.None, TimeSpan.FromSeconds(1))[0];
 
     private static ResponseCards ApplyBudgetRecovery(ResponseCards cards, ToolExecutionAccumulator results,
         AiResponse response, ProcessUserChatCommand request)

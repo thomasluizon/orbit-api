@@ -14,6 +14,20 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AgentPolicyEvaluatorTests : IDisposable
 {
+    [Theory]
+    [InlineData(AgentAuthMethod.ApiKey, false)]
+    [InlineData(AgentAuthMethod.ApiKey, true)]
+    [InlineData(AgentAuthMethod.OAuth, false)]
+    [InlineData(AgentAuthMethod.OAuth, true)]
+    public void HabitSuggestions_RequireGoalsScopeAlongsideHabitsScope(AgentAuthMethod auth, bool readGoals)
+    {
+        var scopes = readGoals ? new[] { AgentScopes.ReadHabits, AgentScopes.ReadGoals } : [AgentScopes.ReadHabits];
+        var result = _policyEvaluator.Evaluate(new(AgentCapabilityIds.HabitsRead, _userId,
+            AgentExecutionSurface.Chat, auth, scopes, "suggest_habits", "Suggest habits"));
+        result.Status.Should().Be(readGoals ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied);
+        if (!readGoals) result.Reason.Should().Be($"missing_scope:{AgentScopes.ReadGoals}");
+    }
+
     private readonly OrbitDbContext _dbContext;
     private readonly AgentCatalogService _catalogService = new();
     private readonly PendingAgentOperationStore _pendingOperationStore;

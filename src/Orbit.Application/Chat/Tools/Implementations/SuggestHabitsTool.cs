@@ -1,0 +1,36 @@
+using System.Text.Json;
+using MediatR;
+using Orbit.Application.Chat.Queries;
+
+namespace Orbit.Application.Chat.Tools.Implementations;
+
+public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
+{
+    public string Name => "suggest_habits";
+    public bool IsReadOnly => true;
+    public string Description => "Suggest personal, editable habit drafts from current habits, goals and free schedule time. "
+        + "Use for suggest, ideas, what habits should I, recommend, sugira, sugestões, ideias, quais hábitos, recomende. "
+        + "Return habitSuggestions instead of a plain list. Pass the person's request and its language. "
+        + "This never creates habits. The person edits a draft and requests its approval preview before saving.";
+
+    public object GetParameterSchema() => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
+        {
+            instruction = new { type = JsonSchemaTypes.String, maxLength = 1000 },
+            language = new { type = JsonSchemaTypes.String, @enum = new[] { "en", "pt", "pt-BR" } },
+            count = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = 5 }
+        },
+        required = new[] { "instruction", "language" }
+    };
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var instruction = JsonArgumentParser.GetOptionalString(args, "instruction") ?? string.Empty;
+        var language = JsonArgumentParser.GetOptionalString(args, "language") ?? "en";
+        var count = JsonArgumentParser.GetOptionalInt(args, "count") ?? 3;
+        var result = await mediator.Send(new SuggestHabitDraftsQuery(userId, instruction, language, count), ct);
+        return result.IsSuccess ? new(true, Payload: result.Value) : ToolResult.FromFailure(result);
+    }
+}

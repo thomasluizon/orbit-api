@@ -15,13 +15,15 @@ public sealed partial class PendingOperationRevisionService
             return Failure("stale_preview");
         var offered = items.ToDictionary(item => item.ItemId, StringComparer.Ordinal);
         if (request.Items.Any(item => !offered.ContainsKey(item.ItemId))) return Failure("item_not_offered");
-        if (EditError(request.Items, offered) is { } editError) return Failure(editError);
+        var members = AccountChangeSet.Read(original.Value.ExecutionArguments ?? execution.Arguments);
+        if (members is null) return Failure("invalid_change_set");
+        if (EditError(request.Items, offered, itemId => members[int.Parse(itemId.AsSpan(0, itemId.IndexOf('/')),
+                System.Globalization.CultureInfo.InvariantCulture)].OperationId)
+            is { } editError) return Failure(editError);
         var expected = AgentOperationFingerprint.Compute(execution.OperationId, execution.Arguments.GetRawText());
         if (request.Items.Count == 0)
             return store.Cancel(userId, execution.PendingOperationId, expected)
                 ? new(true, null, null, null, Cancelled: true) : Failure("revision_conflict");
-        var members = AccountChangeSet.Read(original.Value.ExecutionArguments ?? execution.Arguments);
-        if (members is null) return Failure("invalid_change_set");
         var revisedMembers = await ReviseChangeSetMembersAsync(userId, members, request, items, ct, request.ClientContext);
         if (revisedMembers is null) return Failure("invalid_revision");
         var revised = JsonSerializer.SerializeToElement(new { operations = revisedMembers, reservations = AccountChangeSet.Reservations(execution.Arguments) });
