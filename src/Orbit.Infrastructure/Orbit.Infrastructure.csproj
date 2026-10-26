@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Orbit.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Orbit.Application.Tests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
