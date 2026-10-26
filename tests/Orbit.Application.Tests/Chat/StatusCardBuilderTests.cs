@@ -173,6 +173,20 @@ public class StatusCardBuilderTests
     }
 
     [Fact]
+    public void Calendar_AccountEmailIsNotAnEventRowLabel()
+    {
+        var item = new CalendarEventItem("meeting", "Team meeting", null, "2026-10-01", null, null,
+            false, null, [], CalendarName: "person@example.com");
+
+        var card = StatusCardBuilder.BuildCalendar(new CalendarOverviewPayload([item], null, []))!;
+
+        card.Events.Should().ContainSingle().Which.CalendarName.Should().BeNull();
+        card.Events[0].Title.Should().Be(item.Title);
+        card.Events[0].Id.Should().Be(item.Id);
+        JsonSerializer.Serialize(card).Should().NotContain("person@example.com");
+    }
+
+    [Fact]
     public void Calendar_TwentyFiveEvents_CapsAtTenAndOmitsGatedSync()
     {
         var events = Enumerable.Range(0, 25)

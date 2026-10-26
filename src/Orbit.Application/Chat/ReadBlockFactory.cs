@@ -20,7 +20,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
 {
     public static bool Supports(string tool) => tool is "query_habits" or "query_goals" or "review_goals"
         or "get_habit_metrics" or "get_period_analytics" or "get_habit_history" or "get_daily_summary"
-        or "get_retrospective" or "get_calendar_overview" or "get_gamification_overview"
+        or "get_retrospective" or "get_habit_month" or "get_calendar_overview" or "get_gamification_overview"
         or "get_notifications" or "list_tags" or "get_checklist_templates" or "get_api_keys"
         or "get_profile" or "get_subscription_overview" or "get_referral_overview";
 
@@ -48,6 +48,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             node["date_from"] ??= Iso(from);
             node["date_to"] ??= tool == "get_daily_summary" ? node["date_from"]!.DeepClone() : Iso(to);
         }
+        ResolveHabitMonth(tool, node, args, today);
         ApplyDefaults(tool, node);
         if (tool is "get_daily_summary" or "get_retrospective")
         {
@@ -77,6 +78,17 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             }
         }
         return JsonSerializer.SerializeToElement(node);
+    }
+
+    private static void ResolveHabitMonth(string tool, JsonObject node, JsonElement args, DateOnly today)
+    {
+        if (tool != "get_habit_month") return;
+        var window = HabitCalendarWindow.Resolve(JsonArgumentParser.ParseDateOnly(args, "date_from"),
+            JsonArgumentParser.ParseDateOnly(args, "date_to"), today);
+        if (window.IsFailure) throw new ArgumentException(window.Error);
+        node["date_from"] = window.Value.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        node["date_to"] = window.Value.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        node["language"] ??= "en";
     }
 
     private static void ValidateDates(JsonElement args)
@@ -157,6 +169,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         DailySummaryResponse summary => new("daySummary", summary.ReadCard, summary.SourceRevision),
         RetrospectiveResponse retrospective => new("periodInsight", PeriodInsightCardBuilder.Build(retrospective),
             retrospective.SourceRevision, retrospective.FromCache),
+        HabitMonthCard month => new("habitMonth", month),
         CalendarOverviewPayload calendar => CalendarProjection(calendar, offset),
         GamificationOverviewPayload gamification => GamificationProjection(gamification),
         ProfileResponse profile => new("accountRows", AccountRowsCardBuilder.Profile(profile)),
@@ -214,6 +227,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
         DaySummaryCard card => card with { Read = read },
         StreakCard card => card with { Read = read },
         GamificationCard card => card with { Read = read },
+        HabitMonthCard card => card with { Read = read },
         CalendarCard card => card with { Read = read },
         RecordListCard card => card with { Read = read },
         AccountRowsCard card => card with { Read = read },

@@ -121,7 +121,7 @@ public static class StatusCardBuilder
                     : item.EndUtc?.ToString("O", CultureInfo.InvariantCulture) ?? item.EndTime,
                 item.StartTime is null,
                 item.Id,
-                item.CalendarName))
+                item.CalendarName?.Contains('@') == true ? null : item.CalendarName))
             .ToList();
         var sync = payload.AutoSyncState is { } state
             ? new CalendarCardSync(state.Enabled, state.Status.ToString(), state.LastSyncedAt, state.HasGoogleConnection)

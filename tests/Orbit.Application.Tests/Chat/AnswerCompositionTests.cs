@@ -68,14 +68,19 @@ public partial class ProcessUserChatCommandHandlerTests
             result.IsSuccess.Should().BeTrue(toolName + ": " + mode);
             if (mode == "parts")
             {
-                result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-                    .Which.Kind.Should().Be(kind);
-                result.Value.AiMessage.Should().BeNullOrEmpty();
+                result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Kind.Should().Be(kind);
+                if (kind == "daySummary")
+                    result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().NotMatchRegex(@"\d");
+                else
+                    result.Value.AiMessage.Should().BeNullOrEmpty();
             }
             else if (mode == "legacy")
             {
                 result.Value.Parts.Should().BeNull();
-                result.Value.AiMessage.Should().Contain("Model prose");
+                if (kind == "daySummary")
+                    result.Value.AiMessage.Should().Be("Here is what you finished and what is left for today.");
+                else
+                    result.Value.AiMessage.Should().Contain("Model prose");
             }
             else
             {

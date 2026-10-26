@@ -225,7 +225,11 @@ public sealed class ProactivePartsTests
             summaryLogs.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(), Arg.Any<CancellationToken>())
                 .Returns(new[] { new HabitSummaryLogFact(_habit.Id, Day.AddDays(-2), 1) });
             var summary = new GetDailySummaryQueryHandler(Habits, users, Substitute.For<IGenericRepository<HabitLog>>(),
-                summaryLogs, gate, Substitute.For<ISummaryService>(), _cache);
+                summaryLogs, gate, Substitute.For<ISummaryService>(), _cache, Dates, Mediator);
+            Mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
+                .Returns(call => Result.Success(new PaginatedResponse<HabitScheduleItem>(
+                    Orbit.Application.Tests.Common.DailySummaryScheduleFixture.Project([_habit], call.Arg<GetHabitScheduleQuery>().DateFrom!.Value),
+                    1, 100, 1, 1)));
             Mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
                 .Returns(call => summary.Handle(call.Arg<GetDailySummaryQuery>(), call.Arg<CancellationToken>()));
             var retrospective = new GetRetrospectiveQueryHandler(Habits, gate, Narratives,

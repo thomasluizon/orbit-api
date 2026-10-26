@@ -89,12 +89,16 @@ public partial class ProcessUserChatCommandHandler
             parts.Add(new ChatTextPart(ShortText(parsed.VisibleText, 3,
                 Mentions(request.Message, "steps|passos|step by step|passo a passo"))));
 
+        if (candidates is [{ Block: HabitMonthCard month }] && !hasOutcome
+            && parts is [ChatBlockPart { Kind: "habitMonth" }])
+            parts.Insert(0, new ChatTextPart(HabitMonthCardBuilder.Introduction(month)));
         CaptureComposition(request, context, results, candidates, built, missingProjection, hasOutcome);
-        return new ResponseCards(JoinPartText(parts), Parts: parts)
+        var cards = new ResponseCards(JoinPartText(parts), Parts: parts)
         {
             ServerComposedText = candidates.Count > 0 || status is not null || hasOutcome || results.AskBlock is not null
             || results.LastSuccessfulOperation("get_habit_ranking") is not null
         };
+        return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday, results) : cards;
     }
 
     private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyAsync(
@@ -121,6 +125,8 @@ public partial class ProcessUserChatCommandHandler
         if (!composition)
             cards = ApplyResolutionToCards(cards, executionResults, language);
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
+        if (!composition)
+            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
@@ -131,6 +137,7 @@ public partial class ProcessUserChatCommandHandler
         {
             cards = EnsureHabitRankingResult(cards, request, context, executionResults);
             cards = EnsureFocusedReadResults(cards, request, context, executionResults);
+            cards = ComposeHabitMonth(cards, request, context, executionResults);
         }
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };
@@ -370,6 +377,7 @@ public partial class ProcessUserChatCommandHandler
         "metrics" => "metrics|m[eé]tricas|progress|progresso|statistics|estat[ií]sticas",
         "streak" => "streak|sequ[eê]ncia|level|n[ií]vel|achievements?|conquistas?",
         "daySummary" => "summary|overview|resumo|day summary|resumo do dia",
+        "habitMonth" => "habits?|h[aá]bitos?|month|m[eê]s|calend[aá]rio|calendar",
         "calendar" => "calendar|calend[aá]rio|events?|eventos?|sync|sincroniza[cç][aã]o",
         "periodInsight" => "recap|retrospectiv[ao]|resumo",
         "periodTotal" => "total|count|quantos|quantas|contagem",

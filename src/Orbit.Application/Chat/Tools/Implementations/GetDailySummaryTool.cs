@@ -34,7 +34,8 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
         var language = JsonArgumentParser.GetOptionalString(args, "language") ?? "en";
 
         var result = await mediator.Send(
-            new GetDailySummaryQuery(userId, dateFrom, dateTo, language, JsonArgumentParser.GetOptionalBool(args, "generate_narrative") ?? true), ct);
+            new GetDailySummaryQuery(userId, dateFrom, dateTo, language,
+                JsonArgumentParser.GetOptionalBool(args, "generate_narrative") ?? dateFrom != dateTo), ct);
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)

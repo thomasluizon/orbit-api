@@ -34,7 +34,9 @@ public class GetDailySummaryQueryHandler(
     IHabitSummaryLogReader summaryLogReader,
     IPayGateService payGate,
     ISummaryService summaryService,
-    IMemoryCache cache) : IRequestHandler<GetDailySummaryQuery, Result<DailySummaryResponse>>
+    IMemoryCache cache,
+    IUserDateService userDateService,
+    IMediator mediator) : IRequestHandler<GetDailySummaryQuery, Result<DailySummaryResponse>>
 {
     public async Task<Result<DailySummaryResponse>> Handle(
         GetDailySummaryQuery request,
@@ -62,7 +64,7 @@ public class GetDailySummaryQueryHandler(
         var nowAtUtc = DateTime.UtcNow;
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, userTimeZone);
-        var userToday = DateOnly.FromDateTime(userNow);
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var currentLocalTime = request.DateFrom == userToday && request.DateTo == request.DateFrom
             ? TimeOnly.FromDateTime(userNow)
             : (TimeOnly?)null;
@@ -76,6 +78,28 @@ public class GetDailySummaryQueryHandler(
         cache.TryGetValue(cacheKey, out ScopedSummary? cached);
         var fromCache = request.GenerateNarrative && cached is not null
             && cached.From == request.DateFrom && cached.To == request.DateTo;
+
+        var scheduleItems = new List<HabitScheduleItem>();
+        var page = 1;
+        int totalPages;
+        do
+        {
+            var schedule = await mediator.Send(new GetHabitScheduleQuery(request.UserId,
+                request.DateFrom, request.DateTo, IncludeOverdue: true, Page: page,
+                PageSize: AppConstants.MaxPageSize), cancellationToken);
+            if (schedule.IsFailure)
+                return schedule.PropagateError<DailySummaryResponse>();
+            scheduleItems.AddRange(schedule.Value.Items);
+            totalPages = schedule.Value.TotalPages;
+            page++;
+        } while (page <= totalPages);
+
+        if (!request.GenerateNarrative && request.DateFrom == request.DateTo)
+        {
+            var (dayCard, dayRevision) = DailySummaryReadProjection.Project([], request.DateFrom,
+                request.DateTo, userTimeZone, user.WeekStartDay, user.CurrentStreak, scheduleItems);
+            return Result.Success(new DailySummaryResponse(string.Empty, string.Empty, false, dayCard, dayRevision));
+        }
 
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
@@ -101,7 +125,7 @@ public class GetDailySummaryQueryHandler(
             summaryHabits, userToday, cancellationToken);
 
         var (readCard, revision) = DailySummaryReadProjection.Project(summaryHabits,
-            request.DateFrom, request.DateTo, userTimeZone, user.WeekStartDay, user.CurrentStreak);
+            request.DateFrom, request.DateTo, userTimeZone, user.WeekStartDay, user.CurrentStreak, scheduleItems);
         if (!request.GenerateNarrative || fromCache)
             return Result.Success(new DailySummaryResponse(fromCache ? cached!.Content.Summary : string.Empty,
                 string.Empty, fromCache, readCard, revision));
