@@ -5,6 +5,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Queries;
 using Orbit.Application.Chat.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -25,6 +26,7 @@ public class HabitSuggestionTests
     private HabitSuggestionService Service(params Habit[] habits)
     {
         _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_today);
+        _dates.GetUserWeekStartDayAsync(_userId, Arg.Any<CancellationToken>()).Returns(1);
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToArray());
         return new(_habits, _goals, _dates, _generator);
@@ -73,7 +75,11 @@ public class HabitSuggestionTests
     {
         var original = Draft();
         Generate(original with { Id = Guid.NewGuid(), DueTime = new(22, 30), DueEndTime = new(22, 40), Days = [DayOfWeek.Monday] });
-        var handler = new RefineHabitSuggestionQueryHandler(Service());
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.TryConsumeAiMessage(_userId, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var moderation = Substitute.For<IContentModerationService>();
+        moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
+        var handler = new RefineHabitSuggestionQueryHandler(Service(), payGate, Substitute.For<IUnitOfWork>(), moderation);
         var result = await handler.Handle(new(_userId, original, "weekdays at 22:30", "en"), default);
         result.IsSuccess.Should().BeTrue();
         result.Value.Id.Should().Be(original.Id);
@@ -144,5 +150,40 @@ public class HabitSuggestionTests
         new SuggestHabitDraftsQueryValidator().Validate(new SuggestHabitDraftsQuery(_userId, "ideas", "en", count)).IsValid.Should().BeFalse();
         new RefineHabitSuggestionQueryValidator().Validate(new RefineHabitSuggestionQuery(_userId, Draft() with { Emoji = "" }, "easier")).IsValid.Should().BeFalse();
         new PreviewHabitSuggestionCommandValidator().Validate(new PreviewHabitSuggestionCommand(_userId, Draft() with { DueEndTime = new(20, 0) })).IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("moderated")]
+    [InlineData("unavailable")]
+    [InlineData("allowance")]
+    public async Task Refinement_RespectsModerationAndMessageAllowance(string blockedBy)
+    {
+        var moderation = Substitute.For<IContentModerationService>();
+        moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(blockedBy == "moderated", blockedBy == "unavailable", []));
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.TryConsumeAiMessage(_userId, Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Message allowance used."));
+        var handler = new RefineHabitSuggestionQueryHandler(Service(), payGate, Substitute.For<IUnitOfWork>(), moderation);
+
+        var result = await handler.Handle(new(_userId, Draft(), "make it easier"), default);
+
+        result.IsFailure.Should().BeTrue();
+        await _generator.DidNotReceive().GenerateAsync(Arg.Any<HabitSuggestionRequest>(), Arg.Any<CancellationToken>());
+        if (blockedBy != "allowance")
+            await payGate.DidNotReceive().TryConsumeAiMessage(Arg.Any<Guid>(), Arg.Any<IUnitOfWork>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    public void DraftSet_AcceptsCompleteDistinctDraftsAndRejectsOverlaps(int count)
+    {
+        var drafts = Enumerable.Range(0, count).Select(index => Draft($"Read {index}") with
+        { DueTime = new(20 + index / 4, index % 4 * 15), DueEndTime = new(20 + index / 4, index % 4 * 15 + 10) }).ToArray();
+        var request = new HabitSuggestionRequest(_userId, "ideas", "en", count, _today, [], []);
+        HabitSuggestionService.Normalize(drafts, request).IsSuccess.Should().BeTrue();
+        var overlapping = new[] { Draft("Read"), Draft("Stretch") };
+        HabitSuggestionService.Normalize(overlapping, request with { Count = 2 }).IsFailure.Should().BeTrue();
     }
 }

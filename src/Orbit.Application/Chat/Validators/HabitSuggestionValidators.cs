@@ -2,6 +2,7 @@ using FluentValidation;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Queries;
 using Orbit.Domain.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -10,7 +11,7 @@ public sealed class HabitSuggestionDraftValidator : AbstractValidator<HabitSugge
     public HabitSuggestionDraftValidator()
     {
         RuleFor(draft => draft).Must(draft => draft.ToHabit(Guid.NewGuid()).IsSuccess)
-            .WithMessage("Invalid habit suggestion.").WithErrorCode("HABIT_SUGGESTION_INVALID");
+            .WithCopy("HABIT_SUGGESTION_INVALID");
     }
 }
 
@@ -19,9 +20,10 @@ public sealed class SuggestHabitDraftsQueryValidator : AbstractValidator<Suggest
     public SuggestHabitDraftsQueryValidator()
     {
         RuleFor(request => request.UserId).NotEmpty();
-        RuleFor(request => request.Instruction).NotEmpty().MaximumLength(1000);
-        RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage);
-        RuleFor(request => request.Count).InclusiveBetween(1, 5);
+        RuleFor(request => request.Instruction).NotEmpty().WithCopy(ValidationErrorCodes.HabitSuggestionInstruction)
+            .MaximumLength(1000).WithCopy(ValidationErrorCodes.HabitSuggestionInstruction);
+        RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage).WithCopy(ValidationErrorCodes.LanguageSupported);
+        RuleFor(request => request.Count).InclusiveBetween(1, 5).WithCopy(ValidationErrorCodes.HabitSuggestionCount);
     }
 }
 
@@ -30,9 +32,10 @@ public sealed class RefineHabitSuggestionQueryValidator : AbstractValidator<Refi
     public RefineHabitSuggestionQueryValidator()
     {
         RuleFor(request => request.UserId).NotEmpty();
-        RuleFor(request => request.Instruction).NotEmpty().MaximumLength(500);
-        RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage);
-        RuleFor(request => request.Draft).NotNull().SetValidator(new HabitSuggestionDraftValidator());
+        RuleFor(request => request.Instruction).NotEmpty().WithCopy(ValidationErrorCodes.HabitSuggestionInstruction)
+            .MaximumLength(500).WithCopy(ValidationErrorCodes.HabitSuggestionInstruction);
+        RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage).WithCopy(ValidationErrorCodes.LanguageSupported);
+        RuleFor(request => request.Draft).NotNull().WithCopy("HABIT_SUGGESTION_INVALID").SetValidator(new HabitSuggestionDraftValidator());
     }
 }
 
@@ -41,8 +44,8 @@ public sealed class PreviewHabitSuggestionCommandValidator : AbstractValidator<P
     public PreviewHabitSuggestionCommandValidator()
     {
         RuleFor(request => request.UserId).NotEmpty();
-        RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage);
-        RuleFor(request => request.Draft).NotNull().SetValidator(new HabitSuggestionDraftValidator());
+        RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage).WithCopy(ValidationErrorCodes.LanguageSupported);
+        RuleFor(request => request.Draft).NotNull().WithCopy("HABIT_SUGGESTION_INVALID").SetValidator(new HabitSuggestionDraftValidator());
     }
 }
 

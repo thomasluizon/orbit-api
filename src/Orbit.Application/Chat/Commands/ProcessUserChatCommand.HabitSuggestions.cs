@@ -10,7 +10,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults,
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
-        if (SuggestionAnswer(request, executionResults) is { } suggestions)
+        if (SuggestionAnswer(executionResults) is { } suggestions)
         {
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
             return (suggestions, null, TurnFactSet.FromToolResults(executionResults.ToolResults));
@@ -19,7 +19,7 @@ public partial class ProcessUserChatCommandHandler
             aiResponse, groundingTurn, cancellationToken);
     }
 
-    private static ResponseCards? SuggestionAnswer(ProcessUserChatCommand request, ToolExecutionAccumulator results)
+    private static ResponseCards? SuggestionAnswer(ToolExecutionAccumulator results)
     {
         if (results.PendingOperations.Count > 0 || results.ActionResults.Count > 0) return null;
         var card = results.OperationResults.LastOrDefault(operation => operation.Status == AgentOperationStatus.Succeeded

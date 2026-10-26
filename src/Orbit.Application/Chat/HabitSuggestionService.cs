@@ -17,7 +17,8 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
         var today = await dates.GetUserTodayAsync(userId, ct);
         var active = await habits.FindAsync(habit => habit.UserId == userId && !habit.IsCompleted, ct);
         var activeGoals = await goals.FindAsync(goal => goal.UserId == userId && goal.Status == GoalStatus.Active, ct);
-        var request = new HabitSuggestionRequest(userId, instruction, language, count, today, active, activeGoals, original);
+        var weekStart = await dates.GetUserWeekStartDayAsync(userId, ct);
+        var request = new HabitSuggestionRequest(userId, instruction, language, count, today, active, activeGoals, original, WeekStartDay: weekStart);
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var generated = await generator.GenerateAsync(request, ct);
@@ -26,7 +27,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             if (result.IsSuccess) return result;
             request = request with { Correction = result.Error };
         }
-        return Result.Failure<HabitSuggestionsCard>(Unavailable(language), "HABIT_SUGGESTION_INVALID");
+        return Result.Failure<HabitSuggestionsCard>(Unavailable(language), "HABIT_SUGGESTION_UNAVAILABLE");
     }
 
     public async Task<Result<HabitSuggestionDraft>> CheckForPreviewAsync(Guid userId, HabitSuggestionDraft draft,
@@ -34,9 +35,10 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     {
         var today = await dates.GetUserTodayAsync(userId, ct);
         var active = await habits.FindAsync(habit => habit.UserId == userId && !habit.IsCompleted, ct);
-        var result = Normalize([draft], new(userId, string.Empty, language, 1, today, active, []));
+        var weekStart = await dates.GetUserWeekStartDayAsync(userId, ct);
+        var result = Normalize([draft], new(userId, string.Empty, language, 1, today, active, [], WeekStartDay: weekStart));
         return result.IsSuccess ? Result.Success(result.Value.Drafts[0])
-            : Result.Failure<HabitSuggestionDraft>(Unavailable(language), "HABIT_SUGGESTION_INVALID");
+            : Result.Failure<HabitSuggestionDraft>(Unavailable(language), "HABIT_SUGGESTION_UNAVAILABLE");
     }
 
     internal static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request)
@@ -66,14 +68,8 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             if (entity.IsFailure) return Invalid(entity.Error);
             if (candidate.DueDate < request.Today || candidate.DueDate > request.Today.AddDays(366))
                 return Invalid("Choose a local start date within the coming year.");
-            var windowEnd = candidate.DueDate.AddDays(366);
-            foreach (var day in HabitScheduleService.GetScheduledDates(entity.Value, candidate.DueDate, windowEnd))
-            {
-                if (request.Habits.Concat(scheduled).Any(habit => habit.Id != candidate.ExistingHabitId
-                    && habit.DueTime is { } start && HabitScheduleService.IsHabitDueOnDate(habit, day)
-                    && candidate.DueTime < (habit.DueEndTime ?? start.AddMinutes(1)) && candidate.DueEndTime > start))
-                    return Invalid("Choose a free time that does not overlap the person's habits or another draft.");
-            }
+            if (HasScheduleConflict(entity.Value, candidate, request.Habits.Concat(scheduled), request.WeekStartDay))
+                return Invalid("Choose a free time that does not overlap the person's habits or another draft.");
             output.Add(candidate);
             scheduled.Add(entity.Value);
         }
@@ -81,10 +77,16 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     }
 
     private static Result<HabitSuggestionsCard> Invalid(string reason) => Result.Failure<HabitSuggestionsCard>(reason, "HABIT_SUGGESTION_INVALID");
+    private static bool HasScheduleConflict(Habit entity, HabitSuggestionDraft draft, IEnumerable<Habit> habits, int weekStart)
+    {
+        var timed = habits.Where(habit => habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();
+        return HabitScheduleService.GetScheduledDates(entity, draft.DueDate, draft.DueDate.AddDays(366), weekStart)
+            .Any(day => timed.Any(habit => HabitScheduleService.IsHabitDueOnDate(habit, day, weekStart)
+                && draft.DueTime.ToTimeSpan() < (habit.DueEndTime?.ToTimeSpan() ?? habit.DueTime.GetValueOrDefault().ToTimeSpan().Add(TimeSpan.FromMinutes(1)))
+                && draft.DueEndTime > habit.DueTime));
+    }
     private static bool SameSuggestion(HabitSuggestionDraft other, HabitSuggestionDraft candidate) =>
         other.Id == candidate.Id || HabitNameMatcher.Normalize(other.Title) == HabitNameMatcher.Normalize(candidate.Title)
         || candidate.ExistingHabitId.HasValue && other.ExistingHabitId == candidate.ExistingHabitId;
-    internal static string Unavailable(string language) => LocaleHelper.IsPortuguese(language)
-        ? "Não consegui preparar sugestões para sua agenda. Tente ajustar o pedido."
-        : "I couldn't prepare suggestions for your schedule. Try adjusting your request.";
+    internal static string Unavailable(string language) => ErrorCopy.Resolve("HABIT_SUGGESTION_UNAVAILABLE", LocaleHelper.IsPortuguese(language));
 }

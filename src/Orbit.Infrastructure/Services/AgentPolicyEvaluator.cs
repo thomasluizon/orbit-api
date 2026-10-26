@@ -19,6 +19,10 @@ public class AgentPolicyEvaluator(
 {
     private readonly AgentPlatformSettings _settings = settings.Value;
 
+    private static bool MissingSuggestionScope(AgentPolicyEvaluationContext context) => context.SourceName == "suggest_habits"
+        && context.AuthMethod is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth
+        && !context.GrantedScopes.Contains(AgentScopes.ReadGoals, StringComparer.OrdinalIgnoreCase);
+
     public AgentPolicyDecision Evaluate(AgentPolicyEvaluationContext context)
     {
         if (context.PreviewOnly)
@@ -105,6 +109,9 @@ public class AgentPolicyEvaluator(
 
         if (context.IsReadOnlyCredential && capability.IsMutation)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "read_only_credential");
+
+        if (MissingSuggestionScope(context))
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, $"missing_scope:{AgentScopes.ReadGoals}");
 
         var needsFingerprint = capability.IsMutation ||
             capability.ConfirmationRequirement is AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp;

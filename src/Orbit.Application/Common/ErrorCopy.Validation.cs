@@ -6,6 +6,10 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] Validation =>
     [
+        ("HABIT_SUGGESTION_INVALID", "Review the suggestion's title, schedule and time.", "Revise o título, a frequência e o horário da sugestão."),
+        ("HABIT_SUGGESTION_UNAVAILABLE", "I couldn't prepare suggestions for your schedule. Try adjusting your request.", "Não consegui preparar sugestões para sua agenda. Tente ajustar o pedido."),
+        (ValidationErrorCodes.HabitSuggestionInstruction, "Write a short instruction for the suggestion.", "Escreva uma instrução curta para a sugestão."),
+        (ValidationErrorCodes.HabitSuggestionCount, "Choose between one and five suggestions.", "Escolha entre uma e cinco sugestões."),
         (ValidationErrorCodes.VerificationCodeFormat, "Enter all 6 digits", "Digite os 6 dígitos"),
         (ValidationErrorCodes.ApiKeyNameRequired, "Give the API key a name", "Dê um nome à chave de API"),
         (ValidationErrorCodes.ApiKeyNameLength, "Shorten the API key name to 50 characters or fewer", "Encurte o nome da chave de API para até 50 caracteres"),

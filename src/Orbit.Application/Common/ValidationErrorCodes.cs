@@ -2,6 +2,8 @@ namespace Orbit.Application.Common;
 
 public static class ValidationErrorCodes
 {
+    public const string HabitSuggestionInstruction = "VALIDATION_HABIT_SUGGESTION_INSTRUCTION";
+    public const string HabitSuggestionCount = "VALIDATION_HABIT_SUGGESTION_COUNT";
     public const string VerificationCodeFormat = "VALIDATION_VERIFICATION_CODE_FORMAT";
     public const string ApiKeyNameRequired = "VALIDATION_API_KEY_NAME_REQUIRED";
     public const string ApiKeyNameLength = "VALIDATION_API_KEY_NAME_LENGTH";

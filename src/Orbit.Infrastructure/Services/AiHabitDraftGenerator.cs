@@ -61,6 +61,7 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         request.Language,
         request.Count,
         request.Today,
+        request.WeekStartDay,
         request.Original,
         request.Correction,
         habits = request.Habits.Select(habit => new
@@ -75,7 +76,13 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
             habit.NextDueDate,
             habit.EndDate,
             habit.DueTime,
-            habit.DueEndTime
+            habit.DueEndTime,
+            habit.IntervalWeeks,
+            habit.StartDate,
+            habit.Emoji,
+            habit.ReminderEnabled,
+            habit.ReminderTimes,
+            habit.ChecklistItems
         }),
         goals = request.Goals.Select(goal => new { goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.Unit, goal.Deadline })
     }, JsonOptions);

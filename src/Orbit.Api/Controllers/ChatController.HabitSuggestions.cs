@@ -14,7 +14,7 @@ public partial class ChatController
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RefineHabitSuggestion([FromBody] RefineHabitSuggestionRequest request, CancellationToken ct)
     {
-        if (!CanAccessChat() || HttpContext.User.GetAgentAuthMethod() != AgentAuthMethod.Jwt) return Forbid();
+        if (!CanAccessHabitSuggestions()) return Forbid();
         var result = await mediator.Send(new RefineHabitSuggestionQuery(HttpContext.GetUserId(), request.Draft,
             request.Instruction, request.Language), ct);
         return result.ToPayGateAwareResult(value => Ok(value));
@@ -26,10 +26,15 @@ public partial class ChatController
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> PreviewHabitSuggestion([FromBody] PreviewHabitSuggestionRequest request, CancellationToken ct)
     {
-        if (!CanAccessChat() || HttpContext.User.GetAgentAuthMethod() != AgentAuthMethod.Jwt) return Forbid();
+        if (!CanAccessHabitSuggestions()) return Forbid();
         var result = await mediator.Send(new PreviewHabitSuggestionCommand(HttpContext.GetUserId(), request.Draft,
             request.Language, HttpContext.User.GetAgentAuthMethod(), HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential()), ct);
         return result.ToPayGateAwareResult(value => Ok(value));
     }
+
+    private bool CanAccessHabitSuggestions() => CanAccessChat()
+        && (HttpContext.User.GetAgentAuthMethod() is not (AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
+            || HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ReadHabits, StringComparer.OrdinalIgnoreCase)
+            && HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ReadGoals, StringComparer.OrdinalIgnoreCase));
 }

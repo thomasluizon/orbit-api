@@ -19,6 +19,7 @@ public sealed record HabitSuggestionDraft(
             || string.IsNullOrWhiteSpace(Reason) || Reason.Length > 240 || Reason.Contains('\n')
             || !HasValidSchedule() || ChecklistItems is null
             || DueDate == default || DueEndTime <= DueTime || ExistingHabitId == Guid.Empty
+            || DueTime.Ticks % TimeSpan.TicksPerMinute != 0 || DueEndTime.Ticks % TimeSpan.TicksPerMinute != 0
             || ReminderMinutesBefore is < 0 or > 1440
             || ChecklistItems.Any(string.IsNullOrWhiteSpace))
             return Result.Failure<Habit>("Invalid habit suggestion.", "HABIT_SUGGESTION_INVALID");
@@ -43,4 +44,4 @@ public sealed record HabitSuggestionsCard(string Language, IReadOnlyList<HabitSu
 
 public sealed record HabitSuggestionRequest(Guid UserId, string Instruction, string Language, int Count,
     DateOnly Today, IReadOnlyList<Habit> Habits, IReadOnlyList<Goal> Goals,
-    HabitSuggestionDraft? Original = null, string? Correction = null);
+    HabitSuggestionDraft? Original = null, string? Correction = null, int WeekStartDay = 1);
