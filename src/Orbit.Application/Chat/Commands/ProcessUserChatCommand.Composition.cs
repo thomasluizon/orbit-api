@@ -85,11 +85,12 @@ public partial class ProcessUserChatCommandHandler
                 Mentions(request.Message, "steps|passos|step by step|passo a passo"))));
 
         CaptureComposition(request, context, results, candidates, built, missingProjection, hasOutcome);
-        return new ResponseCards(JoinPartText(parts), Parts: parts)
+        var cards = new ResponseCards(JoinPartText(parts), Parts: parts)
         {
             ServerComposedText = candidates.Count > 0 || status is not null || hasOutcome || results.AskBlock is not null
             || results.LastSuccessfulOperation("get_habit_ranking") is not null
         };
+        return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday) : cards;
     }
 
     private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyAsync(
@@ -116,6 +117,8 @@ public partial class ProcessUserChatCommandHandler
         if (!composition)
             cards = ApplyResolutionToCards(cards, executionResults, language);
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
+        if (!composition)
+            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);

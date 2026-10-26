@@ -63,7 +63,7 @@ public class GetDailySummaryToolTests
                 q.UserId == UserId &&
                 q.DateFrom == Today &&
                 q.DateTo == Today &&
-                q.Language == "en"),
+                q.Language == "en" && !q.GenerateNarrative),
             Arg.Any<CancellationToken>());
     }
 

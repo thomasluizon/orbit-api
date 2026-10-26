@@ -1920,13 +1920,14 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
 
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
-            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true, SupportsHabitListDoneStatus: true)),
             CancellationToken.None);
 
         result.Value.DaySummary.Should().NotBeNull();
-        result.Value.DaySummary!.Due.Should().Be(0);
-        result.Value.DaySummary.Done.Should().Be(0);
-        result.Value.DaySummary.CompletionRate.Should().BeNull();
+        result.Value.DaySummary!.Due.Should().Be(1);
+        result.Value.DaySummary.Done.Should().Be(1);
+        result.Value.DaySummary.CompletionRate.Should().Be(100);
+        result.Value.DaySummary.Rows.Should().ContainSingle().Which.Status.Should().Be("done");
     }
 
     [Fact]

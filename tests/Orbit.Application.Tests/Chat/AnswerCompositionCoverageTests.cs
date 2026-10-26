@@ -60,14 +60,15 @@ public partial class ProcessUserChatCommandHandlerTests
         context.Label.Should().Be(question[..37].TrimEnd() + "...");
         context.Context.Should().Be(toolName);
         context.Target.Should().Be(target);
-        var block = result.Value.Parts.Should().ContainSingle().Subject.Should().BeOfType<ChatBlockPart>().Subject;
+        var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Subject;
         context.QueryId.Should().Be(ReadBlockTelemetry.Describe(block.Block).Read!.QueryId);
         var json = JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions);
         var replay = JsonSerializer.Deserialize<ChatResponse>(json, ChatStreamEvent.SerializerOptions)!;
         ChatStreamEvent.Final(ChatResponseNegotiation.ForClient(replay, client, [])).ToJson()
             .Should().Be(ChatStreamEvent.Final(result.Value).ToJson());
         var fallback = ChatResponseNegotiation.ForClient(replay, client with { PartKinds = [] }, []);
-        fallback.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
+        fallback.Parts.Should().HaveCount(kind == "daySummary" ? 2 : 1)
+            .And.OnlyContain(part => part is ChatTextPart);
         fallback.AiMessage.Should().NotBeNullOrWhiteSpace().And.NotContain("Duplicated prose");
         var legacy = ChatResponseNegotiation.ForClient(replay, null, []);
         legacy.Parts.Should().BeNull();
