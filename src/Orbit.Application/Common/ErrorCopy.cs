@@ -382,7 +382,7 @@ public static partial class ErrorCopy
                  {
                      AccountAndAccess, StepUpAndApiKeys, Habits, Goals, TagsFactsAndTemplates,
                      Astra, Billing, Streaks, Social, Calendar, Notifications, Media,
-                     SyncAndSupport, Profile, Validation, ValidationFields,
+                     SyncAndSupport, Profile, Validation, ValidationFields, ReadFallback,
                  })
         {
             foreach (var (code, en, ptBr) in group)

@@ -276,8 +276,9 @@ public sealed class AstraBlockAnswerService(
             ?? throw new InvalidOperationException("Stored block has no response.");
         var userId = request.UserId;
         var flags = await featureFlags.GetEnabledKeysForUserAsync(userId, ct);
+        var user = await users.GetByIdAsync(userId, ct);
         if (stored.PendingOperations is not { Count: > 0 } pending)
-            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags);
+            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags, user?.Language, user?.TimeZone);
         var current = new List<PendingAgentOperation>();
         foreach (var operation in pending)
         {
@@ -298,9 +299,8 @@ public sealed class AstraBlockAnswerService(
                 PreviewFingerprint = preview.PreviewFingerprint
             });
         }
-        var user = await users.GetByIdAsync(userId, ct);
         return ChatResponseNegotiation.ForClient(stored with { PendingOperations = current }, request.ClientContext, flags,
-            user?.Language);
+            user?.Language, user?.TimeZone);
     }
 
     private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)

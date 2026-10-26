@@ -105,7 +105,7 @@ public sealed class ChatResponseNegotiationTests
         if (mode == "parts")
         {
             result.Parts.Should().BeNull();
-            result.AiMessage.Should().Be("all\n0");
+            result.AiMessage.Should().Be("All habits\nHabits: 0");
         }
         else result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>();
         if (mode is "followups" or "legacy") result.FollowUps.Should().BeNull();
@@ -126,7 +126,7 @@ public sealed class ChatResponseNegotiationTests
             SupportsRecordListCard: true);
         var result = ChatResponseNegotiation.ForClient(response, client, []);
         result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
-        result.AiMessage.Should().Contain(kind == "habitList" ? "2026-04-03" : "0 records");
+        result.AiMessage.Should().Contain(kind == "habitList" ? "04/03/2026" : "Habit history: 0");
         ChatResponseNegotiation.ForClient(response, client with
         { SupportsDatedHabitListCard = true, SupportsHabitHistoryCard = true }, []).Parts
             .Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>();
@@ -158,14 +158,14 @@ public sealed class ChatResponseNegotiationTests
             result.AiMessage.Should().BeNull();
             result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be(kind);
             foreach (var unsupported in new[] { client with { PartKinds = [] }, client with { SupportsParts = false } })
-                ChatResponseNegotiation.ForClient(response, unsupported, []).AiMessage.Should().Contain("3 habits");
+                ChatResponseNegotiation.ForClient(response, unsupported, []).AiMessage.Should().Contain("Habits completed: 3");
             ChatResponseNegotiation.ForClient(response, client, [FeatureFlagKeys.AstraPeriodBlocksDisabled])
-                .AiMessage.Should().Contain("3 habits");
+                .AiMessage.Should().Contain("Habits completed: 3");
         }
         else
         {
-            result.AiMessage.Should().Contain("3 habits");
-            if (compare) result.AiMessage.Should().Contain("1 habits").And.Contain("delta 2 habits");
+            result.AiMessage.Should().Contain("Habits completed: 3");
+            if (compare) result.AiMessage.Should().Contain("Habits completed: 1").And.Contain("Difference: 2 Habits");
             result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
         }
     }

@@ -29,8 +29,18 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("Quantos hábitos concluí esta semana?", "pt-BR", "completedHabits", 3, true, false, false)]
     [InlineData("Compare how many habits I completed each week", "en", "completedHabits", 3, false, true, false)]
     [InlineData("Compare quantos hábitos concluí em cada semana", "pt-BR", "completedHabits", 3, true, true, false)]
+    [InlineData("How many habits did I complete this week?", "en", "completedHabits", 3, false, false, false, false)]
+    [InlineData("Quantos hábitos concluí esta semana?", "pt-BR", "completedHabits", 3, false, false, false, false)]
+    [InlineData("Compare habits", "en", "completedHabits", 3, false, true, false, false)]
+    [InlineData("Compare hábitos", "pt-BR", "completedHabits", 3, false, true, false, false)]
+    [InlineData("How many habits did I complete this week?", "en", "completedHabits", 3, false, false, false, true, true)]
+    [InlineData("Quantos hábitos concluí esta semana?", "pt-BR", "completedHabits", 3, true, false, false, true, true)]
+    [InlineData("How many habits did I complete this week?", "en", "completedHabits", 3, false, false, true, true, true)]
+    [InlineData("Quantos hábitos concluí esta semana?", "pt-BR", "completedHabits", 3, true, false, true, true, true)]
+    [InlineData("How many habits did I complete this week?", "en", "completedHabits", 3, false, false, true, false)]
+    [InlineData("Quantos hábitos concluí esta semana?", "pt-BR", "completedHabits", 3, false, false, true, false)]
     public async Task CompletedHabits_ProductionQueryKeepsCountsAndFiguresInBlock(string message, string language,
-        string metric, int expected, bool composition, bool compare, bool supportsCompletedHabits = true)
+        string metric, int expected, bool composition, bool compare, bool supportsCompletedHabits = true, bool supportsParts = true, bool missingKind = false)
     {
         SetupUserAndPayGate();
         if (composition) EnableComposition();
@@ -73,18 +83,26 @@ public partial class ProcessUserChatCommandHandlerTests
         var events = new List<ChatStreamEvent>();
         var kind = compare ? "periodComparison" : "periodTotal";
         var result = await handler.Handle(new(UserId, message,
-            ClientContext: new(SupportsParts: true, PartKinds: [kind],
+            ClientContext: new(SupportsParts: supportsParts, PartKinds: missingKind ? [] : [kind],
                 SupportsCompletedHabitsMetric: supportsCompletedHabits ? true : null),
             StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue();
-        if (!supportsCompletedHabits)
+        if (!supportsCompletedHabits || !supportsParts || missingKind)
         {
-            result.Value.AiMessage.Should().NotBeNullOrWhiteSpace().And.Contain("3 habits");
-            if (compare) result.Value.AiMessage.Should().Contain("1 habits");
-            result.Value.Parts.Should().NotBeNull();
-            result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
-            result.Value.Parts.OfType<ChatTextPart>().Should().Contain(part => part.Text.Contains("3 habits"));
+            var label = language == "pt-BR" ? "Hábitos concluídos" : "Habits completed";
+            result.Value.AiMessage.Should().NotBeNullOrWhiteSpace().And.Contain($"{label}: 3")
+                .And.NotContain("completedHabits").And.NotContain("99")
+                .And.NotMatchRegex(@"\d{4}-\d{2}-\d{2}");
+            if (compare) result.Value.AiMessage.Should().Contain("1");
+            events.Should().NotContain(item => item.Type == "delta", "fallback figures replace the model narrative");
+            if (supportsParts)
+            {
+                result.Value.Parts.Should().NotBeNull();
+                result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
+                result.Value.Parts.OfType<ChatTextPart>().Should().Contain(part => part.Text.Contains($"{label}: 3"));
+            }
+            else result.Value.Parts.Should().BeNull();
         }
         else
         {
