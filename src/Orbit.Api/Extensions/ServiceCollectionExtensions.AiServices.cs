@@ -30,6 +30,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<ISummaryService, AiSummaryService>();
         builder.Services.AddScoped<IRescheduleSuggestionService, AiRescheduleSuggestionService>();
         builder.Services.AddScoped<IHabitSuggestionService, AiHabitSuggestionService>();
+        builder.Services.AddScoped<IHabitDraftGenerator, AiHabitDraftGenerator>();
+        builder.Services.AddScoped<HabitSuggestionService>();
         builder.Services.AddScoped<IDateInterpretationService, AiDateInterpretationService>();
         builder.Services.AddScoped<IRetrospectiveService, AiRetrospectiveService>();
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
@@ -96,6 +98,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
         builder.Services.AddScoped<IAiTool, GetCalendarOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetHabitMonthTool>();
+        builder.Services.AddScoped<IAiTool, SuggestHabitsTool>();
         builder.Services.AddScoped<GetNotionTasksTool>();
         builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<GetNotionTasksTool>());
         builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();

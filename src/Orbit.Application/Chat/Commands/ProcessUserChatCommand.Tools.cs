@@ -547,6 +547,7 @@ public partial class ProcessUserChatCommandHandler
             ? await DispatchToolCallAsync(call, request, operationExecutor, onExecutionStarted, cancellationToken)
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
         executionResponse = RevisedPreviewResponse(call, executionResponse);
+        RegisterPreviewDiscussion(call, executionResponse, executionResults);
         var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation, request.ClientContext);
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
@@ -575,7 +576,9 @@ public partial class ProcessUserChatCommandHandler
                     dates = call.Name == "bulk_log_habits" ? executionResponse.PendingOperation?.Items?
                         .SelectMany(item => item.Fields).Where(field => field.Field == "date")
                         .Select(field => field.NewValue).Distinct().Order().ToArray() : null,
-                    instruction = "The preview is the entire answer. Emit no prose before or after it. All preview facts come exclusively from preview_items."
+                    instruction = executionResults.IsPreviewDiscussion
+                        ? "Answer the person's question about the preview in one short sentence without figures. The preview remains pending beside the answer. Do not apply or revise anything."
+                        : "The preview is the entire answer. Emit no prose before or after it. All preview facts come exclusively from preview_items."
                 }),
                 null,
                 null,
@@ -596,6 +599,13 @@ public partial class ProcessUserChatCommandHandler
                 executionResponse.PendingOperation)
         }) with
         { PreparedResponse = executionResponse as PreparedToolOperationResponse };
+    }
+
+    private static void RegisterPreviewDiscussion(AiToolCall call, AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
+    {
+        if (call.Name == "revise_pending_changes" && response.PendingOperation is not null
+            && Orbit.Application.Chat.Tools.Implementations.RevisePendingChangesTool.IsInspection(call.Args))
+            results.IsPreviewDiscussion = true;
     }
 
     private void RegisterPendingWrite(Guid userId, IAiTool tool,

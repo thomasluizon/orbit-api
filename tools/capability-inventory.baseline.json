@@ -4460,6 +4460,31 @@
         ]
       },
       {
+        "name": "suggest_habits",
+        "parameters": [
+          {
+            "name": "count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "instruction",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "language",
+            "type": "string",
+            "required": true,
+            "values": [
+              "en",
+              "pt",
+              "pt-BR"
+            ]
+          }
+        ]
+      },
+      {
         "name": "undo_skip_habit",
         "parameters": [
           {
@@ -8165,6 +8190,9 @@
             },
             {
               "tool": "query_habits"
+            },
+            {
+              "tool": "suggest_habits"
             }
           ],
           "viaOperations": []
@@ -8196,6 +8224,10 @@
             },
             {
               "tool": "query_habits",
+              "via": "execute_agent_operation_v2"
+            },
+            {
+              "tool": "suggest_habits",
               "via": "execute_agent_operation_v2"
             }
           ]

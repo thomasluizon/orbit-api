@@ -105,6 +105,7 @@ internal static class ChatResponseNegotiation
             "streak" => typeof(StreakCard),
             "calendar" => typeof(CalendarCard),
             "habitMonth" => typeof(HabitMonthCard),
+            "habitSuggestions" => typeof(HabitSuggestionsCard),
             "recordList" => typeof(RecordListCard),
             "accountRows" => typeof(AccountRowsCard),
             "periodInsight" => typeof(PeriodInsightCard),
@@ -130,6 +131,7 @@ internal static class ChatResponseNegotiation
         var text = value switch
         {
             HabitRankingCard card => HabitRankingCardBuilder.Readable(card.Ranking, null),
+            HabitSuggestionsCard card => HabitSuggestionsPresentation.Readable(card),
             AstraChoiceBlock block => block.Question,
             AstraPickListBlock block => block.Title,
             null => null,
