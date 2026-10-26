@@ -10,20 +10,31 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class GetChecklistTemplatesTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_checklist_templates";
-    public string Description => "Read the user's reusable checklist templates.";
+    public string Description => "Read the user's reusable checklist templates. Pass template_id to retrieve one complete template before editing its items.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
-        properties = new { }
+        properties = new
+        {
+            template_id = new { type = new[] { JsonSchemaTypes.String, "null" } }
+        }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        Guid? templateId = null;
+        if (args.TryGetProperty("template_id", out var value) && value.ValueKind != JsonValueKind.Null)
+        {
+            if (value.ValueKind != JsonValueKind.String || !Guid.TryParse(value.GetString(), out var parsed) || parsed == Guid.Empty)
+                return new ToolResult(false, Error: "template_id must be a valid non-empty GUID.");
+            templateId = parsed;
+        }
         var result = await mediator.Send(new GetChecklistTemplatesQuery(userId, BypassCache: true), ct);
         return result.IsSuccess
-            ? new ToolResult(true, Payload: result.Value)
+            ? new ToolResult(true, Payload: templateId is null ? result.Value
+                : result.Value.Where(template => template.Id == templateId).ToList())
             : ToolResult.FromFailure(result);
     }
 }

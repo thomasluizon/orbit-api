@@ -81,7 +81,6 @@ public sealed class AdditionalOptionalToolTests
     [InlineData(typeof(GetApiKeysTool))]
     [InlineData(typeof(GetReferralCodeTool))]
     [InlineData(typeof(GetReferralOverviewTool))]
-    [InlineData(typeof(GetChecklistTemplatesTool))]
     [InlineData(typeof(CreateChecklistTemplateTool))]
     [InlineData(typeof(DeleteChecklistTemplateTool))]
     [InlineData(typeof(SetProactiveAstraTool))]

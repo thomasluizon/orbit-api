@@ -3510,7 +3510,16 @@
       },
       {
         "name": "get_checklist_templates",
-        "parameters": []
+        "parameters": [
+          {
+            "name": "template_id",
+            "type": [
+              "string",
+              "null"
+            ],
+            "required": false
+          }
+        ]
       },
       {
         "name": "get_daily_summary",

@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.ChecklistTemplates.Queries;
+using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
@@ -58,7 +60,13 @@ public partial class ProcessUserChatCommandHandler
             operationResult.TargetId,
             operationResult.TargetName,
             BuildToolError(operationResult),
-            operationResult.Payload is HabitMonthCard month ? HabitMonthModelPayload.From(month) : operationResult.Payload,
+            operationResult.Payload switch
+            {
+                HabitMonthCard month => HabitMonthModelPayload.From(month),
+                IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
+                HabitRankingResponse ranking when !ModelPayloadBudget.Fits(ranking) => HabitRankingModelPayload.From(ranking),
+                _ => operationResult.Payload
+            },
             operationResult.ReadBlock is null ? null : "[[orbit:read:" + call.Id + "]]");
     }
 
