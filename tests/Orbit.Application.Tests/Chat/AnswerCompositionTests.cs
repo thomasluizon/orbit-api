@@ -189,7 +189,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     [Theory]
     [InlineData("Here is your habit ranking.")]
-    [InlineData("Veja a classificação dos seus hábitos.")]
+    [InlineData("Aqui está o ranking dos seus hábitos.")]
     public async Task Composition_RankingOmissionUsesProducedCompleteRanking(string sentence)
     {
         SetupUserAndPayGate();

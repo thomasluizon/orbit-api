@@ -231,8 +231,8 @@ public class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false, "Here is your habit ranking.")]
     [InlineData(true, "Here is your habit ranking.")]
-    [InlineData(false, "Veja a classificação dos seus hábitos.")]
-    [InlineData(true, "Veja a classificação dos seus hábitos.")]
+    [InlineData(false, "Aqui está o ranking dos seus hábitos.")]
+    [InlineData(true, "Aqui está o ranking dos seus hábitos.")]
     public async Task ToolRounds_PreserveFramingAndTerminalReadDirective(bool streaming, string sentence)
     {
         var text = sentence + "\n" + TerminalReadDirective.Marker;

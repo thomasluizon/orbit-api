@@ -17,9 +17,9 @@ public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
     [InlineData("en", "Here is your habit ranking.")]
-    [InlineData("pt-BR", "Veja a classificação dos seus hábitos.")]
+    [InlineData("pt-BR", "Aqui está o ranking dos seus hábitos.")]
     [InlineData("en", "Here is your habit ranking. Another sentence.")]
-    [InlineData("pt-BR", "Veja a classificação dos seus hábitos. Outra frase.")]
+    [InlineData("pt-BR", "Aqui está o ranking dos seus hábitos. Outra frase.")]
     [InlineData("en", "Here are your top 3 habits.")]
     [InlineData("pt-BR", "Veja seus 3 principais hábitos.")]
     [InlineData("en", "You have one completion.")]
@@ -60,10 +60,10 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.EvalTrace.ToolCalls.Should().ContainSingle().Which.Status.Should().Be("Succeeded");
         result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
             .Should().BeOfType<HabitRankingCard>().Which.Ranking.Should().Be(ranking);
-        var safe = text.StartsWith("Here is", StringComparison.Ordinal) || text.StartsWith("Veja a", StringComparison.Ordinal);
+        var safe = text.StartsWith("Here is", StringComparison.Ordinal) || text.StartsWith("Aqui está", StringComparison.Ordinal);
         if (safe)
         {
-            var sentence = language == "en" ? "Here is your habit ranking." : "Veja a classificação dos seus hábitos.";
+            var sentence = language == "en" ? "Here is your habit ranking." : "Aqui está o ranking dos seus hábitos.";
             result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(sentence);
             result.Value.AiMessage.Should().Be(sentence);
         }
