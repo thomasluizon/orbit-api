@@ -234,6 +234,7 @@ public partial class AgentCatalogService
                 [
                     "HabitsController.CreateHabit",
                     "HabitsController.SuggestSetup",
+                    "OnboardingController.SuggestSetup",
                     "HabitsController.LogHabit",
                     "HabitsController.SkipHabit",
                     "HabitsController.UndoSkipHabit",
@@ -1052,7 +1053,9 @@ public partial class AgentCatalogService
                     "OAuthController.GrantConsent",
                     "OAuthController.CancelConsent",
                     "WaitlistController.Join",
-                    "WaitlistController.Confirm"
+                    "WaitlistController.Confirm",
+                    "OnboardingController.Challenge",
+                    "OnboardingController.Enroll"
                 ]),
 
             new AgentCapability(
