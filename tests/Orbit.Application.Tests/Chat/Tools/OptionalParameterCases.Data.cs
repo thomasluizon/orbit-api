@@ -9,7 +9,7 @@ public static partial class OptionalParameterCases
         {
             [(typeof(AssignTagsTool), "")] = ["habit_id", "habit_ids", "tag_names", "tag_ids"],
             [(typeof(BulkCreateHabitsTool), "habits.items")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
             [(typeof(BulkLogHabitsTool), "")] = ["filter", "habit_ids", "date", "dates"],
             [(typeof(BulkUpdateHabitEmojisTool), "")] =
             [
@@ -32,11 +32,11 @@ public static partial class OptionalParameterCases
                 "description", "target_value", "unit", "deadline", "goal_type", "habit_ids"
             ],
             [(typeof(CreateHabitTool), "")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
             [(typeof(CreateHabitTool), "sub_habits.items")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "parent_habit_id", "sub_habits"],
             [(typeof(CreateSubHabitTool), "")] =
-            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "sub_habits"],
+            ["description", "emoji", "frequency_unit", "frequency_quantity", "interval_weeks", "days", "due_date", "end_date", "due_time", "due_end_time", "is_bad_habit", "is_general", "is_flexible", "checklist_items", "start_date", "placement", "reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "slip_alert_enabled", "tag_names", "habit_id", "tag_ids", "goal_ids", "sub_habits"],
             [(typeof(DeleteChecklistTemplateTool), "")] = [],
             [(typeof(DeleteNotificationsTool), "")] = ["notification_id", "notification_ids"],
             [(typeof(GetApiKeysTool), "")] = [],

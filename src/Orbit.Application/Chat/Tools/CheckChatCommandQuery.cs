@@ -60,6 +60,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
     private async Task<Result?> CheckHabitAsync(object command, CancellationToken ct) => command switch
     {
         CreateSubHabitCommand create => await CheckSubHabitAsync(create, ct),
+        AppendChecklistItemCommand append => await AppendChecklistItemCommandHandler.CheckAsync(append, Repository<Habit>(), ct),
         UpdateChecklistCommand update => await ExistsAsync<Habit>(h => h.Id == update.HabitId && h.UserId == update.UserId, ct),
         DeleteHabitCommand delete => await ExistsAsync<Habit>(h => h.Id == delete.HabitId && h.UserId == delete.UserId, ct),
         DuplicateHabitCommand duplicate => await ExistsAsync<Habit>(h => h.Id == duplicate.HabitId && h.UserId == duplicate.UserId, ct),

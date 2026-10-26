@@ -5,6 +5,7 @@ using MediatR;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -142,7 +143,7 @@ public class BulkCreateHabitsTool(
     }
 
     private static bool RequiresTreeCommands(JsonElement item) =>
-        new[] { GoalIds, TagIds, HabitId }.Any(field => item.TryGetProperty(field, out _))
+        new[] { GoalIds, TagIds, HabitId, HabitPlacementRecommendation.Argument }.Any(field => item.TryGetProperty(field, out _))
         || item.TryGetProperty(SubHabits, out var children) && children.EnumerateArray().Any(RequiresTreeCommands);
 
     internal async Task<ToolResult> ExecuteSingleAsync(JsonElement source, Guid userId, CancellationToken ct)
@@ -187,6 +188,20 @@ public class BulkCreateHabitsTool(
     private async Task<ToolResult> ExecuteTreeAsync(JsonElement source, BulkHabitItem item, Guid userId,
         Guid? parentId, bool checkOnly, CancellationToken ct)
     {
+        if (source.TryGetProperty(HabitPlacementRecommendation.Argument, out var placement))
+        {
+            if (placement.ValueKind != JsonValueKind.String || HabitPlacement.Validate(placement.GetString(), parentId).IsFailure)
+                return new(false, Error: "invalid_placement");
+            if (placement.GetString() == HabitPlacement.ChecklistItem)
+            {
+                var append = new AppendChecklistItemCommand(userId, parentId!.Value, item.Title);
+                if (checkOnly) return await ChatToolArgumentCheck.CheckCommandAsync(mediator, append, ct);
+                var appended = await mediator.Send(append, ct);
+                return appended.IsFailure ? ToolResult.FromFailure(appended)
+                    : new(true, EntityId: appended.Value.ToString(), EntityName: item.Title);
+            }
+            if (placement.GetString() == HabitPlacement.NewParent) parentId = null;
+        }
         if (source.TryGetProperty(HabitId, out var existingId))
             return existingId.ValueKind == JsonValueKind.String && Guid.TryParse(existingId.GetString(), out var reusedId)
                 ? await UpdateExistingTreeAsync(source, item, reusedId, parentId, userId, checkOnly, ct)
@@ -194,7 +209,8 @@ public class BulkCreateHabitsTool(
         var command = CreateTreeCommand(source, item, userId, parentId);
         if (checkOnly)
         {
-            var check = await ChatToolArgumentCheck.CheckCommandAsync(mediator, command, ct);
+            var checkCommand = command is CreateHabitCommand ? (object)new BulkCreateHabitsCommand(userId, [item]) : command;
+            var check = await ChatToolArgumentCheck.CheckCommandAsync(mediator, checkCommand, ct);
             if (!check.Success) return check;
             return new ToolResult(true);
         }
@@ -391,6 +407,12 @@ public class BulkCreateHabitsTool(
         };
 
         properties["start_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD recurrence anchor." };
+        properties["placement"] = new
+        {
+            type = JsonSchemaTypes.String,
+            @enum = new[] { HabitPlacement.SubHabit, HabitPlacement.ChecklistItem, HabitPlacement.NewParent },
+            description = "Optional explicit placement choice for an addition to parent_habit_id. Omit to use the server recommendation. Preserve every other proposal field when switching."
+        };
         properties["reminder_enabled"] = new { type = JsonSchemaTypes.Boolean };
         properties["reminder_times"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } };
         properties["scheduled_reminders"] = BulkHabitToolArguments.ScheduledRemindersSchema();
@@ -406,7 +428,7 @@ public class BulkCreateHabitsTool(
             properties["sub_habits"] = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
+                description = "Independently trackable activities under this parent. Follow the destination structure and account pattern. An empty account's new routine defaults to this form. Preserve each requested time.",
                 items = HabitItemSchema(remainingDepth - 1)
             };
         }

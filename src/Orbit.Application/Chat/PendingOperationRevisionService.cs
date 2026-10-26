@@ -9,11 +9,12 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
-public sealed record RevisedPendingOperationItem(string ItemId, JsonElement? Edits = null);
+public sealed record RevisedPendingOperationItem(string ItemId, JsonElement? Edits = null, string? Placement = null);
 
 public sealed record RevisePendingOperationRequest(
     string PreviewFingerprint,
-    IReadOnlyList<RevisedPendingOperationItem> Items);
+    IReadOnlyList<RevisedPendingOperationItem> Items,
+    AgentClientContext? ClientContext = null);
 
 public sealed record PendingOperationRevisionResult(
     bool IsSuccess,
@@ -29,7 +30,7 @@ public sealed partial class PendingOperationRevisionService(
     AiToolRegistry toolRegistry)
 {
     public async Task<PendingOperationRevisionResult> RefreshAsync(
-        Guid userId, Guid pendingOperationId, CancellationToken cancellationToken)
+        Guid userId, Guid pendingOperationId, CancellationToken cancellationToken, AgentClientContext? clientContext = null)
     {
         var execution = store.GetExecution(userId, pendingOperationId);
         if (execution is null)
@@ -39,7 +40,7 @@ public sealed partial class PendingOperationRevisionService(
             return Failure("pending_operation_schema_changed");
 
         var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
-            execution.Arguments, cancellationToken);
+            execution.Arguments, cancellationToken, clientContext);
         if (previewResult.IsFailure)
             return Failure(previewResult.ErrorCode ?? previewResult.Error);
         var preview = previewResult.Value;
@@ -70,14 +71,14 @@ public sealed partial class PendingOperationRevisionService(
         if (execution is null)
             return Failure("pending_operation_not_found");
 
-        if (execution.RequiresReproposal)
-            return Failure("pending_operation_schema_changed");
+        if (RevisionError(execution, request) is { } revisionError)
+            return Failure(revisionError);
 
         if (execution.OperationId == AccountChangeSet.OperationName)
             return await ReviseChangeSetAsync(userId, execution, request, cancellationToken);
 
         var originalResult = await previewer.PreviewAsync(userId, execution.OperationId,
-            execution.Arguments, cancellationToken);
+            execution.Arguments, cancellationToken, request.ClientContext);
         if (originalResult.IsFailure)
             return PreparationFailure(originalResult);
         var original = originalResult.Value;
@@ -109,7 +110,7 @@ public sealed partial class PendingOperationRevisionService(
             return Failure("invalid_revision");
 
         var revisedPreviewResult = await previewer.PreviewAsync(userId, execution.OperationId,
-            revised.Value, cancellationToken);
+            revised.Value, cancellationToken, request.ClientContext);
         if (revisedPreviewResult.IsFailure)
             return PreparationFailure(revisedPreviewResult);
         var revisedPreview = revisedPreviewResult.Value;
@@ -119,7 +120,7 @@ public sealed partial class PendingOperationRevisionService(
                     && item.StateFingerprint != previous.StateFingerprint))
             return Failure("stale_preview");
 
-        var revisedJson = revised.Value.GetRawText();
+        var revisedJson = (revisedPreview.ExecutionArguments ?? revised.Value).GetRawText();
         var revisedFingerprint = AgentOperationFingerprint.Compute(execution.OperationId, revisedJson);
         if (!store.Revise(userId, pendingOperationId, expectedFingerprint, revisedJson,
             revisedFingerprint, revisedPreview.PreviewFingerprint!))
@@ -128,11 +129,23 @@ public sealed partial class PendingOperationRevisionService(
         return new PendingOperationRevisionResult(true, null, pendingOperationId, revisedPreview);
     }
 
+    private static string? RevisionError(PendingAgentOperationExecution execution, RevisePendingOperationRequest request) =>
+        execution.RequiresReproposal ? "pending_operation_schema_changed"
+        : !CanRevisePlacement(execution, request) ? "placement_not_supported" : null;
+
+    private static bool CanRevisePlacement(PendingAgentOperationExecution execution, RevisePendingOperationRequest request) =>
+        request.ClientContext?.SupportsPendingOperationPlacement == true
+        || !PendingOperationPlacementNegotiation.RequiresSupport(execution.OperationId, execution.Arguments)
+            && request.Items.All(item => item.Placement is null);
+
     private static string? EditError(IReadOnlyList<RevisedPendingOperationItem> items,
         IReadOnlyDictionary<string, PendingOperationItem> offered)
     {
         foreach (var item in items)
         {
+            if (item.Placement is { } placement && (offered[item.ItemId].Placement is not { } placementChoice
+                || placement != placementChoice.Selected && !placementChoice.Alternatives.Contains(placement, StringComparer.Ordinal)))
+                return "placement_not_offered";
             if (item.Edits is not { } edits || edits.ValueKind == JsonValueKind.Null)
                 continue;
             if (edits.ValueKind != JsonValueKind.Object)
@@ -155,7 +168,7 @@ public sealed partial class PendingOperationRevisionService(
         Failure(result.ErrorCode ?? result.Error);
 
     public async Task<bool> IsCurrentAsync(Guid userId, PendingAgentOperationExecution execution,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, AgentClientContext? clientContext = null)
     {
         if (execution.RequiresReproposal)
             return false;
@@ -163,7 +176,7 @@ public sealed partial class PendingOperationRevisionService(
             return execution.Surface != AgentExecutionSurface.Chat
                 || toolRegistry.GetTool(execution.OperationId)?.IsReadOnly == true;
         var currentResult = await previewer.PreviewAsync(userId, execution.OperationId,
-            execution.Arguments, cancellationToken);
+            execution.Arguments, cancellationToken, clientContext);
         if (currentResult.IsFailure)
             return false;
         var current = currentResult.Value;
@@ -171,19 +184,22 @@ public sealed partial class PendingOperationRevisionService(
     }
 
     public async Task<bool> CanApproveAsync(Guid userId, PendingAgentOperationExecution execution,
-        CancellationToken cancellationToken) =>
-        await ApprovalErrorAsync(userId, execution, cancellationToken) is null;
+        CancellationToken cancellationToken, AgentClientContext? clientContext = null) =>
+        await ApprovalErrorAsync(userId, execution, cancellationToken, clientContext) is null;
 
     public async Task<string?> ApprovalErrorAsync(Guid userId, PendingAgentOperationExecution execution,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, AgentClientContext? clientContext = null)
     {
         if (execution.RequiresReproposal)
             return "pending_operation_schema_changed";
+        if (clientContext?.SupportsPendingOperationPlacement != true
+            && PendingOperationPlacementNegotiation.RequiresSupport(execution.OperationId, execution.Arguments))
+            return "placement_not_supported";
         if (execution.OperationId is not (BulkCreateHabits or AccountChangeSet.OperationName))
             return null;
 
         var previewResult = await previewer.PreviewAsync(userId, execution.OperationId,
-            execution.Arguments, cancellationToken);
+            execution.Arguments, cancellationToken, clientContext);
         if (previewResult.IsFailure)
             return previewResult.ErrorCode ?? "validation_error";
         var preview = previewResult.Value;
@@ -203,7 +219,7 @@ public sealed partial class PendingOperationRevisionService(
         IReadOnlyList<RevisedPendingOperationItem> items, CancellationToken cancellationToken)
     {
         var edits = items.Where(HasEdits).SelectMany(item => item.Edits!.Value.EnumerateObject()).ToList();
-        if (edits.Count == 0)
+        if (edits.Count == 0 && items.All(item => item.Placement is null))
             return true;
         if (operationId == BulkCreateHabits)
             edits = edits.Where(edit => edit.Name != ParentHabitId).ToList();
@@ -290,7 +306,9 @@ public sealed partial class PendingOperationRevisionService(
             root["action"] = "delete_selected";
             return true;
         }
-        return selected.Count == 1 && ApplyEdits(root, selected[0].Edits, operationId);
+        if (selected.Count != 1 || !ApplyEdits(root, selected[0].Edits, operationId)) return false;
+        ApplyPlacement(root, selected[0]);
+        return true;
     }
 
     private static bool BuildCalendarArguments(JsonObject root,
@@ -342,9 +360,11 @@ public sealed partial class PendingOperationRevisionService(
                 copy[ParentHabitId] = sharedParent.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
+            ApplyPlacement(copy, item);
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
                 && edits.TryGetProperty(ParentHabitId, out var parent))
             {
+                if (item.Placement is null) copy.Remove(HabitPlacementRecommendation.Argument);
                 copy.Remove(HabitHeadingParents.CandidateIdsField);
                 copy.Remove(HabitHeadingParents.SuggestedParentField);
                 if (parent.ValueKind == JsonValueKind.Null)
@@ -358,6 +378,12 @@ public sealed partial class PendingOperationRevisionService(
         root["habits"] = revisedHabits;
         root.Remove(ParentHabitId);
         return true;
+    }
+
+    private static void ApplyPlacement(JsonObject target, RevisedPendingOperationItem item)
+    {
+        if (item.Placement is { } placement)
+            target[HabitPlacementRecommendation.Argument] = placement;
     }
 
     private static bool BuildUpdatedHabitArguments(JsonObject root, string operationId,

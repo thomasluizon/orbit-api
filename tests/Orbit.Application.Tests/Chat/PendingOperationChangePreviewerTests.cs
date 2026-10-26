@@ -79,6 +79,26 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Fact]
+    public async Task ChildCreation_ChecklistDestinationRecommendsChecklistWithAlternatives()
+    {
+        var parent = CreateHabit("Morning routine", null);
+        parent.UpdateChecklist([new ChecklistItem("Coffee", false)]);
+        Setup([parent]);
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        var arguments = JsonSerializer.Serialize(new { parent_habit_id = parent.Id, title = "Stretch", frequency_unit = "Day" });
+
+        var preview = await Preview("create_sub_habit", arguments, new(SupportsPendingOperationPlacement: true));
+
+        preview.Should().NotBeNull();
+        var item = JsonSerializer.SerializeToElement(preview!.Items!.Single(), JsonSerializerOptions.Web);
+        item.TryGetProperty("placement", out var placement).Should().BeTrue("a destination proposal must offer placement");
+        placement.GetProperty("selected").GetString().Should().Be("checklist_item");
+        placement.GetProperty("reasonKey").GetString().Should().Be("chat.placement.destinationChecklist");
+        placement.GetProperty("alternatives").EnumerateArray().Select(value => value.GetString())
+            .Should().BeEquivalentTo("sub_habit", "new_parent");
+    }
+
+    [Fact]
     public async Task ChildCreation_PreviewsEverySuppliedFieldAndResolvesOwnedDependencies()
     {
         var parent = CreateHabit("Parent", null);
@@ -200,6 +220,7 @@ public sealed class PendingOperationChangePreviewerTests
     {
         var parent = CreateHabit("Academia", null);
         Setup([parent]);
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         var preview = await Preview("bulk_create_habits", JsonSerializer.Serialize(new
         {
             parent_habit_id = parent.Id,
@@ -945,10 +966,10 @@ public sealed class PendingOperationChangePreviewerTests
         }
     }
 
-    private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json) =>
+    private async Task<Orbit.Domain.Models.PendingOperationChangePreview?> Preview(string operation, string json, Orbit.Domain.Models.AgentClientContext? clientContext = null) =>
         (await new PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
             new AiToolRegistry([])).PreviewAsync(
-            UserId, operation, JsonDocument.Parse(json).RootElement)).Value;
+            UserId, operation, JsonDocument.Parse(json).RootElement, clientContext: clientContext)).Value;
 
     private void Setup(IReadOnlyList<Habit> habits) =>
         _habits.FindAsync(

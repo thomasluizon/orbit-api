@@ -998,6 +998,22 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public Result CanAppendChecklistItem(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return Result.Failure(DomainErrors.ChecklistItemRequired);
+        if (text.Length > DomainConstants.MaxChecklistItemTextLength) return Result.Failure(DomainErrors.ChecklistItemTooLong);
+        return ChecklistItems.Count >= DomainConstants.MaxChecklistItems
+            ? Result.Failure(DomainErrors.ChecklistFull) : Result.Success();
+    }
+
+    public Result AppendChecklistItem(string text)
+    {
+        var validation = CanAppendChecklistItem(text);
+        if (validation.IsFailure) return validation;
+        UpdateChecklist([.. ChecklistItems, new ChecklistItem(text, false)]);
+        return Result.Success();
+    }
+
     public void SetPosition(int? position)
     {
         Position = position;

@@ -455,6 +455,13 @@
             }
           },
           {
+            "name": "clientContext",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "api-version",
             "in": "header",
             "required": true,
@@ -591,6 +598,13 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "clientContext",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -16176,6 +16190,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsPendingOperationPlacement": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -18885,6 +18905,16 @@
         "properties": {
           "confirmationToken": {
             "type": "string"
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
           }
         }
       },
@@ -22039,6 +22069,58 @@
               "$ref": "#/components/schemas/PendingOperationFieldOptions"
             },
             "description": "Only present for a required unresolved parent choice. Options contain exactly the matching parent habits and No parent; resolved or root items omit this field."
+          },
+          "placement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PendingOperationPlacement"
+              }
+            ]
+          }
+        }
+      },
+      "PendingOperationPlacement": {
+        "required": [
+          "selected",
+          "recommended",
+          "reasonKey",
+          "reason",
+          "alternatives",
+          "destinationId",
+          "destinationName"
+        ],
+        "type": "object",
+        "properties": {
+          "selected": {
+            "type": "string"
+          },
+          "recommended": {
+            "type": "string"
+          },
+          "reasonKey": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destinationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "destinationName": {
+            "type": "string"
           }
         }
       },
@@ -24502,7 +24584,13 @@
           "itemId": {
             "type": "string"
           },
-          "edits": { }
+          "edits": { },
+          "placement": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
         }
       },
       "RevisePendingOperationRequest": {
@@ -24520,6 +24608,16 @@
             "items": {
               "$ref": "#/components/schemas/RevisedPendingOperationItem"
             }
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
           }
         }
       },

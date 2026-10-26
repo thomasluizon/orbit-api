@@ -50,7 +50,10 @@ public partial class ProcessUserChatCommandHandler
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
-            ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
+            ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
+            request.ClientContext?.SupportsPendingOperationPlacement == true
+                ? HabitPlacementContext.Build(context.UserHabits, request.Message)
+                : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
         var toolNames = ai.ToolRegistry.GetAll().Select(tool => tool.Name).ToArray();
 
@@ -71,7 +74,7 @@ public partial class ProcessUserChatCommandHandler
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
         foreach (var pending in execution.PendingOperationStore.GetAwaiting(request.UserId))
         {
-            var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, cancellationToken);
+            var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, cancellationToken, request.ClientContext);
             if (preview.IsSuccess && preview.Value is { } value)
                 pendingPreviews.Add(new { pending_operation_id = pending.PendingOperationId, items = value.Items });
         }
