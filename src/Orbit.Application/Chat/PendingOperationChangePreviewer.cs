@@ -47,6 +47,10 @@ public sealed partial class PendingOperationChangePreviewer(
         ScheduledRemindersField, RelativeRemindersField
     };
 
+    internal static bool CanReviseCreationField(string operationId, string field) =>
+        operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits
+        && (field == ParentHabitId || field != HabitId && CreateFields.Contains(field));
+
     public async Task<Result<PendingOperationChangePreview?>> PreviewAsync(
         Guid userId,
         string operationId,

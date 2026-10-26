@@ -89,7 +89,7 @@ public sealed partial class PendingOperationRevisionService(
         if (request.Items.Any(item => !offered.ContainsKey(item.ItemId)))
             return Failure("item_not_offered");
 
-        if (EditError(request.Items, offered) is { } editError)
+        if (EditError(request.Items, offered, _ => execution.OperationId) is { } editError)
             return Failure(editError);
 
         var expectedFingerprint = AgentOperationFingerprint.Compute(
@@ -116,7 +116,7 @@ public sealed partial class PendingOperationRevisionService(
         var revisedPreview = revisedPreviewResult.Value;
         if (revisedPreview?.Items is null || revisedPreview.Items.Count != request.Items.Count
             || revisedPreview.Items.Any(item => !offered.TryGetValue(item.ItemId, out var previous)
-                || execution.OperationId != BulkCreateHabits
+                || execution.OperationId is not (BulkCreateHabits or "create_habit" or "create_sub_habit")
                     && item.StateFingerprint != previous.StateFingerprint))
             return Failure("stale_preview");
 
@@ -139,7 +139,7 @@ public sealed partial class PendingOperationRevisionService(
             && request.Items.All(item => item.Placement is null);
 
     private static string? EditError(IReadOnlyList<RevisedPendingOperationItem> items,
-        IReadOnlyDictionary<string, PendingOperationItem> offered)
+        IReadOnlyDictionary<string, PendingOperationItem> offered, Func<string, string> operationForItem)
     {
         foreach (var item in items)
         {
@@ -153,7 +153,9 @@ public sealed partial class PendingOperationRevisionService(
             var allowed = offered[item.ItemId].Fields.Where(field => field.IsEditable)
                 .Select(field => field.Field)
                 .ToHashSet(StringComparer.Ordinal);
-            if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)))
+            if (edits.EnumerateObject().Any(field => !allowed.Contains(field.Name)
+                && (offered[item.ItemId].Fields.Any(existing => existing.Field == field.Name)
+                    || !PendingOperationChangePreviewer.CanReviseCreationField(operationForItem(item.ItemId), field.Name))))
                 return "field_not_offered";
             foreach (var choice in offered[item.ItemId].FieldOptions ?? [])
                 if (edits.TryGetProperty(choice.Field, out var selected)

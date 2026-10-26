@@ -9,7 +9,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
 {
     public string Name => "revise_pending_changes";
     public bool IsReadOnly => true;
-    public string Description => "Correct an existing pending preview. Keep every unchanged field and item. Only explicitly removed item IDs are removed. This revises a proposal and never applies account changes.";
+    public string Description => "Correct an existing pending preview with only the requested field edits. Keep every unchanged field and item, including when adding an optional field. Only explicitly removed item IDs are removed. For an opinion or question about a preview, pass empty items and omit remove_item_ids to keep it beside your one-sentence answer without figures. This never applies account changes.";
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
@@ -41,6 +41,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         var store = services.GetRequiredService<IPendingAgentOperationStore>();
         var stored = store.GetExecution(userId, id);
         if (stored is null || !store.IsAwaitingConfirmation(userId, id)) return new(false, Error: "pending_operation_not_found");
+        if (stored.RequiresReproposal) return new(false, Error: "pending_operation_schema_changed");
         var previewer = services.GetRequiredService<IPendingOperationChangePreviewer>();
         var original = await previewer.PreviewAsync(userId, stored.OperationId, stored.Arguments, ct, clientContext);
         if (original.IsFailure || original.Value?.Items is not { } offered) return new(false, Error: "preview_unavailable");
@@ -60,17 +61,28 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         }
         var removed = (JsonArgumentParser.ParseStringArray(args, "remove_item_ids") ?? []).ToHashSet(StringComparer.Ordinal);
         if (edits.Keys.Concat(removed).Any(itemId => offered.All(item => item.ItemId != itemId))) return new(false, Error: "item_not_offered");
+        if (IsInspection(args)) return PendingPreview(original.Value);
         var selected = offered.Where(item => !removed.Contains(item.ItemId)).Select(item =>
             new RevisedPendingOperationItem(item.ItemId, edits.TryGetValue(item.ItemId, out var change) ? change : null)).ToArray();
         var revision = await services.GetRequiredService<PendingOperationRevisionService>().ReviseAsync(userId, id,
             new(original.Value.PreviewFingerprint!, selected, clientContext), ct);
         if (!revision.IsSuccess || revision.Preview is not { } preview) return new(false, Error: revision.Error ?? "invalid_revision");
-        var capability = services.GetRequiredService<IAgentCatalogService>().GetCapability(stored.CapabilityId)
-            ?? throw new InvalidOperationException("The pending operation capability is missing.");
-        return new(true, Payload: new PendingAgentOperation(id, stored.CapabilityId, stored.OperationId, stored.OperationId,
-            capability.RiskClass, stored.ConfirmationRequirement,
-            stored.ExpiresAtUtc ?? throw new InvalidOperationException("The pending operation expiry is missing."),
-            preview.Changes, preview.ChangeTargetCount, preview.Items,
-            preview.PreviewFingerprint, stored.ActionKey));
+        return PendingPreview(preview);
+
+        ToolResult PendingPreview(PendingOperationChangePreview value)
+        {
+            var capability = services.GetRequiredService<IAgentCatalogService>().GetCapability(stored.CapabilityId)
+                ?? throw new InvalidOperationException("The pending operation capability is missing.");
+            return new(true, Payload: new PendingAgentOperation(id, stored.CapabilityId, stored.OperationId, stored.OperationId,
+                capability.RiskClass, stored.ConfirmationRequirement,
+                stored.ExpiresAtUtc ?? throw new InvalidOperationException("The pending operation expiry is missing."),
+                value.Changes, value.ChangeTargetCount, value.Items,
+                value.PreviewFingerprint, stored.ActionKey));
+        }
     }
+
+    internal static bool IsInspection(JsonElement args) =>
+        args.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array && items.GetArrayLength() == 0
+        && (!args.TryGetProperty("remove_item_ids", out var removed)
+            || removed.ValueKind == JsonValueKind.Array && removed.GetArrayLength() == 0);
 }
