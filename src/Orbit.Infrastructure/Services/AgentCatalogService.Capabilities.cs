@@ -74,6 +74,7 @@ public partial class AgentCatalogService
                     "ChatController.RefreshReadBlock",
                     "ChatController.RefineHabitSuggestion",
                     "ChatController.PreviewHabitSuggestion",
+                    "ChatController.PreviewAllHabitSuggestions",
                     "ChatController.Transcribe",
                     "AiController.ConfirmPendingOperation",
                     "AiController.RefreshPendingOperationPreview",
