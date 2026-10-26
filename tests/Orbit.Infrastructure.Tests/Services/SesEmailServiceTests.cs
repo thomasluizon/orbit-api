@@ -215,7 +215,7 @@ public sealed class SesEmailServiceTests
         var message = _requests.Should().ContainSingle().Which.Content.Simple;
         var body = message.Body.Html.Data;
 
-        body.Should().Contain("logo-no-bg.png");
+        body.Should().Contain("pwa-512x512.png");
         body.Should().Contain("It works for the next 5 minutes.");
     }
 
@@ -277,7 +277,7 @@ public sealed class SesEmailServiceTests
         var message = _requests.Should().ContainSingle().Which.Content.Simple;
         var body = message.Body.Html.Data;
 
-        body.Should().Contain("logo-no-bg.png");
+        body.Should().Contain("pwa-512x512.png");
         message.Body.Text.Data.Should().NotBeNullOrWhiteSpace();
         body.Should().Contain("Reply to this email to answer them.");
     }

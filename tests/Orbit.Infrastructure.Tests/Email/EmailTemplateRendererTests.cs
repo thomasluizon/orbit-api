@@ -9,7 +9,7 @@ public class EmailTemplateRendererTests
         Lang: "en",
         Preheader: "Preview line",
         Footer: "The Orbit Team",
-        LogoUrl: "https://app.useorbit.org/logo-no-bg.png");
+        LogoUrl: "https://app.useorbit.org/pwa-512x512.png");
 
     private static Dictionary<string, string> VerificationCodeTokens() => new()
     {
@@ -105,7 +105,7 @@ public class EmailTemplateRendererTests
 
         html.Should().Contain("<html lang=\"en\">");
         html.Should().Contain("Preview line");
-        html.Should().Contain("https://app.useorbit.org/logo-no-bg.png");
+        html.Should().Contain("https://app.useorbit.org/pwa-512x512.png");
         html.Should().Contain("The Orbit Team");
         html.Should().Contain("role=\"presentation\"");
     }
