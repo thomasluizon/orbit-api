@@ -15,6 +15,58 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public sealed partial class ChatWriteHoldHandlerTests
 {
     [Theory]
+    [InlineData("bulk_create_habits", "frequency_unit", "\"Week\"")]
+    [InlineData("bulk_create_habits", "end_date", "\"2026-12-31\"")]
+    [InlineData("update_habit", "due_time", "\"20:00\"")]
+    [InlineData("update_habit", "frequency_unit", "\"Week\"")]
+    [InlineData("update_habit", "end_date", "\"2026-12-31\"")]
+    [InlineData("update_habit", "reminder_enabled", "false")]
+    [InlineData("update_habit", "tag_ids", "[]")]
+    [InlineData("update_habit", "parent_habit_id", null)]
+    public async Task RevisionTool_BulkAndUpdatePreserveUnmentionedFieldsAndItems(string operationId, string field, string? value)
+    {
+        var parents = ParentAccount("en");
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var arguments = operationId == "bulk_create_habits"
+            ? JsonSerializer.SerializeToElement(new
+            {
+                habits = new[]
+                {
+                    new { title = "Read", frequency_unit = "Day", due_time = "09:00", description = "A quiet chapter" },
+                    new { title = "Stretch", frequency_unit = "Day", due_time = "10:00", description = "Slowly" }
+                }
+            })
+            : JsonSerializer.SerializeToElement(new { habit_id = parents[0].Id, description = "Quiet time" });
+        ScriptToolCall(arguments.GetRawText(), operationId);
+        var held = await CreateHandler().Handle(new(_userId, "Prepare these changes"), default);
+        held.IsSuccess.Should().BeTrue(held.Error);
+        var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
+        var before = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var edited = pending.Items!.First();
+        var editValue = value is null ? JsonSerializer.SerializeToElement(parents[1].Id) : JsonDocument.Parse(value).RootElement.Clone();
+        using var services = RevisionToolServices();
+
+        var result = await new Orbit.Application.Chat.Tools.Implementations.RevisePendingChangesTool(services).ExecuteAsync(
+            JsonSerializer.SerializeToElement(new
+            {
+                pending_operation_id = pending.Id,
+                items = new[] { new { item_id = edited.ItemId,
+                    edits_json = JsonSerializer.Serialize(new Dictionary<string, JsonElement> { [field] = editValue }) } }
+            }), _userId, default);
+
+        result.Success.Should().BeTrue(result.Error);
+        var after = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var beforeItem = operationId == "bulk_create_habits" ? before.Arguments.GetProperty("habits")[0] : before.Arguments;
+        var afterItem = operationId == "bulk_create_habits" ? after.Arguments.GetProperty("habits")[0] : after.Arguments;
+        JsonElement.DeepEquals(afterItem.GetProperty(field), editValue).Should().BeTrue();
+        foreach (var property in beforeItem.EnumerateObject().Where(property => property.Name != field))
+            afterItem.GetProperty(property.Name).GetRawText().Should().Be(property.Value.GetRawText(), property.Name);
+        if (operationId == "bulk_create_habits")
+            after.Arguments.GetProperty("habits")[1].GetRawText().Should().Be(before.Arguments.GetProperty("habits")[1].GetRawText());
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
+    }
+
+    [Theory]
     [InlineData("en", "due_time", "\"20:00\"", "Move it to evenings")]
     [InlineData("pt-BR", "due_time", "\"20:00\"", "Mude para a noite")]
     [InlineData("en", "frequency_unit", "\"Week\"", "Make it weekly")]

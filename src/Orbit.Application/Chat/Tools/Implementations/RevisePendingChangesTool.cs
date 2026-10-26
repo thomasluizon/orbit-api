@@ -22,7 +22,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
-                    properties = new { item_id = new { type = JsonSchemaTypes.String }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the changed fields, in the existing preview field names and types." } },
+                    properties = new { item_id = new { type = JsonSchemaTypes.String }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
                     required = new[] { "item_id", "edits_json" }
                 }
             },
