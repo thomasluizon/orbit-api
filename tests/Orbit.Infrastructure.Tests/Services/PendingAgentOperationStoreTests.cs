@@ -402,6 +402,27 @@ public class PendingAgentOperationStoreTests : IDisposable
     }
 
     [Fact]
+    public void Placement_NewParentReservesTheRootIdentity()
+    {
+        var destination = Guid.NewGuid();
+        var capability = _catalogService.GetCapabilityByChatTool("bulk_create_habits")!
+            with
+        { ConfirmationRequirement = AgentConfirmationRequirement.FreshConfirmation };
+        var json = JsonSerializer.Serialize(new
+        {
+            parent_habit_id = destination,
+            habits = new[] { new { title = "Stretch", placement = "new_parent" } }
+        });
+        var pending = _store.Create(_userId, capability, "bulk_create_habits", json, "Create habit",
+            AgentOperationFingerprint.Compute("bulk_create_habits", json), AgentExecutionSurface.Chat);
+
+        _store.GetPendingHabitCreations(_userId).Should().ContainSingle().Which.ParentHabitId.Should().BeNull();
+        _store.SupersedeHabitCreation(_userId, "Stretch", destination).Should().BeFalse();
+        _store.GetExecution(_userId, pending.Id).Should().NotBeNull();
+        _store.SupersedeHabitCreation(_userId, "Stretch", null).Should().BeTrue();
+    }
+
+    [Fact]
     public void Cancel_RejectsAnyLaterConfirmationOrExecution()
     {
         var capability = _catalogService.GetCapability(AgentCapabilityIds.HabitsBulkDelete)!;

@@ -33,24 +33,31 @@ public sealed class GetPeriodAnalyticsQueryHandler(
             ? new ReadWindow(from, to) : null;
         var first = baseline is not null && baseline.From < window.From ? baseline.From : window.From;
         var last = baseline is not null && baseline.To > window.To ? baseline.To : window.To;
-        var rows = await habits.FindAsync(h => h.UserId == request.UserId
+        var rows = await habits.FindAsync(h => h.UserId == request.UserId && !h.IsDeleted
                 && (!request.HabitId.HasValue || h.Id == request.HabitId)
                 && (!request.IsBadHabit.HasValue || h.IsBadHabit == request.IsBadHabit),
             q => q.Include(h => h.Tags).Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date >= first && l.Date <= last)).AsSplitQuery(), ct);
         if (request.HabitId.HasValue && rows.Count == 0)
             return Result.Failure<PeriodAnalyticsResponse>(ErrorMessages.HabitNotFound);
-        var selected = rows.Where(h => request.HabitId.HasValue || h.ParentHabitId is null)
-            .Where(h => string.IsNullOrWhiteSpace(request.Search) || HabitNameMatcher.Matches(h.Title, request.Search))
+        var selected = rows.Where(h => string.IsNullOrWhiteSpace(request.Search) || HabitNameMatcher.Matches(h.Title, request.Search))
             .Where(h => string.IsNullOrWhiteSpace(request.Tag) || h.Tags.Any(t => HabitNameMatcher.Matches(t.Name, request.Tag)))
             .OrderBy(h => h.Id).ToList();
+        var legacySelected = selected.Where(h => request.HabitId.HasValue || h.ParentHabitId is null).ToList();
         var zone = TimeZoneHelper.FindTimeZone(user.TimeZone);
-        var (current, series) = PeriodAnalyticsCalculator.Calculate(selected, window, zone, user.WeekStartDay);
+        var (current, series) = PeriodAnalyticsCalculator.Calculate(legacySelected, window, zone, user.WeekStartDay);
+        current = current with { CompletedHabits = PeriodAnalyticsCalculator.CountCompletedHabits(selected, window) };
         var value = PeriodAnalyticsCalculator.Value(current, request.Metric);
-        var unit = request.Metric == "positiveLogRecords" ? "records" : "days";
+        var unit = request.Metric switch
+        {
+            "completedHabits" => "habits",
+            "positiveLogRecords" => "records",
+            _ => "days"
+        };
         PeriodComparisonCard? comparison = null;
         if (baseline is not null)
         {
-            var (previous, _) = PeriodAnalyticsCalculator.Calculate(selected, baseline, zone, user.WeekStartDay);
+            var (previous, _) = PeriodAnalyticsCalculator.Calculate(legacySelected, baseline, zone, user.WeekStartDay);
+            previous = previous with { CompletedHabits = PeriodAnalyticsCalculator.CountCompletedHabits(selected, baseline) };
             var previousValue = PeriodAnalyticsCalculator.Value(previous, request.Metric);
             comparison = new(request.Metric, unit, current, previous, value, previousValue, value - previousValue,
                 previousValue == 0 ? null : (decimal)(value - previousValue) / previousValue, request.HabitId);

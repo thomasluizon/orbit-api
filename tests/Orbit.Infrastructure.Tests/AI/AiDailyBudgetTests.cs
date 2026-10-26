@@ -30,36 +30,31 @@ public class AiDailyBudgetTests
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Timing_RecordsActualTokenCountRequestsAndCompletions(bool failCount)
+    [Fact]
+    public async Task Completion_DoesNotDispatchInputTokenCountRequests()
+    {
+        using var fixture = new BudgetFixture(useLocalEstimator: true);
+        await fixture.Client.CompleteTextAsync("system", "write");
+        fixture.Handler.CountedRequests.Should().BeEmpty();
+        fixture.Handler.Completions.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Timing_RecordsLocalBudgetAndCompletionWithoutTokenCountPhase()
     {
         using var fixture = new BudgetFixture();
         var clock = new CompletionTestClock();
-        fixture.Handler.FailCount = failCount;
-        fixture.Handler.OnCount = () => clock.Advance(TimeSpan.FromMilliseconds(11));
         fixture.Handler.OnCompletion = () => clock.Advance(TimeSpan.FromMilliseconds(13));
         using var timer = ChatTurnTimer.Begin(clock);
 
-        var error = await Record.ExceptionAsync(() => fixture.Client.CompleteTextAsync("system", "write"));
+        await fixture.Client.CompleteTextAsync("system", "write");
 
         var timing = timer.Complete();
-        timing.Phases.Select(phase => phase.Name).Should().Equal(failCount
-            ? new[] { "budget", "input_token_count", "other" }
-            : new[] { "budget", "input_token_count", "budget", "model_call", "budget", "other" });
-        timing.Phases.Single(phase => phase.Name == "input_token_count").Milliseconds.Should().Be(11);
+        timing.Phases.Select(phase => phase.Name).Should().Equal("budget", "budget", "model_call", "budget", "other");
+        timing.TotalMilliseconds.Should().Be(13);
         timing.Phases.Sum(phase => phase.Milliseconds).Should().Be(timing.TotalMilliseconds);
-        timing.TotalMilliseconds.Should().Be(failCount ? 11 : 24);
-        fixture.Handler.CountedRequests.Should().ContainSingle();
-        fixture.Handler.Completions.Should().Be(failCount ? 0 : 1);
-        if (failCount)
-            error.Should().NotBeNull();
-        else
-        {
-            error.Should().BeNull();
-            timing.Phases.Single(phase => phase.Name == "model_call").Milliseconds.Should().Be(13);
-        }
+        fixture.Handler.CountedRequests.Should().BeEmpty();
+        fixture.Handler.Completions.Should().Be(1);
     }
 
     [Theory]
@@ -100,9 +95,9 @@ public class AiDailyBudgetTests
         call.ChargedMicroDollars.Should().Be(2644);
         call.IsSettled.Should().BeTrue();
         read.AiUsageDaily.Single().CostUsd.Should().Be(0.00264375m);
-        JsonElement.DeepEquals(fixture.Handler.CountedRequests.Single().GetProperty("input"),
+        JsonElement.DeepEquals(fixture.EstimatedRequests.Single().GetProperty("input"),
             fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
-        fixture.Handler.CountedRequests.Single().TryGetProperty("max_output_tokens", out _).Should().BeFalse();
+        fixture.Handler.CountedRequests.Should().BeEmpty();
         fixture.Handler.CompletionRequests.Single().GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
     }
 
@@ -136,7 +131,7 @@ public class AiDailyBudgetTests
     }
 
     [Fact]
-    public async Task FreeImageMessage_UsesProviderImageCountAndFitsCeiling()
+    public async Task FreeImageMessage_ReservesAndSettlesWithinCeiling()
     {
         using var fixture = new BudgetFixture();
         fixture.Handler.InputTokens = 20_829;
@@ -148,8 +143,8 @@ public class AiDailyBudgetTests
 
         result.IsSuccess.Should().BeTrue();
         fixture.Handler.Completions.Should().Be(1);
-        fixture.Handler.CountedRequests.Single().GetProperty("input").GetRawText().Should().Contain("input_image");
-        JsonElement.DeepEquals(fixture.Handler.CountedRequests.Single().GetProperty("input"),
+        fixture.EstimatedRequests.Single().GetProperty("input").GetRawText().Should().Contain("input_image");
+        JsonElement.DeepEquals(fixture.EstimatedRequests.Single().GetProperty("input"),
             fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
         using var read = fixture.Database.CreateContext();
         read.AiBudgetCalls.Single().ChargedMicroDollars.Should().BeLessThan(20_000);
@@ -356,27 +351,13 @@ public class AiDailyBudgetTests
     }
 
     [Fact]
-    public async Task CountingFailure_RefusesCompletion_AndAnonymousUserIsRefused()
+    public async Task AnonymousUser_IsRefusedBeforeReservationOrCompletion()
     {
         using var fixture = new BudgetFixture();
-        fixture.Handler.FailCount = true;
-        var failed = () => fixture.Client.CompleteTextAsync("system", "write");
-        await failed.Should().ThrowAsync<Exception>();
-        fixture.Handler.Completions.Should().Be(0);
         fixture.Http.HttpContext!.User = new ClaimsPrincipal();
         var anonymous = () => fixture.Client.CompleteTextAsync("system", "write");
         await anonymous.Should().ThrowAsync<InvalidOperationException>().WithMessage("*authenticated user*");
-    }
-
-    [Fact]
-    public async Task CountingRequest_UsesTheWholeCompletionDeadline()
-    {
-        using var fixture = new BudgetFixture(completionTimeoutSeconds: 1);
-        fixture.Handler.WaitForCountCancellation = true;
-        var call = () => fixture.Client.CompleteTextAsync("system", "write").WaitAsync(TimeSpan.FromSeconds(5));
-
-        await call.Should().ThrowAsync<OperationCanceledException>();
-
+        fixture.EstimatedRequests.Should().BeEmpty();
         fixture.Handler.Completions.Should().Be(0);
     }
 
@@ -385,7 +366,7 @@ public class AiDailyBudgetTests
     [InlineData("json")]
     [InlineData("chat")]
     [InlineData("stream")]
-    public async Task CompletionShapes_ReserveTheSameCountedInputAndTools(string kind)
+    public async Task CompletionShapes_ReserveTheSameSerializedInputAndTools(string kind)
     {
         using var fixture = new BudgetFixture();
         if (kind == "text")
@@ -400,7 +381,7 @@ public class AiDailyBudgetTests
                 kind == "stream" ? _ => Task.CompletedTask : null);
             result.IsSuccess.Should().BeTrue();
         }
-        var counted = fixture.Handler.CountedRequests.Single();
+        var counted = fixture.EstimatedRequests.Single();
         var completed = fixture.Handler.CompletionRequests.Single();
         counted.GetProperty("input").GetRawText().Should().Be(completed.GetProperty("input").GetRawText());
         if (kind is "chat" or "stream")
@@ -420,9 +401,11 @@ public class AiDailyBudgetTests
         internal ModelHandler Handler { get; }
         internal BudgetedAiCompletionClient Client { get; }
         internal IAiUsageRecorder Recorder { get; }
+        internal List<JsonElement> EstimatedRequests { get; } = [];
         private readonly ServiceProvider _provider;
+        private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _estimateCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-        internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185)
+        internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185, bool useLocalEstimator = false)
         {
             User = User.Create("Writer", "writer@example.com").Value;
             User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
@@ -455,8 +438,19 @@ public class AiDailyBudgetTests
                 options, Substitute.For<IProductAnalytics>(), NullLogger<AiUsageRecorder>.Instance), Http, options);
             var raw = new AiCompletionClient(options, NullLogger<AiCompletionClient>.Instance, Recorder,
                 new HttpClientPipelineTransport(new HttpClient(Handler)));
+            var estimates = Substitute.For<IAiRequestCostEstimator>();
+            estimates.EstimateMicroDollarsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                using var request = JsonDocument.Parse(call.Arg<string>());
+                EstimatedRequests.Add(request.RootElement.Clone());
+                var price = AiRequestCostEstimator.GetPrice(options.Value, request.RootElement.GetProperty("model").GetString()!);
+                var inputRate = Math.Max(price.InputPerMillionUsd, price.CacheWritePerMillionUsd ?? price.InputPerMillionUsd);
+                return checked((long)decimal.Ceiling(Handler.InputTokens * inputRate
+                    + request.RootElement.GetProperty("max_output_tokens").GetInt32() * price.OutputPerMillionUsd));
+            });
             Client = new BudgetedAiCompletionClient(raw, new AiDailyBudget(_provider.GetRequiredService<IServiceScopeFactory>()),
-                Http, NullLogger<BudgetedAiCompletionClient>.Instance, new AiRequestCostEstimator(raw, options));
+                Http, NullLogger<BudgetedAiCompletionClient>.Instance, useLocalEstimator
+                    ? new AiRequestCostEstimator(_estimateCache, options) : estimates);
         }
 
         internal void SetUser(Guid userId) => Http.HttpContext!.User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -464,6 +458,7 @@ public class AiDailyBudgetTests
 
         public void Dispose()
         {
+            _estimateCache.Dispose();
             _provider.Dispose();
             Database.Dispose();
         }
@@ -481,12 +476,9 @@ public class AiDailyBudgetTests
         internal bool FullToolLoops { get; set; }
         internal bool Fail { get; set; }
         internal HttpStatusCode FailureStatus { get; set; } = HttpStatusCode.ServiceUnavailable;
-        internal bool FailCount { get; set; }
-        internal bool WaitForCountCancellation { get; set; }
         internal bool ReportFailedUsage { get; set; }
         internal bool OmitUsage { get; set; }
         internal bool OmitTerminalEvent { get; set; }
-        internal Action? OnCount { get; set; }
         internal Action? OnCompletion { get; set; }
         internal List<JsonElement> CountedRequests { get; } = [];
         internal List<JsonElement> CompletionRequests { get; } = [];
@@ -496,12 +488,8 @@ public class AiDailyBudgetTests
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
             if (request.RequestUri!.AbsolutePath.EndsWith("/input_tokens", StringComparison.Ordinal))
             {
-                OnCount?.Invoke();
                 CountedRequests.Add(body.RootElement.Clone());
-                if (WaitForCountCancellation)
-                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-                return Response(request, FailCount ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK,
-                    FailCount ? "{}" : JsonSerializer.Serialize(new { @object = "response.input_tokens", input_tokens = InputTokens }));
+                throw new InvalidOperationException("Completions must not dispatch token-count requests.");
             }
             CompletionRequests.Add(body.RootElement.Clone());
             OnCompletion?.Invoke();

@@ -127,6 +127,7 @@ public partial class ProcessUserChatCommandHandler
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
         if (!composition)
             cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
+        cards = ComposePeriodAnalytics(cards, request, context, executionResults);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);

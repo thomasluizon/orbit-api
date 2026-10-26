@@ -1,5 +1,6 @@
 using Orbit.Application.Common;
 using FluentValidation;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -16,6 +17,9 @@ public sealed class RevisePendingOperationRequestValidator : AbstractValidator<R
                 .Distinct(StringComparer.Ordinal).Count() == items.Count)
             .WithCopy(ValidationErrorCodes.RevisionItemIdsUnique);
         RuleForEach(request => request.Items).ChildRules(item =>
-            item.RuleFor(value => value.ItemId).NotEmpty().MaximumLength(100));
+        {
+            item.RuleFor(value => value.ItemId).NotEmpty().MaximumLength(100);
+            item.RuleFor(value => value.Placement).Must(value => value is null || HabitPlacement.IsValid(value));
+        });
     }
 }

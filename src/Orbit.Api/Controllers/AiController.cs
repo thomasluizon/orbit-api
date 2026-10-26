@@ -112,20 +112,23 @@ public class AiController(
     public record ConfirmPendingOperationResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc);
     public record StepUpChallengeRequest(string Language = "en");
     public record VerifyStepUpRequest([property: JsonRequired] Guid ChallengeId, string Code);
-    public record ExecutePendingOperationRequest(string ConfirmationToken);
+    public record ExecutePendingOperationRequest(string ConfirmationToken, AgentClientContext? ClientContext = null);
 
     [HttpPost("pending-operations/{id:guid}/preview/refresh")]
     [DistributedRateLimit("ai-operations")]
     [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(PendingOperationRevisionResult), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RefreshPendingOperationPreview(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> RefreshPendingOperationPreview(Guid id, CancellationToken cancellationToken,
+        [FromQuery] string? clientContext = null)
     {
         if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        var result = await revisionService.RefreshAsync(userId, id, cancellationToken);
+        if (!TryParseClientContext(clientContext, out var parsedClientContext))
+            return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
+        var result = await revisionService.RefreshAsync(userId, id, cancellationToken, parsedClientContext);
         await auditService.RecordAsync(new AgentAuditEntry(
             userId, AgentCapabilityIds.ChatInteract, nameof(RefreshPendingOperationPreview),
             AgentExecutionSurface.Metadata, HttpContext.User.GetAgentAuthMethod(),
@@ -172,12 +175,15 @@ public class AiController(
 
     [HttpPost("pending-operations/{id:guid}/confirm")]
     [DistributedRateLimit("ai-operations")]
-    public async Task<IActionResult> ConfirmPendingOperation(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ConfirmPendingOperation(Guid id, CancellationToken cancellationToken,
+        [FromQuery] string? clientContext = null)
     {
         if (HttpContext.User.GetAgentAuthMethod() is AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
+        if (!TryParseClientContext(clientContext, out var parsedClientContext))
+            return BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody());
         var execution = pendingStores.OperationStore.GetExecution(userId, id);
         if (execution?.RequiresReproposal == true)
         {
@@ -185,7 +191,7 @@ public class AiController(
             return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
         }
         var approvalError = execution is null ? null
-            : await revisionService.ApprovalErrorAsync(userId, execution, cancellationToken);
+            : await revisionService.ApprovalErrorAsync(userId, execution, cancellationToken, parsedClientContext);
         var invalid = approvalError is not null;
         var confirmation = invalid ? null : pendingStores.OperationStore.Confirm(userId, id);
         await auditService.RecordAsync(new AgentAuditEntry(
@@ -322,13 +328,13 @@ public class AiController(
             return Conflict(new { error = "pending_operation_schema_changed", message = "This approval uses an older tool schema. Ask Astra to propose the change again." });
         }
 
-        if (await revisionService.ApprovalErrorAsync(userId, pendingExecution, cancellationToken) is { } approvalError)
+        if (await revisionService.ApprovalErrorAsync(userId, pendingExecution, cancellationToken, request.ClientContext) is { } approvalError)
         {
             LogPendingRejection(id, pendingExecution.OperationId, approvalError);
             return ApprovalFailure(approvalError);
         }
 
-        if (!await revisionService.IsCurrentAsync(userId, pendingExecution, cancellationToken))
+        if (!await revisionService.IsCurrentAsync(userId, pendingExecution, cancellationToken, request.ClientContext))
         {
             LogPendingRejection(id, pendingExecution.OperationId, "stale_preview");
             return Conflict(new { error = "stale_preview" });
@@ -343,9 +349,24 @@ public class AiController(
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
             request.ConfirmationToken,
-            HttpContext.TraceIdentifier), cancellationToken);
+            HttpContext.TraceIdentifier, ClientContext: request.ClientContext), cancellationToken);
 
         return Ok(result);
+    }
+
+    private static bool TryParseClientContext(string? value, out AgentClientContext? context)
+    {
+        context = null;
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        try
+        {
+            context = JsonSerializer.Deserialize<AgentClientContext>(value, JsonSerializerOptions.Web);
+            return context is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private BadRequestObjectResult ApprovalFailure(string error) => error == "parent_choice_required"

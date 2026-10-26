@@ -50,7 +50,10 @@ public partial class ProcessUserChatCommandHandler
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
-            ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
+            ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
+            request.ClientContext?.SupportsPendingOperationPlacement == true
+                ? HabitPlacementContext.Build(context.UserHabits, request.Message)
+                : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
         var toolNames = ai.ToolRegistry.GetAll().Select(tool => tool.Name).ToArray();
 
@@ -71,7 +74,7 @@ public partial class ProcessUserChatCommandHandler
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
         foreach (var pending in execution.PendingOperationStore.GetAwaiting(request.UserId))
         {
-            var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, cancellationToken);
+            var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, cancellationToken, request.ClientContext);
             if (preview.IsSuccess && preview.Value is { } value)
                 pendingPreviews.Add(new { pending_operation_id = pending.PendingOperationId, items = value.Items });
         }
@@ -127,6 +130,15 @@ public partial class ProcessUserChatCommandHandler
         if (activeToolNames.Contains("get_habit_month"))
             prompt = string.Join(Environment.NewLine, prompt,
                 "get_habit_month returns habitMonth. For a supported habitMonth kind, use its exact readDirective; the server preserves the complete Calendário data. Write at most one short sentence without figures, then its block. For unsupported clients, use only its returned habit facts in text.");
+        if (activeToolNames.Contains("get_period_analytics"))
+            prompt = string.Join(Environment.NewLine, prompt,
+                "For how many habits did I complete this week or quantos hábitos concluí esta semana, call get_period_analytics with metric completedHabits. "
+                + "For how many times did I complete habits or quantas vezes concluí hábitos, use positiveLogRecords. "
+                + "Habits are distinct positive recurring habits, including independently logged children; tasks and slips do not count as habits. "
+                + "For a supported periodTotal or periodComparison block, write at most one short sentence in the person's language without figures, then the block. "
+                + "Period blocks with metric completedHabits and unit habits also require supportsCompletedHabitsMetric, in addition to supportsParts and their advertised kind. "
+                + $"Completed habits metric supported: {client?.SupportsCompletedHabitsMetric == true}. "
+                + "For an unsupported metric, answer from the queried facts in text.");
         if (client?.SupportsParts == true && client.PartKinds is { Count: > 0 })
             prompt = string.Join(Environment.NewLine, prompt,
                 "When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. "

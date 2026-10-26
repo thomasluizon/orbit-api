@@ -165,6 +165,8 @@ public partial class ProcessUserChatCommandHandler
 
     internal static bool ReadSubtypeEnabled(object block, AgentClientContext? client) => block switch
     {
+        PeriodTotalCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
+        PeriodComparisonCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
         RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
         _ => true
@@ -249,6 +251,25 @@ public partial class ProcessUserChatCommandHandler
         CaptureReadMetadata(request.UserId, cards);
         return new ChatResponse(cards.AiMessage, [], results.OperationResults, CorrelationId: request.CorrelationId,
             Parts: cards.Parts);
+    }
+
+    private static bool HasOnlySupportedPeriodReads(ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results) => !HasPendingWritePreview(results) && !results.HasBudgetRecovery
+        && results.OperationResults.Count > 0 && results.OperationResults.All(operation =>
+            operation.OperationId == "get_period_analytics" && operation.Status == AgentOperationStatus.Succeeded
+            && operation.ReadBlock is { Kind: "periodTotal" or "periodComparison" } read
+            && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags));
+
+    private ResponseCards ComposePeriodAnalytics(ResponseCards cards, ProcessUserChatCommand request,
+        ChatContext context, ToolExecutionAccumulator results)
+    {
+        if (!HasOnlySupportedPeriodReads(request, context, results)) return cards;
+        cards = EnsureFocusedReadResults(cards, request, context, results);
+        var blocks = cards.Parts?.OfType<ChatBlockPart>().ToArray();
+        if (blocks is not { Length: > 0 } || blocks.Any(block => block.Kind is not ("periodTotal" or "periodComparison"))
+            || results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)))
+            return cards;
+        return cards with { AiMessage = null, Parts = blocks, ServerComposedText = true };
     }
 
     private static List<QueryReadBlock> ReadCandidates(string directive, ToolExecutionAccumulator results)

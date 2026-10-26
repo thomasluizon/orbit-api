@@ -304,7 +304,7 @@ public partial class AgentCatalogService
                 IsPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 ChatToolNames: ["get_habit_metrics", "get_period_analytics"],
-                McpToolNames: ["get_habit_metrics"],
+                McpToolNames: ["get_habit_metrics", "get_period_analytics"],
                 ControllerActionKeys: ["HabitsController.GetMetrics"]),
 
             new AgentCapability(

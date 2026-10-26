@@ -35,9 +35,10 @@ public sealed class AstraBlockAnswerService(
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
         Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
-        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkInput = null)
+        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkInput = null,
+        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkChoiceInput = null)
     {
-        var preparation = await PrepareAsync(request, ct, checkInput);
+        var preparation = await PrepareAsync(request, ct, checkInput, checkChoiceInput);
         if (preparation.IsFailure)
             return preparation.PropagateError<ChatResponse>();
         var prepared = preparation.Value;
@@ -155,7 +156,8 @@ public sealed class AstraBlockAnswerService(
     }
 
     public async Task<Result<PreparedAstraBlockAnswer>> PrepareAsync(ProcessUserChatCommand request, CancellationToken ct,
-        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkInput = null)
+        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkInput = null,
+        Func<string, CancellationToken, Task<Result<ModerationResult>>>? checkChoiceInput = null)
     {
         var answer = request.BlockAnswer ?? throw new ArgumentException("Block answer is required.", nameof(request));
         var validation = await new AstraBlockAnswerValidator().ValidateAsync(answer, ct);
@@ -190,9 +192,10 @@ public sealed class AstraBlockAnswerService(
                 var isChoice = definition.Form == AstraBlockKinds.Choice;
                 var message = BuildMessage(definition, answer);
                 var crisis = await DetectCrisisTurnAsync(request.UserId, message, token);
-                if (crisis == CrisisLocales.None && checkInput is not null)
+                var moderationCheck = isChoice ? checkChoiceInput ?? checkInput : checkInput;
+                if (crisis == CrisisLocales.None && moderationCheck is not null)
                 {
-                    var inputCheck = await checkInput(message, token);
+                    var inputCheck = await moderationCheck(message, token);
                     if (inputCheck.IsFailure)
                         return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
                     if (inputCheck.Value.Flagged)

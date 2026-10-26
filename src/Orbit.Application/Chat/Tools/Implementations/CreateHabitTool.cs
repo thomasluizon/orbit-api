@@ -24,7 +24,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
     public int Order => 0;
 
     public string Description =>
-        "Use frequency_unit: OneTime for one-time tasks; null leaves recurrence unspecified and may require clarification. Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking." + "\n" + HabitModelInstructions.All;
+        "Use frequency_unit: OneTime for one-time tasks; null leaves recurrence unspecified and may require clarification. Create habits or dated tasks with tags, goals, checklists and children inline. Single dated events are one-time, even when a weekday is named. Separate dated extras from recurring classes. Dated children inherit parent frequency without its weekdays; use OneTime for a one-time child. Preserve requested weekdays. Use checklist_items for steps done together and sub_habits for independent tracking.";
 
     public object GetParameterSchema() => BulkCreateHabitsTool.HabitItemSchema(AppConstants.MaxHabitDepth);
 

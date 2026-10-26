@@ -144,7 +144,8 @@ public interface IPendingOperationChangePreviewer
         Guid userId,
         string operationId,
         JsonElement arguments,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        AgentClientContext? clientContext = null);
 }
 
 public interface IDestructiveOperationPreviewer

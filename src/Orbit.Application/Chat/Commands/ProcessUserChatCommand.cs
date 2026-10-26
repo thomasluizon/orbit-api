@@ -237,6 +237,7 @@ public partial class ProcessUserChatCommandHandler(
         if (request.BlockAnswer is not null)
         {
             recording.Enabled = true;
+            ChatContext? choiceContext = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
                 data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
@@ -255,8 +256,13 @@ public partial class ProcessUserChatCommandHandler(
                 }
                 return prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc);
-            }, cancellationToken, (_, token) => ModerateInputAsync(request, token));
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc, choiceContext);
+            }, cancellationToken, (_, token) => ModerateInputAsync(request, token), async (_, token) =>
+            {
+                var loaded = await LoadModeratedContextAsync(request, token);
+                choiceContext = loaded.Context;
+                return loaded.Check;
+            });
         }
         var crisis = CrisisSupportGuard.Detect(request.Message);
         if (crisis != CrisisLocales.None)
@@ -268,7 +274,7 @@ public partial class ProcessUserChatCommandHandler(
                 return await HandleCrisisTurnAsync(request, crisis, captureMessage: true);
             }
         }
-        var inputCheck = await ModerateInputAsync(request, cancellationToken);
+        var (inputCheck, context) = await LoadModeratedContextAsync(request, cancellationToken);
         if (inputCheck.IsFailure)
             return inputCheck.PropagateError<ChatResponse>();
         if (inputCheck.Value.Flagged)
@@ -278,7 +284,59 @@ public partial class ProcessUserChatCommandHandler(
             await execution.UnitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
             await execution.BlockStore.InvalidateOpenAsync(request.UserId, token);
         }, cancellationToken);
-        return await HandleTurnAsync(request, recording, evalTrace, cancellationToken);
+        return await HandleTurnAsync(request, recording, evalTrace, cancellationToken, loadedContext: context);
+
+    }
+
+    private async Task<(Result<ModerationResult> Check, ChatContext? Context)> LoadModeratedContextAsync(
+        ProcessUserChatCommand request, CancellationToken cancellationToken)
+    {
+        using var contextCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var moderationTask = ModerateInputAsync(request, cancellationToken);
+        if (moderationTask.IsCompleted)
+        {
+            var completedCheck = await moderationTask;
+            if (completedCheck.IsFailure)
+                return (completedCheck, null);
+            if (completedCheck.Value.Flagged)
+                return (completedCheck, null);
+        }
+        var contextTask = execution.UnitOfWork.HasActiveTransaction
+            ? execution.UnitOfWork.ExecuteInSavepointAsync(
+                token => LoadChatContextAsync(request, token), contextCancellation.Token)
+            : LoadChatContextAsync(request, contextCancellation.Token);
+        Result<ModerationResult> inputCheck;
+        try
+        {
+            inputCheck = await moderationTask;
+        }
+        catch
+        {
+            await CancelContextAsync();
+            throw;
+        }
+        if (inputCheck.IsFailure || inputCheck.Value.Flagged)
+        {
+            await CancelContextAsync();
+            return (inputCheck, null);
+        }
+        var contextResult = await contextTask;
+        if (contextResult.IsFailure)
+            return (contextResult.PropagateError<ModerationResult>(), null);
+        return (inputCheck, contextResult.Value);
+
+        async Task CancelContextAsync()
+        {
+            await contextCancellation.CancelAsync();
+            try
+            {
+                await contextTask;
+            }
+            catch (OperationCanceledException) when (contextCancellation.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
     }
 
     private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
@@ -324,14 +382,16 @@ public partial class ProcessUserChatCommandHandler(
 
     private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ChatTurnState recording,
         ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
-        DateTime? answeredAtUtc = null)
+        DateTime? answeredAtUtc = null, ChatContext? loadedContext = null)
     {
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
         cancellationToken = turnCancellation.Token;
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
 
-        var contextResult = await LoadChatContextAsync(request, cancellationToken);
+        var contextResult = loadedContext is null
+            ? await LoadChatContextAsync(request, cancellationToken)
+            : Result.Success(loadedContext);
         if (contextResult.IsFailure)
             return contextResult.PropagateError<ChatResponse>();
 
@@ -427,6 +487,9 @@ public partial class ProcessUserChatCommandHandler(
         if (cachedFaqAnswer is not null)
             return Result.Success(ComposeCachedFaq(cachedFaqAnswer, request, composition));
 
+        if (await TryHandlePlacementTurnAsync(request, cancellationToken) is { } placementReply)
+            return placementReply;
+
         if (await TryHandlePendingParentTurnAsync(request, context, cancellationToken) is { } pendingReply)
             return pendingReply;
 
@@ -476,7 +539,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.SanitizeFailedActions(ToolFailureMessage(userLanguage));
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
-        if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink)
+        if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink
+            && !HasOnlySupportedPeriodReads(request, context, executionResults))
             foreach (var item in bufferedStream) await streamSink(item);
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);

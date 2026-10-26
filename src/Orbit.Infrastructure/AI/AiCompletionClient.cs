@@ -127,27 +127,6 @@ public sealed partial class AiCompletionClient
         return ModelReaderWriter.Write(options).ToString();
     }
 
-    internal async Task<long> CountInputTokensAsync(string requestJson, CancellationToken cancellationToken)
-    {
-        using var phase = Orbit.Application.Chat.ChatTurnTimer.Measure(Orbit.Application.Chat.ChatPhase.InputTokenCount);
-        using var request = JsonDocument.Parse(requestJson);
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "model", "input", "tools", "text", "reasoning", "instructions", "tool_choice",
-            "parallel_tool_calls", "previous_response_id", "conversation", "truncation"
-        };
-        var fields = request.RootElement.EnumerateObject().Where(property => allowed.Contains(property.Name))
-            .ToDictionary(property => property.Name, property => property.Value);
-        using var content = BinaryContent.Create(BinaryData.FromObjectAsJson(fields));
-        var result = await _responsesClient.GetInputTokenCountAsync(content, "application/json",
-            new RequestOptions { CancellationToken = cancellationToken });
-        using var response = JsonDocument.Parse(result.GetRawResponse().Content);
-        var tokens = response.RootElement.GetProperty("input_tokens").GetInt64();
-        if (tokens < 0)
-            throw new InvalidOperationException("The provider returned an invalid input token count.");
-        return tokens;
-    }
-
     internal CreateResponseOptions CreateOptions(
         AiModelTier tier = AiModelTier.Primary,
         double temperature = 0.1,

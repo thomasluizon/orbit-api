@@ -101,7 +101,7 @@ public sealed class AstraApprovalPathTests : IDisposable
         var args = JsonSerializer.SerializeToElement(new
         {
             parent_habit_id = parent.Id,
-            habits = new[] { new { title = "Aquecimento" }, new { title = "Treino" }, new { title = "Alongamento" } }
+            habits = new[] { new { title = "Aquecimento", placement = "sub_habit" }, new { title = "Treino", placement = "sub_habit" }, new { title = "Alongamento", placement = "sub_habit" } }
         });
         var held = await executor.ExecuteAsync(new(_userId, tool.Name, args, AgentExecutionSurface.Chat,
             AgentAuthMethod.Jwt, IncludeChangePreview: true));
