@@ -104,6 +104,7 @@ internal static class ChatResponseNegotiation
             "daySummary" => typeof(DaySummaryCard),
             "streak" => typeof(StreakCard),
             "calendar" => typeof(CalendarCard),
+            "habitMonth" => typeof(HabitMonthCard),
             "recordList" => typeof(RecordListCard),
             "accountRows" => typeof(AccountRowsCard),
             "periodInsight" => typeof(PeriodInsightCard),

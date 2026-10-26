@@ -217,6 +217,9 @@ public sealed class ReadBlockScopeTests
         var tool = new GetDailySummaryTool(mediator, _dates);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, null), default);
+        await mediator.Received(1).Send(Arg.Is<GetDailySummaryQuery>(q => !q.GenerateNarrative
+            && q.DateFrom == _day && q.DateTo == _day), Arg.Any<CancellationToken>());
+        mediator.ClearReceivedCalls();
         _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_day.AddDays(100));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
         var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
@@ -401,7 +404,111 @@ public sealed class ReadBlockScopeTests
             q.AsOf == _day && q.DateTo == _day.AddDays(1) && !q.UseCurrentSelection && q.CalendarIds!.Single() == "calendar"), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task HabitMonth_RefreshRetainsAbsolutePeriodAcrossLocalMonthBoundary(string language)
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new CalendarMonthResponse([], [])));
+        var handler = new GetHabitMonthQueryHandler(mediator, _dates);
+        mediator.Send(Arg.Any<GetHabitMonthQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<GetHabitMonthQuery>(), call.Arg<CancellationToken>()));
+        var tool = new GetHabitMonthTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name,
+            JsonSerializer.SerializeToElement(new { language }), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var read = initial.Operation.ReadBlock!;
+        read.Kind.Should().Be("habitMonth");
+        read.Read.Scope.GetProperty("date_from").GetString().Should().Be("2026-04-01");
+        read.Read.Scope.GetProperty("date_to").GetString().Should().Be("2026-04-30");
+        var month = read.Block.Should().BeOfType<HabitMonthCard>().Subject;
+        month.Read.Should().Be(read.Read);
+        HabitMonthReadBlockRefreshResponse.From(read).Block.Should().BeSameAs(month);
+        _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 5, 1));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var refreshed = await refresh.Handle(new(_userId, read.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["habitMonth"]), HabitMonthOnly: true), default);
+        refreshed.IsSuccess.Should().BeTrue();
+        refreshed.Value.Read.QueryId.Should().Be(read.Read.QueryId);
+        refreshed.Value.Read.Scope.GetProperty("date_from").GetString().Should().Be("2026-04-01");
+        refreshed.Value.Read.Scope.GetProperty("date_to").GetString().Should().Be("2026-04-30");
+        await mediator.Received(2).Send(Arg.Is<GetCalendarMonthQuery>(q => q.UserId == _userId
+            && q.DateFrom == new DateOnly(2026, 4, 1) && q.DateTo == new DateOnly(2026, 4, 30)), Arg.Any<CancellationToken>());
+        mediator.ClearReceivedCalls();
+        var denied = await refresh.Handle(new(_userId, read.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["calendar"], SupportsCalendarCard: true), HabitMonthOnly: true), default);
+        denied.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+        mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HabitMonthRefresh_RejectsOtherContractsBeforeReadingSources(bool gamification)
+    {
+        var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new CalendarMonthResponse([], [])));
+        var handler = new GetHabitMonthQueryHandler(mediator, _dates);
+        mediator.Send(Arg.Any<GetHabitMonthQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<GetHabitMonthQuery>(), call.Arg<CancellationToken>()));
+        var tool = new GetHabitMonthTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{}"),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        mediator.ClearReceivedCalls();
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+
+        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["habitMonth", "gamification"]), GamificationOnly: gamification), default);
+
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+        mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
     private AgentOperationExecutor Executor(IAiTool tool) => CreateExecutor(tool, _blocks);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HabitMonthRefresh_RejectsGamificationAndStreakTokens(bool gamification)
+    {
+        var mediator = Substitute.For<IMediator>();
+        GamificationReadTestData.Configure(mediator, _day);
+        var tool = new GetGamificationOverviewTool(mediator);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, JsonSerializer.SerializeToElement(new
+        { include_profile = true, include_achievements = false, include_streak = !gamification }),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        mediator.ClearReceivedCalls();
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+
+        var result = await refresh.Handle(new(_userId, initial.Operation.ReadBlock!.Read.RefreshToken,
+            new(SupportsParts: true, PartKinds: ["habitMonth", "gamification", "streak"], SupportsStreakCard: true),
+            HabitMonthOnly: true), default);
+
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorMessages.NoPermission.Code);
+        mediator.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false, false, false, true)]
+    [InlineData(false, false, true, true)]
+    [InlineData(true, false, false, true)]
+    [InlineData(false, true, false, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, true, true, false)]
+    [InlineData(true, true, false, false)]
+    public void RefreshValidator_RejectsPagingForDedicatedContractsAndOverlappingContracts(
+        bool habitMonth, bool gamification, bool page, bool valid)
+    {
+        var validator = new Orbit.Application.Chat.Validators.RefreshReadBlockQueryValidator();
+
+        validator.Validate(new RefreshReadBlockQuery(_userId, "token", null,
+            Page: page, GamificationOnly: gamification, HabitMonthOnly: habitMonth)).IsValid.Should().Be(valid);
+    }
 
     [Theory]
     [InlineData(true, false, false, "gamification")]

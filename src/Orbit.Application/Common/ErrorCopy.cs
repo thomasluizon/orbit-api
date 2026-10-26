@@ -91,6 +91,7 @@ public static partial class ErrorCopy
         (DomainErrors.GeneralHabitHasEndDate.Code, "A general habit carries no end date.", "Um hábito geral não tem data de fim."),
         (DomainErrors.EndDateBeforeStartDate.Code, "Set the end date on or after the start date.", "Defina a data de fim igual ou depois da data de início."),
         (DomainErrors.InvalidStartDate.Code, "Choose a valid start date for a recurring habit.", "Escolha uma data de início válida para um hábito recorrente."),
+        (DomainErrors.HabitCalendarRangeInvalid.Code, "Choose a valid habit calendar period of up to 62 days.", "Escolha um período válido de até 62 dias para o calendário de hábitos."),
         (DomainErrors.InvalidDatePhrase.Code, "I couldn't identify the date. Choose it on the calendar.", "Não consegui identificar a data. Escolha no calendário."),
         (DomainErrors.MaxScheduledReminders.Code, "A habit holds {0} scheduled reminders. Remove one to add another.", "Um hábito guarda {0} lembretes agendados. Remova um para adicionar outro."),
         (DomainErrors.MaxReminderTimes.Code, "A habit holds {0} reminder times. Remove one to add another.", "Um hábito guarda {0} horários de lembrete. Remova um para adicionar outro."),

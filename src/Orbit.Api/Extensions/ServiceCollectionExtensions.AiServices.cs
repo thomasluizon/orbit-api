@@ -95,6 +95,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
         builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
         builder.Services.AddScoped<IAiTool, GetCalendarOverviewTool>();
+        builder.Services.AddScoped<IAiTool, GetHabitMonthTool>();
         builder.Services.AddScoped<GetNotionTasksTool>();
         builder.Services.AddScoped<IAiTool>(sp => sp.GetRequiredService<GetNotionTasksTool>());
         builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();

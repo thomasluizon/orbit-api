@@ -9,6 +9,7 @@ public static class DomainErrors
     public static readonly AppError ChecklistItemRequired = new("CHECKLIST_ITEM_REQUIRED", "Checklist append requires nonblank text.");
     public static readonly AppError ChecklistItemTooLong = new("CHECKLIST_ITEM_TOO_LONG", "Checklist append text exceeds the domain limit.");
     public static readonly AppError ChecklistFull = new("CHECKLIST_FULL", "Checklist append exceeds the domain item limit.");
+    public static readonly AppError HabitCalendarRangeInvalid = new("HABIT_CALENDAR_RANGE_INVALID", "A habit calendar window must be ordered, support schedule lookback, and contain at most 62 local dates.");
     public static readonly AppError InvalidDatePhrase = new("INVALID_DATE_PHRASE", "A date phrase of up to 200 characters and a supported language are required.");
     public static readonly AppError InvalidStartDate = new("INVALID_START_DATE", "A valid start date requires a recurring habit and account date context.");
     public static readonly AppError UserIdRequired = new("USER_ID_REQUIRED", "User ID is required.");

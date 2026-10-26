@@ -449,7 +449,8 @@ public partial class ProcessUserChatCommandHandlerTests
     private static IAiTool SummaryReadTool(IReadOnlyList<Habit>? habits = null)
     {
         var (card, revision) = Orbit.Application.Habits.Services.DailySummaryReadProjection.Project(
-            habits ?? [], Today, Today, TimeZoneInfo.Utc, 1, 0);
+            habits ?? [], Today, Today, TimeZoneInfo.Utc, 1, 0,
+            Orbit.Application.Tests.Common.DailySummaryScheduleFixture.Project(habits ?? [], Today));
         return ReadTool("get_daily_summary", new ToolResult(true,
             Payload: new DailySummaryResponse("Summary", string.Empty, false, card, revision)));
     }
@@ -1920,13 +1921,14 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupReadToolReply("get_daily_summary", "Today [[orbit:day]]");
 
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(
-            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true)),
+            UserId, "How is today?", ClientContext: new AgentClientContext(SupportsDaySummaryCard: true, SupportsHabitListDoneStatus: true)),
             CancellationToken.None);
 
         result.Value.DaySummary.Should().NotBeNull();
-        result.Value.DaySummary!.Due.Should().Be(0);
-        result.Value.DaySummary.Done.Should().Be(0);
-        result.Value.DaySummary.CompletionRate.Should().BeNull();
+        result.Value.DaySummary!.Due.Should().Be(1);
+        result.Value.DaySummary.Done.Should().Be(1);
+        result.Value.DaySummary.CompletionRate.Should().Be(100);
+        result.Value.DaySummary.Rows.Should().ContainSingle().Which.Status.Should().Be("done");
     }
 
     [Fact]
