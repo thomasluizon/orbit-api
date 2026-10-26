@@ -8,12 +8,11 @@ install credentials. Terraform state contains decrypted secrets and needs restri
 
 The desktop shell loads the hosted app, so its origin is `https://app.useorbit.org`
 or `https://app-staging.useorbit.org`. It needs no custom-scheme CORS origin.
-Production also allows the apex and www landing origins. Staging also allows its
-legacy web origin and Render landing origin. The Turnstile hostname list is the
-intersection of each environment's origins with `cloudflare_turnstile_widget.orbit.domains`.
-The existing widget supports the staging app hostname; it does not support
-`staging.useorbit.org` or `orbit-landing-staging.onrender.com`. Those origins can pass
-CORS but cannot supply a valid proof until the widget supports their hostnames.
+Each environment allows only its app web origin. The landing page does not call
+onboarding, and the web app forwards onboarding requests through its Server Action
+BFF. The Turnstile hostname list is the intersection of each environment's origins
+with `cloudflare_turnstile_widget.orbit.domains`, yielding only `app.useorbit.org`
+for production and `app-staging.useorbit.org` for staging.
 
 ## Mobile inputs
 

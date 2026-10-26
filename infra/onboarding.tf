@@ -2,13 +2,9 @@ locals {
   onboarding_allowed_origins = {
     production = [
       "https://app.useorbit.org",
-      "https://useorbit.org",
-      "https://www.useorbit.org",
     ]
     staging = [
       "https://app-staging.useorbit.org",
-      "https://staging.useorbit.org",
-      "https://orbit-landing-staging.onrender.com",
     ]
   }
 

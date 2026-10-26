@@ -24,16 +24,18 @@ test("onboarding signing secrets are stable per-environment SecureStrings", () =
   }
 })
 
-for (const [environment, origins] of [
-  ["production", ["https://app.useorbit.org", "https://useorbit.org", "https://www.useorbit.org"]],
-  ["staging", ["https://app-staging.useorbit.org", "https://staging.useorbit.org", "https://orbit-landing-staging.onrender.com"]],
-]) {
+const expectedOrigins = {
+  production: ["https://app.useorbit.org"],
+  staging: ["https://app-staging.useorbit.org"],
+}
+
+for (const environment of ["production", "staging"]) {
   test(`${environment} API receives its own onboarding settings and secret`, () => {
     const group = configuration.split(`resource "render_env_group" "${environment}_api" {`)[1].split('\nresource "')[0]
-    assert.match(group, new RegExp(`for key, value in local\\.onboarding_api_values\\["${environment}"\\] : key => \\{ value = value \\}`))
-    assert.match(group, new RegExp(`OnboardingSecurity__SigningSecret = \\{ value = aws_ssm_parameter\\.onboarding_signing_secret_${environment}\\.value \\}`))
-    const configuredOrigins = onboarding.match(new RegExp(`${environment} = \\[([^\\]]+)\\]`))[1]
-    assert.deepEqual([...configuredOrigins.matchAll(/"([^"]+)"/g)].map(match => match[1]), origins)
+    assert.ok(group.includes(`for key, value in local.onboarding_api_values["${environment}"] : key => { value = value }`))
+    assert.ok(group.includes(`OnboardingSecurity__SigningSecret = { value = aws_ssm_parameter.onboarding_signing_secret_${environment}.value }`))
+    const configuredOrigins = onboarding.split(`${environment} = [`)[1].split("]")[0]
+    assert.deepEqual([...configuredOrigins.matchAll(/"([^"]+)"/g)].map(match => match[1]), expectedOrigins[environment])
   })
 }
 
