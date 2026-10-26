@@ -42,11 +42,13 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task TemplatePayloadBudget_ProductionReadSurvivesModelHandoff(bool supports)
+    [InlineData(true, true)]
+    public async Task TemplatePayloadBudget_ProductionReadSurvivesModelHandoff(bool supports, bool escapedNames = false)
     {
         SetupUserAndPayGate();
         var templates = Enumerable.Range(0, 40).Select(index => ChecklistTemplate.Create(UserId,
-            $"Template {index:D2}", Enumerable.Range(0, 10)
+            escapedNames ? $"Template {index:D2} ".PadRight(63, '\u6f22') + "\U0001f600" + new string('\u6f22', 35)
+                : $"Template {index:D2}", Enumerable.Range(0, 10)
                 .Select(item => $"Step {item:D2}: " + new string('x', 72)).ToList()).Value).ToList();
         _checklistTemplateRepo.FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(templates);
@@ -56,7 +58,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(call => queryHandler.Handle(call.Arg<GetChecklistTemplatesQuery>(), call.Arg<CancellationToken>()));
         var tool = new GetChecklistTemplatesTool(_mediator);
         var handler = CreateHandler(tool);
-        UseProductionReadExecutor(tool);
+        var blocks = UseProductionReadExecutor(tool);
         SetupAiResponse(ToolResponse(tool.Name, "templates", "{}"));
         ContinueWithReadDirective("[[orbit:read:templates]]");
 
@@ -67,18 +69,40 @@ public partial class ProcessUserChatCommandHandlerTests
         var full = (await tool.ExecuteAsync(ParseArguments("{}"), UserId, default)).Payload
             .Should().BeAssignableTo<IReadOnlyList<ChecklistTemplateResponse>>().Subject;
         full.Should().HaveCount(40).And.OnlyContain(template => template.Items.Count == 10);
+        foreach (var template in full)
+            template.Items.Should().Equal(templates.Single(original => original.Id == template.Id).Items);
         JsonSerializer.Serialize(full, PayloadBudgetSerializerOptions).Length.Should().BeGreaterThan(AppConstants.MaxAiToolPayloadJsonLength);
         var sent = CapturedBudgetResult();
         await AssertActualModelHandoffAsync(sent);
         var json = JsonSerializer.Serialize(sent.Payload, PayloadBudgetSerializerOptions);
         Console.WriteLine($"Template model payload: {json.Length}");
         json.Length.Should().BeLessThan(AppConstants.MaxAiToolPayloadJsonLength);
+        var model = sent.Payload.Should().BeOfType<ChecklistTemplateModelPayload>().Subject;
+        model.TotalCount.Should().Be(40);
+        model.OmittedTemplates.Should().Be(30);
+        model.Templates.Select(row => row.Id).Should().Equal(full.Take(10).Select(template => template.Id));
+        model.Templates.Should().OnlyContain(row => row.ItemCount == 10);
+        model.Templates.Should().OnlyContain(row => row.Name.Length <= 64 && !char.IsHighSurrogate(row.Name[row.Name.Length - 1]));
+        json.Should().NotContain("Step");
         if (supports)
         {
             var card = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
                 .Should().BeOfType<RecordListCard>().Subject;
             card.TotalCount.Should().Be(40);
             card.Items.Should().HaveCount(10).And.OnlyContain(item => item.Count == 10);
+            card.Read!.RefreshToken.Should().NotBeNullOrWhiteSpace();
+            card.Read.QueryFamily.Should().Be(tool.Name);
+            var readTokens = new ReadQueryTokenService(Options.Create(new JwtSettings
+            {
+                SecretKey = "test-read-query-signing-key-with-32-bytes",
+                Issuer = "test",
+                Audience = "test"
+            }));
+            var refresh = new RefreshReadBlockQueryHandler(readTokens, _operationExecutor, blocks, _featureFlagService);
+            var refreshed = await refresh.Handle(new(UserId, card.Read.RefreshToken,
+                new(SupportsParts: true, PartKinds: ["recordList"], SupportsRecordListCard: true)), default);
+            refreshed.IsSuccess.Should().BeTrue();
+            refreshed.Value.Block.Should().BeOfType<RecordListCard>().Which.Items.Should().BeEquivalentTo(card.Items);
             var ids = card.Items.Select(item => item.Id).ToList();
             var pages = new GetRecordListPageQueryHandler(_mediator);
             while (card.NextCursor is { } cursor)
@@ -97,12 +121,22 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(20, true)]
     [InlineData(100, true)]
     [InlineData(100, false)]
-    public async Task RankingPayloadBudget_ProductionReadSurvivesModelHandoff(int pageSize, bool supports)
+    [InlineData(100, true, true, true)]
+    [InlineData(20, true, true, true)]
+    [InlineData(100, true, true, false, 101)]
+    [InlineData(100, false, false, false, 100, "pt-BR")]
+    [InlineData(100, true, false, false, 0)]
+    public async Task RankingPayloadBudget_ProductionReadSurvivesModelHandoff(int pageSize, bool supports,
+        bool escapedNames = false, bool filtered = false, int total = 100, string language = "en")
     {
-        SetupUserAndPayGate();
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
         _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
-        var habits = Enumerable.Range(0, 100).Select(index => Habit.Create(new(HabitSchedule.Recurring,
-            UserId, $"Daily habit {index:D3} " + new string('x', 50), FrequencyUnit.Day, 1, Today)).Value).ToList();
+        var habits = Enumerable.Range(0, total).Select(index => Habit.Create(new(HabitSchedule.Recurring,
+            UserId, escapedNames ? ($"Daily habit {index:D3} ".PadRight(63, '\u6f22') + "\U0001f600")
+                .PadRight(AppConstants.MaxHabitTitleLength, '\u6f22')
+                : $"Daily habit {index:D3} " + new string('x', 50), FrequencyUnit.Day, 1, Today)).Value).ToList();
         foreach (var habit in habits) habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
         _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
@@ -121,7 +155,13 @@ public partial class ProcessUserChatCommandHandlerTests
         var tool = new GetHabitRankingTool(_mediator);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
-        var args = JsonSerializer.Serialize(new { date_from = Today, date_to_exclusive = Today.AddDays(1), page_size = pageSize });
+        var args = JsonSerializer.Serialize(new
+        {
+            date_from = Today,
+            date_to_exclusive = Today.AddDays(1),
+            page_size = pageSize,
+            habit_ids = filtered ? habits.Select(habit => habit.Id).ToArray() : null
+        });
         SetupAiResponse(ToolResponse(tool.Name, "ranking", args));
         ContinueWithReadDirective("[[orbit:ranking]]");
 
@@ -130,18 +170,43 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var full = (await tool.ExecuteAsync(ParseArguments(args), UserId, default)).Payload.Should().BeOfType<HabitRankingResponse>().Subject;
-        full.Rows.Should().HaveCount(pageSize);
+        full.Rows.Should().HaveCount(Math.Min(pageSize, total));
         full.Query.PageSize.Should().Be(pageSize);
         var sent = CapturedBudgetResult();
         await AssertActualModelHandoffAsync(sent);
         var json = JsonSerializer.Serialize(sent.Payload, PayloadBudgetSerializerOptions);
         Console.WriteLine($"Ranking page size {pageSize} model payload: {json.Length}");
         json.Length.Should().BeLessThan(AppConstants.MaxAiToolPayloadJsonLength);
+        var model = sent.Payload.Should().BeOfType<HabitRankingModelPayload>().Subject;
+        model.Rows.Select(row => Guid.Parse((string)row[0])).Should().Equal(full.Rows.Select(row => row.HabitId));
+        model.Rows.Select(row => (int)row[1]).Should().Equal(full.Rows.Select(row => row.CompletedCount));
+        model.Rows.Select((_, index) => model.Offset + index + 1).Should().Equal(full.Rows.Select(row => row.Rank));
+        model.QueryToken.Should().Be(full.QueryToken);
+        model.NextCursor.Should().Be(full.NextCursor);
+        model.Revision.Should().Be(full.Revision);
+        model.IsComplete.Should().Be(full.IsComplete);
+        model.Query.DateFrom.Should().Be(full.Query.DateFrom);
+        model.Query.DateToExclusive.Should().Be(full.Query.DateToExclusive);
+        model.Query.FilteredHabitCount.Should().Be(filtered ? total : 0);
+        model.OmittedNames.Should().Be(full.Rows.Count - model.Names.Count);
+        model.Names.Should().OnlyContain(pair => full.Rows.Any(row => row.HabitId.ToString("N") == pair.Key
+            && row.Name.StartsWith(pair.Value, StringComparison.Ordinal)));
+        model.Names.Values.Should().OnlyContain(name => name.Length <= 64 && !char.IsHighSurrogate(name[name.Length - 1]));
+        var maxCounts = HabitRankingModelPayload.From(full with
+        {
+            Rows = full.Rows.Select(row => row with { CompletedCount = int.MaxValue }).ToArray()
+        });
+        JsonSerializer.Serialize(maxCounts, PayloadBudgetSerializerOptions).Length.Should().BeLessThan(AppConstants.MaxAiToolPayloadJsonLength);
+        maxCounts.Rows.Should().HaveCount(full.Rows.Count);
+        await AssertActualModelHandoffAsync(sent with { Payload = maxCounts });
         if (supports)
             result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
                 .Should().BeOfType<HabitRankingCard>().Which.Ranking.Should().BeEquivalentTo(full);
         else
+        {
             foreach (var row in full.Rows) result.Value.AiMessage.Should().Contain($"{row.Name}: {row.CompletedCount}");
+            result.Value.AiMessage.Should().Contain(language == "pt-BR" ? "Conclusões de hábitos" : "Habit completions");
+        }
         var refreshed = await queryHandler.Handle(new(UserId, QueryToken: full.QueryToken, Refresh: true), default);
         refreshed.IsSuccess.Should().BeTrue();
         refreshed.Value.Should().BeEquivalentTo(full);
@@ -154,6 +219,7 @@ public partial class ProcessUserChatCommandHandlerTests
             pageResponse = page.Value;
             pageResponse.QueryId.Should().Be(full.QueryId);
             ids.AddRange(pageResponse.Rows.Select(row => row.HabitId));
+            await AssertActualModelHandoffAsync(sent with { Payload = HabitRankingModelPayload.From(pageResponse) });
         }
         ids.Should().BeEquivalentTo(habits.Select(habit => habit.Id)).And.OnlyHaveUniqueItems();
     }
@@ -185,7 +251,15 @@ public partial class ProcessUserChatCommandHandlerTests
 
         response.IsSuccess.Should().BeTrue();
         transport.RequestBody.Should().NotBeNull();
-        transport.RequestBody.Should().NotContain("\\\"dropped\\\":true", "the production handoff must retain typed-read facts");
+        using var request = JsonDocument.Parse(transport.RequestBody!);
+        var output = request.RootElement.GetProperty("input").EnumerateArray()
+            .Single(item => item.GetProperty("type").GetString() == "function_call_output");
+        using var body = JsonDocument.Parse(output.GetProperty("output").GetString()!);
+        var payload = body.RootElement.GetProperty("payload");
+        payload.TryGetProperty("dropped", out _).Should().BeFalse("the production handoff must retain typed-read facts");
+        payload.GetRawText().Should().Be(JsonSerializer.Serialize(sent.Payload, PayloadBudgetSerializerOptions));
+        if (sent.ReadDirective is not null)
+            body.RootElement.GetProperty("readDirective").GetString().Should().Be(sent.ReadDirective);
     }
 
     private sealed class PayloadBudgetTransport : HttpMessageHandler
