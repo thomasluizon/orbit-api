@@ -58,7 +58,7 @@ public partial class ProcessUserChatCommandHandler
             operationResult.TargetId,
             operationResult.TargetName,
             BuildToolError(operationResult),
-            operationResult.Payload,
+            operationResult.Payload is HabitMonthCard month ? HabitMonthModelPayload.From(month) : operationResult.Payload,
             operationResult.ReadBlock is null ? null : "[[orbit:read:" + call.Id + "]]");
     }
 
