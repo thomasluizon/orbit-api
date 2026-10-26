@@ -37,6 +37,7 @@ public class TurnstileVerificationServiceTests
         {
             var result = await service.VerifyAsync("client-token");
             result.Success.Should().Be(decision == "accept");
+            result.Hostname.Should().Be(decision == "accept" ? "example.com" : null);
         }
 
         sentRequest!.Method.Should().Be(HttpMethod.Post);

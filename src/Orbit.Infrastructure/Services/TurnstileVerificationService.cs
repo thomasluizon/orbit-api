@@ -41,7 +41,7 @@ public sealed class TurnstileVerificationService(
 
             var errorCodes = payload.ErrorCodes ?? [];
             if (payload.Success.Value)
-                return new TurnstileVerificationResult(true, errorCodes);
+                return new TurnstileVerificationResult(true, errorCodes, payload.Hostname);
 
             if (errorCodes.Contains("internal-error", StringComparer.Ordinal))
             {
@@ -64,6 +64,9 @@ public sealed class TurnstileVerificationService(
     {
         [JsonPropertyName("success")]
         public bool? Success { get; init; }
+
+        [JsonPropertyName("hostname")]
+        public string? Hostname { get; init; }
 
         [JsonPropertyName("error-codes")]
         public string[]? ErrorCodes { get; init; }

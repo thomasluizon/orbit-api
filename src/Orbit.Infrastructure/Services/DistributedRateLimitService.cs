@@ -9,7 +9,8 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider clock) : IDistributedRateLimitService
+public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider clock)
+    : IDistributedRateLimitService, IDistributedQuotaService
 {
     private static readonly DateTime LeaseWindowStartUtc = DateTime.UnixEpoch;
 
@@ -61,6 +62,24 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         return await ExecuteRelationalAttemptAsync(policyName, partitionKey, policy, cancellationToken);
     }
 
+    public async Task<bool> TryAcquireAsync(string policy, string partition, int limit, int amount,
+        TimeSpan window, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(policy);
+        ArgumentException.ThrowIfNullOrWhiteSpace(partition);
+        ArgumentOutOfRangeException.ThrowIfLessThan(amount, 1);
+        if (limit < amount || window <= TimeSpan.Zero)
+            return false;
+
+        var quota = new RateLimitPolicy(window, limit, 1, amount);
+        if (dbContext.ChangeTracker.HasChanges())
+            throw new InvalidOperationException("Quota acquisition requires a context without pending changes.");
+        var result = dbContext.Database.IsRelational()
+            ? await ExecuteRelationalAttemptAsync(policy, partition, quota, cancellationToken)
+            : await TryAcquireCoreAsync(policy, partition, quota, cancellationToken);
+        return result.Allowed;
+    }
+
     public async Task<DistributedRateLimitDecision> TryAcquireLeaseAsync(
         string policyName,
         string partitionKey,
@@ -74,7 +93,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
 
         var now = clock.GetUtcNow().UtcDateTime;
         var leaseEndsAtUtc = now.Add(leaseDuration);
-        await DeleteExpiredLeasesAsync(policyName, partitionKey, now, cancellationToken);
+        await DeleteExpiredLeasesAsync(policyName, now, cancellationToken);
 
         var existingLease = await dbContext.DistributedRateLimitBuckets
             .AsNoTracking()
@@ -139,13 +158,11 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
 
     private async Task DeleteExpiredLeasesAsync(
         string policyName,
-        string partitionKey,
         DateTime now,
         CancellationToken cancellationToken)
     {
         var expiredLeases = dbContext.DistributedRateLimitBuckets
             .Where(bucket => bucket.PolicyName == policyName &&
-                             bucket.PartitionKey == partitionKey &&
                              bucket.WindowStartUtc == LeaseWindowStartUtc &&
                              bucket.WindowEndsAtUtc <= now);
 
@@ -243,7 +260,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             .ToListAsync(cancellationToken);
 
         var currentCount = recentBuckets.Sum(bucket => (long)bucket.Count);
-        if (currentCount >= policy.PermitLimit)
+        if (currentCount > (long)policy.PermitLimit - policy.Amount)
         {
             var oldestRelevantBucket = recentBuckets.FirstOrDefault();
             return new DistributedRateLimitDecision(
@@ -260,11 +277,12 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                 policyName,
                 partitionKey,
                 segmentStartUtc,
-                bucketExpiresAtUtc));
+                bucketExpiresAtUtc,
+                policy.Amount));
         }
         else
         {
-            currentBucket.Increment();
+            currentBucket.Increment(policy.Amount);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -272,7 +290,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         return new DistributedRateLimitDecision(
             true,
             policy.PermitLimit,
-            (int)currentCount + 1,
+            (int)currentCount + policy.Amount,
             bucketExpiresAtUtc);
     }
 
@@ -310,5 +328,5 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         return new DateTime(ticks, DateTimeKind.Utc);
     }
 
-    private sealed record RateLimitPolicy(TimeSpan Window, int PermitLimit, int SegmentCount);
+    private sealed record RateLimitPolicy(TimeSpan Window, int PermitLimit, int SegmentCount, int Amount = 1);
 }

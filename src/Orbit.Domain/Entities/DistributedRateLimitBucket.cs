@@ -18,23 +18,31 @@ public class DistributedRateLimitBucket : Entity
         string policyName,
         string partitionKey,
         DateTime windowStartUtc,
-        DateTime windowEndsAtUtc)
+        DateTime windowEndsAtUtc,
+        int amount = 1)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(partitionKey);
+        ArgumentOutOfRangeException.ThrowIfLessThan(amount, 1);
+        if (policyName.Length > 64 || partitionKey.Length > 256 || windowEndsAtUtc <= windowStartUtc)
+            throw new ArgumentException("Invalid rate-limit bucket.");
+
         return new DistributedRateLimitBucket
         {
             PolicyName = policyName,
             PartitionKey = partitionKey,
             WindowStartUtc = windowStartUtc,
             WindowEndsAtUtc = windowEndsAtUtc,
-            Count = 1,
+            Count = amount,
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow
         };
     }
 
-    public void Increment()
+    public void Increment(int amount = 1)
     {
-        Count++;
+        ArgumentOutOfRangeException.ThrowIfLessThan(amount, 1);
+        Count = checked(Count + amount);
         UpdatedAtUtc = DateTime.UtcNow;
     }
 }

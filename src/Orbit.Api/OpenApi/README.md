@@ -21,6 +21,11 @@ artifact bytes retain their exact meaning. Legacy retirement needs separate
 consumer adoption work. Future compatible endpoint additions can still update
 all supported streams through ordinary generation and comparison.
 
+The additive anonymous onboarding enrollment, attestation, credential rotation and
+schedule fallback contract for thomasluizon/orbit-tickets#1782 is documented in
+[Onboarding.md](Onboarding.md). Deploy the producer before updating the paired
+consumer's shared contract snapshot.
+
 Chat clients may send optional `clientContext.supportsMessageAllowance: true` to
 receive optional `messageAllowanceConsumed` on each successful chat response,
 including the SSE final response. True means the request consumed one message;
