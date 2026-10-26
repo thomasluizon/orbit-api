@@ -15,6 +15,65 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Moderation_OverlapsContextAndGatesModel(bool flagged, bool unavailable)
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Allowed" });
+        var check = new TaskCompletionSource<ModerationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var contextStarted = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var context = new TaskCompletionSource<IReadOnlyList<Habit>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(check.Task);
+        _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                var token = call.Arg<CancellationToken>();
+                contextStarted.TrySetResult(token);
+                return context.Task.WaitAsync(token);
+            });
+
+        using var cancellation = new CancellationTokenSource();
+        var turn = CreateHandler().Handle(new(UserId, "Hello", ClientContext: new(SupportsMessageAllowance: true)), cancellation.Token);
+        try
+        {
+            var token = await contextStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            _aiIntentService.ReceivedCalls().Should().BeEmpty();
+            check.SetResult(new ModerationResult(flagged, unavailable, []));
+            if (!flagged && !unavailable)
+            {
+                _aiIntentService.ReceivedCalls().Should().BeEmpty();
+                context.SetResult([]);
+            }
+            var result = await turn.WaitAsync(TimeSpan.FromSeconds(2));
+            if (flagged || unavailable)
+            {
+                token.IsCancellationRequested.Should().BeTrue();
+                _aiIntentService.ReceivedCalls().Should().BeEmpty();
+                _payGate.ReceivedCalls().Should().BeEmpty();
+                await _blockStore.DidNotReceiveWithAnyArgs().InvalidateOpenAsync(default, default);
+                result.IsFailure.Should().Be(unavailable);
+            }
+            else
+            {
+                result.IsSuccess.Should().BeTrue();
+                await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+                    Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+                await _habitRepo.Received(1).FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
+                    Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>());
+            }
+        }
+        finally
+        {
+            check.TrySetResult(new ModerationResult(false, true, []));
+            context.TrySetResult([]);
+            cancellation.Cancel();
+            await turn;
+        }
+    }
+
+    [Theory]
     [InlineData(null, false)]
     [InlineData(false, false)]
     [InlineData(true, false)]
