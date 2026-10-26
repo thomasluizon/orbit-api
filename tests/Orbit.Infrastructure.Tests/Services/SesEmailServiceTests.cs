@@ -46,7 +46,7 @@ public sealed class SesEmailServiceTests
 
         _requests.Should().ContainSingle();
         var request = _requests[0];
-        request.FromEmailAddress.Should().Be("Orbit <noreply@send.useorbit.org>");
+        request.FromEmailAddress.Should().Be("Orbit <contact@useorbit.org>");
         request.Destination.ToAddresses.Should().ContainSingle().Which.Should().Be(to);
         request.ConfigurationSetName.Should().Be("orbit-transactional");
         request.Content.Simple.Subject.Data.Should().ContainEquivalentOf(subjectFragment);
@@ -59,7 +59,7 @@ public sealed class SesEmailServiceTests
     {
         await _service.SendSupportEmailAsync("Taylor", "taylor@example.com", "Help", "Question");
         var request = _requests.Should().ContainSingle().Which;
-        request.FromEmailAddress.Should().Be("Orbit <noreply@send.useorbit.org>");
+        request.FromEmailAddress.Should().Be("Orbit <contact@useorbit.org>");
         request.Destination.ToAddresses.Should().ContainSingle().Which.Should().Be("support@useorbit.org");
         request.ConfigurationSetName.Should().Be("orbit-transactional");
         request.Content.Simple.Subject.Data.Should().Be("[Orbit Support] Help");

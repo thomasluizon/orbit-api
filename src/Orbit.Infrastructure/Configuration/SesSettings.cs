@@ -6,7 +6,7 @@ public sealed class SesSettings
     public string Region { get; init; } = "us-east-2";
     public string AccessKeyId { get; init; } = "";
     public string SecretAccessKey { get; init; } = "";
-    public string FromEmail { get; init; } = "Orbit <noreply@send.useorbit.org>";
+    public string FromEmail { get; init; } = "Orbit <contact@useorbit.org>";
     public string SupportEmail { get; init; } = "contact@useorbit.org";
     public string MarketingFromEmail { get; init; } = "Orbit <news@updates.useorbit.org>";
     public string TransactionalConfigurationSet { get; init; } = "orbit-transactional";

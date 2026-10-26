@@ -228,7 +228,23 @@ Each SNS HTTPS subscription retains failed deliveries for up to 14 days in its o
 
 The SES DKIM CNAME records and the MAIL FROM MX and SPF records are managed directly in `ses.tf` using the SES identity outputs. Each identity uses Easy DKIM with 2048-bit keys and three unproxied CNAME records. The custom MAIL FROM domains are `bounce.send.useorbit.org`, `bounce.updates.useorbit.org`, and `bounce.useorbit.org`; only these bounce subdomains receive SES MX and SPF records. The root `useorbit.org` MX stays on Google Workspace, and `_dmarc.useorbit.org` retains its reject policy. The Cloudflare zone is created on the Free plan without a zone subscription resource because that resource requires billing scope unavailable to the DNS token.
 
-Staging uses `Ses__FromEmail = "Orbit <contact@useorbit.org>"`, the Workspace user whose profile photo is the Orbit icon. Production keeps `Orbit <noreply@send.useorbit.org>`. Apply the root identity, its DNS records, and both send policies before deploying the staging environment group. In the AWS SES console in `us-east-2`, confirm that `useorbit.org` has successful identity, DKIM, and custom MAIL FROM verification. In Render, confirm the staging API service inherits the new `Ses__FromEmail` from its linked `orbit-staging-api` environment group, with no service override. Receive a real staging email in Gmail, check aligned SPF, DKIM, and DMARC in **Show original**, and verify the Orbit icon in both Gmail web and the Gmail app. The Workspace profile photo route needs this received-email check; configuration alone does not prove the avatar appears. Switch production only in a follow-up after the staging check succeeds.
+Both environments send transactional email with `Ses__FromEmail = "Orbit <contact@useorbit.org>"`, the Workspace user whose public profile photo is the Orbit icon. Staging inherits this value from `production_api_values`. Marketing retains `Ses__MarketingFromEmail = "Orbit <news@updates.useorbit.org>"` for its separate reputation, and `Ses__SupportEmail` remains `contact@useorbit.org`.
+
+To roll out the transactional sender to production:
+
+1. In the AWS SES console in `us-east-2`, confirm that `useorbit.org` has successful identity, DKIM, and custom MAIL FROM verification.
+2. Save a plan targeting only the production API environment group:
+
+   ```sh
+   terraform -chdir=infra plan -var-file=local.tfvars \
+     -target=render_env_group.production_api \
+     -out=production-sender.tfplan
+   ```
+
+3. Review the saved plan with `terraform -chdir=infra show production-sender.tfplan`. Only `render_env_group.production_api` may change, and its only setting change must be `Ses__FromEmail` to `Orbit <contact@useorbit.org>`. Preserve all other settings, including the marketing sender and support address. If the plan includes other changes, stop and resolve them before applying.
+4. Apply the reviewed plan with `terraform -chdir=infra apply production-sender.tfplan`.
+5. In Render, open the production API service `orbit-api` > **Environment**. Confirm it inherits `Ses__FromEmail = "Orbit <contact@useorbit.org>"` from the linked `orbit-production-api` environment group, with no service override, and confirm its deploy with the updated environment succeeds.
+6. Receive one real production transactional email in Gmail web. Confirm the From address is `Orbit <contact@useorbit.org>`, the Orbit icon appears in the sender header, and **Show original** reports passing, aligned SPF, DKIM, and DMARC: MAIL FROM `bounce.useorbit.org` and DKIM signing domain `useorbit.org`. The Workspace profile photo route needs this received-email check; configuration alone does not prove the avatar appears.
 
 Terraform creates `/orbit/production/api/BotProtection__SecretKey` and `/orbit/staging/api/BotProtection__SecretKey` as SecureString parameters from the managed Turnstile widget. Both API environment groups read the corresponding parameter. `BotProtection__Enabled` remains at its current setting. The public `turnstile_site_key` output is for the web and landing builds.
 

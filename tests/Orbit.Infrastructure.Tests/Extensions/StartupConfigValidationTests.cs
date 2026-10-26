@@ -170,7 +170,7 @@ public class StartupConfigValidationTests
         ["Ses:AccessKeyId"] = "key",
         ["Ses:SecretAccessKey"] = "secret",
         ["Ses:Region"] = "us-east-2",
-        ["Ses:FromEmail"] = "Orbit <noreply@send.useorbit.org>",
+        ["Ses:FromEmail"] = "Orbit <contact@useorbit.org>",
         ["Ses:SupportEmail"] = "contact@useorbit.org",
         ["Ses:MarketingFromEmail"] = "Orbit <news@updates.useorbit.org>",
         ["Ses:TransactionalConfigurationSet"] = "orbit-transactional",

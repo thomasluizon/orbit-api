@@ -50,7 +50,7 @@ locals {
     Jwt__Issuer                         = "OrbitApi"
     Jwt__RefreshExpiryDays              = "90"
     Ses__Region                         = "us-east-2"
-    Ses__FromEmail                      = "Orbit <noreply@send.useorbit.org>"
+    Ses__FromEmail                      = "Orbit <contact@useorbit.org>"
     Ses__MarketingFromEmail             = "Orbit <news@updates.useorbit.org>"
     Ses__SupportEmail                   = "contact@useorbit.org"
     Ses__TransactionalConfigurationSet  = aws_sesv2_configuration_set.orbit["transactional"].configuration_set_name
@@ -72,7 +72,6 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
-    Ses__FromEmail                     = "Orbit <contact@useorbit.org>"
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn
