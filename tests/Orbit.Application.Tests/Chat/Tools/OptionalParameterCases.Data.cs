@@ -45,7 +45,7 @@ public static partial class OptionalParameterCases
                 "as_of", "calendar_ids", "date_from", "date_to", "window_from_utc", "window_to_utc", "include_calendars",
                 "include_events", "include_auto_sync_state", "include_suggestions"
             ],
-            [(typeof(GetChecklistTemplatesTool), "")] = [],
+            [(typeof(GetChecklistTemplatesTool), "")] = ["template_id"],
             [(typeof(GetGamificationOverviewTool), "")] =
             [
                 "as_of", "include_profile", "include_achievements", "include_streak"

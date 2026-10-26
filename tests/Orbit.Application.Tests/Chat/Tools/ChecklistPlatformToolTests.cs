@@ -85,17 +85,34 @@ public class ChecklistPlatformToolTests
         JsonSerializer.Serialize(accountTool.GetParameterSchema()).Should().Contain("confirm_deletion");
     }
 
-    [Fact]
-    public async Task GetChecklistTemplatesTool_ReturnsSuccess()
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"template_id\":null}")]
+    public async Task GetChecklistTemplatesTool_ReturnsSuccess(string args)
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetChecklistTemplatesQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<ChecklistTemplateResponse>>([]));
         var tool = new GetChecklistTemplatesTool(mediator);
 
-        var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse(args), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("\"invalid\"")]
+    [InlineData("\"00000000-0000-0000-0000-000000000000\"")]
+    [InlineData("42")]
+    [InlineData("[]")]
+    public async Task GetChecklistTemplatesTool_RejectsInvalidLookupWithoutReading(string value)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var result = await new GetChecklistTemplatesTool(mediator).ExecuteAsync(
+            Parse("{\"template_id\":" + value + "}"), UserId, default);
+
+        result.Success.Should().BeFalse();
+        await mediator.DidNotReceive().Send(Arg.Any<GetChecklistTemplatesQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

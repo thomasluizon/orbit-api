@@ -5,23 +5,34 @@ namespace Orbit.Application.Chat;
 internal sealed record ChecklistTemplateModelPayload(int TotalCount,
     IReadOnlyList<ChecklistTemplateModelRow> Templates, int OmittedTemplates)
 {
-    public string Instruction => "Only listed templates have model facts. Names may be shortened and item texts are omitted. "
-        + "The client template list has paging; complete items remain in the checklist-template application response. "
-        + "Emit the read directive instead of repeating records. Do not infer omitted facts or retry with narrower filters.";
+    public string Instruction => "Every template identity is listed. Names may be shortened. Item texts may be incomplete; compare items length with itemCount. "
+        + "Before replacing or appending items, call get_checklist_templates with template_id to read the complete template if any items are missing. "
+        + "Do not infer missing items. Complete items remain in the checklist-template application response. Emit the read directive instead of repeating records.";
 
     public static ChecklistTemplateModelPayload From(IReadOnlyList<ChecklistTemplateResponse> templates)
     {
-        var rows = templates.Take(RecordListCardBuilder.PageSize).Select(template => new ChecklistTemplateModelRow(
-            template.Id, ShortName(template.Name), template.Items.Count)).ToList();
-        return new(templates.Count, rows, templates.Count - rows.Count);
-    }
-
-    private static string ShortName(string name)
-    {
-        if (name.Length <= 64) return name;
-        var length = char.IsHighSurrogate(name[63]) ? 63 : 64;
-        return name[..length];
+        var nameLength = 64;
+        var rows = templates.Select(template => new ChecklistTemplateModelRow(
+            template.Id, ModelPayloadBudget.ShortName(template.Name), template.Items.Count, [])).ToList();
+        var payload = new ChecklistTemplateModelPayload(templates.Count, rows, 0);
+        while (!ModelPayloadBudget.Fits(payload, reservedCharacters: 1) && nameLength > 0)
+        {
+            nameLength /= 2;
+            for (var index = 0; index < rows.Count; index++)
+                rows[index] = rows[index] with { Name = ModelPayloadBudget.ShortName(templates[index].Name, nameLength) };
+        }
+        for (var index = 0; index < rows.Count; index++)
+        {
+            foreach (var item in templates[index].Items)
+            {
+                rows[index].Items.Add(item);
+                if (ModelPayloadBudget.Fits(payload, reservedCharacters: 1)) continue;
+                rows[index].Items.RemoveAt(rows[index].Items.Count - 1);
+                break;
+            }
+        }
+        return payload;
     }
 }
 
-internal sealed record ChecklistTemplateModelRow(Guid Id, string Name, int ItemCount);
+internal sealed record ChecklistTemplateModelRow(Guid Id, string Name, int ItemCount, List<string> Items);

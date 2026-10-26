@@ -1,6 +1,4 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
-using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 
 namespace Orbit.Application.Chat;
@@ -9,13 +7,6 @@ internal sealed record HabitMonthModelPayload(DateOnly DateFrom, DateOnly DateTo
     IReadOnlyList<HabitMonthModelRow> Habits, int OmittedHabits)
 {
     private const int MaxRows = 40;
-    private const int MaxTitleLength = 64;
-    private static readonly JsonSerializerOptions ModelSerializerOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     public string Instruction => "Only listed habits have model facts. Titles may be shortened. "
         + "Do not infer facts about omitted habits or retry with narrower dates. "
         + "The client calendar block contains the complete habits and daily data for this window.";
@@ -26,7 +17,7 @@ internal sealed record HabitMonthModelPayload(DateOnly DateFrom, DateOnly DateTo
         var rows = card.Calendar.Habits.SelectMany(habit => Rows(habit.Id, habit.Title, habit.IsBadHabit, habit.IsFlexible,
             habit.ScheduledDates, habit.Children, card)).Take(MaxRows).ToList();
         var payload = new HabitMonthModelPayload(card.DateFrom, card.DateTo, card.Today, rows, total - rows.Count);
-        while (JsonSerializer.Serialize(payload, ModelSerializerOptions).Length >= AppConstants.MaxAiToolPayloadJsonLength)
+        while (!ModelPayloadBudget.Fits(payload, reservedCharacters: 1))
         {
             rows.RemoveAt(rows.Count - 1);
             payload = payload with { OmittedHabits = total - rows.Count };
@@ -36,13 +27,6 @@ internal sealed record HabitMonthModelPayload(DateOnly DateFrom, DateOnly DateTo
 
     private static int CountChildren(IReadOnlyList<HabitScheduleChildItem> children) =>
         children.Sum(child => 1 + CountChildren(child.Children));
-
-    private static string ShortTitle(string title)
-    {
-        if (title.Length <= MaxTitleLength) return title;
-        var length = char.IsHighSurrogate(title[MaxTitleLength - 1]) ? MaxTitleLength - 1 : MaxTitleLength;
-        return title[..length];
-    }
 
     private static IEnumerable<HabitMonthModelRow> Rows(Guid id, string title, bool isBadHabit, bool isFlexible,
         IReadOnlyList<DateOnly> scheduledDates, IReadOnlyList<HabitScheduleChildItem> children, HabitMonthCard card)
@@ -55,7 +39,7 @@ internal sealed record HabitMonthModelPayload(DateOnly DateFrom, DateOnly DateTo
         var scheduled = scheduledDates.Where(date => date >= card.DateFrom && date <= card.DateTo).Distinct().ToArray();
         var missed = isBadHabit ? 0 : scheduled.Count(date => date < card.Today
             && !completed.Contains(date) && !skipped.Contains(date));
-        yield return new(id, ShortTitle(title), scheduled.Length, isBadHabit ? 0 : completed.Count, skipped.Count, missed,
+        yield return new(id, ModelPayloadBudget.ShortName(title), scheduled.Length, isBadHabit ? 0 : completed.Count, skipped.Count, missed,
             isBadHabit, isFlexible, isBadHabit ? completed.Count : 0);
         foreach (var child in children)
             foreach (var row in Rows(child.Id, child.Title, child.IsBadHabit, child.IsFlexible,

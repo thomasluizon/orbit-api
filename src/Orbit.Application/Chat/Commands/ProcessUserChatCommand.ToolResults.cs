@@ -63,8 +63,8 @@ public partial class ProcessUserChatCommandHandler
             operationResult.Payload switch
             {
                 HabitMonthCard month => HabitMonthModelPayload.From(month),
-                IReadOnlyList<ChecklistTemplateResponse> templates => ChecklistTemplateModelPayload.From(templates),
-                HabitRankingResponse ranking => HabitRankingModelPayload.From(ranking),
+                IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
+                HabitRankingResponse ranking when !ModelPayloadBudget.Fits(ranking) => HabitRankingModelPayload.From(ranking),
                 _ => operationResult.Payload
             },
             operationResult.ReadBlock is null ? null : "[[orbit:read:" + call.Id + "]]");
