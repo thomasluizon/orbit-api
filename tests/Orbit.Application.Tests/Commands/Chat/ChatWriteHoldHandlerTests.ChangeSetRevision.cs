@@ -76,7 +76,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         foreach (var member in members) _pendingOperationStore.GetExecution(_userId, member.PendingOperationId).Should().BeNull();
     }
 
-    private async Task<PendingAgentOperation> HoldTwoChangesAsync()
+    private async Task<PendingAgentOperation> HoldTwoChangesAsync(AgentClientContext? clientContext = null)
     {
         var parents = ParentAccount("en");
         _unitOfWork.PassThroughTransactions<Result<string>>();
@@ -95,7 +95,7 @@ public sealed partial class ChatWriteHoldHandlerTests
                 ],
                 ConversationContext = new()
             }));
-        var result = await CreateHandler().Handle(new(_userId, "Add Magnesium under Post Lunch and describe Before Bed as Quiet time"), default);
+        var result = await CreateHandler().Handle(new(_userId, "Add Magnesium under Post Lunch and describe Before Bed as Quiet time", ClientContext: clientContext), default);
         result.IsSuccess.Should().BeTrue();
         return result.Value.PendingOperations.Should().ContainSingle().Which;
     }

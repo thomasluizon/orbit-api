@@ -38,13 +38,13 @@ public partial class ProcessUserChatCommandHandler
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
         if (!correction)
         {
-            var original = await previewer.PreviewAsync(request.UserId, stored.OperationId, stored.Arguments, ct);
+            var original = await previewer.PreviewAsync(request.UserId, stored.OperationId, stored.Arguments, ct, request.ClientContext);
             if (original.IsFailure || original.Value is null) return null;
             return Result.Success(PendingParentReply(request, PendingFromStored(stored, proposal, original.Value)));
         }
         var revised = ParentCorrectionArguments(request, context, stored);
         if (revised is null) return Result.Failure<ChatResponse>("parent_resolution_required", "parent_resolution_required");
-        var preview = await previewer.PreviewAsync(request.UserId, revised.OperationId, revised.Arguments, ct);
+        var preview = await previewer.PreviewAsync(request.UserId, revised.OperationId, revised.Arguments, ct, request.ClientContext);
         if (preview.IsFailure || preview.Value?.Items is not { Count: > 0 })
             return Result.Failure<ChatResponse>("preview_unavailable");
         AgentExecuteOperationResponse? replacement = null;

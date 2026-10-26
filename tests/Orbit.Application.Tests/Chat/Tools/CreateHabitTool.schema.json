@@ -109,6 +109,15 @@
       "type": "string",
       "description": "YYYY-MM-DD recurrence anchor."
     },
+    "placement": {
+      "type": "string",
+      "enum": [
+        "sub_habit",
+        "checklist_item",
+        "new_parent"
+      ],
+      "description": "Optional explicit placement choice for an addition to parent_habit_id. Omit to use the server recommendation. Preserve every other proposal field when switching."
+    },
     "reminder_enabled": {
       "type": "boolean"
     },
@@ -195,7 +204,7 @@
     },
     "sub_habits": {
       "type": "array",
-      "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
+      "description": "Independently trackable activities under this parent. Follow the destination structure and account pattern. An empty account's new routine defaults to this form. Preserve each requested time.",
       "items": {
         "type": "object",
         "properties": {
@@ -307,6 +316,15 @@
             "type": "string",
             "description": "YYYY-MM-DD recurrence anchor."
           },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "sub_habit",
+              "checklist_item",
+              "new_parent"
+            ],
+            "description": "Optional explicit placement choice for an addition to parent_habit_id. Omit to use the server recommendation. Preserve every other proposal field when switching."
+          },
           "reminder_enabled": {
             "type": "boolean"
           },
@@ -393,7 +411,7 @@
           },
           "sub_habits": {
             "type": "array",
-            "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
+            "description": "Independently trackable activities under this parent. Follow the destination structure and account pattern. An empty account's new routine defaults to this form. Preserve each requested time.",
             "items": {
               "type": "object",
               "properties": {
@@ -505,6 +523,15 @@
                   "type": "string",
                   "description": "YYYY-MM-DD recurrence anchor."
                 },
+                "placement": {
+                  "type": "string",
+                  "enum": [
+                    "sub_habit",
+                    "checklist_item",
+                    "new_parent"
+                  ],
+                  "description": "Optional explicit placement choice for an addition to parent_habit_id. Omit to use the server recommendation. Preserve every other proposal field when switching."
+                },
                 "reminder_enabled": {
                   "type": "boolean"
                 },
@@ -591,7 +618,7 @@
                 },
                 "sub_habits": {
                   "type": "array",
-                  "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
+                  "description": "Independently trackable activities under this parent. Follow the destination structure and account pattern. An empty account's new routine defaults to this form. Preserve each requested time.",
                   "items": {
                     "type": "object",
                     "properties": {
@@ -703,6 +730,15 @@
                         "type": "string",
                         "description": "YYYY-MM-DD recurrence anchor."
                       },
+                      "placement": {
+                        "type": "string",
+                        "enum": [
+                          "sub_habit",
+                          "checklist_item",
+                          "new_parent"
+                        ],
+                        "description": "Optional explicit placement choice for an addition to parent_habit_id. Omit to use the server recommendation. Preserve every other proposal field when switching."
+                      },
                       "reminder_enabled": {
                         "type": "boolean"
                       },
@@ -789,7 +825,7 @@
                       },
                       "sub_habits": {
                         "type": "array",
-                        "description": "Independently trackable child habits under this parent. Routine activities belong here under one parent; preserve each requested time. Choose this form without asking checklist versus children.",
+                        "description": "Independently trackable activities under this parent. Follow the destination structure and account pattern. An empty account's new routine defaults to this form. Preserve each requested time.",
                         "items": {
                           "type": "object",
                           "properties": {
@@ -900,6 +936,15 @@
                             "start_date": {
                               "type": "string",
                               "description": "YYYY-MM-DD recurrence anchor."
+                            },
+                            "placement": {
+                              "type": "string",
+                              "enum": [
+                                "sub_habit",
+                                "checklist_item",
+                                "new_parent"
+                              ],
+                              "description": "Optional explicit placement choice for an addition to parent_habit_id. Omit to use the server recommendation. Preserve every other proposal field when switching."
                             },
                             "reminder_enabled": {
                               "type": "boolean"
