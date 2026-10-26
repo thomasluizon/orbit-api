@@ -71,6 +71,7 @@ public partial class ChatControllerTests
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..", "src/Orbit.Api"));
         var json = File.ReadAllText(Path.Combine(root, artifact));
         json.Should().Contain("/api/Chat/habit-suggestions/refine").And.Contain("/api/Chat/habit-suggestions/preview");
+        json.Should().Contain("/api/Chat/habit-suggestions/preview-all").And.Contain("PreviewAllHabitSuggestionsRequest").And.Contain("draftIndex");
         json.Should().Contain("HabitSuggestionDraft").And.Contain("existingHabitId");
     }
 }

@@ -33,6 +33,21 @@ public partial class ChatController
         return result.ToPayGateAwareResult(value => Ok(value));
     }
 
+    [HttpPost("habit-suggestions/preview-all")]
+    [ProducesResponseType<AgentExecuteOperationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<HabitSuggestionPreviewErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> PreviewAllHabitSuggestions([FromBody] PreviewAllHabitSuggestionsRequest request, CancellationToken ct)
+    {
+        if (!CanAccessHabitSuggestions()) return Forbid();
+        var result = await mediator.Send(new PreviewAllHabitSuggestionsCommand(HttpContext.GetUserId(), request.Drafts,
+            request.Language, HttpContext.User.GetAgentAuthMethod(), HttpContext.User.GetGrantedAgentScopes(),
+            HttpContext.User.IsReadOnlyCredential()), ct);
+        if (result is HabitSuggestionPreviewFailure failure)
+            return BadRequest(new HabitSuggestionPreviewErrorResponse(failure.Error, failure.ErrorCode, failure.DraftIndex));
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
     private bool CanAccessHabitSuggestions() => CanAccessChat()
         && (HttpContext.User.GetAgentAuthMethod() is not (AgentAuthMethod.ApiKey or AgentAuthMethod.OAuth)
             || HttpContext.User.GetGrantedAgentScopes().Contains(AgentScopes.ReadHabits, StringComparer.OrdinalIgnoreCase)

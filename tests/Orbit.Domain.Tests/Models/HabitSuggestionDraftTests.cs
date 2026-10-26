@@ -6,6 +6,15 @@ namespace Orbit.Domain.Tests.Models;
 
 public class HabitSuggestionDraftTests
 {
+    [Theory]
+    [InlineData(-1, false)]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(5, true)]
+    [InlineData(6, false)]
+    public void DraftCount_EnforcesSuggestionBlockBounds(int count, bool valid) =>
+        HabitSuggestionsCard.IsValidDraftCount(count).Should().Be(valid);
+
     private static HabitSuggestionDraft Draft() => new(Guid.NewGuid(), "📖", "Read", "Habit", FrequencyUnit.Day, 1,
         [], new(2026, 10, 26), new(22, 0), new(22, 15), null, [], "A quiet pause before bed.");
 

@@ -32,6 +32,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IHabitSuggestionService, AiHabitSuggestionService>();
         builder.Services.AddScoped<IHabitDraftGenerator, AiHabitDraftGenerator>();
         builder.Services.AddScoped<HabitSuggestionService>();
+        builder.Services.AddScoped<AccountChangeSetService>();
         builder.Services.AddScoped<IDateInterpretationService, AiDateInterpretationService>();
         builder.Services.AddScoped<IRetrospectiveService, AiRetrospectiveService>();
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();

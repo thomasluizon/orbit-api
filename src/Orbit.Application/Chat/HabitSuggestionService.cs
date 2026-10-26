@@ -57,7 +57,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
 
     internal static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request)
     {
-        if (drafts is null || drafts.Count != request.Count || drafts.Count is < 1 or > 5)
+        if (drafts is null || drafts.Count != request.Count || !HabitSuggestionsCard.IsValidDraftCount(drafts.Count))
             return Invalid("Return the requested number of drafts, between one and five.");
         var output = new List<HabitSuggestionDraft>();
         var scheduled = new List<Habit>();

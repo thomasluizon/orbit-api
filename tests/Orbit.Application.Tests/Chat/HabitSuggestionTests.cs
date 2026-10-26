@@ -17,7 +17,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat;
 
-public class HabitSuggestionTests
+public partial class HabitSuggestionTests
 {
     private readonly Guid _userId = Guid.NewGuid();
     private readonly DateOnly _today = new(2026, 10, 26);
