@@ -90,7 +90,7 @@ public partial class ProcessUserChatCommandHandler
             ServerComposedText = candidates.Count > 0 || status is not null || hasOutcome || results.AskBlock is not null
             || results.LastSuccessfulOperation("get_habit_ranking") is not null
         };
-        return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday) : cards;
+        return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday, results) : cards;
     }
 
     private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyAsync(

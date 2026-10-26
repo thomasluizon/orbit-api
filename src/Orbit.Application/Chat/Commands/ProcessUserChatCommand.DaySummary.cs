@@ -9,10 +9,13 @@ public partial class ProcessUserChatCommandHandler
         AiResponse response, ToolExecutionAccumulator results) =>
         response.IsTruncated || results.HasBudgetRecovery || HasPendingWritePreview(results)
             || results.OperationResults.Any(operation => operation.Status != AgentOperationStatus.Succeeded)
-            ? cards : WithDaySummaryIntro(cards, language, context.UserToday);
+            ? cards : WithDaySummaryIntro(cards, language, context.UserToday, results);
 
-    private static ResponseCards WithDaySummaryIntro(ResponseCards cards, string? language, DateOnly today)
+    private static ResponseCards WithDaySummaryIntro(ResponseCards cards, string? language, DateOnly today,
+        ToolExecutionAccumulator results)
     {
+        if (results.OperationResults.Any(operation => operation.OperationId != "get_daily_summary"))
+            return cards;
         var blocks = cards.Parts?.OfType<ChatBlockPart>().ToList();
         var day = blocks is { Count: 1 } && blocks[0].Block is DaySummaryCard block
             ? block : cards.Parts is null ? cards.DaySummary : null;

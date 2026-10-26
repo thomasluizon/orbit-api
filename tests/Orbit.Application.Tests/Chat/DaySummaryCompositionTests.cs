@@ -9,6 +9,44 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task DaySummary_PreservesIndependentReadTextFallback(bool composition, bool summaryFirst)
+    {
+        SetupUserAndPayGate();
+        if (composition) EnableComposition();
+        var summary = SummaryReadTool();
+        var goals = CompositionTool("query_goals");
+        var handler = CreateHandler(summary, goals);
+        UseProductionReadExecutor(summary, goals);
+        var summaryCall = new AiToolCall(summary.Name, "summary", ParseArguments("{}"));
+        var goalsCall = new AiToolCall(goals.Name, "goals", ParseArguments("{}"));
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = summaryFirst ? [summaryCall, goalsCall] : [goalsCall, summaryCall],
+            ConversationContext = TestConversationContext
+        });
+        ContinueWithReadDirective(summaryFirst
+            ? "[[orbit:read:summary]]\n[[orbit:read:goals]]"
+            : "[[orbit:read:goals]]\n[[orbit:read:summary]]");
+
+        var result = await handler.Handle(new(UserId, "Summarize my day and show my goals", ClientContext: new(
+            SupportsParts: true, PartKinds: ["daySummary"], SupportsDaySummaryCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Parts.Should().NotBeNull();
+        var parts = result.Value.Parts!;
+        parts.OfType<ChatBlockPart>().Should().ContainSingle()
+            .Which.Block.Should().BeOfType<DaySummaryCard>();
+        parts.OfType<ChatTextPart>().Should().ContainSingle()
+            .Which.Text.Should().Be("0 goals");
+        result.Value.AiMessage.Should().Be("0 goals");
+        parts[summaryFirst ? 0 : 1].Should().BeOfType<ChatBlockPart>();
+    }
+
+    [Theory]
     [InlineData("en", true)]
     [InlineData("pt-BR", true)]
     [InlineData("en", false)]
