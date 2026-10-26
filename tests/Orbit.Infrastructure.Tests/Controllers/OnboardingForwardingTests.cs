@@ -50,7 +50,7 @@ public sealed class OnboardingForwardingTests : IAsyncLifetime
         builder.Services.AddSingleton(Substitute.For<IGenericRepository<User>>());
         builder.Services.AddMediatR(options => options.RegisterServicesFromAssemblyContaining<GetOnboardingChallengeCommand>());
         builder.Services.AddSingleton(db);
-        builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+        builder.Services.AddSingleton<TimeProvider>(new FrozenClock());
         builder.Services.AddScoped<IDistributedQuotaService, DistributedRateLimitService>();
         builder.Services.AddScoped<IOnboardingAccessService, OnboardingAccessService>();
         builder.Services.AddSingleton(Options.Create(new OnboardingSecuritySettings { SigningSecret = new string('s', 64) }));
@@ -299,4 +299,10 @@ public sealed class OnboardingForwardingTests : IAsyncLifetime
     }
 
     private sealed record Client(string ConnectionIp, string[]? VisitorIps, string[]? Secrets);
+
+    private sealed class FrozenClock : TimeProvider
+    {
+        private readonly DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 }
