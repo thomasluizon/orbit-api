@@ -8,7 +8,7 @@ namespace Orbit.Application.Chat;
 
 public sealed record HabitMonthCard(DateOnly DateFrom, DateOnly DateTo, DateOnly Today, int WeekStartDay,
     CalendarMonthResponse Calendar, string Language = "en", string SurfaceId = "calendar",
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ReadBlockMetadata? Read = null) : ReadBlockCard;
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ReadBlockMetadata? Read = null);
 
 public static class HabitMonthCardBuilder
 {

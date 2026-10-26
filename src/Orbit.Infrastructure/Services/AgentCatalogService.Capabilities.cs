@@ -178,6 +178,7 @@ public partial class AgentCatalogService
                 McpToolNames: ["list_habits", "get_habit", "get_habit_logs", "get_all_habit_logs"],
                 ControllerActionKeys:
                 [
+                    "ChatController.RefreshHabitMonthReadBlock",
                     "HabitsController.GetHabits",
                     "HabitsController.GetHabitCount",
                     "HabitsController.GetHabitWidget",

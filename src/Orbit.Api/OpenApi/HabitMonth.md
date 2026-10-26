@@ -39,7 +39,33 @@ instance marked Completed as a positive log: the existing instance projection al
 uses that state for skips. No grid aggregation or replacement schedule engine is
 introduced in chat. The complete month is returned without sampling or paging.
 
-Refresh retains the original absolute dates across month and timezone boundaries.
+## Refresh contract for the paired UI
+
+Tracks thomasluizon/orbit-tickets#1748. Refresh with
+`POST /api/Chat/habit-month/refresh` in both HTTP API versions. Send the original
+`read.refreshToken` and the negotiated client context:
+
+```json
+{
+  "token": "<read.refreshToken>",
+  "clientContext": {
+    "supportsParts": true,
+    "partKinds": ["habitMonth"]
+  }
+}
+```
+
+The response is `HabitMonthReadBlockRefreshResponse`: `kind: "habitMonth"`,
+`block: HabitMonthCard` and `read: ReadBlockMetadata`. Replace the card and its
+read metadata together. Refresh retains the original absolute dates across month
+and timezone boundaries. The complete period is returned without a page parameter.
+The route requires the authenticated owner; API key and OAuth credentials need
+both `chat_interact` and `read_habits`. Existing token expiry, scope, policy and
+parts/status-block kill flags apply to every refresh.
+
+`POST /api/Chat/reads/refresh` retains its published response union and rejects
+habit-month tokens before executing the read. Do not use that route for this kind.
+
 Replay negotiates the new kind again and falls back to localized text when the
 client does not advertise it. A successful single month answer has one short
 localized introduction with no figures, then its block. It also survives a failed

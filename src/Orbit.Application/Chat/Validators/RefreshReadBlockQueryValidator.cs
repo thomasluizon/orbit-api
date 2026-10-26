@@ -9,6 +9,7 @@ public sealed class RefreshReadBlockQueryValidator : AbstractValidator<RefreshRe
     {
         RuleFor(q => q.UserId).NotEmpty();
         RuleFor(q => q.Token).NotEmpty().MaximumLength(32768);
-        RuleFor(q => q.Page).Equal(false).When(q => q.GamificationOnly);
+        RuleFor(q => q.Page).Equal(false).When(q => q.GamificationOnly || q.HabitMonthOnly);
+        RuleFor(q => q.HabitMonthOnly).Equal(false).When(q => q.GamificationOnly);
     }
 }

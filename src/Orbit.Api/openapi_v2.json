@@ -4132,6 +4132,165 @@
         }
       }
     },
+    "/api/Chat/habit-month/refresh": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshHabitMonthReadBlockRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshHabitMonthReadBlockRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshHabitMonthReadBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitMonthReadBlockRefreshResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitMonthReadBlockRefreshResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HabitMonthReadBlockRefreshResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Chat/habit-ranking/query": {
       "post": {
         "tags": [
@@ -20043,6 +20202,78 @@
           }
         }
       },
+      "HabitMonthCard": {
+        "required": [
+          "dateFrom",
+          "dateTo",
+          "today",
+          "weekStartDay",
+          "calendar"
+        ],
+        "type": "object",
+        "properties": {
+          "dateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "today": {
+            "type": "string",
+            "format": "date"
+          },
+          "weekStartDay": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "calendar": {
+            "$ref": "#/components/schemas/CalendarMonthResponse"
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "surfaceId": {
+            "type": "string",
+            "default": "calendar"
+          },
+          "read": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          }
+        }
+      },
+      "HabitMonthReadBlockRefreshResponse": {
+        "required": [
+          "kind",
+          "block",
+          "read"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "block": {
+            "$ref": "#/components/schemas/HabitMonthCard"
+          },
+          "read": {
+            "$ref": "#/components/schemas/ReadBlockMetadata"
+          }
+        }
+      },
       "HabitPositionRequest": {
         "required": [
           "habitId",
@@ -22855,9 +23086,6 @@
             "$ref": "#/components/schemas/ReadBlockCardCalendarCard"
           },
           {
-            "$ref": "#/components/schemas/ReadBlockCardHabitMonthCard"
-          },
-          {
             "$ref": "#/components/schemas/ReadBlockCardRecordListCard"
           },
           {
@@ -23149,58 +23377,6 @@
             "type": [
               "null",
               "string"
-            ]
-          }
-        }
-      },
-      "ReadBlockCardHabitMonthCard": {
-        "required": [
-          "dateFrom",
-          "dateTo",
-          "today",
-          "weekStartDay",
-          "calendar"
-        ],
-        "properties": {
-          "dateFrom": {
-            "type": "string",
-            "format": "date"
-          },
-          "dateTo": {
-            "type": "string",
-            "format": "date"
-          },
-          "today": {
-            "type": "string",
-            "format": "date"
-          },
-          "weekStartDay": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "calendar": {
-            "$ref": "#/components/schemas/CalendarMonthResponse"
-          },
-          "language": {
-            "type": "string",
-            "default": "en"
-          },
-          "surfaceId": {
-            "type": "string",
-            "default": "calendar"
-          },
-          "read": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ReadBlockMetadata"
-              }
             ]
           }
         }
@@ -24059,6 +24235,27 @@
         }
       },
       "RefreshGamificationReadBlockRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "clientContext": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentClientContext"
+              }
+            ]
+          }
+        }
+      },
+      "RefreshHabitMonthReadBlockRequest": {
         "required": [
           "token"
         ],

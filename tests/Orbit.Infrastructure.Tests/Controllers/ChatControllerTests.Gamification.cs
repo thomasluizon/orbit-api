@@ -89,7 +89,7 @@ public partial class ChatControllerTests
         schemas.GetProperty("ReadBlockCard").GetProperty("anyOf").EnumerateArray()
             .Select(item => item.GetProperty("$ref").GetString()).Should().BeEquivalentTo(
                 new[] { "HabitListCard", "GoalListCard", "MetricsCard", "PeriodInsightCard", "DaySummaryCard", "StreakCard",
-                    "CalendarCard", "HabitMonthCard", "RecordListCard", "AccountRowsCard", "PeriodTotalCard", "PeriodComparisonCard" }
+                    "CalendarCard", "RecordListCard", "AccountRowsCard", "PeriodTotalCard", "PeriodComparisonCard" }
                     .Select(name => $"#/components/schemas/ReadBlockCard{name}"));
         schemas.GetProperty("GamificationReadBlockRefreshResponse").GetProperty("properties")
             .GetProperty("block").GetProperty("$ref").GetString().Should().Be("#/components/schemas/GamificationCard");
