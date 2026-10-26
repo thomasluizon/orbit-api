@@ -66,6 +66,30 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Fact]
+    public async Task Placement_LegacyParentEditCanClearDestination()
+    {
+        var parents = ParentAccount("en");
+        ScriptToolCall(JsonSerializer.Serialize(new
+        {
+            habits = new[] {
+            new { title = "Stretch", parent_habit_id = parents[0].Id, frequency_unit = "Day" }
+        }
+        }), "bulk_create_habits");
+        var held = await CreateHandler().Handle(new(_userId, "Add Stretch to Post Lunch"), default);
+        var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
+
+        var revision = await ParentRevisionService().ReviseAsync(_userId, pending.Id,
+            new(pending.PreviewFingerprint!, [new(pending.Items!.Single().ItemId,
+                JsonSerializer.SerializeToElement(new { parent_habit_id = (Guid?)null }))]), default);
+
+        revision.IsSuccess.Should().BeTrue(revision.Error);
+        revision.Preview!.Items!.Single().Placement.Should().BeNull();
+        var stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        stored.Arguments.GetProperty("habits")[0].TryGetProperty("placement", out _).Should().BeFalse();
+        stored.Arguments.GetProperty("habits")[0].TryGetProperty("parent_habit_id", out _).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task PlacementSwitch_CompoundPreviewPreservesSiblingAndLegacyApproval()
     {
         var pending = await HoldTwoChangesAsync();

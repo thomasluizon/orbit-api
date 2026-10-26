@@ -351,6 +351,7 @@ public sealed partial class PendingOperationRevisionService(
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
                 && edits.TryGetProperty(ParentHabitId, out var parent))
             {
+                if (item.Placement is null) copy.Remove(HabitPlacementRecommendation.Argument);
                 copy.Remove(HabitHeadingParents.CandidateIdsField);
                 copy.Remove(HabitHeadingParents.SuggestedParentField);
                 if (parent.ValueKind == JsonValueKind.Null)

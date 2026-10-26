@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 
@@ -11,10 +10,13 @@ public sealed partial class PendingOperationChangePreviewer
     private async Task<PendingOperationChangePreview?> PreviewPlacementAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken ct)
     {
-        var habits = await habitRepository.FindAsync(habit => habit.UserId == userId && !habit.IsDeleted, ct);
         var root = JsonNode.Parse(arguments.GetRawText())!.AsObject();
         var sources = operationId == "bulk_create_habits"
             ? (root["habits"] as JsonArray)?.OfType<JsonObject>().ToArray() ?? [] : [root];
+        if (!sources.Any(source => source["habit_id"] is null
+            && Guid.TryParse((source["parent_habit_id"] ?? root["parent_habit_id"])?.ToString(), out _)))
+            return await PreviewChangesAsync(userId, operationId, arguments, ct);
+        var habits = await habitRepository.FindAsync(habit => habit.UserId == userId && !habit.IsDeleted, ct);
         var placements = new Dictionary<int, PendingOperationPlacement>();
         for (var index = 0; index < sources.Length; index++)
         {
@@ -39,7 +41,7 @@ public sealed partial class PendingOperationChangePreviewer
                 Placement = placement,
                 Fields = item.Fields.Where(field => field.Field != HabitPlacementRecommendation.Argument).ToArray()
             } : item).ToArray();
-        return BuildPreview(operationId, updated.SelectMany(item => item.Fields).ToArray(), updated)!
+        return BuildPreview(operationId, preview.Changes.Where(field => field.Field != HabitPlacementRecommendation.Argument).ToArray(), updated)!
             with
         { ExecutionArguments = normalized };
     }

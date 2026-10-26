@@ -13,8 +13,9 @@ its parent and independently tracked children by default.
 
 The destination's checklist and active children take precedence. For an empty
 destination, the account's checklist and sub-habit usage inform the recommendation.
-An account with separate root habits and no structured habits favors a new parent.
-Leaf sub-habits do not count as evidence that the person prefers separate roots.
+An account with more separate root habits than either structured pattern favors a new parent.
+The pattern also counts habits with neither structure, including leaves. Leaf
+sub-habits do not count as evidence that the person prefers separate roots.
 Ties favor checklists when checklist evidence exists, otherwise sub-habits.
 
 The existing `POST /api/ai/pending-operations/{id}/revise` route accepts optional

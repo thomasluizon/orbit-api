@@ -5,7 +5,7 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat;
 
-public sealed record HabitStructurePattern(int Checklists, int SubHabits, int Neither)
+public sealed record HabitStructurePattern(int Checklists, int SubHabits, int Neither, int SeparateParents)
 {
     public static HabitStructurePattern From(IReadOnlyList<Habit> habits)
     {
@@ -14,6 +14,7 @@ public sealed record HabitStructurePattern(int Checklists, int SubHabits, int Ne
             .Select(habit => habit.ParentHabitId!.Value).ToHashSet();
         return new(active.Count(habit => habit.ChecklistItems.Count > 0),
             active.Count(habit => parents.Contains(habit.Id)),
+            active.Count(habit => habit.ChecklistItems.Count == 0 && !parents.Contains(habit.Id)),
             active.Count(habit => !habit.ParentHabitId.HasValue && habit.ChecklistItems.Count == 0 && !parents.Contains(habit.Id)));
     }
 }
@@ -29,13 +30,21 @@ public static class HabitPlacementRecommendation
         var pattern = HabitStructurePattern.From(habits);
         var (recommended, reason) = checklist > 0 || children > 0
             ? checklist >= children ? (HabitPlacement.ChecklistItem, "destinationChecklist") : (HabitPlacement.SubHabit, "destinationSubHabits")
-            : pattern.Checklists > 0 || pattern.SubHabits > 0
-                ? pattern.Checklists >= pattern.SubHabits ? (HabitPlacement.ChecklistItem, "accountChecklists") : (HabitPlacement.SubHabit, "accountSubHabits")
-                : pattern.Neither > 1 ? (HabitPlacement.NewParent, "accountFlat") : (HabitPlacement.SubHabit, "newRoutine");
+            : AccountChoice(pattern);
         selected ??= recommended;
         return new(selected, recommended, "chat.placement." + reason, Copy(reason, checklist, children),
             new[] { HabitPlacement.SubHabit, HabitPlacement.ChecklistItem, HabitPlacement.NewParent }
                 .Where(option => option != selected).ToArray(), destination.Id, destination.Title);
+    }
+
+    private static (string Placement, string Reason) AccountChoice(HabitStructurePattern pattern)
+    {
+        if (pattern.SeparateParents > 1 && pattern.SeparateParents > Math.Max(pattern.Checklists, pattern.SubHabits))
+            return (HabitPlacement.NewParent, "accountFlat");
+        if (pattern.Checklists > 0 || pattern.SubHabits > 0)
+            return pattern.Checklists >= pattern.SubHabits
+                ? (HabitPlacement.ChecklistItem, "accountChecklists") : (HabitPlacement.SubHabit, "accountSubHabits");
+        return (HabitPlacement.SubHabit, "newRoutine");
     }
 
     private static IReadOnlyDictionary<string, string> Copy(string reason, int checklist, int children)

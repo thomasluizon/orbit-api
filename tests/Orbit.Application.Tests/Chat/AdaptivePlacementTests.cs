@@ -120,6 +120,41 @@ public sealed class AdaptivePlacementTests
     }
 
     [Fact]
+    public void Pattern_ReportsUnstructuredLeavesWithoutTreatingThemAsSeparateParents()
+    {
+        using var context = new HeldWriteTestContext();
+        AddPattern(context, "children");
+        var habits = context.Records.OfType<Habit>().Where(habit => habit.UserId == context.UserId).ToArray();
+        var pattern = HabitStructurePattern.From(habits);
+        pattern.SubHabits.Should().Be(3);
+        pattern.Neither.Should().Be(4);
+        pattern.SeparateParents.Should().Be(1);
+        HabitPlacementRecommendation.For(context.Habit, habits).Recommended.Should().Be(HabitPlacement.SubHabit);
+    }
+
+    [Fact]
+    public void Pattern_MostlySeparateParentsTakesPrecedenceOverAnIsolatedChecklist()
+    {
+        using var context = new HeldWriteTestContext();
+        AddPattern(context, "flat");
+        context.Records.OfType<Habit>().First(habit => habit.Title == "Routine 0").UpdateChecklist([new("Step", false)]);
+        HabitPlacementRecommendation.For(context.Habit, context.Records.OfType<Habit>().Where(habit => habit.UserId == context.UserId).ToArray())
+            .Recommended.Should().Be(HabitPlacement.NewParent);
+    }
+
+    [Fact]
+    public async Task ForeignDestination_IsNeverOffered()
+    {
+        using var context = new HeldWriteTestContext();
+        var tool = context.Tool("create_sub_habit");
+        var previewer = new PendingOperationChangePreviewer(context.Repository<Habit>(), context.Repository<Goal>(),
+            context.Repository<Tag>(), context.Dates, new AiToolRegistry([tool]));
+        var preview = await previewer.PreviewAsync(context.UserId, tool.Name,
+            JsonSerializer.SerializeToElement(new { title = "Stretch", parent_habit_id = context.ForeignHabit.Id }));
+        preview.Value.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Append_ChangesOnlyTheChecklistAndKeepsExistingItems()
     {
         using var context = new HeldWriteTestContext();

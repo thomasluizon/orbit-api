@@ -347,6 +347,10 @@ public sealed partial class ChatWriteHoldHandlerTests
 
     private void UseParentHabits(Habit[] habits)
     {
+        var existingSteps = habits.Where(parent => parent.ParentHabitId is null
+            && habits.All(child => child.ParentHabitId != parent.Id)).Select(parent => Habit.Create(new HabitCreateParams(
+                HabitSchedule.Recurring, _userId, "Existing step", FrequencyUnit.Day, 1, Today, ParentHabitId: parent.Id)).Value).ToArray();
+        habits = [.. habits, .. existingSteps];
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());

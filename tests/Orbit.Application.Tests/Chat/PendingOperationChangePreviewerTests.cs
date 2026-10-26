@@ -220,6 +220,7 @@ public sealed class PendingOperationChangePreviewerTests
     {
         var parent = CreateHabit("Academia", null);
         Setup([parent]);
+        _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         var preview = await Preview("bulk_create_habits", JsonSerializer.Serialize(new
         {
             parent_habit_id = parent.Id,
