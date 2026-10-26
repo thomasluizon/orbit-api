@@ -88,7 +88,7 @@ public class RetrospectivePeriodRangeTests
     [InlineData("last_7_days", "2026-10-26", "2026-10-20", "2026-10-26")]
     public void Resolve_RelativeDaysAndMonths_HaveExplicitMeaning(string period, string day, string from, string to)
     {
-        RetrospectivePeriodRange.IsKnownPeriod(period).Should().BeTrue();
+        RetrospectivePeriodRange.IsRelativePeriod(period).Should().BeTrue();
         RetrospectivePeriodRange.Resolve(period, DateOnly.Parse(day), 1)
             .Should().Be((DateOnly.Parse(from), DateOnly.Parse(to)));
     }

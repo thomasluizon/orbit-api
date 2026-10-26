@@ -3497,6 +3497,27 @@
             "required": false
           },
           {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
+            ]
+          },
+          {
             "name": "window_from_utc",
             "type": "string",
             "required": false
@@ -3543,6 +3564,27 @@
             "name": "language",
             "type": "string",
             "required": false
+          },
+          {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
+            ]
           }
         ]
       },
@@ -3577,12 +3619,12 @@
           {
             "name": "date_from",
             "type": "string",
-            "required": true
+            "required": false
           },
           {
             "name": "date_to",
             "type": "string",
-            "required": true
+            "required": false
           },
           {
             "name": "habit_id",
@@ -3598,6 +3640,27 @@
             "name": "offset",
             "type": "integer",
             "required": false
+          },
+          {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
+            ]
           }
         ]
       },
@@ -3618,6 +3681,27 @@
             "name": "habit_id",
             "type": "string",
             "required": true
+          },
+          {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
+            ]
           }
         ]
       },
@@ -3642,6 +3726,27 @@
               "en",
               "pt",
               "pt-BR"
+            ]
+          },
+          {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
             ]
           }
         ]
@@ -3691,6 +3796,11 @@
             "required": false
           },
           {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
             "name": "query_token",
             "type": "string",
             "required": false
@@ -3699,6 +3809,22 @@
             "name": "refresh",
             "type": "boolean",
             "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
+            ]
           },
           {
             "name": "window",
@@ -3739,6 +3865,27 @@
             "required": false
           },
           {
+            "name": "baseline_period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "baseline_relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
+            ]
+          },
+          {
             "name": "baseline_to",
             "type": "string",
             "required": false
@@ -3746,12 +3893,12 @@
           {
             "name": "date_from",
             "type": "string",
-            "required": true
+            "required": false
           },
           {
             "name": "date_to",
             "type": "string",
-            "required": true
+            "required": false
           },
           {
             "name": "habit_id",
@@ -3773,6 +3920,27 @@
               "metScheduledDates",
               "positiveLogRecords",
               "scheduledDates"
+            ]
+          },
+          {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
             ]
           },
           {
@@ -3836,6 +4004,27 @@
               "semester",
               "week",
               "year"
+            ]
+          },
+          {
+            "name": "period_count",
+            "type": "integer",
+            "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "last_7_days",
+              "last_month",
+              "last_n_days",
+              "last_n_weeks",
+              "last_week",
+              "this_month",
+              "this_week",
+              "today",
+              "yesterday"
             ]
           }
         ]
@@ -4248,6 +4437,15 @@
             "name": "offset",
             "type": "integer",
             "required": false
+          },
+          {
+            "name": "relative_period",
+            "type": "string",
+            "required": false,
+            "values": [
+              "today",
+              "yesterday"
+            ]
           },
           {
             "name": "search",

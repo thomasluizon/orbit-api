@@ -20,6 +20,8 @@ public sealed class GetHabitMonthTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
             date_from = new { type = JsonSchemaTypes.String, description = "Inclusive local start date YYYY-MM-DD. Defaults to the first day of the requested or current month." },
             date_to = new { type = JsonSchemaTypes.String, description = "Inclusive local end date YYYY-MM-DD. Defaults to the last day of the start month." },
             language = new { type = JsonSchemaTypes.String, @enum = new[] { "en", "pt", "pt-BR" }, description = "Language of the current message." }

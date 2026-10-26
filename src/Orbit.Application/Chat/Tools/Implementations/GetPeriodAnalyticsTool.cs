@@ -15,10 +15,10 @@ public sealed class GetPeriodAnalyticsTool(IMediator mediator) : IAiTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            relative_period = RelativeReadPeriod.Schema,
-            period_count = RelativeReadPeriod.CountSchema,
-            baseline_relative_period = RelativeReadPeriod.Schema,
-            baseline_period_count = RelativeReadPeriod.CountSchema,
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
+            baseline_relative_period = RelativeReadPeriod.PeriodSchema(),
+            baseline_period_count = RelativeReadPeriod.CountSchema(),
             date_from = new { type = JsonSchemaTypes.String },
             date_to = new { type = JsonSchemaTypes.String },
             baseline_from = new { type = JsonSchemaTypes.String },

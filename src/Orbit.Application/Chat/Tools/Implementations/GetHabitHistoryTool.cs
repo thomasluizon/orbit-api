@@ -8,20 +8,22 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public sealed class GetHabitHistoryTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_habit_history";
-    public string Description => "Read actual dated habit logs for an absolute period. Values indicate completion records, never measured amounts.";
+    public string Description => "Read actual dated habit logs for a relative period or explicit dates. Values indicate completion records, never measured amounts.";
     public bool IsReadOnly => true;
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            relative_period = RelativeReadPeriod.PeriodSchema(),
+            period_count = RelativeReadPeriod.CountSchema(),
             habit_id = new { type = JsonSchemaTypes.String },
             date_from = new { type = JsonSchemaTypes.String },
             date_to = new { type = JsonSchemaTypes.String },
             offset = new { type = JsonSchemaTypes.Integer },
             limit = new { type = JsonSchemaTypes.Integer }
         },
-        required = new[] { "habit_id", "date_from", "date_to" }
+        required = new[] { "habit_id" }
     };
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

@@ -62,5 +62,10 @@ public partial class ProcessUserChatCommandHandlerTests
         card.Metrics.Window.To.Should().Be(monday);
         card.Value.Should().Be(1);
         card.Read!.Scope.GetProperty("date_from").GetString().Should().Be("2026-10-26");
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request =>
+                request.DynamicContext!.Contains("this week / esta semana to this_week")
+                && request.DynamicContext.Contains("last week / semana passada to last_week")
+                && request.DynamicContext.Contains("baseline_relative_period")),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 }

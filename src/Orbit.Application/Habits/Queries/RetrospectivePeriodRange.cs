@@ -11,21 +11,21 @@ namespace Orbit.Application.Habits.Queries;
 public static class RetrospectivePeriodRange
 {
     private static readonly string[] Known = ["week", "month", "quarter", "semester", "year"];
-    public static IReadOnlyList<string> RelativePeriods { get; } = Array.AsReadOnly(new[]
-    {
+    public static readonly IReadOnlyList<string> RelativePeriods =
+    [
         "today", "yesterday", "this_week", "last_week", "this_month", "last_month", "last_7_days",
         "last_n_days", "last_n_weeks"
-    });
+    ];
 
     public static bool IsRelativePeriod(string? period) =>
         period is not null && RelativePeriods.Contains(period, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// True when <paramref name="period"/> is one <see cref="Resolve"/> understands (case-insensitive),
-    /// so callers can reject unknown periods at the trust boundary before resolving.
+    /// True for a legacy retrospective period label (case-insensitive). Relative selectors use
+    /// <see cref="IsRelativePeriod"/> and resolve into dates without changing the response labels.
     /// </summary>
     public static bool IsKnownPeriod(string? period) =>
-        period is not null && (Known.Contains(period, StringComparer.OrdinalIgnoreCase) || IsRelativePeriod(period));
+        period is not null && Known.Contains(period, StringComparer.OrdinalIgnoreCase);
 
     public static (DateOnly DateFrom, DateOnly DateTo) Resolve(string period, DateOnly today, int weekStartDay,
         int? periodCount = null)

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -66,8 +65,8 @@ public partial class ProcessUserChatCommandHandlerTests
         UseProductionReadExecutor(tool);
         var args = JsonSerializer.Serialize(new
         {
-            date_from = Today.AddDays(-20).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            date_to_exclusive = Today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            relative_period = "last_n_weeks",
+            period_count = 3
         });
         SetupAiResponse(ToolResponse(tool.Name, "ranking", args));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
@@ -96,7 +95,7 @@ public partial class ProcessUserChatCommandHandlerTests
             && operation.Status == AgentOperationStatus.Succeeded);
         events.Where(item => item.Type == "delta").Should().BeEmpty();
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request =>
-            request.DynamicContext!.Contains("date_from=today-20 days")
+            request.DynamicContext!.Contains("relative_period=last_n_weeks and period_count=3")
             && request.DynamicContext.Contains("Do not ask to choose rolling or calendar weeks")),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }

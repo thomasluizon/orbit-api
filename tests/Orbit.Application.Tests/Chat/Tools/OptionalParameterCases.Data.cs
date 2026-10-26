@@ -42,7 +42,7 @@ public static partial class OptionalParameterCases
             [(typeof(GetApiKeysTool), "")] = [],
             [(typeof(GetCalendarOverviewTool), "")] =
             [
-                "as_of", "calendar_ids", "date_from", "date_to", "window_from_utc", "window_to_utc", "include_calendars",
+                "relative_period", "period_count", "as_of", "calendar_ids", "date_from", "date_to", "window_from_utc", "window_to_utc", "include_calendars",
                 "include_events", "include_auto_sync_state", "include_suggestions"
             ],
             [(typeof(GetChecklistTemplatesTool), "")] = ["template_id"],
@@ -60,7 +60,7 @@ public static partial class OptionalParameterCases
             [(typeof(ManageSubscriptionTool), "")] = ["interval"],
             [(typeof(QueryHabitsTool), "")] =
             [
-                "search", "date", "include_overdue", "is_general", "is_completed", "is_bad_habit", "frequency", "tag",
+                "relative_period", "search", "date", "include_overdue", "is_general", "is_completed", "is_bad_habit", "frequency", "tag",
                 "include_sub_habits", "include_metrics", "offset", "limit"
             ],
             [(typeof(SendSupportRequestTool), "")] = [],
