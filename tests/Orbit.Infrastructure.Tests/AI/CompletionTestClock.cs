@@ -5,6 +5,9 @@ internal sealed class CompletionTestClock : TimeProvider
     private readonly List<ManualTimer> _timers = [];
     private long _ticks;
 
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+    public override long GetTimestamp() => _ticks;
+
     internal int ActiveTimers => _timers.Count(timer => !timer.Disposed);
 
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)

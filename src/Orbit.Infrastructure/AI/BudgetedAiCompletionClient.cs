@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Chat;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.AI;
@@ -24,20 +25,29 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
         var stage = "estimate";
         try
         {
-            var reservedMicroDollars = await estimates.EstimateMicroDollarsAsync(requestJson, cancellationToken);
+            long reservedMicroDollars;
+            using (ChatTurnTimer.Measure(ChatPhase.Budget))
+                reservedMicroDollars = await estimates.EstimateMicroDollarsAsync(requestJson, cancellationToken);
             stage = "reservation";
-            var reservation = await budget.ReserveAsync(userId.Value, reservedMicroDollars, cancellationToken);
+            Guid reservation;
+            using (ChatTurnTimer.Measure(ChatPhase.Budget))
+                reservation = await budget.ReserveAsync(userId.Value, reservedMicroDollars, cancellationToken);
             using var context = AiCallContext.Begin(userId.Value);
             stage = "completion";
             try
             {
+                using var phase = ChatTurnTimer.Measure(ChatPhase.ModelCall);
                 return await complete(inner);
             }
             finally
             {
                 using var settlement = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var chargedMicroDollars = context.ChargedMicroDollars ?? (context.HasUnreportedDispatch ? reservedMicroDollars : 0);
-                try { await budget.SettleAsync(reservation, chargedMicroDollars, settlement.Token); }
+                try
+                {
+                    using var phase = ChatTurnTimer.Measure(ChatPhase.Budget);
+                    await budget.SettleAsync(reservation, chargedMicroDollars, settlement.Token);
+                }
                 catch (Exception exception)
                 {
                     logger.LogWarning(exception, "AI budget settlement failed for {CallId}; spend reservation retained", reservation);
