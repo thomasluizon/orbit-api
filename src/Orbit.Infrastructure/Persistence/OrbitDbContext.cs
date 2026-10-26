@@ -592,6 +592,10 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ProAiCallsPerDay", "450", "Daily AI call safety budget for Pro users"),
                 AppConfig.Create("FreeAiMicroDollarsPerDay", "20000", "Daily AI safety budget for Free users in USD micro-dollars"),
                 AppConfig.Create("ProAiMicroDollarsPerDay", "120000", "Daily AI safety budget for Pro users in USD micro-dollars"),
+                AppConfig.Create("OnboardingIpCallsPerHour", "10", "Hourly anonymous onboarding call limit per IP address"),
+                AppConfig.Create("OnboardingInstallCallsPerHour", "10", "Hourly anonymous onboarding call limit per verified install"),
+                AppConfig.Create("OnboardingCallsPerDay", "1000", "Global daily anonymous onboarding call limit"),
+                AppConfig.Create("OnboardingTokensPerDay", "16384000", "Global daily anonymous onboarding token limit"),
                 AppConfig.Create("RequireApiKeyCreationStepUp", "false", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet"));
         });
     }
