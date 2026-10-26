@@ -56,7 +56,6 @@ internal static class ChatResponseNegotiation
         if (response.Parts is null) return ForPendingPreview(response, supportsParts, language);
         var negotiated = new List<ChatResponsePart>();
         var downgraded = false;
-        var readFallbacks = new List<ChatTextPart>();
         foreach (var part in response.Parts)
         {
             if (part is not ChatBlockPart block)
@@ -72,11 +71,8 @@ internal static class ChatResponseNegotiation
                 downgraded = true;
                 var fallback = new ChatTextPart(Fallback(value, language, timeZone));
                 negotiated.Add(fallback);
-                if (value is ReadBlockCard or HabitMonthCard) readFallbacks.Add(fallback);
             }
         }
-        if (readFallbacks.Count > 0 && response.Actions.Count == 0 && response.PendingOperations is not { Count: > 0 })
-            negotiated.RemoveAll(part => part is ChatTextPart text && !readFallbacks.Contains(text));
         var text = string.Join("\n\n", negotiated.OfType<ChatTextPart>().Select(part => part.Text));
         var followUps = client?.SupportsFollowUps == true && !flags.Contains(FeatureFlagKeys.AstraFollowUpsDisabled);
         return ForPendingPreview(response with

@@ -60,11 +60,10 @@ public class ReadFallbackTextTests
     public void StoredBlocksKeepTurnLocaleWhenDowngraded(string language, object block, string label, string figure, string identifier)
     {
         var (_, kind, _) = ReadBlockTelemetry.Describe(block);
-        var original = new ChatResponse("You completed 99 habits.", [], Parts:
-            [new ChatTextPart("You completed 99 habits."), new ChatBlockPart(kind, block)]);
+        var original = new ChatResponse(null, [], Parts: [new ChatBlockPart(kind, block)]);
         var replay = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(original, ChatStreamEvent.SerializerOptions), ChatStreamEvent.SerializerOptions)!;
         var result = ChatResponseNegotiation.ForClient(replay, new(SupportsParts: true, PartKinds: []), [], language, "America/Sao_Paulo");
-        result.AiMessage.Should().Contain(label).And.Contain(figure).And.NotContain("99")
+        result.AiMessage.Should().Contain(label).And.Contain(figure)
             .And.NotMatchRegex("(?m)^" + Regex.Escape(identifier) + ":")
             .And.NotMatchRegex(@"\d{4}-\d{2}-\d{2}");
     }
