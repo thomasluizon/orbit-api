@@ -50,6 +50,7 @@ public record ApplyOnboardingCommand(
     ApplyLogInput? FirstLog,
     ApplyGoalInput? Goal,
     int? WeekStartDay,
+    [property: Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
     string? ColorScheme) : IRequest<Result<ApplyOnboardingResponse>>, IConcurrencyRetryable;
 
 public record ApplyOnboardingRepositories(

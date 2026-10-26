@@ -37,7 +37,7 @@ public partial class ProcessUserChatCommandHandler
             new AgentSnapshotInputs(
                 context.EnabledFeatureFlags,
                 context.UserTags,
-                context.ChecklistTemplates,
+                context.ChecklistTemplateNames,
                 context.ActiveHabits,
                 context.ActiveGoals),
             context.HasProAccess);
@@ -236,7 +236,7 @@ public partial class ProcessUserChatCommandHandler
     private sealed record AgentSnapshotInputs(
         IReadOnlyList<string> FeatureFlags,
         IReadOnlyCollection<Tag> UserTags,
-        IReadOnlyCollection<ChecklistTemplate> ChecklistTemplates,
+        IReadOnlyCollection<string> ChecklistTemplateNames,
         IReadOnlyCollection<Habit> ActiveHabits,
         IReadOnlyCollection<Goal> ActiveGoals);
 
@@ -246,7 +246,7 @@ public partial class ProcessUserChatCommandHandler
         AgentSnapshotInputs inputs,
         bool hasProAccess)
     {
-        var (featureFlags, userTags, checklistTemplates, activeHabits, activeGoals) = inputs;
+        var (featureFlags, userTags, checklistTemplateNames, activeHabits, activeGoals) = inputs;
         return new AgentContextSnapshot(
             hasProAccess ? "pro" : "free",
             user?.Language,
@@ -265,8 +265,7 @@ public partial class ProcessUserChatCommandHandler
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .Take(12)
                 .ToList(),
-            checklistTemplates
-                .Select(template => template.Name)
+            checklistTemplateNames
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .Take(10)
                 .ToList(),

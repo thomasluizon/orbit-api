@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
-using Orbit.Application.Goals.Services;
 using Orbit.Application.Chat;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -41,24 +40,18 @@ public partial class ProcessUserChatCommandHandler
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
 
-        var freshProgressValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
-        var loadedGoals = await data.GoalRepository.FindAsync(
+        var activeGoals = await data.GoalRepository.FindAsync(
             g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
-            q => q.Include(g => g.Habits),
+            null,
             cancellationToken);
-        foreach (var goal in loadedGoals)
-        {
-            if (freshProgressValues.TryGetValue(goal.Id, out var fresh))
-                GoalProgressSyncService.ApplyReadValue(goal, fresh);
-        }
-        IReadOnlyList<Goal> activeGoals = loadedGoals;
 
         var userTags = await data.TagRepository.FindAsync(
             t => t.UserId == request.UserId,
             cancellationToken);
 
-        var checklistTemplates = await data.ChecklistTemplateRepository.FindAsync(
+        var checklistTemplateNames = await data.ChecklistTemplateRepository.ProjectAsync(
             template => template.UserId == request.UserId,
+            query => query.Select(template => template.Name),
             cancellationToken);
 
         var enabledFeatureFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(
@@ -78,7 +71,7 @@ public partial class ProcessUserChatCommandHandler
             hasProAccess,
             activeGoals,
             userTags,
-            checklistTemplates,
+            checklistTemplateNames,
             enabledFeatureFlags,
             userToday,
             todayFacts,
@@ -199,7 +192,7 @@ public partial class ProcessUserChatCommandHandler
         bool HasProAccess,
         IReadOnlyList<Goal> ActiveGoals,
         IReadOnlyList<Tag> UserTags,
-        IReadOnlyList<ChecklistTemplate> ChecklistTemplates,
+        IReadOnlyList<string> ChecklistTemplateNames,
         IReadOnlyList<string> EnabledFeatureFlags,
         DateOnly UserToday,
         HabitTodaySnapshot TodayFacts,

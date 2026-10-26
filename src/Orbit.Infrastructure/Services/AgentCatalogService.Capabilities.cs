@@ -878,7 +878,6 @@ public partial class AgentCatalogService
                 [
                     "SubscriptionController.CreateCheckout",
                     "SubscriptionController.CreatePortal",
-                    "SubscriptionController.ClaimAdReward",
                     "SubscriptionController.HandleWebhook",
                     "SubscriptionController.VerifyPlayPurchase",
                     "SubscriptionController.HandlePlayNotification",

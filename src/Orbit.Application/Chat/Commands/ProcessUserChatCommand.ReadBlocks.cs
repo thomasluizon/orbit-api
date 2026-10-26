@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Goals.Services;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
@@ -44,7 +47,16 @@ public partial class ProcessUserChatCommandHandler
         if (reads.Count > 0)
             return reads.Count == 1 && reads[0].Status == AgentOperationStatus.Succeeded ? reads[0].Payload as GoalListCard : null;
         if (readBlocks is null)
-            return GoalListCardBuilder.Build(context.ActiveGoals, context.UserToday, context.User?.WeekStartDay ?? 1, includeProjections);
+        {
+            var freshValues = await execution.GoalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, context.UserToday, ct);
+            var goals = await data.GoalRepository.FindAsync(
+                goal => goal.UserId == request.UserId && goal.Status == GoalStatus.Active,
+                query => query.Include(goal => goal.Habits), ct);
+            foreach (var goal in goals)
+                if (freshValues.TryGetValue(goal.Id, out var fresh))
+                    GoalProgressSyncService.ApplyReadValue(goal, fresh);
+            return GoalListCardBuilder.Build(goals, context.UserToday, context.User?.WeekStartDay ?? 1, includeProjections);
+        }
         var response = await ExecuteImplicitReadAsync(request, "query_goals",
             System.Text.Json.JsonSerializer.SerializeToElement(new { status = "Active", as_of = context.UserToday.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) }), ct);
         return response.Operation.ReadBlock?.Block as GoalListCard;
