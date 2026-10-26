@@ -194,11 +194,11 @@ public class HabitProposalValidatorTests
     }
 
     [Fact]
-    public void ToolSchemas_ReadTheSameAuthoritativeModelAsThePrompt()
+    public void ToolSchemas_KeepScheduleContractWithoutRepeatingPromptGuidance()
     {
         var tool = new BulkCreateHabitsTool(Substitute.For<IMediator>());
-        tool.Description.Should().Contain(HabitModelInstructions.Schedule).And.Contain(HabitModelInstructions.Polarity)
-            .And.Contain(HabitModelInstructions.Correction);
+        tool.Description.Should().NotContain(HabitModelInstructions.Schedule).And.NotContain(HabitModelInstructions.Polarity)
+            .And.NotContain(HabitModelInstructions.Correction);
         var frequency = JsonSerializer.SerializeToElement(tool.GetParameterSchema()).GetProperty("properties")
             .GetProperty("habits").GetProperty("items").GetProperty("properties").GetProperty("frequency_unit");
         frequency.GetProperty("enum").EnumerateArray().Select(value => value.GetString()).Should().Contain("OneTime");
