@@ -50,7 +50,7 @@ the live infrastructure inputs. From the repository root:
 terraform -chdir=infra init -input=false
 terraform -chdir=infra plan -input=false -var-file=local.tfvars \
   -target=render_env_group.staging_api \
-  '-target=aws_ssm_parameter.onboarding_signing_secret["staging"]' \
+  -target=aws_ssm_parameter.onboarding_signing_secret_staging \
   -out=local.onboarding-staging.tfplan
 terraform -chdir=infra show local.onboarding-staging.tfplan
 terraform -chdir=infra show -json local.onboarding-staging.tfplan | node infra/check-web-plan.mjs
@@ -91,7 +91,7 @@ open the app.
 
 After staging acceptance, repeat the reviewed targeted plan and apply for
 `render_env_group.production_api` and
-`aws_ssm_parameter.onboarding_signing_secret["production"]`. Release the same
+`aws_ssm_parameter.onboarding_signing_secret_production`. Release the same
 carrying commit from `main` through Release API with environment `production`.
 Read back the four keys through Render > production Postgres > Connections and
 confirm the production entries in Environment Groups > orbit-production-api.

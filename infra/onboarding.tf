@@ -42,17 +42,24 @@ data "aws_ssm_parameters_by_path" "onboarding_platform" {
   with_decryption = true
 }
 
-resource "random_password" "onboarding_signing_secret" {
-  for_each = toset(["production", "staging"])
-
+resource "random_password" "onboarding_signing_secret_production" {
   length  = 64
   special = false
 }
 
-resource "aws_ssm_parameter" "onboarding_signing_secret" {
-  for_each = random_password.onboarding_signing_secret
+resource "random_password" "onboarding_signing_secret_staging" {
+  length  = 64
+  special = false
+}
 
-  name  = "/orbit/${each.key}/api/OnboardingSecurity__SigningSecret"
+resource "aws_ssm_parameter" "onboarding_signing_secret_production" {
+  name  = "/orbit/production/api/OnboardingSecurity__SigningSecret"
   type  = "SecureString"
-  value = each.value.result
+  value = random_password.onboarding_signing_secret_production.result
+}
+
+resource "aws_ssm_parameter" "onboarding_signing_secret_staging" {
+  name  = "/orbit/staging/api/OnboardingSecurity__SigningSecret"
+  type  = "SecureString"
+  value = random_password.onboarding_signing_secret_staging.result
 }

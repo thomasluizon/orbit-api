@@ -9,13 +9,19 @@ const configuration = readFileSync(join(root, "configuration.tf"), "utf8")
 const onboarding = existsSync(join(root, "onboarding.tf")) ? readFileSync(join(root, "onboarding.tf"), "utf8") : ""
 
 test("onboarding signing secrets are stable per-environment SecureStrings", () => {
-  assert.match(onboarding, /resource "random_password" "onboarding_signing_secret"\s*\{\s*for_each\s*=\s*toset\(\["production", "staging"\]\)/)
-  assert.match(onboarding, /length\s*=\s*64\b/)
-  assert.match(onboarding, /special\s*=\s*false\b/)
   assert.doesNotMatch(onboarding, /keepers|timestamp\(|plantimestamp\(/)
-  assert.match(onboarding, /resource "aws_ssm_parameter" "onboarding_signing_secret"\s*\{\s*for_each\s*=\s*random_password\.onboarding_signing_secret/)
-  assert.match(onboarding, /name\s*=\s*"\/orbit\/\$\{each\.key\}\/api\/OnboardingSecurity__SigningSecret"/)
-  assert.match(onboarding, /type\s*=\s*"SecureString"\s*value\s*=\s*each\.value\.result/)
+  for (const environment of ["production", "staging"]) {
+    const password = onboarding.split(`resource "random_password" "onboarding_signing_secret_${environment}" {`)[1]?.split("\n}")[0]
+    assert.ok(password, `Missing independently targeted ${environment} signing password`)
+    assert.match(password, /length\s*=\s*64\b/)
+    assert.match(password, /special\s*=\s*false\b/)
+    assert.doesNotMatch(password, /for_each|each\./)
+    const parameter = onboarding.split(`resource "aws_ssm_parameter" "onboarding_signing_secret_${environment}" {`)[1]?.split("\n}")[0]
+    assert.ok(parameter, `Missing independently targeted ${environment} signing parameter`)
+    assert.match(parameter, new RegExp(`name\\s*=\\s*"/orbit/${environment}/api/OnboardingSecurity__SigningSecret"`))
+    assert.match(parameter, new RegExp(`type\\s*=\\s*"SecureString"\\s*value\\s*=\\s*random_password\\.onboarding_signing_secret_${environment}\\.result`))
+    assert.doesNotMatch(parameter, /for_each|each\./)
+  }
 })
 
 for (const [environment, origins] of [
@@ -25,7 +31,7 @@ for (const [environment, origins] of [
   test(`${environment} API receives its own onboarding settings and secret`, () => {
     const group = configuration.split(`resource "render_env_group" "${environment}_api" {`)[1].split('\nresource "')[0]
     assert.match(group, new RegExp(`for key, value in local\\.onboarding_api_values\\["${environment}"\\] : key => \\{ value = value \\}`))
-    assert.match(group, new RegExp(`OnboardingSecurity__SigningSecret = \\{ value = aws_ssm_parameter\\.onboarding_signing_secret\\["${environment}"\\]\\.value \\}`))
+    assert.match(group, new RegExp(`OnboardingSecurity__SigningSecret = \\{ value = aws_ssm_parameter\\.onboarding_signing_secret_${environment}\\.value \\}`))
     const configuredOrigins = onboarding.match(new RegExp(`${environment} = \\[([^\\]]+)\\]`))[1]
     assert.deepEqual([...configuredOrigins.matchAll(/"([^"]+)"/g)].map(match => match[1]), origins)
   })
