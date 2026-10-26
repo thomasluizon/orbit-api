@@ -77,6 +77,9 @@ public partial class ProcessUserChatCommandHandlerTests
         month.DateTo.Should().Be(end);
         var calendar = await calendarHandler.Handle(new(UserId, start, end), default);
         month.Calendar.Should().BeEquivalentTo(calendar.Value);
+        var fallback = ProcessUserChatCommandHandler.ReadFallback(month, language);
+        fallback.Should().Contain(grandchild.Title).And.NotMatchRegex(@"\d{4}-\d{2}-\d{2}")
+            .And.Contain(language == "pt-BR" ? "31/10/2026" : "10/31/2026");
         month.Calendar.Logs.Should().HaveCount(40);
         month.Calendar.Logs.Values.Sum(logs => logs.Count).Should().Be(402);
         month.Calendar.Habits[0].ScheduledDates.Should().HaveCount(31);

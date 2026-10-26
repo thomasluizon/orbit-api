@@ -49,7 +49,7 @@ internal static class ChatResponseNegotiation
     }
 
     public static ChatResponse ForClient(ChatResponse response, AgentClientContext? client, IReadOnlyList<string> flags,
-        string? language = null)
+        string? language = null, string? timeZone = null)
     {
         response = ForAllowance(response, client, response.MessageAllowanceConsumed ?? false);
         var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AstraPartsDisabled);
@@ -69,7 +69,8 @@ internal static class ChatResponseNegotiation
             else
             {
                 downgraded = true;
-                negotiated.Add(new ChatTextPart(Fallback(value)));
+                var fallback = new ChatTextPart(Fallback(value, language, timeZone));
+                negotiated.Add(fallback);
             }
         }
         var text = string.Join("\n\n", negotiated.OfType<ChatTextPart>().Select(part => part.Text));
@@ -126,17 +127,17 @@ internal static class ChatResponseNegotiation
         }
     }
 
-    private static string Fallback(object? value)
+    private static string Fallback(object? value, string? language, string? timeZone)
     {
         var text = value switch
         {
-            HabitRankingCard card => HabitRankingCardBuilder.Readable(card.Ranking, null),
+            HabitRankingCard card => HabitRankingCardBuilder.Readable(card.Ranking, language),
             HabitSuggestionsCard card => HabitSuggestionsPresentation.Readable(card),
             AstraChoiceBlock block => block.Question,
             AstraPickListBlock block => block.Title,
             null => null,
-            _ => ProcessUserChatCommandHandler.ReadFallback(value)
+            _ => ProcessUserChatCommandHandler.ReadFallback(value, language, timeZone)
         };
-        return string.IsNullOrWhiteSpace(text) ? "This response is unavailable on this client." : text;
+        return string.IsNullOrWhiteSpace(text) ? ErrorCopy.Resolve("chat.read.clientUnavailable", LocaleHelper.IsPortuguese(language)) : text;
     }
 }

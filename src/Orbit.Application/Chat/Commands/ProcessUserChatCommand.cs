@@ -538,7 +538,8 @@ public partial class ProcessUserChatCommandHandler(
         if (aiStreamFilter is not null)
             await aiStreamFilter.FlushAsync();
         if (executionResults.PendingOperations.Count == 0 && request.StreamSink is { } streamSink
-            && !HasOnlySupportedPeriodReads(request, context, executionResults))
+            && !HasOnlySupportedPeriodReads(request, context, executionResults)
+            && !ShouldComposeReadFallbacks(request, context, executionResults))
             foreach (var item in bufferedStream) await streamSink(item);
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
@@ -867,7 +868,7 @@ public partial class ProcessUserChatCommandHandler(
             {
                 if (!ReadEnabled(bound, request.ClientContext, context.EnabledFeatureFlags))
                 {
-                    if (ReadFallback(bound.Block) is { Length: > 0 } fallback) parts.Add(new ChatTextPart(fallback));
+                    if (ReadFallback(bound.Block, language, context.User?.TimeZone) is { Length: > 0 } fallback) parts.Add(new ChatTextPart(fallback));
                     continue;
                 }
                 parts.Add(new ChatBlockPart(bound.Kind, ForClient(bound, request.ClientContext, context.EnabledFeatureFlags).Block));
@@ -931,11 +932,11 @@ public partial class ProcessUserChatCommandHandler(
     {
         try
         {
-            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags);
+            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags, context.User?.Language, context.User?.TimeZone);
             var boundRead = ResolveQueryRead(aiMessage, executionResults);
             if (boundRead is not null && ReadEnabled(boundRead, request.ClientContext, context.EnabledFeatureFlags))
                 return ResponseFromRead(StripAllDirectives(aiMessage), ForClient(boundRead, request.ClientContext, context.EnabledFeatureFlags));
-            return RetainCompatibleCards(await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken), request.ClientContext);
+            return RetainCompatibleCards(await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken), request.ClientContext, context.User?.Language, context.User?.TimeZone);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

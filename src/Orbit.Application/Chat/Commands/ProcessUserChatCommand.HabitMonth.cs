@@ -18,7 +18,7 @@ public partial class ProcessUserChatCommandHandler
             return new(intro, Parts: [new ChatTextPart(intro), new ChatBlockPart("habitMonth", month)])
             { ServerComposedText = true };
         }
-        var text = HabitMonthCardBuilder.Readable(month);
+        var text = ReadFallback(month, context.User?.Language, context.User?.TimeZone);
         return new(text, Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(text)] : null)
         { ServerComposedText = true };
     }

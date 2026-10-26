@@ -120,6 +120,7 @@ public partial class ProcessUserChatCommandHandler
         if (!composition)
             cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
         cards = ComposePeriodAnalytics(cards, request, context, executionResults);
+        cards = ComposeUnavailableReads(cards, request, context, executionResults);
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition && !executionResults.IsPreviewDiscussion ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
@@ -235,7 +236,7 @@ public partial class ProcessUserChatCommandHandler
                 else
                 {
                     built.Fallback = "missing_capability";
-                    var text = ReadFallback(read.Block);
+                    var text = ReadFallback(read.Block, language, context.User?.TimeZone);
                     parts.Add(new ChatTextPart(string.IsNullOrWhiteSpace(text) ? ToolFailureMessage(language) : text));
                 }
             }

@@ -151,7 +151,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static string? ReplaceUnavailableReadDirectives(string? message, ToolExecutionAccumulator results,
-        AgentClientContext? client, IReadOnlyList<string> flags)
+        AgentClientContext? client, IReadOnlyList<string> flags, string? language, string? timeZone)
     {
         if (message is null) return null;
         return System.Text.RegularExpressions.Regex.Replace(message, @"\[\[orbit:(?:read:[A-Za-z0-9_-]+|[a-z:]+)\]\]", match =>
@@ -159,7 +159,7 @@ public partial class ProcessUserChatCommandHandler
             var candidates = ResolveQueryRead(match.Value, results) is { } bound
                 ? new List<QueryReadBlock> { bound } : ReadCandidates(match.Value, results);
             return candidates.Count > 1 || candidates.Count == 1 && !ReadEnabled(candidates[0], client, flags)
-                ? string.Join("\n\n", candidates.Select(read => ReadFallback(read.Block))) : match.Value;
+                ? string.Join("\n\n", candidates.Select(read => ReadFallback(read.Block, language, timeZone))) : match.Value;
         }, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     }
 
@@ -175,42 +175,43 @@ public partial class ProcessUserChatCommandHandler
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client);
 
-    internal static string ReadFallback(object block) => block switch
-    {
-        HabitListCard card => string.Join("\n", new[] { card.Date?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? card.Scope }
-            .Concat(card.Items.Count == 0 ? ["0"] : card.Items.Select(item => $"{item.Title} ({item.Status})"))),
-        RecordListCard { Kind: "habitHistory" } card => string.Join("\n", new[]
-            { $"{card.Read?.Scope.GetProperty("date_from").GetString()} to {card.Read?.Scope.GetProperty("date_to").GetString()}: {card.TotalCount} records" }
-            .Concat(card.Items.Select(item => $"{item.Title}: {item.Value}"))),
-        PeriodTotalCard card => $"{card.Metric}: {card.Value} {card.Unit} ({card.Metrics.Window.From:yyyy-MM-dd} to {card.Metrics.Window.To:yyyy-MM-dd})",
-        PeriodComparisonCard card => $"{card.Metric}: {card.CurrentValue} {card.Unit} ({card.Current.Window.From:yyyy-MM-dd} to {card.Current.Window.To:yyyy-MM-dd}); "
-            + $"{card.BaselineValue} {card.Unit} ({card.Baseline.Window.From:yyyy-MM-dd} to {card.Baseline.Window.To:yyyy-MM-dd}); delta {card.AbsoluteDelta} {card.Unit}",
-        MetricsCard { PeriodMetrics: { } period } card => $"{card.HabitTitle}\npositiveLogRecords: {period.PositiveLogRecords} records ({period.Window.From:yyyy-MM-dd} to {period.Window.To:yyyy-MM-dd})"
-            + (card.Period == "habit" ? $"\nLifetime completions: {card.TotalCompletions}" : string.Empty),
-        MetricsCard card => $"{card.Period}: {card.TotalCompletions} records",
-        GoalListCard card => card.Items.Count == 0 ? "0 goals" : string.Join("\n", card.Items.Select(item => $"{item.Title}: {item.Current}/{item.Target} {item.Unit}")),
-        DaySummaryCard card => $"{card.Date:yyyy-MM-dd}: {card.Done}/{card.Due}",
-        StreakCard card => $"Streak: {card.CurrentStreak}; level: {card.Level}; XP: {card.TotalXp}",
-        HabitMonthCard card => HabitMonthCardBuilder.Readable(card),
-        CalendarCard card => string.Join("\n", new[] { $"{card.Events.Count} events; sync: {card.Sync?.Status}" }
-            .Concat(card.Events.Select(item => $"{item.Start}: {item.Title}"))),
-        PeriodInsightCard card => $"{card.DateFrom:yyyy-MM-dd} to {card.DateTo:yyyy-MM-dd}: {card.TotalCompletions}/{card.TotalScheduled}; {card.CompletionRate}%",
-        RecordListCard card => string.Join("\n", new[] { $"{card.Kind}: {card.TotalCount}" }
-            .Concat(card.Items.Select(item => $"{item.Title}: {item.Detail ?? item.State}"))),
-        AccountRowsCard card => string.Join("\n", card.Rows.Select(row => $"{row.Key}: {row.Value}")),
-        _ => string.Empty
-    };
+    internal static string ReadFallback(object block, string? language, string? timeZone = null) =>
+        new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone).Format(block);
 
-    private static ResponseCards RetainCompatibleCards(ResponseCards cards, AgentClientContext? client)
+    private static ResponseCards RetainCompatibleCards(ResponseCards cards, AgentClientContext? client, string? language, string? timeZone)
     {
         if (cards.HabitList is { } habit && !ReadSubtypeEnabled(habit, client))
             cards = cards with
             {
                 HabitList = null,
-                AiMessage = string.Join("\n\n", new[] { cards.AiMessage, ReadFallback(habit) }
+                AiMessage = string.Join("\n\n", new[] { cards.AiMessage, ReadFallback(habit, language, timeZone) }
                 .Where(text => !string.IsNullOrWhiteSpace(text)))
             };
         return cards;
+    }
+
+    private static bool ShouldComposeReadFallbacks(ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results) => results.OperationResults.Count > 0
+        && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
+        && results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags));
+
+    private static ResponseCards ComposeUnavailableReads(ResponseCards cards, ProcessUserChatCommand request,
+        ChatContext context, ToolExecutionAccumulator results)
+    {
+        if (!ShouldComposeReadFallbacks(request, context, results)) return cards;
+        var reads = SelectCompositionReads(results.QueryReads.Values.ToList(), results)
+            .Where(read => request.ClientContext?.SupportsParts == true || !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
+            .DistinctBy(read => read.Read.QueryId);
+        var parts = reads.Select(read => request.ClientContext?.SupportsParts == true
+                && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
+            ? (ChatResponsePart)new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)
+            : new ChatTextPart(ReadFallback(read.Block, context.User?.Language, context.User?.TimeZone))).ToArray();
+        return cards with
+        {
+            AiMessage = JoinPartText(parts),
+            Parts = request.ClientContext?.SupportsParts == true ? parts : null,
+            ServerComposedText = true
+        };
     }
 
     private static bool HasOnlySuccessfulFocusedReads(ToolExecutionAccumulator results) =>
@@ -233,7 +234,7 @@ public partial class ProcessUserChatCommandHandler
                     Parts = (cards.Parts ?? []).Append(new ChatBlockPart(read.Kind,
                     ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)).ToArray()
                 };
-            else if (ReadFallback(read.Block) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
+            else if (ReadFallback(read.Block, context.User?.Language, context.User?.TimeZone) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
                 cards = cards with
                 {
                     AiMessage = string.Join("\n\n", new[] { cards.AiMessage, text }.Where(value => !string.IsNullOrWhiteSpace(value))),

@@ -66,10 +66,17 @@ public partial class ProcessUserChatCommandHandlerTests
         var replay = JsonSerializer.Deserialize<ChatResponse>(json, ChatStreamEvent.SerializerOptions)!;
         ChatStreamEvent.Final(ChatResponseNegotiation.ForClient(replay, client, [])).ToJson()
             .Should().Be(ChatStreamEvent.Final(result.Value).ToJson());
+        var expectedTexts = result.Value.Parts!.Select(part => part switch
+        {
+            ChatTextPart text => text.Text,
+            ChatBlockPart read => ProcessUserChatCommandHandler.ReadFallback(read.Block, null),
+            _ => throw new InvalidOperationException("Unexpected response part in read composition.")
+        }).ToArray();
         var fallback = ChatResponseNegotiation.ForClient(replay, client with { PartKinds = [] }, []);
-        fallback.Parts.Should().HaveCount(kind == "daySummary" ? 2 : 1)
-            .And.OnlyContain(part => part is ChatTextPart);
-        fallback.AiMessage.Should().NotBeNullOrWhiteSpace().And.NotContain("Duplicated prose");
+        fallback.Parts.Should().NotBeNull().And.AllBeOfType<ChatTextPart>();
+        fallback.Parts!.Cast<ChatTextPart>().Select(part => part.Text).Should().Equal(expectedTexts);
+        fallback.AiMessage.Should().Be(string.Join("\n\n", expectedTexts))
+            .And.NotBeNullOrWhiteSpace().And.NotContain("Duplicated prose");
         var legacy = ChatResponseNegotiation.ForClient(replay, null, []);
         legacy.Parts.Should().BeNull();
         legacy.AiMessage.Should().Be(fallback.AiMessage);
