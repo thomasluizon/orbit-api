@@ -134,6 +134,7 @@ public partial class ProcessUserChatCommandHandler
             cards = EnsureHabitRankingResult(cards, request, context, executionResults);
             cards = EnsureFocusedReadResults(cards, request, context, executionResults);
             cards = ComposeHabitMonth(cards, request, context, executionResults);
+            cards = ComposePeriodAnalytics(cards, request, context, executionResults);
         }
         if (!composition && executionResults.AskBlock is { } askBlock)
             cards = cards with { Parts = (cards.Parts ?? []).Concat(new[] { askBlock }).ToArray() };

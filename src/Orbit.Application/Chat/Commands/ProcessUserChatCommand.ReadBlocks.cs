@@ -251,6 +251,20 @@ public partial class ProcessUserChatCommandHandler
             Parts: cards.Parts);
     }
 
+    private static ResponseCards ComposePeriodAnalytics(ResponseCards cards, ProcessUserChatCommand request,
+        ChatContext context, ToolExecutionAccumulator results)
+    {
+        if (HasPendingWritePreview(results) || results.HasBudgetRecovery || results.OperationResults.Count == 0
+            || results.OperationResults.Any(operation => operation.OperationId != "get_period_analytics"
+                || operation.Status != AgentOperationStatus.Succeeded))
+            return cards;
+        var blocks = cards.Parts?.OfType<ChatBlockPart>().ToArray();
+        if (blocks is not { Length: > 0 } || blocks.Any(block => block.Kind is not ("periodTotal" or "periodComparison"))
+            || results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)))
+            return cards;
+        return cards with { AiMessage = null, Parts = blocks, ServerComposedText = true };
+    }
+
     private static List<QueryReadBlock> ReadCandidates(string directive, ToolExecutionAccumulator results)
     {
         var kind = DirectivePartKind(directive);

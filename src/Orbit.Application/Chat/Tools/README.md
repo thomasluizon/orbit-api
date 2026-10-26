@@ -128,6 +128,13 @@ settings as well as habit and log sources. The metrics block
 retains its lifetime `totalCompletions`, `currentStreak` and `bestStreak`, while
 `periodMetrics` and its series carry the explicitly scoped facts.
 
+For "how many habits did I complete" and "quantos hábitos concluí", select
+`completedHabits` with unit `habits`. For "how many times" and "quantas vezes",
+select `positiveLogRecords` with unit `records`. Supported period answers contain
+at most one short sentence without figures, then the block; figures belong only
+in the block. MCP exposes the same `get_period_analytics` query through a typed
+`query` object with camelCase fields and the same inclusive dates and metric names.
+
 ## Total and comparison blocks
 
 Both new kinds require `supportsParts: true` and their exact kind in `partKinds`.

@@ -749,6 +749,18 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return $"Retrospective ({period}){(r.FromCache ? " (cached)" : "")}:\n{narrativeText}";
     }
 
+    [McpServerTool(Name = "get_period_analytics"), Description("Read totals or comparisons over inclusive local dates. Use completedHabits for how many habits or quantos hábitos; it counts distinct positive recurring habits including independent children and excludes tasks and slips. Use positiveLogRecords for how many times or quantas vezes. Other metrics: distinctLoggedDates, metScheduledDates, scheduledDates.")]
+    public async Task<string> GetPeriodAnalytics(ClaimsPrincipal user,
+        [Description("Exact dateFrom/dateTo, named metric, optional habitId/search/tag/isBadHabit and baselineFrom/baselineTo.")]
+        PeriodAnalyticsReadRequest query,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await mediator.Send(new GetPeriodAnalyticsQuery(McpToolHelpers.GetUserId(user), query.DateFrom,
+            query.DateTo, query.Metric, query.HabitId, query.BaselineFrom, query.BaselineTo,
+            query.Search, query.Tag, query.IsBadHabit), cancellationToken);
+        return result.IsSuccess ? JsonSerializer.Serialize(result.Value, PayloadOptions) : $"Error [{result.ErrorCode}]: {result.Error}";
+    }
+
     [McpServerTool(Name = "get_habit_ranking"), Description("Rank positive recurring habits by completion log count. Uses resolved local dates, includes independent children and supports bound paging and refresh without narrative generation.")]
     public async Task<string> GetHabitRanking(ClaimsPrincipal user,
         [Description("Absolute dateFrom/dateToExclusive or window/months, optional metric/habitIds/pageSize; later requests use queryToken and cursor or refresh only.")]
