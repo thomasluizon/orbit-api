@@ -9,8 +9,8 @@ namespace Orbit.Application.Chat;
 
 public static class RelativeReadPeriod
 {
-    public const string Instruction = "For every relative period phrase in English or Portuguese, use relative_period and let the server resolve the person's local dates and week start. "
-        + "Use absolute dates only when the person names dates. Never calculate calendar boundaries yourself. "
+    public const string Instruction = "For every relative period phrase in English or Portuguese on a read, use relative_period and let the server resolve the person's local dates and week start. "
+        + "For these reads, use absolute dates only when the person names dates. Never calculate calendar boundaries yourself. "
         + "Map this week / esta semana to this_week, last week / semana passada to last_week, "
         + "this month / este mês to this_month, last month / mês passado to last_month, "
         + "today / hoje to today, yesterday / ontem to yesterday, last 7 days / últimos 7 dias to last_7_days. "

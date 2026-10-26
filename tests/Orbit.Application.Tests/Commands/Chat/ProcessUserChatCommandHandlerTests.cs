@@ -3323,7 +3323,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsFollowUps: true, SupportsPendingOperationPlacement: true)), CancellationToken.None);
 
         var expected = new List<string> { "dynamic prompt", "dynamic supplement",
-            HabitPlacementContext.Build([], "Show goals calendar notifications and my week") };
+            HabitPlacementContext.Build([], "Show goals calendar notifications and my week"), RelativeReadPeriod.Instruction };
         var subtypeInstruction = "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
             + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
             + "Dated habit lists supported: False. Habit history supported: False. "
