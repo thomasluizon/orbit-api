@@ -129,6 +129,7 @@ public sealed partial class AiCompletionClient
 
     internal async Task<long> CountInputTokensAsync(string requestJson, CancellationToken cancellationToken)
     {
+        using var phase = Orbit.Application.Chat.ChatTurnTimer.Measure(Orbit.Application.Chat.ChatPhase.InputTokenCount);
         using var request = JsonDocument.Parse(requestJson);
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {

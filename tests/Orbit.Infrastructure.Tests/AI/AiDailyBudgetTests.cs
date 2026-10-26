@@ -14,6 +14,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Application.Common;
+using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -28,6 +29,38 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiDailyBudgetTests
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Timing_RecordsActualTokenCountRequestsAndCompletions(bool failCount)
+    {
+        using var fixture = new BudgetFixture();
+        var clock = new CompletionTestClock();
+        fixture.Handler.FailCount = failCount;
+        fixture.Handler.OnCount = () => clock.Advance(TimeSpan.FromMilliseconds(11));
+        fixture.Handler.OnCompletion = () => clock.Advance(TimeSpan.FromMilliseconds(13));
+        using var timer = ChatTurnTimer.Begin(clock);
+
+        var error = await Record.ExceptionAsync(() => fixture.Client.CompleteTextAsync("system", "write"));
+
+        var timing = timer.Complete();
+        timing.Phases.Select(phase => phase.Name).Should().Equal(failCount
+            ? new[] { "budget", "input_token_count", "other" }
+            : new[] { "budget", "input_token_count", "budget", "model_call", "budget", "other" });
+        timing.Phases.Single(phase => phase.Name == "input_token_count").Milliseconds.Should().Be(11);
+        timing.Phases.Sum(phase => phase.Milliseconds).Should().Be(timing.TotalMilliseconds);
+        timing.TotalMilliseconds.Should().Be(failCount ? 11 : 24);
+        fixture.Handler.CountedRequests.Should().ContainSingle();
+        fixture.Handler.Completions.Should().Be(failCount ? 0 : 1);
+        if (failCount)
+            error.Should().NotBeNull();
+        else
+        {
+            error.Should().BeNull();
+            timing.Phases.Single(phase => phase.Name == "model_call").Milliseconds.Should().Be(13);
+        }
+    }
 
     [Theory]
     [InlineData(false, 5)]
@@ -453,6 +486,7 @@ public class AiDailyBudgetTests
         internal bool ReportFailedUsage { get; set; }
         internal bool OmitUsage { get; set; }
         internal bool OmitTerminalEvent { get; set; }
+        internal Action? OnCount { get; set; }
         internal Action? OnCompletion { get; set; }
         internal List<JsonElement> CountedRequests { get; } = [];
         internal List<JsonElement> CompletionRequests { get; } = [];
@@ -462,6 +496,7 @@ public class AiDailyBudgetTests
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
             if (request.RequestUri!.AbsolutePath.EndsWith("/input_tokens", StringComparison.Ordinal))
             {
+                OnCount?.Invoke();
                 CountedRequests.Add(body.RootElement.Clone());
                 if (WaitForCountCancellation)
                     await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);

@@ -32,6 +32,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static ChatResponse ComposeCachedFaq(string answer, ProcessUserChatCommand request, bool composition)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
         var text = composition ? ShortText(answer, 3) : answer;
         return new ChatResponse(text, [], CorrelationId: request.CorrelationId,
             Parts: composition ? [new ChatTextPart(text)] : null);

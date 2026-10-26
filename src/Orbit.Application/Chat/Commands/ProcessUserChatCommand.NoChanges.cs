@@ -10,6 +10,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results,
         ToolLoopResult loop, AiResponse response, GroundingTurn grounding, CancellationToken ct)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
         if (BulkNoChangesMessage(results, GetUserLanguage(context.User)) is not { } message)
             return await ComposeRegularReplyAsync(request, context, results, loop, response, grounding, ct);
         if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());

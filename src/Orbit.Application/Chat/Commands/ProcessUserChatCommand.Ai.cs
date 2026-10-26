@@ -20,6 +20,7 @@ public partial class ProcessUserChatCommandHandler
         ChatTurnState turn,
         CancellationToken cancellationToken)
     {
+        using var promptPhase = ChatTurnTimer.Measure(ChatPhase.PromptBuild);
         var promptRequest = new PromptBuildRequest(
             context.PromptHabits,
             HasImage: request.ImageData is not null,
@@ -90,6 +91,7 @@ public partial class ProcessUserChatCommandHandler
             .ToList();
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
+        promptPhase?.Dispose();
 
         var reservation = request.BlockAnswer is not null ? Result.Success() : await execution.PayGateService.TryConsumeAiMessage(
             request.UserId,

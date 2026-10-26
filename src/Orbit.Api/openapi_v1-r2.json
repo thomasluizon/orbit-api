@@ -17386,6 +17386,16 @@
             "items": {
               "$ref": "#/components/schemas/ChatEvalToolCall"
             }
+          },
+          "timing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChatTurnTiming"
+              }
+            ]
           }
         }
       },
@@ -17420,6 +17430,35 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "ChatPhaseTiming": {
+        "required": [
+          "name",
+          "milliseconds",
+          "elapsedMilliseconds"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "milliseconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "elapsedMilliseconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -17670,6 +17709,29 @@
           },
           "text": {
             "type": "string"
+          }
+        }
+      },
+      "ChatTurnTiming": {
+        "required": [
+          "totalMilliseconds",
+          "phases"
+        ],
+        "type": "object",
+        "properties": {
+          "totalMilliseconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "phases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatPhaseTiming"
+            }
           }
         }
       },

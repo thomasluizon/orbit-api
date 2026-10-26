@@ -169,7 +169,8 @@ public partial class ProcessUserChatCommandHandler(
     ILogger<ProcessUserChatCommandHandler> logger,
     IAppConfigService appConfig,
     IContentModerationService moderation,
-    IConversationTurnRecorder? conversationRecorder = null, ReadBlockFactory? readBlocks = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IConversationTurnRecorder? conversationRecorder = null, ReadBlockFactory? readBlocks = null,
+    TimeProvider? timeProvider = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -198,18 +199,18 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
         ChatEvalTraceCollector? evalTrace = null;
-        if (request.EvalTraceRequested)
-        {
-            var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
-            if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
-                evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
-        }
-
         var recording = new ChatTurnState();
         Result<ChatResponse>? response = null;
         try
         {
+            if (request.EvalTraceRequested)
+            {
+                var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+                if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
+                    evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
+            }
             response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
             if (response.IsSuccess)
             {
@@ -217,14 +218,17 @@ public partial class ProcessUserChatCommandHandler(
                     recording.MessageAllowanceConsumed);
                 response = Result.Success(negotiated);
             }
-            return response.IsSuccess && evalTrace is not null
-                ? Result.Success(response.Value with { EvalTrace = evalTrace.Build() })
-                : response;
         }
         finally
         {
             RecordConversationSafely(request, recording, response);
+            var timing = timer.Complete();
+            logger.LogInformation("Astra turn timing {Phases} total {TotalMilliseconds} ms",
+                JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);
         }
+        return response.IsSuccess && evalTrace is not null
+            ? Result.Success(response.Value with { EvalTrace = evalTrace.Build(timer.Complete()) })
+            : response;
     }
 
     private async Task<Result<ChatResponse>> HandleCoreAsync(ProcessUserChatCommand request,
@@ -279,6 +283,7 @@ public partial class ProcessUserChatCommandHandler(
 
     private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.Moderation);
         var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
         var check = await moderation.CheckTextAsync(input, cancellationToken);
         if (check.Unavailable)
@@ -402,7 +407,9 @@ public partial class ProcessUserChatCommandHandler(
         CaptureFollowUpSentEvent(request, context.User);
 
         var userLanguage = GetUserLanguage(context.User);
-        var groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
+        GroundingTurn groundingTurn;
+        using (ChatTurnTimer.Measure(ChatPhase.ContextLoad))
+            groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
         var composition = UsesComposition(request, context);
         var bufferedStream = new List<ChatStreamEvent>();
         Func<ChatStreamEvent, Task>? bufferedSink = request.StreamSink is null ? null : item =>

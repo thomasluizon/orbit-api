@@ -11,6 +11,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyList<ActionResult> actionResults,
         CancellationToken cancellationToken)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.Save);
         /**
          * Every habit tool stages its mutation against the shared change tracker and this is the one
          * place those stagings commit, so this is where the chat path joins HabitCeilingLock. Skip,

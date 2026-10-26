@@ -14,6 +14,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        using var phase = ChatTurnTimer.Measure(ChatPhase.ContextLoad);
         LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 

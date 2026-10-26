@@ -115,6 +115,12 @@ public partial class ProcessUserChatCommandHandlerTests
         var response = EvalResponseJson(result.Value, stream);
         response.TryGetProperty("evalTrace", out var trace).Should().BeTrue();
         trace.GetProperty("traceId").GetString().Should().Be("request-eval");
+        var timing = trace.GetProperty("timing");
+        var phases = timing.GetProperty("phases").EnumerateArray().ToArray();
+        phases.Select(phase => phase.GetProperty("name").GetString()).Should()
+            .Contain(["moderation", "context_load", "prompt_build", "tool_call", "save", "composition"]);
+        phases.Sum(phase => phase.GetProperty("milliseconds").GetDouble()).Should()
+            .BeApproximately(timing.GetProperty("totalMilliseconds").GetDouble(), 0.001);
         var calls = trace.GetProperty("toolCalls").EnumerateArray().ToArray();
         calls.Select(call => call.GetProperty("id").GetString()).Should().Equal("habit-call", "goal-call", "follow-up");
         calls.Select(call => call.GetProperty("name").GetString()).Should().Equal("query_habits", "query_goals", "query_habits");
