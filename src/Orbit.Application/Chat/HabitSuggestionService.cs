@@ -1,4 +1,7 @@
+using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -37,8 +40,19 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
         var active = await habits.FindAsync(habit => habit.UserId == userId && !habit.IsCompleted, ct);
         var weekStart = await dates.GetUserWeekStartDayAsync(userId, ct);
         var result = Normalize([draft], new(userId, string.Empty, language, 1, today, active, [], WeekStartDay: weekStart));
-        return result.IsSuccess ? Result.Success(result.Value.Drafts[0])
-            : Result.Failure<HabitSuggestionDraft>(Unavailable(language), "HABIT_SUGGESTION_UNAVAILABLE");
+        if (result.IsSuccess)
+        {
+            var candidate = result.Value.Drafts[0];
+            if (candidate.ExistingHabitId is not { } existing) return Result.Success(candidate);
+            var target = active.Single(habit => habit.Id == existing);
+            var update = ResolveUpdate(target, candidate, today, weekStart);
+            if (update.IsSuccess)
+            {
+                var validation = await HabitUpdateValidation.ValidateAsync(userId, target, update.Value, habits, ct);
+                if (validation.IsSuccess) return Result.Success(candidate);
+            }
+        }
+        return Result.Failure<HabitSuggestionDraft>(Unavailable(language), "HABIT_SUGGESTION_UNAVAILABLE");
     }
 
     internal static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request)
@@ -66,6 +80,16 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
                 return Invalid("Each draft must propose a distinct habit.");
             var entity = candidate.ToHabit(request.UserId);
             if (entity.IsFailure) return Invalid(entity.Error);
+            if (candidate.ExistingHabitId is { } targetId)
+            {
+                var target = request.Habits.Single(habit => habit.Id == targetId);
+                var update = ResolveUpdate(target, candidate, request.Today, request.WeekStartDay);
+                if (update.IsFailure) return Invalid(update.Error);
+                var relations = HabitUpdateValidation.ValidateGeneral(target, false, request.Habits);
+                if (relations.IsFailure) return Invalid(relations.Error);
+                entity = target.PreviewUpdate(update.Value);
+                if (entity.IsFailure) return Invalid(entity.Error);
+            }
             if (candidate.DueDate < request.Today || candidate.DueDate > request.Today.AddDays(366))
                 return Invalid("Choose a local start date within the coming year.");
             if (HasScheduleConflict(entity.Value, candidate, request.Habits.Concat(scheduled), request.WeekStartDay))
@@ -74,6 +98,14 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             scheduled.Add(entity.Value);
         }
         return Result.Success(new HabitSuggestionsCard(request.Language, output));
+    }
+
+    private static Result<HabitUpdateParams> ResolveUpdate(Habit target, HabitSuggestionDraft draft, DateOnly today, int weekStart)
+    {
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(PreviewHabitSuggestionCommandHandler.Arguments(draft), allowHabitId: true);
+        if (error is not null) return Result.Failure<HabitUpdateParams>(error);
+        var update = HabitUpdateValidation.ResolveSingleUpdate(target, changes!, today);
+        return update.IsSuccess ? Result.Success(update.Value with { WeekStartDay = weekStart }) : update;
     }
 
     private static Result<HabitSuggestionsCard> Invalid(string reason) => Result.Failure<HabitSuggestionsCard>(reason, "HABIT_SUGGESTION_INVALID");
