@@ -10,8 +10,10 @@ public sealed class BulkSkipHabitsTool(
     IMediator mediator,
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    BulkHabitReplayPlanner replayPlanner) : IAiTool, IArgumentCheckTool
+    BulkHabitReplayPlanner replayPlanner) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) => true;
+
     public string Name => "bulk_skip_habits";
 
     public string Description =>

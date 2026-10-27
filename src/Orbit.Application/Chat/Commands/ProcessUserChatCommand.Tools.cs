@@ -203,7 +203,7 @@ public partial class ProcessUserChatCommandHandler
         if (executionResults.AskBlock is not null)
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
 
-        if (CanCompleteReadRound(aiResponse, request, context, executionResults, iteration,
+        if (CanCompleteToolRound(aiResponse, request, context, executionResults, iteration,
             orderedCalls, outcomesByCallId, toolResults))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -258,9 +258,22 @@ public partial class ProcessUserChatCommandHandler
         ? call with
         {
             Args = OptionalToolArguments.OmitOptionalNulls(
-            tool.IsReadOnly ? TerminalReadDirective.ExecutionArguments(call.Args) : call.Args, tool.GetParameterSchema())
+            tool.IsReadOnly ? TerminalReadDirective.ExecutionArguments(call.Args) : TerminalWriteDirective.ExecutionArguments(call.Args), tool.GetParameterSchema())
         }
         : call;
+
+    private bool CanCompleteWriteRound(AiResponse response, IReadOnlyList<AiToolCall> calls,
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomes) =>
+        TerminalWriteDirective.IsComplete(response) && calls.Count == response.ToolCalls!.Count
+        && calls.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == false
+            && outcomes.TryGetValue(call.Id, out var outcome)
+            && outcome.PendingOperation is { Items.Count: > 0 });
+
+    private bool CanCompleteToolRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
+        CanCompleteWriteRound(response, calls, outcomes)
+        || CanCompleteReadRound(response, request, context, results, iteration, calls, outcomes, toolResults);
 
     private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,

@@ -144,7 +144,7 @@ public sealed partial class PendingOperationChangePreviewer(
             }
             else
             {
-                fields.Add(BuildActionChange(habit, operationId, arguments, revisedItems,
+                fields.AddRange(BuildActionChanges(habit, operationId, arguments, revisedItems,
                     isRevised, today));
                 actualChangeCount = fields.Count;
             }
@@ -328,7 +328,9 @@ public sealed partial class PendingOperationChangePreviewer(
             var itemId = stableIds.TryGetValue((item.HabitId, item.Date), out var stableId)
                 ? stableId : multipleDates ? $"{habit.Id}:{date}" : habit.Id.ToString();
             return new PendingOperationItem(itemId,
-                habit.Id, habit.Title, [change], FingerprintHabit(habit), RemovesData: false);
+                habit.Id, habit.Title, operationId == "bulk_skip_habits"
+                    ? [change, AgentArgumentPreview.SkipAction(habit.Id, habit.Title)] : [change],
+                FingerprintHabit(habit), RemovesData: false);
         }).ToList();
         return BuildPreview(operationId, datedPreview.Take(10).SelectMany(item => item.Fields).ToList(), datedPreview);
     }
@@ -483,6 +485,14 @@ public sealed partial class PendingOperationChangePreviewer(
             tag.Color,
             tag.IsDeleted
         }));
+
+    private static IEnumerable<PendingOperationChange> BuildActionChanges(Habit habit, string operationId,
+        JsonElement arguments, JsonElement revisedItems, bool isRevised, DateOnly today)
+    {
+        yield return BuildActionChange(habit, operationId, arguments, revisedItems, isRevised, today);
+        if (operationId == "bulk_skip_habits")
+            yield return AgentArgumentPreview.SkipAction(habit.Id, habit.Title);
+    }
 
     private static PendingOperationChange BuildActionChange(Habit habit, string operationId,
         JsonElement arguments, JsonElement revisedItems, bool isRevised, DateOnly today)

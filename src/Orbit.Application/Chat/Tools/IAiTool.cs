@@ -54,12 +54,16 @@ public interface IArgumentCheckTool
 public interface ITransactionalAiTool
 {
     bool SupportsAtomicExecution(JsonElement arguments) => false;
+
+    Task<bool> SupportsAtomicExecutionAsync(Guid userId, JsonElement arguments, CancellationToken ct) =>
+        Task.FromResult(SupportsAtomicExecution(arguments));
 }
 
 public static class AiToolAtomicity
 {
-    public static bool Supports(IAiTool? tool, JsonElement arguments) =>
-        tool is ITransactionalAiTool transactional && transactional.SupportsAtomicExecution(arguments);
+    public static Task<bool> SupportsAsync(IAiTool? tool, Guid userId, JsonElement arguments, CancellationToken ct) =>
+        tool is ITransactionalAiTool transactional
+            ? transactional.SupportsAtomicExecutionAsync(userId, arguments, ct) : Task.FromResult(false);
 }
 
 public record ToolResult(

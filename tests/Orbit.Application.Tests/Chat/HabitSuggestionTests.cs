@@ -97,6 +97,27 @@ public partial class HabitSuggestionTests
     }
 
     [Theory]
+    [InlineData("en", "weekdays at 22:30")]
+    [InlineData("pt-BR", "só nos dias de semana, às 22h30")]
+    public async Task Refine_ExplicitWeekdaysCannotBecomeFiveUnspecifiedWeeklySessions(string language, string instruction)
+    {
+        var original = Draft() with { FrequencyUnit = FrequencyUnit.Week, FrequencyQuantity = 3 };
+        Generate(original with { FrequencyQuantity = 5, DueTime = new(22, 30), DueEndTime = new(22, 50) });
+
+        var result = await Service().GenerateAsync(_userId, instruction, language, 1, original, default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var draft = result.Value.Drafts.Should().ContainSingle().Which;
+        draft.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        draft.FrequencyQuantity.Should().Be(1);
+        draft.Days.Should().Equal(DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday);
+        draft.Id.Should().Be(original.Id);
+        draft.Title.Should().Be(original.Title);
+        draft.DueTime.Should().Be(new TimeOnly(22, 30));
+        await _generator.Received(1).GenerateAsync(Arg.Any<HabitSuggestionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
     public async Task Overlap_IsRepairedBeforeReturningADraft(string language)

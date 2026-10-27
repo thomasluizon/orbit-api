@@ -326,7 +326,7 @@ public sealed class PendingOperationChangePreviewerTests
         var retained = preview!.Items.Should().ContainSingle().Subject;
         retained.ItemId.Should().Be(itemId);
         retained.EntityId.Should().Be(habit.Id);
-        retained.Fields.Should().ContainSingle().Which.NewValue.Should().Be("2026-10-17");
+        retained.Fields.Single(field => field.Field == "date").NewValue.Should().Be("2026-10-17");
     }
 
     [Theory]
@@ -405,6 +405,28 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Theory]
+    [InlineData("skip_habit", false)]
+    [InlineData("bulk_skip_habits", false)]
+    [InlineData("bulk_skip_habits", true)]
+    public async Task SkipPreview_IdentifiesTheActionAlongsideTheOccurrence(string operation, bool revised)
+    {
+        var habit = CreateHabit("Walk", null);
+        Setup([habit]);
+        var arguments = operation == "skip_habit"
+            ? JsonSerializer.Serialize(new { habit_id = habit.Id, date = "2026-09-25" })
+            : revised
+                ? JsonSerializer.Serialize(new { revised_items = new[] { new { habit_id = habit.Id, date = "2026-09-25" } } })
+                : JsonSerializer.Serialize(new { habit_ids = new[] { habit.Id }, date = "2026-09-25" });
+
+        var preview = await Preview(operation, arguments);
+
+        var item = preview!.Items.Should().ContainSingle().Which;
+        item.Fields.Should().Contain(field => field.Field == "action" && field.NewValue == "skip"
+            && field.ValueType == "action" && !field.IsEditable);
+        item.Fields.Should().Contain(field => field.Field == "date" && field.NewValue == "2026-09-25");
+    }
+
+    [Theory]
     [InlineData("bulk_delete_habits", "delete")]
     [InlineData("bulk_log_habits", "date")]
     [InlineData("bulk_skip_habits", "date")]
@@ -416,9 +438,9 @@ public sealed class PendingOperationChangePreviewerTests
 
         preview!.Items.Should().HaveCount(2);
         preview.Items!.SelectMany(item => item.Fields).Select(change => change.Field)
-            .Should().OnlyContain(value => value == field);
-        preview.Items.SelectMany(item => item.Fields).Select(change => change.IsEditable)
-            .Should().OnlyContain(value => value == (field == "date"));
+            .Should().OnlyContain(value => value == field || operationId == "bulk_skip_habits" && value == "action");
+        preview.Items.SelectMany(item => item.Fields)
+            .Should().OnlyContain(change => change.IsEditable == (change.Field == "date"));
     }
 
     [Theory]

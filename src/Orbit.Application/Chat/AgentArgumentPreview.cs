@@ -74,6 +74,9 @@ public static class AgentArgumentPreview
                         && target?.CurrentValues.GetValueOrDefault("frequency_unit") == string.Empty)))
             .ToList();
 
+        if (operationId == "skip_habit")
+            fields.Add(SkipAction(entityId, entityName));
+
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,
             target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId),
             RemovesData: operationId is "create_habit" or "log_habit" or "unlog_habit" or "skip_habit" or "update_habit"
@@ -83,6 +86,9 @@ public static class AgentArgumentPreview
 
         return new PendingOperationChangePreview(fields, 1, [item], fingerprint);
     }
+
+    internal static PendingOperationChange SkipAction(Guid entityId, string entityName) =>
+        new(entityId, entityName, "action", null, "skip", "action", IsEditable: false);
 
     private static bool IsEditable(string field) =>
         !FixedFields.Contains(field) && !IsIdentifier(field);

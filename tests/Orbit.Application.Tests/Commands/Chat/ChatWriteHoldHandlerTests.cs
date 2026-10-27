@@ -91,6 +91,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             new BulkCreateHabitsTool(_mediator),
             new CreateSubHabitTool(_mediator),
             new LogHabitTool(_mediator, _habitRepo, _userDateService),
+            new SkipHabitTool(_mediator, _habitRepo),
             new UnlogHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate,
                 _userStreakService, Substitute.For<IGoalCompletionService>()),
             emojiTool,

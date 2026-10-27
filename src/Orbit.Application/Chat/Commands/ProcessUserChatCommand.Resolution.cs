@@ -155,6 +155,7 @@ public partial class ProcessUserChatCommandHandler
             results.InvalidCalls[call.Id] = "Habits must be an array of objects.";
             return null;
         }
+        items = HabitHeadingParents.UnwrapExistingParents(items, results.ParentHeadings);
         var allHaveHeadings = items.Count > 0 && items.OfType<JsonObject>()
             .All(item => HabitHeadingParents.ForItem(item, results.ParentHeadings) is not null);
         if (allHaveHeadings)

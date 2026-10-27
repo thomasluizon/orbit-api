@@ -58,6 +58,8 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         For every draft, choose a realistic duration and an unoccupied time using existing schedules and other drafts.
         Existing untimed habits do not reserve a clock interval; an existing timed habit without an end reserves its start minute.
         Keep the user's requested time and cadence. Start on or after today, within the coming year.
+        Weekdays, Monday through Friday, dias de semana and dias úteis mean frequencyUnit Day, frequencyQuantity 1,
+        days [Monday,Tuesday,Wednesday,Thursday,Friday]. Never replace specified days with an unspecified weekly count.
         For a refinement, return only the original draft rewritten following instruction, retaining its id and existingHabitId.
         Keep fields unrelated to that instruction. Never add other drafts during refinement.
         If correction is supplied, repair that validation error while preserving the person's request.

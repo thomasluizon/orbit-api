@@ -44,7 +44,7 @@ public partial class AgentOperationExecutor
         var operation = catalogService.GetOperation(member.OperationId);
         var capability = operation is null ? null : catalogService.GetCapability(operation.CapabilityId);
         if (operation is not { IsMutation: true, IsAgentExecutable: true } || capability is null
-            || !AiToolAtomicity.Supports(toolRegistry.GetTool(operation.Id), member.Arguments))
+            || !await AiToolAtomicity.SupportsAsync(toolRegistry.GetTool(operation.Id), execution.Request.UserId, member.Arguments, ct))
             return (null, "unsupported_by_policy");
         var ownership = await targetOwnershipService.GetDenialReasonAsync(operation.Id, execution.Request.UserId, member.Arguments, ct);
         if (ownership is not null) return (null, ownership);

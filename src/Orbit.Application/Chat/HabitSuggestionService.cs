@@ -8,6 +8,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using System.Text.RegularExpressions;
 
 namespace Orbit.Application.Chat;
 
@@ -91,6 +92,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             if (draft is null) return Invalid("A complete draft is required.");
             var candidate = request.Original is { } original
                 ? draft with { Id = original.Id, ExistingHabitId = original.ExistingHabitId } : draft;
+            candidate = PreserveRequestedWeekdays(candidate, request);
             var matches = request.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(candidate.Title ?? string.Empty)).ToArray();
             if (matches.Length > 1) return Invalid("Choose an unambiguous existing habit.");
             if (matches is [var match])
@@ -134,6 +136,22 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     }
 
     private static Result<HabitSuggestionsCard> Invalid(string reason) => Result.Failure<HabitSuggestionsCard>(reason, "HABIT_SUGGESTION_INVALID");
+
+    private static HabitSuggestionDraft PreserveRequestedWeekdays(HabitSuggestionDraft draft, HabitSuggestionRequest request)
+    {
+        var instruction = HabitNameMatcher.Normalize(request.Instruction);
+        if (request.Original is null || draft.Type != "Habit"
+            || !Regex.IsMatch(instruction, @"\b(weekdays|dias (?:de semana|uteis)|monday (?:to|through) friday|segunda (?:a|ate) sexta)\b",
+                RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
+            || Regex.IsMatch(instruction, @"\b(except|excluding|exceto|menos)\b", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)))
+            return draft;
+        return draft with
+        {
+            FrequencyUnit = FrequencyUnit.Day,
+            FrequencyQuantity = 1,
+            Days = [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday]
+        };
+    }
     private static bool HasScheduleConflict(Habit entity, HabitSuggestionDraft draft, IEnumerable<Habit> habits, int weekStart)
     {
         var timed = habits.Where(habit => habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();
