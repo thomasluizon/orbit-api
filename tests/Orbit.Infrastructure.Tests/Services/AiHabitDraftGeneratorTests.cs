@@ -28,6 +28,7 @@ public class AiHabitDraftGeneratorTests
         prompt.RootElement.GetProperty("habits")[0].GetProperty("id").GetGuid().Should().Be(habit.Id);
         prompt.RootElement.GetProperty("goals")[0].GetProperty("title").GetString().Should().Be(goal.Title);
         AiHabitDraftGenerator.Instructions.Should().Contain("existingHabitId").And.Contain("unoccupied time")
-            .And.Contain("untrusted data").And.Contain("Keep fields unrelated");
+            .And.Contain("untrusted data").And.Contain("Keep fields unrelated")
+            .And.Contain("required non-null HH:mm strings for every draft, with end after start");
     }
 }

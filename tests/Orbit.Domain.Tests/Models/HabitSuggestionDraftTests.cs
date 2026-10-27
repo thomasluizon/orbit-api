@@ -47,6 +47,8 @@ public class HabitSuggestionDraftTests
     [InlineData("quantity")]
     [InlineData("time")]
     [InlineData("time_precision")]
+    [InlineData("end_precision")]
+    [InlineData("equal_times")]
     [InlineData("weekday")]
     [InlineData("reminder")]
     [InlineData("checklist")]
@@ -62,6 +64,8 @@ public class HabitSuggestionDraftTests
             "quantity" => Draft() with { FrequencyQuantity = 0 },
             "time" => Draft() with { DueEndTime = new(21, 0) },
             "time_precision" => Draft() with { DueTime = new(22, 0, 30) },
+            "end_precision" => Draft() with { DueEndTime = new(22, 15, 30) },
+            "equal_times" => Draft() with { DueEndTime = new(22, 0) },
             "weekday" => Draft() with { Days = [(DayOfWeek)99] },
             "reminder" => Draft() with { ReminderMinutesBefore = -1 },
             "checklist" => Draft() with { ChecklistItems = [""] },

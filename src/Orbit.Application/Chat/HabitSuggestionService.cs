@@ -31,7 +31,13 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var generated = await generator.GenerateAsync(request, ct);
-            if (generated.IsFailure) return generated.PropagateError<HabitSuggestionsCard>();
+            if (generated.IsFailure)
+            {
+                if (generated.ErrorCode != "HABIT_SUGGESTION_INVALID")
+                    return generated.PropagateError<HabitSuggestionsCard>();
+                request = request with { Correction = generated.Error };
+                continue;
+            }
             var result = Normalize(generated.Value, request);
             if (result.IsSuccess) return result;
             request = request with { Correction = result.Error };
