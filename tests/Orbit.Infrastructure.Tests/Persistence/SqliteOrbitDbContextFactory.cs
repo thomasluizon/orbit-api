@@ -52,6 +52,8 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
         }.ToString();
         _connection = new SqliteConnection(connectionString);
         _connection.Open();
+        _connection.CreateFunction<string, string>("md5", value => Convert.ToHexStringLower(
+            System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(value))), isDeterministic: true);
 
         var options = new DbContextOptionsBuilder<OrbitDbContext>();
         void Configure(SqliteDbContextOptionsBuilder sqlite)
