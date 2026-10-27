@@ -136,6 +136,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Gamification.Backfill.XpAwardLogBackfillService>();
         builder.Services.AddScoped<IHabitLogReader, HabitLogReader>();
         builder.Services.AddScoped<IHabitScheduleLogReader, HabitScheduleLogReader>();
+        builder.Services.AddScoped<IHabitRankingReader, HabitRankingReader>();
         builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
         builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
         builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>

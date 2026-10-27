@@ -90,7 +90,7 @@ public class ChatContextScaleTests(ITestOutputHelper output)
             Issuer = "test",
             Audience = "test"
         });
-        var ranking = new GetHabitRankingQueryHandler(repository, dates, new HabitRankingTokenService(jwt),
+        var ranking = new GetHabitRankingQueryHandler(new HabitRankingReader(db, encryption), dates, new HabitRankingTokenService(jwt),
             Substitute.For<IProductAnalytics>(), NullLogger<GetHabitRankingQueryHandler>.Instance);
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetHabitRankingQuery>(), Arg.Any<CancellationToken>())
@@ -181,7 +181,7 @@ public class ChatContextScaleTests(ITestOutputHelper output)
         contextHabits.Should().BeLessThanOrEqualTo(AppConstants.MaxPromptHabitEntries);
         var rankingSql = counter.Commands.Except(contextCommands).Where(c => c.Sql.Contains("GROUP BY", StringComparison.Ordinal)).ToArray();
         rankingSql.Should().ContainSingle();
-        rankingSql[0].Rows.Should().Be(habitCount);
+        rankingSql[0].Rows.Should().Be(ranked.Rows.Count);
         db.ChangeTracker.HasChanges().Should().BeFalse();
     }
 

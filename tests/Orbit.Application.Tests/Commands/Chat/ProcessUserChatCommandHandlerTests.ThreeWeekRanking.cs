@@ -1,3 +1,4 @@
+using Orbit.Tests.Shared;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -46,17 +47,13 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([read, walk]);
-        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
-                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(1)(
-                new[] { read, walk }.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToList());
         var tokens = new HabitRankingTokenService(Options.Create(new JwtSettings
         {
             SecretKey = "three-week-ranking-test-signing-secret",
             Issuer = "test",
             Audience = "test"
         }));
-        var queryHandler = new GetHabitRankingQueryHandler(_habitRepo, _userDateService, tokens,
+        var queryHandler = new GetHabitRankingQueryHandler(new InMemoryHabitRankingReader([read, walk]), _userDateService, tokens,
             _productAnalytics, NullLogger<GetHabitRankingQueryHandler>.Instance);
         _mediator.Send(Arg.Any<GetHabitRankingQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => queryHandler.Handle(call.Arg<GetHabitRankingQuery>(), call.Arg<CancellationToken>()));

@@ -16873,6 +16873,12 @@
               "null",
               "string"
             ]
+          },
+          "access": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

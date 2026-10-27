@@ -129,7 +129,11 @@ public partial class AgentOperationExecutor(
                 Error: "unsupported_by_policy"),
             cancellationToken);
 
-        return AgentOperationResponseFactory.UnknownOperation(request.OperationId);
+        var tool = toolRegistry.GetTool(request.OperationId);
+        var capability = catalogService.GetCapabilityByChatTool(request.OperationId);
+        var access = tool is not null ? tool.IsReadOnly ? "read" : "write"
+            : capability is not null ? capability.IsMutation ? "write" : "read" : null;
+        return AgentOperationResponseFactory.UnknownOperation(request.OperationId, access);
     }
 
     private async Task<AgentExecuteOperationResponse> DenyDirectUserFlowAsync(
@@ -289,6 +293,7 @@ public partial class AgentOperationExecutor(
 
         return AgentOperationResponseFactory.ConfirmationRequired(
             execution.Operation.Id,
+            execution.Capability.IsMutation,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
             execution.Summary,
@@ -420,6 +425,7 @@ public partial class AgentOperationExecutor(
         if (tool is null)
             return AgentOperationResponseFactory.MissingTool(
                 execution.Operation.Id,
+                execution.Capability.IsMutation,
                 execution.Capability.RiskClass,
                 execution.Capability.ConfirmationRequirement,
                 execution.Summary);
@@ -495,6 +501,7 @@ public partial class AgentOperationExecutor(
 
         return AgentOperationResponseFactory.Failed(
             execution.Operation.Id,
+            execution.Capability.IsMutation,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
             execution.Summary);
@@ -563,6 +570,7 @@ public partial class AgentOperationExecutor(
 
         var response = AgentOperationResponseFactory.ToolOutcome(
             execution.Operation.Id,
+            execution.Capability.IsMutation,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
             execution.Summary,
@@ -607,6 +615,7 @@ public partial class AgentOperationExecutor(
     {
         return AgentOperationResponseFactory.Denied(
             execution.Operation.Id,
+            execution.Capability.IsMutation,
             execution.Capability.RiskClass,
             execution.Capability.ConfirmationRequirement,
             summary,

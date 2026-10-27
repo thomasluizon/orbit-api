@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <Compile Include="../Shared/CommandRepository.cs" Link="Common/CommandRepository.cs" />
+    <Compile Include="../Shared/InMemoryHabitRankingReader.cs" Link="Common/InMemoryHabitRankingReader.cs" />
     <Compile Include="../Shared/GoalToolCommandMediator.cs" Link="Common/GoalToolCommandMediator.cs" />
     <Compile Include="../Shared/HabitToolCommandMediator.cs" Link="Common/HabitToolCommandMediator.cs" />
   </ItemGroup>

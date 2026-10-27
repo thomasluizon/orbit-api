@@ -6,8 +6,6 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
-using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -64,7 +62,7 @@ public static class HabitRankingPeriodRange
 }
 
 public sealed class GetHabitRankingQueryHandler(
-    IGenericRepository<Habit> habits,
+    IHabitRankingReader reader,
     IUserDateService dates,
     IHabitRankingTokenService tokens,
     IProductAnalytics analytics,
@@ -108,58 +106,29 @@ public sealed class GetHabitRankingQueryHandler(
         if (request.Cursor is not null && !TryReadCursor(request.Cursor, queryId, query.PageSize, out cursor))
             return Failure("Invalid ranking cursor.");
 
-        var eligible = await LoadEligibleAsync(query, ct);
-        if (request.QueryToken is null && query.HabitIds.Any(id => eligible.All(h => h.HabitId != id)))
+        var offset = cursor?.Offset ?? 0;
+        var page = await reader.ReadAsync(query, offset, ct);
+        if (request.QueryToken is null && query.HabitIds.Count > 0 && page.EligibleCount != query.HabitIds.Count)
             return Result.Failure<HabitRankingResponse>(ErrorMessages.HabitNotFound);
-
-        var counted = eligible.Where(h => h.CompletedCount > 0)
-            .OrderByDescending(h => h.CompletedCount)
-            .ThenBy(h => h.HabitId.ToString("D"), StringComparer.Ordinal).ToList();
-        var revision = Hash(JsonSerializer.Serialize(new
-        {
-            QueryId = queryId,
-            Rows = counted.Select(h => new
-            {
-                h.HabitId,
-                h.Name,
-                h.Emoji,
-                h.ParentHabitId,
-                h.CompletedCount
-            })
-        }));
+        var revision = Hash(queryId + page.Fingerprint);
         if (cursor is not null && cursor.Revision != revision)
             return Result.Failure<HabitRankingResponse>("Ranking changed. Refresh the resolved query.", "HABIT_RANKING_STALE");
-        var offset = cursor?.Offset ?? 0;
-        if (cursor is not null && offset >= counted.Count)
+        if (cursor is not null && offset >= page.TotalCount)
             return Failure("Ranking page is out of range.");
-        var rows = counted.Skip(offset).Take(query.PageSize).Select((h, i) => h with { Rank = offset + i + 1 }).ToArray();
-        var complete = offset + rows.Length >= counted.Count;
+        var rows = page.Rows.Select((h, i) => new HabitRankingRow(offset + i + 1, h.HabitId,
+            h.Name, h.Emoji, h.ParentHabitId, h.CompletedCount)).ToArray();
+        var complete = offset + rows.Length >= page.TotalCount;
         var next = complete ? null : tokens.Sign(JsonSerializer.Serialize(new CursorPayload(
             "habit-ranking-page-v1", queryId, revision, offset + rows.Length)));
         return Result.Success(new HabitRankingResponse(queryId, tokens.Sign(canonical), revision,
             new HabitRankingResolvedQuery(query.DateFrom, query.DateToExclusive, query.TimeZone, query.Metric,
                 "Count of distinct positive completion log records; undone, deleted and slip records excluded.",
-                new HabitRankingScope(), query.HabitIds, query.PageSize), rows, counted.Count, offset, complete, next));
+                new HabitRankingScope(), query.HabitIds, query.PageSize), rows, page.TotalCount, offset, complete, next));
     }
 
     private bool TryReadCursor(string token, string queryId, int pageSize, out CursorPayload? cursor) =>
         TryRead(token, out cursor) && cursor is not null && cursor.Purpose == "habit-ranking-page-v1"
         && cursor.QueryId == queryId && cursor.Offset > 0 && cursor.Offset % pageSize == 0;
-
-    private Task<IReadOnlyList<HabitRankingRow>> LoadEligibleAsync(HabitRankingDefinition query, CancellationToken ct)
-    {
-        return habits.ProjectAsync(
-            h => h.UserId == query.UserId && !h.IsDeleted
-                && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible) && !h.IsBadHabit
-                && (query.HabitIds.Count == 0 || query.HabitIds.Contains(h.Id)),
-            q => q.SelectMany(h => h.Logs.Where(l => !l.IsDeleted && !l.IsSlip && l.Value > 0
-                    && l.Date >= query.DateFrom && l.Date < query.DateToExclusive
-                    && q.Any(owner => owner.Id == l.HabitId)).DefaultIfEmpty(),
-                (h, log) => new { h.Id, h.Title, h.Emoji, h.ParentHabitId, LogId = log == null ? (Guid?)null : log.Id })
-                .GroupBy(row => new { row.Id, row.Title, row.Emoji, row.ParentHabitId })
-                .Select(group => new HabitRankingRow(0, group.Key.Id, group.Key.Title, group.Key.Emoji,
-                    group.Key.ParentHabitId, group.Count(row => row.LogId != null))), ct);
-    }
 
     private async Task<Result<HabitRankingDefinition>> ResolveAsync(GetHabitRankingQuery request, CancellationToken ct)
     {

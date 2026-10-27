@@ -6,7 +6,7 @@ namespace Orbit.Infrastructure.Services;
 
 internal static class AgentOperationResponseFactory
 {
-    public static AgentExecuteOperationResponse UnknownOperation(string operationId)
+    public static AgentExecuteOperationResponse UnknownOperation(string operationId, string? access)
     {
         return new AgentExecuteOperationResponse(
             new AgentOperationResult(
@@ -15,7 +15,8 @@ internal static class AgentOperationResponseFactory
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
                 AgentOperationStatus.UnsupportedByPolicy,
-                PolicyReason: "unsupported_by_policy"),
+                PolicyReason: "unsupported_by_policy",
+                Access: access),
             PolicyDenial: new AgentPolicyDenial(
                 operationId,
                 operationId,
@@ -26,6 +27,7 @@ internal static class AgentOperationResponseFactory
 
     public static AgentExecuteOperationResponse MissingTool(
         string operationId,
+        bool isMutation,
         AgentRiskClass riskClass,
         AgentConfirmationRequirement confirmationRequirement,
         string summary)
@@ -38,7 +40,8 @@ internal static class AgentOperationResponseFactory
                 confirmationRequirement,
                 AgentOperationStatus.UnsupportedByPolicy,
                 Summary: summary,
-                PolicyReason: "missing_tool_executor"),
+                PolicyReason: "missing_tool_executor",
+                Access: isMutation ? "write" : "read"),
             PolicyDenial: new AgentPolicyDenial(
                 operationId,
                 operationId,
@@ -49,6 +52,7 @@ internal static class AgentOperationResponseFactory
 
     public static AgentExecuteOperationResponse Denied(
         string operationId,
+        bool isMutation,
         AgentRiskClass riskClass,
         AgentConfirmationRequirement confirmationRequirement,
         string summary,
@@ -63,7 +67,8 @@ internal static class AgentOperationResponseFactory
                 confirmationRequirement,
                 AgentOperationStatus.Denied,
                 Summary: summary,
-                PolicyReason: policyReason),
+                PolicyReason: policyReason,
+                Access: isMutation ? "write" : "read"),
             PolicyDenial: new AgentPolicyDenial(
                 operationId,
                 operationId,
@@ -74,6 +79,7 @@ internal static class AgentOperationResponseFactory
 
     public static AgentExecuteOperationResponse ConfirmationRequired(
         string operationId,
+        bool isMutation,
         AgentRiskClass riskClass,
         AgentConfirmationRequirement confirmationRequirement,
         string summary,
@@ -89,12 +95,14 @@ internal static class AgentOperationResponseFactory
                 AgentOperationStatus.PendingConfirmation,
                 Summary: summary,
                 PolicyReason: policyReason,
-                PendingOperationId: pendingOperation?.Id),
+                PendingOperationId: pendingOperation?.Id,
+                Access: isMutation ? "write" : "read"),
             PendingOperation: pendingOperation);
     }
 
     public static AgentExecuteOperationResponse Failed(
         string operationId,
+        bool isMutation,
         AgentRiskClass riskClass,
         AgentConfirmationRequirement confirmationRequirement,
         string summary)
@@ -106,11 +114,13 @@ internal static class AgentOperationResponseFactory
             confirmationRequirement,
             AgentOperationStatus.Failed,
             Summary: summary,
-            PolicyReason: "unexpected_error"));
+            PolicyReason: "unexpected_error",
+            Access: isMutation ? "write" : "read"));
     }
 
     public static AgentExecuteOperationResponse ToolOutcome(
         string operationId,
+        bool isMutation,
         AgentRiskClass riskClass,
         AgentConfirmationRequirement confirmationRequirement,
         string summary,
@@ -130,7 +140,8 @@ internal static class AgentOperationResponseFactory
                 TargetName: result.EntityName,
                 PolicyReason: result.Success ? null : result.Error,
                 ErrorCode: result.ErrorCode,
-                Payload: result.Payload),
+                Payload: result.Payload,
+                Access: isMutation ? "write" : "read"),
             PolicyDenial: isPayGateDenial
                 ? new AgentPolicyDenial(
                     operationId,
