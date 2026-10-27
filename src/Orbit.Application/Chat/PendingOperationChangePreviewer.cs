@@ -68,7 +68,20 @@ public sealed partial class PendingOperationChangePreviewer(
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
         if (operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits)
             return Result.Success(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext));
-        return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
+        return Result.Success(LocalizeActions(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken), clientContext));
+    }
+
+    private static PendingOperationChangePreview? LocalizeActions(PendingOperationChangePreview? preview, AgentClientContext? client)
+    {
+        if (preview is null) return null;
+        var skip = Orbit.Application.Common.LocaleHelper.IsPortuguese(client?.Locale) ? "Pular ocorrência" : "Skip occurrence";
+        PendingOperationChange Localize(PendingOperationChange field) =>
+            field is { Field: "action", NewValue: "skip" } ? field with { NewValue = skip } : field;
+        return preview with
+        {
+            Changes = preview.Changes.Select(Localize).ToArray(),
+            Items = preview.Items?.Select(item => item with { Fields = item.Fields.Select(Localize).ToArray() }).ToArray()
+        };
     }
 
     private async Task<bool> HasMissingSearchAsync(Guid userId, string operationId, JsonElement arguments,
@@ -87,7 +100,7 @@ public sealed partial class PendingOperationChangePreviewer(
     private async Task<PendingOperationChangePreview?> PreviewChangesAsync(
         Guid userId, string operationId, JsonElement arguments, CancellationToken cancellationToken)
     {
-        arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
+        arguments = await ResolveOccurrenceDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
             return await PreviewLogDatesAsync(userId, operationId, arguments, cancellationToken);
         if (operationId == BulkCreateHabits)
@@ -184,11 +197,11 @@ public sealed partial class PendingOperationChangePreviewer(
             : BuildPreview(operationId, [], []);
     }
 
-    private async Task<JsonElement> ResolveUnlogDateAsync(Guid userId, string operationId,
+    private async Task<JsonElement> ResolveOccurrenceDateAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken)
     {
-        if (operationId == "unlog_habit" && arguments.ValueKind == JsonValueKind.Object
-            && !arguments.TryGetProperty("date", out _))
+        if (operationId is "unlog_habit" or "skip_habit" && arguments.ValueKind == JsonValueKind.Object
+            && (!arguments.TryGetProperty("date", out var date) || date.ValueKind == JsonValueKind.Null))
         {
             var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
             var resolved = arguments.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);

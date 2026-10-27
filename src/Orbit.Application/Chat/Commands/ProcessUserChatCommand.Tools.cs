@@ -263,16 +263,17 @@ public partial class ProcessUserChatCommandHandler
         : call;
 
     private bool CanCompleteWriteRound(AiResponse response, IReadOnlyList<AiToolCall> calls,
-        IReadOnlyDictionary<string, ToolCallOutcome> outcomes) =>
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results) =>
         TerminalWriteDirective.IsComplete(response) && calls.Count == response.ToolCalls!.Count
+        && results.PendingOperations.Count > 0
         && calls.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == false
             && outcomes.TryGetValue(call.Id, out var outcome)
-            && outcome.PendingOperation is { Items.Count: > 0 });
+            && (outcome.PendingOperation is { Items.Count: > 0 } || results.MergedCallIds.Contains(call.Id)));
 
     private bool CanCompleteToolRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
-        CanCompleteWriteRound(response, calls, outcomes)
+        CanCompleteWriteRound(response, calls, outcomes, results)
         || CanCompleteReadRound(response, request, context, results, iteration, calls, outcomes, toolResults);
 
     private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,

@@ -88,7 +88,7 @@ public static class AgentArgumentPreview
     }
 
     internal static PendingOperationChange SkipAction(Guid entityId, string entityName) =>
-        new(entityId, entityName, "action", null, "skip", "action", IsEditable: false);
+        new(entityId, entityName, "action", null, "skip", "action", JsonSerializer.SerializeToElement("skip"), IsEditable: false);
 
     private static bool IsEditable(string field) =>
         !FixedFields.Contains(field) && !IsIdentifier(field);

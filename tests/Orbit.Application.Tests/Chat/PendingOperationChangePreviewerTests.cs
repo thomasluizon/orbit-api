@@ -405,10 +405,28 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Theory]
-    [InlineData("skip_habit", false)]
-    [InlineData("bulk_skip_habits", false)]
-    [InlineData("bulk_skip_habits", true)]
-    public async Task SkipPreview_IdentifiesTheActionAlongsideTheOccurrence(string operation, bool revised)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SkipPreview_DefaultOccurrenceUsesTheUsersLocalToday(bool explicitNull)
+    {
+        var habit = CreateHabit("Walk", null);
+        Setup([habit]);
+        var arguments = explicitNull ? JsonSerializer.Serialize(new { habit_id = habit.Id, date = (string?)null })
+            : JsonSerializer.Serialize(new { habit_id = habit.Id });
+
+        var preview = await Preview("skip_habit", arguments);
+
+        preview!.Items!.Single().Fields.Should().Contain(field => field.Field == "date" && field.NewValue == "2026-09-25");
+    }
+
+    [Theory]
+    [InlineData("skip_habit", false, "en", "Skip occurrence")]
+    [InlineData("bulk_skip_habits", false, "en", "Skip occurrence")]
+    [InlineData("bulk_skip_habits", true, "en", "Skip occurrence")]
+    [InlineData("skip_habit", false, "pt-BR", "Pular ocorrência")]
+    [InlineData("bulk_skip_habits", false, "pt-BR", "Pular ocorrência")]
+    [InlineData("bulk_skip_habits", true, "pt-BR", "Pular ocorrência")]
+    public async Task SkipPreview_IdentifiesTheActionAlongsideTheOccurrence(string operation, bool revised, string locale, string label)
     {
         var habit = CreateHabit("Walk", null);
         Setup([habit]);
@@ -418,11 +436,12 @@ public sealed class PendingOperationChangePreviewerTests
                 ? JsonSerializer.Serialize(new { revised_items = new[] { new { habit_id = habit.Id, date = "2026-09-25" } } })
                 : JsonSerializer.Serialize(new { habit_ids = new[] { habit.Id }, date = "2026-09-25" });
 
-        var preview = await Preview(operation, arguments);
+        var preview = await Preview(operation, arguments, new(Locale: locale));
 
         var item = preview!.Items.Should().ContainSingle().Which;
-        item.Fields.Should().Contain(field => field.Field == "action" && field.NewValue == "skip"
+        item.Fields.Should().Contain(field => field.Field == "action" && field.NewValue == label
             && field.ValueType == "action" && !field.IsEditable);
+        item.Fields.Single(field => field.Field == "action").ProposedValue!.Value.GetString().Should().Be("skip");
         item.Fields.Should().Contain(field => field.Field == "date" && field.NewValue == "2026-09-25");
     }
 

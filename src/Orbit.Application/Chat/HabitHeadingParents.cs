@@ -37,7 +37,7 @@ internal static partial class HabitHeadingParents
         var output = new JsonArray();
         foreach (var item in items.OfType<JsonObject>())
         {
-            var heading = headings.SingleOrDefault(heading =>
+            var heading = headings.FirstOrDefault(heading =>
                 NormalizeName(heading.Name) == NormalizeName(item["title"]?.ToString()));
             if (heading is { Candidates.Count: > 0 } && item["sub_habits"] is JsonArray { Count: > 0 } children)
             {

@@ -5,6 +5,9 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -101,6 +104,18 @@ public sealed partial class ChatWriteHoldHandlerTests
         }
         parents[0].Emoji.Should().BeNull();
         parents[1].Emoji.Should().BeNull();
+        var stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, approved.Operation.PolicyReason);
+        for (var index = 0; index < 2; index++)
+        {
+            var parent = parents[index];
+            var title = pending.Items[index].EntityName;
+            await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.ParentHabitId == parent.Id
+                && habit.Title == title), Arg.Any<CancellationToken>());
+        }
     }
 
     [Fact]
@@ -127,8 +142,30 @@ public sealed partial class ChatWriteHoldHandlerTests
         stored.OperationId.Should().Be(AccountChangeSet.OperationName);
         pending.Items.Should().HaveCount(2);
         pending.Items!.Single(item => item.EntityId == habits[1].Id).Fields.Should()
-            .Contain(field => field.Field == "action" && field.NewValue == "skip" && !field.IsEditable);
+            .Contain(field => field.Field == "action" && field.NewValue == "Skip occurrence" && !field.IsEditable);
         habits[0].Title.Should().Be("Post Lunch");
         habits[1].NextDueDate.Should().Be(Today);
+        _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success("updated"));
+        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new SkipHabitResponse(Guid.NewGuid())));
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, approved.Operation.PolicyReason);
+        await _mediator.Received(1).Send(Arg.Is<SkipHabitCommand>(command => command.HabitId == habits[1].Id
+            && command.Date == Today), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GateSix_SkipWithActiveStreakRewardsKeepsExternalEffectsOutsideAtomicBundles()
+    {
+        var habit = ParentAccount("en")[0];
+        var goal = Goal.Create(new Goal.CreateGoalParams(_userId, "Keep a streak", 10, "days", Type: GoalType.Streak)).Value;
+        habit.AddGoal(goal);
+        var args = JsonSerializer.SerializeToElement(new { habit_id = habit.Id, date = Today.ToString("yyyy-MM-dd") });
+
+        var supported = await AiToolAtomicity.SupportsAsync(new SkipHabitTool(_mediator, _habitRepo), _userId, args, default);
+
+        supported.Should().BeFalse();
+        await _mediator.DidNotReceive().Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>());
     }
 }
