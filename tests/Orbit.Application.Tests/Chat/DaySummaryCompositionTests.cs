@@ -26,7 +26,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate(user);
         if (composition) EnableComposition();
         var summary = SummaryReadTool();
-        var goals = CompositionTool("query_goals");
+        var goals = CompositionTool("query_goals", empty: true);
         var handler = CreateHandler(summary, goals);
         UseProductionReadExecutor(summary, goals);
         var summaryCall = new AiToolCall(summary.Name, "summary", ParseArguments("{}"));
@@ -100,6 +100,12 @@ public partial class ProcessUserChatCommandHandlerTests
             SupportsParts: true, PartKinds: ["daySummary"], SupportsDaySummaryCard: true)), default);
 
         result.IsSuccess.Should().BeTrue();
+        if (composition)
+        {
+            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("daySummary");
+            result.Value.AiMessage.Should().BeNullOrEmpty();
+            return;
+        }
         result.Value.Parts.Should().HaveCount(2);
         var sentence = result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Subject.Text;
         sentence.Should().Be(language == "pt-BR"

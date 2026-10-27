@@ -11,7 +11,8 @@ Successful typed results supply blocks and query identities. Directives cannot e
 success or determine the leading position. Tool-call structure selects answers without request
 keywords. A lookup is a prerequisite when all its typed entity IDs first appear in that result
 and supply arguments to later tool rounds. Calls in the same round cannot consume each other's
-results. Other successful reads render in recorded operation order, including independent reads
+results. Explicitly requested subjects select the relevant successful reads. When no subject can be resolved,
+successful reads render in recorded operation order, including independent reads
 alongside a pending preview or write outcome. Rankings use the complete count result and retain
 their produced position. Only equivalent query families, kinds and canonical scopes deduplicate;
 different entity IDs, date windows and metrics remain distinct, including history scopes.
@@ -36,15 +37,14 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
 | Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
 
-Supported data blocks may have one short framing sentence from the first model round before
-them. The sentence has no digits or result claims and never repeats the block. The server
-drops unsafe framing and keeps at most one sentence of at most 180 characters. Later model
-rounds cannot replace it. Choice questions stay in their blocks; pending previews retain
+Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
 from the typed result. Builder failure never becomes an empty success. Successful typed reads
-survive narrative outage. Empty lists carry an existing screen action in `relatedSurfaces`
-when applicable. Unknown directives are stripped. Model text and follow-ups retain grounding.
+survive narrative outage. Complete empty habit, goal and record lists use a short localized state without a heading.
+They carry an existing screen action in `relatedSurfaces` when applicable. Habit queries use
+`today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
+Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
 
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
