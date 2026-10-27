@@ -7,11 +7,39 @@ using Microsoft.Extensions.Options;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
 public sealed class ToolResultSerializationTests
 {
+    [Theory]
+    [InlineData("read")]
+    [InlineData("write")]
+    public void OperationAccess_IsOptionalAndAdditiveInHttpAndStreamResponses(string access)
+    {
+        var builder = WebApplication.CreateBuilder();
+        Orbit.Api.Extensions.ServiceCollectionExtensions.AddApiPipeline(builder);
+        using var provider = builder.Services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<JsonOptions>>().Value.JsonSerializerOptions;
+        var legacy = new AgentOperationResult("test", "test", AgentRiskClass.Low,
+            AgentConfirmationRequirement.None, AgentOperationStatus.Failed);
+        var legacyJson = JsonSerializer.Serialize(legacy, options);
+        var current = legacy with { Access = access };
+        var currentJson = JsonSerializer.Serialize(current, options);
+        JsonSerializer.Deserialize<AgentOperationResult>(legacyJson, options).Should().Be(legacy);
+        JsonSerializer.Deserialize<AgentOperationResult>(currentJson, options).Should().Be(current);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(currentJson)!.AsObject();
+        node["access"]!.GetValue<string>().Should().Be(access);
+        node.Remove("access").Should().BeTrue();
+        node.ToJsonString(options).Should().Be(legacyJson);
+
+        using var json = JsonDocument.Parse(ChatStreamEvent.Final(new ChatResponse(null, [], [current, legacy])).ToJson());
+        var operations = json.RootElement.GetProperty("response").GetProperty("operations");
+        operations[0].GetProperty("access").GetString().Should().Be(access);
+        operations[1].TryGetProperty("access", out _).Should().BeFalse();
+    }
+
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
