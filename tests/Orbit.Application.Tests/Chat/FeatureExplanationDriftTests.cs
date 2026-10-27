@@ -109,7 +109,7 @@ public class FeatureExplanationDriftTests
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<int>(1));
-        var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config, dates);
+        var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config, dates, Substitute.For<IFeatureFlagService>());
         var limit = pro ? AppConstants.DefaultProAiMessages : AppConstants.DefaultFreeAiMessages;
 
         for (var count = 0; count < limit; count++)
@@ -140,7 +140,7 @@ public class FeatureExplanationDriftTests
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(Arg.Any<string>(), true, Arg.Any<CancellationToken>()).Returns(true);
         var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config,
-            Substitute.For<IUserDateService>());
+            Substitute.For<IUserDateService>(), Substitute.For<IFeatureFlagService>());
 
         (await gate.CanUseDailySummary(user.Id)).IsSuccess.Should().Be(pro);
         (await gate.CanAccessCalendar(user.Id)).IsSuccess.Should().Be(pro);

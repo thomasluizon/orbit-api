@@ -23,7 +23,7 @@ public class PayGateServiceTests
 
     public PayGateServiceTests()
     {
-        _sut = new PayGateService(_habitRepo, _userRepo, _appConfig, _userDateService);
+        _sut = new PayGateService(_habitRepo, _userRepo, _appConfig, _userDateService, Substitute.For<IFeatureFlagService>());
 
         _appConfig.GetAsync(
                 AppConfigKeys.FreeMaxHabits,

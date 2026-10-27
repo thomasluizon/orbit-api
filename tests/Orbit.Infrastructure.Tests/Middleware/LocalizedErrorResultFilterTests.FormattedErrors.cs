@@ -78,7 +78,7 @@ public partial class LocalizedErrorResultFilterTests
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkCreateHabitsCommandHandler(
             new(habits, Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>(), Substitute.For<IGenericRepository<Tag>>()),
-            new PayGateService(habits, users, config, dates), dates, unitOfWork, cache, config);
+            new PayGateService(habits, users, config, dates, Substitute.For<IFeatureFlagService>()), dates, unitOfWork, cache, config);
 
         var result = await handler.Handle(new(userId, [new("Read", null, FrequencyUnit.Day, 1)]), CancellationToken.None);
         var body = await Run(result.ToErrorResult(), language);

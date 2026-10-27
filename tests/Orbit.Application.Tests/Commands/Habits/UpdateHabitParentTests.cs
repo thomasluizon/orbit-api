@@ -219,7 +219,7 @@ public sealed class UpdateHabitParentTests : IDisposable
         while (_available.Count(h => h.ParentHabitId is null && !h.IsCompleted) < 2) Add();
         var users = Substitute.For<IGenericRepository<User>>();
         users.GetByIdAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(_user);
-        var gate = new PayGateService(_habits, users, _config, _dates);
+        var gate = new PayGateService(_habits, users, _config, _dates, Substitute.For<IFeatureFlagService>());
         var enters = finalRoot && (!completed || reopen != "none") && (!wasRoot || completed);
         var command = Command(habit) with
         {
@@ -308,7 +308,7 @@ public sealed class UpdateHabitParentTests : IDisposable
         second.SetParentHabitId(parent.Id);
         var users = Substitute.For<IGenericRepository<User>>();
         users.GetByIdAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(_user);
-        var gate = new PayGateService(_habits, users, _config, _dates);
+        var gate = new PayGateService(_habits, users, _config, _dates, Substitute.For<IFeatureFlagService>());
         var work = new SerializingUnitOfWork();
         var prepared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

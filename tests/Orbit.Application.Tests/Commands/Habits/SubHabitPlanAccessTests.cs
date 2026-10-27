@@ -42,7 +42,7 @@ public sealed class SubHabitPlanAccessTests : IDisposable
         _config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<int>(1));
         _dates.GetUserTodayAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(Today);
-        _payGate = new PayGateService(_habits, users, _config, _dates);
+        _payGate = new PayGateService(_habits, users, _config, _dates, Substitute.For<IFeatureFlagService>());
         _habits.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => _stored.Count(call.Arg<Expression<Func<Habit, bool>>>().Compile()));
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())

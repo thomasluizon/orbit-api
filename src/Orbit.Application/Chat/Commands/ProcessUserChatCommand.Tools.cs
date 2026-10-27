@@ -24,7 +24,8 @@ public partial class ProcessUserChatCommandHandler
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         long totalBudgetTokens = initialResponse.RequestBudgetTokenCount ?? initialResponse.ReportedTokenCount;
-        var tokenBudgetExceeded = totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
+        var unmetered = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
+        var tokenBudgetExceeded = !unmetered && totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
         RejectedCallCorrection? correction = null;
@@ -73,7 +74,7 @@ public partial class ProcessUserChatCommandHandler
 
             totalReportedTokens += roundResult.Response.ReportedTokenCount;
             totalBudgetTokens += roundResult.Response.RequestBudgetTokenCount ?? roundResult.Response.ReportedTokenCount;
-            tokenBudgetExceeded = totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
+            tokenBudgetExceeded = !unmetered && totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
             if (tokenBudgetExceeded)
             {
                 LogAiRequestTokenCeilingReached(
@@ -210,7 +211,7 @@ public partial class ProcessUserChatCommandHandler
 
         if (hadToolFailure && !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration))
         {
-            if (!HasCorrectionAllowance(request, executionResults, iteration, totalBudgetTokens))
+            if (!HasCorrectionAllowance(request, context, executionResults, iteration, totalBudgetTokens))
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
             correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
             OfferCorrections(toolResults, outcomesByCallId);
@@ -356,9 +357,11 @@ public partial class ProcessUserChatCommandHandler
         return toolResults;
     }
 
-    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ToolExecutionAccumulator results,
+    private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results,
         int iteration, long totalBudgetTokens) =>
-        iteration < ChatTurnLimits.MaxToolIterations && totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens
+        iteration < ChatTurnLimits.MaxToolIterations
+        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal)
+            || totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens)
         && request.BlockAnswer is null && request.ConfirmationToken is null
         && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences);
 

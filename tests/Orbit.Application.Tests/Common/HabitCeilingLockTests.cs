@@ -24,7 +24,7 @@ public class HabitCeilingLockTests
             .Returns(User.Create("Reader", "reader@orbit.test").Value);
         config.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>()).Returns(37);
         habits.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(37);
-        var gate = new PayGateService(habits, users, config, Substitute.For<IUserDateService>());
+        var gate = new PayGateService(habits, users, config, Substitute.For<IUserDateService>(), Substitute.For<IFeatureFlagService>());
         var mutated = false;
 
         var result = await HabitCeilingLock.ExecuteEntryAsync<bool, Guid>(
@@ -133,7 +133,7 @@ public class HabitCeilingLockTests
             .Returns(ceiling);
         habitRepository.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(_ => liveHabitCount);
-        var payGate = new PayGateService(habitRepository, userRepository, appConfig, userDateService);
+        var payGate = new PayGateService(habitRepository, userRepository, appConfig, userDateService, Substitute.For<IFeatureFlagService>());
         var creationGateCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseCreation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var creation = HabitCeilingLock.ExecuteAsync(

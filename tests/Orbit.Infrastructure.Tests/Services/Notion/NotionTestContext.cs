@@ -46,7 +46,7 @@ internal sealed class NotionTestContext : IDisposable
             .Returns(new[] { FeatureFlagKeys.NotionIntegration });
         Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 9, 15));
         var payGate = new PayGateService(new GenericRepository<Habit>(Db), new GenericRepository<User>(Db),
-            Substitute.For<IAppConfigService>(), Dates);
+            Substitute.For<IAppConfigService>(), Dates, Substitute.For<IFeatureFlagService>());
         Gate = new NotionAccessGate(payGate, Flags);
         UnitOfWork = new UnitOfWork(Db, new DatabaseConnectionSettings());
         Connections = new NotionConnectionService(Db, Api, Options.Create(new NotionSettings

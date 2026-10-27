@@ -353,7 +353,7 @@ public partial class ProcessUserChatCommandHandlerTests
         appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
             .Returns(50);
 
-        return new PayGateService(_habitRepo, userRepository, appConfig, _userDateService);
+        return new PayGateService(_habitRepo, userRepository, appConfig, _userDateService, Substitute.For<IFeatureFlagService>());
     }
 
     private static readonly AiConversationContext TestConversationContext = new()

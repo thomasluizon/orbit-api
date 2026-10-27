@@ -424,7 +424,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(_user);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(call => _dbContext.SaveChangesAsync(call.Arg<CancellationToken>()));
-        return new PayGateService(_habitRepo, _userRepo, config, _userDateService);
+        return new PayGateService(_habitRepo, _userRepo, config, _userDateService, Substitute.For<IFeatureFlagService>());
     }
 
     private void DenyContinuation(Action? beforeDenial = null) =>

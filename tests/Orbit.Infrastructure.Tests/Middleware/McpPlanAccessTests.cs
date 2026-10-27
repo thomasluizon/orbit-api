@@ -79,7 +79,7 @@ public class McpPlanAccessTests
         userRepository.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
         var payGate = new PayGateService(
             Substitute.For<IGenericRepository<Habit>>(), userRepository,
-            Substitute.For<IAppConfigService>(), Substitute.For<IUserDateService>());
+            Substitute.For<IAppConfigService>(), Substitute.For<IUserDateService>(), Substitute.For<IFeatureFlagService>());
         var catalog = new AgentCatalogService();
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())

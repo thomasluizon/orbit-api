@@ -9,6 +9,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -29,6 +30,64 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiDailyBudgetTests
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
+
+    [Theory]
+    [InlineData("Staging", true, "calls")]
+    [InlineData("Staging", true, "spend")]
+    [InlineData("Staging", true, "legacy")]
+    [InlineData("Staging", true, "reservation")]
+    [InlineData("Staging", false, "calls")]
+    [InlineData("Staging", false, "spend")]
+    [InlineData("Staging", false, "legacy")]
+    [InlineData("Staging", false, "reservation")]
+    [InlineData("Production", true, "calls")]
+    [InlineData("Production", true, "spend")]
+    [InlineData("Production", true, "legacy")]
+    [InlineData("Production", true, "reservation")]
+    public async Task EvalUnmetered_SpentBudgetsRequireStagingAndTargetedFlag_UsageStillGrows(
+        string environmentName, bool flagged, string guard)
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: flagged, environmentName: environmentName);
+        if (guard == "calls")
+            fixture.Config.GetAsync(AppConfigKeys.ProAiCallsPerDay, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+        if (guard == "reservation")
+            fixture.Config.GetAsync(AppConfigKeys.ProAiMicroDollarsPerDay, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(1L);
+        if (guard != "reservation")
+        {
+            var spent = AiBudgetCall.Reserve(fixture.User.Id, Today, guard == "calls" ? 1 : AppConfigKeys.DefaultProAiMicroDollarsPerDay);
+            if (guard == "legacy")
+            {
+                spent.Settle(0);
+                fixture.Database.Context.Entry(spent).Property<long>("ChargedTokens").CurrentValue = 20_000;
+            }
+            fixture.Database.Context.AiBudgetCalls.Add(spent);
+            await fixture.Database.Context.SaveChangesAsync();
+        }
+
+        if (environmentName != "Staging" || !flagged)
+        {
+            var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
+            await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+            fixture.Handler.Completions.Should().Be(0);
+            using var read = fixture.Database.CreateContext();
+            read.AiUsageDaily.Should().BeEmpty();
+            return;
+        }
+
+        await fixture.Client.CompleteTextAsync("system", "write");
+        await fixture.Client.CompleteTextAsync("system", "write again");
+
+        fixture.Handler.Completions.Should().Be(2);
+        using var recorded = fixture.Database.CreateContext();
+        var usage = recorded.AiUsageDaily.Single();
+        usage.UserId.Should().Be(fixture.User.Id);
+        usage.Calls.Should().Be(2);
+        usage.PromptTokens.Should().Be(39_200);
+        usage.CompletionTokens.Should().Be(1_000);
+        usage.TotalTokens.Should().Be(40_200);
+        usage.CostUsd.Should().Be(0.00329225m);
+        recorded.AiBudgetCalls.Count(call => call.IsSettled && call.ChargedMicroDollars > 0).Should().Be(2);
+    }
 
     [Fact]
     public async Task Completion_DoesNotDispatchInputTokenCountRequests()
@@ -405,11 +464,14 @@ public class AiDailyBudgetTests
         private readonly ServiceProvider _provider;
         private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _estimateCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
-        internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185, bool useLocalEstimator = false)
+        internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185,
+            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging")
         {
             User = User.Create("Writer", "writer@example.com").Value;
             User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
             Database.Context.Users.Add(User);
+            if (evalExempt)
+                Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraEvalUnmetered, User.Id));
             Database.Context.SaveChanges();
             SetUser(User.Id);
             Config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));
@@ -419,6 +481,9 @@ public class AiDailyBudgetTests
             _provider = new ServiceCollection()
                 .AddScoped(_ => Database.CreateContext())
                 .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
+                .AddSingleton<IHostEnvironment>(Host.CreateApplicationBuilder(
+                    new HostApplicationBuilderSettings { EnvironmentName = environmentName }).Environment)
+                .AddMemoryCache().AddScoped<IFeatureFlagService, FeatureFlagService>()
                 .AddSingleton(Config).AddSingleton(dates).BuildServiceProvider();
             var options = Options.Create(new AiSettings
             {
