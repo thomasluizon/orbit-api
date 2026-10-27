@@ -173,6 +173,8 @@ public partial class ProcessUserChatCommandHandler
     {
         PeriodTotalCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
         PeriodComparisonCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
+        HabitListCard { SkippedIds.Count: > 0 } => false,
+        HabitListCard card when card.Read is { } read && HabitReadMessages.IsMissingMetricsLookup(new("habitList", card, read)) => false,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
         RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
         _ => true
@@ -197,7 +199,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool ShouldComposeReadFallbacks(ProcessUserChatCommand request, ChatContext context,
-        ToolExecutionAccumulator results) => results.OperationResults.Count > 0
+        ToolExecutionAccumulator results) => results.AskBlock is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
         && results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags));
 

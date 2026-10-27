@@ -92,7 +92,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("question")]
     [InlineData("choice")]
     [InlineData("pickList")]
-    public async Task BlockAnswer_ModerationChecksSelectedInputInsteadOfRequestEnvelope(string form)
+    public async Task BlockAnswer_ModerationChecksSelectedInputAndHistory(string form)
     {
         SetupUserAndPayGate();
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
@@ -120,7 +120,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         checkedInput.Should().Contain(selected).And.NotContain("Unselected input")
-            .And.NotContain("Request envelope").And.NotContain("Earlier assistant content");
+            .And.NotContain("Request envelope").And.Contain("Earlier assistant content");
         if (form != "pickList")
             checkedInput.Should().Contain(custom);
         result.Value.MessageAllowanceConsumed.Should().BeFalse();
@@ -128,6 +128,54 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+    }
+
+    [Theory]
+    [InlineData("question", "user", "en")]
+    [InlineData("question", "assistant", "en")]
+    [InlineData("choice", "user", "en")]
+    [InlineData("choice", "assistant", "en")]
+    [InlineData("question", "user", "pt-BR")]
+    [InlineData("question", "assistant", "pt-BR")]
+    [InlineData("choice", "user", "pt-BR")]
+    [InlineData("choice", "assistant", "pt-BR")]
+    public async Task BlockAnswer_RejectedHistory_RefusesBeforeClaimingOrConsumingAllowance(
+        string form, string historyRole, string locale)
+    {
+        SetupUserAndPayGate();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var definition = form == "question"
+            ? new AstraBlockDefinition(form, "", [], [], Questions:
+                [new("feeling", "singleChoice", "Feeling?", [new("fine", "Fine"), new("other", "Other")])])
+            : new(form, "Feeling?", [new("fine", "Fine"), new("other", "Other")], []);
+        var block = IssuedAstraBlock.Create(UserId, definition);
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        SetupAiResponse(new AiResponse { TextMessage = "Model reply" });
+        const string historyMarker = "Rejected history marker";
+        _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var flagged = call.Arg<string>().Contains(historyMarker, StringComparison.Ordinal);
+            return new ModerationResult(flagged, false, flagged ? ["violence"] : []);
+        });
+        var answer = form == "question"
+            ? new AstraBlockAnswer(block.Id, [], Answers: [new("feeling", ["fine"])])
+            : new(block.Id, ["fine"]);
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer",
+            History: [new(historyRole, historyMarker)], BlockAnswer: answer,
+            ClientContext: new(SupportsMessageAllowance: true, Locale: locale)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(ErrorCopy.Resolve(ErrorCodes.ContentModerationRefused, locale == "pt-BR"));
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
+        await _moderation.Received(1).CheckTextAsync(Arg.Is<string>(input => input.Contains(historyMarker)),
+            Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
+        await _blockStore.DidNotReceiveWithAnyArgs().RecordAnswerAsync(default, default, default, default!, default, default, default);
+        await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
     }
 
     [Theory]

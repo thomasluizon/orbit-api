@@ -344,7 +344,9 @@ public partial class ProcessUserChatCommandHandler(
         string? safetyText = null)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Moderation);
-        var input = safetyText ?? JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
+        var input = safetyText is null
+            ? JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer })
+            : JsonSerializer.Serialize(new { Message = safetyText, request.History });
         var check = await moderation.CheckTextAsync(input, cancellationToken);
         if (check.Unavailable)
             return Result.Failure<ModerationResult>(ErrorMessages.AiUnavailable);

@@ -98,23 +98,29 @@ public class QueryHabitsTool(
         foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
             .OrderBy(h => h.Position).ThenBy(h => h.Id))
             AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs, parentTitles);
+        var page = rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList();
         return new ToolResult(true, EntityName: output,
             Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
-                rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList(),
+                page,
                 query.Schedule?.Date, TotalCount: rows.Count,
                 SourceRevision: ReadRevision.Hash(new
                 {
                     Rows = rows,
                     Sources = allHabits.OrderBy(h => h.Id).Select(h => new { h.Id, h.UpdatedAtUtc }),
                     ScheduleRevision = query.Schedule?.Facts.SourceRevision
-                })));
+                }))
+            {
+                SkippedIds = query.Schedule?.Facts.SkippedIds.Select(id => id.ToString())
+                    .Intersect(page.Select(item => item.Id)).ToHashSet() ?? []
+            });
     }
 
     private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,
         IReadOnlyList<Habit> habits, ScheduleContext? schedule, DateOnly today, bool includeSubs, IReadOnlyDictionary<Guid, string> parentTitles)
     {
         var status = schedule is not null
-            ? schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
+            ? schedule.Facts.SkippedIds.Contains(habit.Id) ? HabitListCardBuilder.StatusNone
+                : schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
                 : schedule.Facts.OverdueIds.Contains(habit.Id) ? HabitListCardBuilder.StatusOverdue
                 : HabitListCardBuilder.StatusToday
             : habit.Schedule == HabitSchedule.General ? HabitListCardBuilder.StatusGeneral
@@ -214,7 +220,9 @@ public class QueryHabitsTool(
         {
             var schedule = await HabitTodaySnapshot.ReadAsync(habits, date, weekStartDay, scheduleLogReader, ct);
             var scheduled = habits.Where(h =>
-                (schedule.TodayIds.Contains(h.Id) || f.IncludeOverdue && schedule.OverdueIds.Contains(h.Id))
+                (schedule.TodayIds.Contains(h.Id) || f.IncludeOverdue && schedule.OverdueIds.Contains(h.Id)
+                    || f.IsCompleted is null && schedule.SkippedIds.Contains(h.Id))
+                && (f.IsCompleted != false || !schedule.SkippedIds.Contains(h.Id))
                 && (f.IsCompleted is null || schedule.DoneTodayIds.Contains(h.Id) == f.IsCompleted.Value));
             return new HabitQueryResult(scheduled.ToList(), new ScheduleContext(date, schedule));
         }
@@ -273,7 +281,8 @@ public class QueryHabitsTool(
         if (schedule is not null)
         {
             var done = results.Count(habit => schedule.Facts.DoneTodayIds.Contains(habit.Id));
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Returned schedule for {schedule.Date:yyyy-MM-dd}: {done} done, {results.Count - done} remaining (top-level entries).");
+            var skipped = results.Count(habit => schedule.Facts.SkippedIds.Contains(habit.Id));
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Returned schedule for {schedule.Date:yyyy-MM-dd}: {done} done, {results.Count - done - skipped} remaining, {skipped} skipped (top-level entries).");
         }
         if (results.Count == 0)
             sb.AppendLine("No habits found matching the given filters.");
@@ -322,6 +331,7 @@ public class QueryHabitsTool(
         if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL");
         if (schedule is not null)
         {
+            if (schedule.Facts.SkippedIds.Contains(habit.Id)) labels.Add("SKIPPED ON DATE");
             if (schedule.Facts.TodayIds.Contains(habit.Id))
                 labels.Add(schedule.Date == today ? "DUE TODAY" : "SCHEDULED ON DATE");
             if (schedule.Facts.OverdueIds.Contains(habit.Id)) labels.Add("OVERDUE");
