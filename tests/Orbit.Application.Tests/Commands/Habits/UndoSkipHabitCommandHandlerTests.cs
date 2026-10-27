@@ -184,6 +184,30 @@ public sealed class UndoSkipHabitCommandHandlerTests
         restored.NextDueDate.Should().Be(Today);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Undo_AtHabitLimit_PreservesLocalizedLimitAndCompletedState(bool isPtBr)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Read", FrequencyUnit.Day, 1,
+            Today, EndDate: Today)).Value;
+        var skipId = Guid.NewGuid();
+        await Seed(habit);
+        (await Skip(habit.Id, skipId)).IsSuccess.Should().BeTrue();
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.HabitLimitReached.Format(37)));
+
+        var result = await Undo(habit.Id, skipId);
+
+        result.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
+        result.ErrorArgs.Should().Equal(37);
+        ErrorCopy.TryResolve(result.ErrorCode, isPtBr, result.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 37 hábitos." : "You've reached the 37 habit limit.");
+        await using var verify = Context();
+        (await verify.Habits.SingleAsync()).IsCompleted.Should().BeTrue();
+        (await verify.HabitSkipUndos.SingleAsync()).IsUndone.Should().BeFalse();
+    }
+
     [Fact]
     public async Task RepeatingSkipId_DoesNotCreateAnotherFlexibleSkip()
     {

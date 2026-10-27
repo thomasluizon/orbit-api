@@ -80,21 +80,26 @@ public class DuplicateHabitCommandHandlerTests
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
     }
 
-    [Fact]
-    public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_HabitLimitReached_ReturnsCodedFailure(bool isPtBr)
     {
         var original = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         SetupAllHabitsForUser(new List<Habit> { original });
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit limit reached"));
+            .Returns(Result.Failure(ErrorMessages.HabitLimitReached.Format(1000)));
 
         var command = new DuplicateHabitCommand(UserId, original.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
+        result.ErrorArgs.Should().Equal(1000);
+        ErrorCopy.TryResolve(result.ErrorCode, isPtBr, result.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 1000 hábitos." : "You've reached the 1000 habit limit.");
+        result.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using MediatR;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -27,7 +28,11 @@ public record BulkMoveHabitParentItemResult(
     BulkItemStatus Status,
     Guid HabitId,
     string? Error = null,
-    string? ErrorCode = null);
+    string? ErrorCode = null)
+{
+    [JsonIgnore]
+    public IReadOnlyList<object?> ErrorArgs { get; init; } = Array.Empty<object?>();
+}
 
 public class BulkMoveHabitParentCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -119,7 +124,7 @@ public class BulkMoveHabitParentCommandHandler(
             {
                 var id = request.HabitIds[index];
                 if (errors.TryGetValue(id, out var error))
-                    results.Add(new(index, BulkItemStatus.Failed, id, error.Message, error.Code));
+                    results.Add(new(index, BulkItemStatus.Failed, id, error.Message, error.Code) { ErrorArgs = error.Args });
                 else
                 {
                     habitsById[id].SetParentHabitId(request.ParentId);

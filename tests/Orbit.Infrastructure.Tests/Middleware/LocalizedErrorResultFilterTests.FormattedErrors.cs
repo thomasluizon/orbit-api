@@ -3,7 +3,9 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Application.Common;
@@ -19,7 +21,8 @@ public partial class LocalizedErrorResultFilterTests
 {
     public static IEnumerable<object[]> FormattedErrors()
     {
-        foreach (var field in typeof(ErrorMessages).GetFields(BindingFlags.Public | BindingFlags.Static))
+        foreach (var field in new[] { typeof(ErrorMessages), typeof(DomainErrors) }
+                     .SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.Static)))
         {
             if (field.GetValue(null) is not AppError error)
                 continue;
@@ -85,4 +88,41 @@ public partial class LocalizedErrorResultFilterTests
         body.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
         await habits.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
+    [Theory]
+    [InlineData("en", "You've reached the 2 habit limit.")]
+    [InlineData("pt-BR", "Você chegou ao limite de 2 hábitos.")]
+    public async Task BulkMove_AtConfiguredLimit_LocalizesFailedItemsAndKeepsSuccessfulItems(string language, string expected)
+    {
+        var userId = Guid.NewGuid();
+        var root = Habit.Create(new(HabitSchedule.Recurring, userId, "Root", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var first = Habit.Create(new(HabitSchedule.Recurring, userId, "First", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3), ParentHabitId: root.Id)).Value;
+        var second = Habit.Create(new(HabitSchedule.Recurring, userId, "Second", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3), ParentHabitId: root.Id)).Value;
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        habits.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { root, first, second }.AsReadOnly());
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>()).Returns(2);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
+        var handler = new BulkMoveHabitParentCommandHandler(habits, config, Substitute.For<IUserStreakService>(),
+            unitOfWork, dates, cache);
+
+        var result = await handler.Handle(new(userId, [first.Id, second.Id, root.Id], null), CancellationToken.None);
+        var context = await RunContext(result.ToPayGateAwareResult(value => new OkObjectResult(value)), language);
+        var response = ((ObjectResult)context.Result).Value.Should().BeOfType<BulkMoveHabitParentResult>().Subject;
+
+        response.Results.Select(item => item.Status).Should().Equal(BulkItemStatus.Success, BulkItemStatus.Failed, BulkItemStatus.Success);
+        var failed = response.Results[1];
+        failed.Error.Should().Be(expected).And.NotMatchRegex(@"\{\d+(?:[^}]*)\}");
+        failed.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
+        first.ParentHabitId.Should().BeNull();
+        second.ParentHabitId.Should().Be(root.Id);
+        response.Results[0].Error.Should().BeNull();
+        JsonSerializer.Serialize(response).Should().NotContain("ErrorArgs");
+    }
+
 }

@@ -278,14 +278,16 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         active.Description.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Handle_ReactivatingCompletedRoots_ChecksWholeChunkAllowanceUnderLock()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_ReactivatingCompletedRoots_ChecksWholeChunkAllowanceUnderLock(bool isPtBr)
     {
         var first = CreateCompletedRecurringHabit("First");
         var second = CreateCompletedRecurringHabit("Second");
         SetupHabits(first, second);
         _payGate.CanCreateHabits(UserId, 2, Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit limit reached."));
+            .Returns(Result.Failure(ErrorMessages.HabitLimitReached.Format(1000)));
         var command = new BulkUpdateHabitsCommand(
             UserId,
             new BulkHabitFilter(false, [], IsCompleted: true),
@@ -294,7 +296,10 @@ public sealed class BulkUpdateHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Habit limit reached.");
+        result.ErrorArgs.Should().Equal(1000);
+        ErrorCopy.TryResolve(result.ErrorCode, isPtBr, result.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 1000 hábitos." : "You've reached the 1000 habit limit.");
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
         first.IsCompleted.Should().BeTrue();
         second.IsCompleted.Should().BeTrue();
         await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
