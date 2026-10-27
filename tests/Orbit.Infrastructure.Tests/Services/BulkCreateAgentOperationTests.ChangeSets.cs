@@ -1,7 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
 using Orbit.Application.Chat;
-using Orbit.Domain.Common;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
@@ -66,24 +65,24 @@ public sealed partial class BulkCreateAgentOperationTests
 
     private async Task<AgentExecuteOperationRequest> ConfirmChangeSetAsync(params string[] titles)
     {
-        var members = new List<PendingAgentOperationExecution>();
+        var members = new List<PendingAgentOperation>();
         foreach (var title in titles)
         {
             var args = JsonSerializer.SerializeToElement(new { habits = new[] { new { title, frequency_unit = "Day" } } });
             var held = await _executor.ExecuteAsync(new(_userId, "bulk_create_habits", args,
                 AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
             held.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
-            members.Add(_pending.GetExecution(_userId, held.PendingOperation!.Id)!);
+            members.Add(held.PendingOperation!);
         }
-        var arguments = AccountChangeSet.BuildArguments(members);
         var catalog = new AgentCatalogService(_registry.GetAll());
-        var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
-        var preview = (await _previewer.PreviewAsync(_userId, AccountChangeSet.OperationName, arguments)).Value!;
-        var pending = _pending.Create(_userId, catalog.GetCapability(AccountChangeSet.CapabilityId)!,
-            AccountChangeSet.OperationName, arguments.GetRawText(), "Review account changes", fingerprint, AgentExecutionSurface.Chat);
-        _pending.Revise(_userId, pending.Id, fingerprint, arguments.GetRawText(), fingerprint, preview.PreviewFingerprint!).Should().BeTrue();
-        var confirmation = _pending.Confirm(_userId, pending.Id)!;
-        return new(_userId, AccountChangeSet.OperationName, arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
+        var service = new AccountChangeSetService(_pending, _previewer, catalog, _registry);
+        var combined = await service.CombineAsync(_userId, members, default);
+        combined.Should().NotBeNull();
+        combined!.MemberIds.Should().BeEquivalentTo(members.Select(member => member.Id));
+        combined.PendingOperation.Items.Should().HaveCount(members.Count);
+        var execution = _pending.GetExecution(_userId, combined.PendingOperation.Id)!;
+        var confirmation = _pending.Confirm(_userId, combined.PendingOperation.Id)!;
+        return new(_userId, AccountChangeSet.OperationName, execution.Arguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
             ConfirmationToken: confirmation.ConfirmationToken);
     }
 }

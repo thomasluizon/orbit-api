@@ -26,6 +26,17 @@ schedule fallback contract for thomasluizon/orbit-tickets#1782 is documented in
 [Onboarding.md](Onboarding.md). Deploy the producer before updating the paired
 consumer's shared contract snapshot.
 
+`POST /api/chat/habit-suggestions/preview-all` accepts `drafts` (one to five
+`HabitSuggestionDraft` values) and optional `language` (default `en`). It returns
+the existing `AgentExecuteOperationResponse` with one pending preview containing
+every create and adjustment in request order. A single draft follows the single
+preview path. Every draft is checked before staging; a failed schedule or target
+check returns HTTP 400 with its original `errorCode` and zero-based `draftIndex`.
+Malformed drafts use the validation response with indexed `Drafts` field paths.
+The existing confirmation and execution endpoints approve the combined change
+set once. Deploy this producer before the suggestion-card consumer in
+thomasluizon/orbit-tickets#1751 uses the route. Tracks thomasluizon/orbit-tickets#1788.
+
 Chat clients may send optional `clientContext.supportsMessageAllowance: true` to
 receive optional `messageAllowanceConsumed` on each successful chat response,
 including the SSE final response. True means the request consumed one message;

@@ -40,7 +40,12 @@ public sealed record HabitSuggestionDraft(
         && (Days.Count == 0 || FrequencyUnit == Enums.FrequencyUnit.Day && FrequencyQuantity == 1);
 }
 
-public sealed record HabitSuggestionsCard(string Language, IReadOnlyList<HabitSuggestionDraft> Drafts);
+public sealed record HabitSuggestionsCard(string Language, IReadOnlyList<HabitSuggestionDraft> Drafts)
+{
+    public const int MaxDrafts = 5;
+
+    public static bool IsValidDraftCount(int count) => count is >= 1 and <= MaxDrafts;
+}
 
 public sealed record HabitSuggestionRequest(Guid UserId, string Instruction, string Language, int Count,
     DateOnly Today, IReadOnlyList<Habit> Habits, IReadOnlyList<Goal> Goals,

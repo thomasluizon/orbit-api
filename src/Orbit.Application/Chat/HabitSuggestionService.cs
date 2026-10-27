@@ -11,6 +11,12 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
+internal sealed class HabitSuggestionSetFailure(string error, int draftIndex)
+    : Result<HabitSuggestionsCard>(null, false, error, "HABIT_SUGGESTION_UNAVAILABLE")
+{
+    public int DraftIndex { get; } = draftIndex;
+}
+
 public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGenericRepository<Goal> goals,
     IUserDateService dates, IHabitDraftGenerator generator)
 {
@@ -36,33 +42,46 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     public async Task<Result<HabitSuggestionDraft>> CheckForPreviewAsync(Guid userId, HabitSuggestionDraft draft,
         string language, CancellationToken ct)
     {
+        var result = await CheckAllForPreviewAsync(userId, [draft], language, ct);
+        return result.IsSuccess ? Result.Success(result.Value.Drafts[0]) : result.PropagateError<HabitSuggestionDraft>();
+    }
+
+    internal async Task<Result<HabitSuggestionsCard>> CheckAllForPreviewAsync(Guid userId, IReadOnlyList<HabitSuggestionDraft> drafts,
+        string language, CancellationToken ct)
+    {
         var today = await dates.GetUserTodayAsync(userId, ct);
         var active = await habits.FindAsync(habit => habit.UserId == userId && !habit.IsCompleted, ct);
         var weekStart = await dates.GetUserWeekStartDayAsync(userId, ct);
-        var result = Normalize([draft], new(userId, string.Empty, language, 1, today, active, [], WeekStartDay: weekStart));
-        if (result.IsSuccess)
+        var result = Normalize(drafts, new(userId, string.Empty, language, drafts.Count, today, active, [], WeekStartDay: weekStart),
+            out var draftIndex);
+        if (result.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), draftIndex);
+        for (var index = 0; index < result.Value.Drafts.Count; index++)
         {
-            var candidate = result.Value.Drafts[0];
-            if (candidate.ExistingHabitId is not { } existing) return Result.Success(candidate);
+            var candidate = result.Value.Drafts[index];
+            if (candidate.ExistingHabitId is not { } existing) continue;
             var target = active.Single(habit => habit.Id == existing);
             var update = ResolveUpdate(target, candidate, today, weekStart);
-            if (update.IsSuccess)
-            {
-                var validation = await HabitUpdateValidation.ValidateAsync(userId, target, update.Value, habits, ct);
-                if (validation.IsSuccess) return Result.Success(candidate);
-            }
+            if (update.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), index);
+            var validation = await HabitUpdateValidation.ValidateAsync(userId, target, update.Value, habits, ct);
+            if (validation.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), index);
         }
-        return Result.Failure<HabitSuggestionDraft>(Unavailable(language), "HABIT_SUGGESTION_UNAVAILABLE");
+        return result;
     }
 
-    internal static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request)
+    internal static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request) =>
+        Normalize(drafts, request, out _);
+
+    private static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request,
+        out int draftIndex)
     {
-        if (drafts is null || drafts.Count != request.Count || drafts.Count is < 1 or > 5)
+        draftIndex = 0;
+        if (drafts is null || drafts.Count != request.Count || !HabitSuggestionsCard.IsValidDraftCount(drafts.Count))
             return Invalid("Return the requested number of drafts, between one and five.");
         var output = new List<HabitSuggestionDraft>();
         var scheduled = new List<Habit>();
-        foreach (var draft in drafts)
+        for (; draftIndex < drafts.Count; draftIndex++)
         {
+            var draft = drafts[draftIndex];
             if (draft is null) return Invalid("A complete draft is required.");
             var candidate = request.Original is { } original
                 ? draft with { Id = original.Id, ExistingHabitId = original.ExistingHabitId } : draft;

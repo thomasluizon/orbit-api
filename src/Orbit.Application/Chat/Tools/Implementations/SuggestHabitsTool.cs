@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Chat.Queries;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -20,7 +21,7 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
         {
             instruction = new { type = JsonSchemaTypes.String, maxLength = 1000 },
             language = new { type = JsonSchemaTypes.String, @enum = new[] { "en", "pt", "pt-BR" } },
-            count = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = 5 }
+            count = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = HabitSuggestionsCard.MaxDrafts }
         },
         required = new[] { "instruction", "language" }
     };
