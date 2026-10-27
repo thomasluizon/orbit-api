@@ -119,7 +119,8 @@ public class HabitRankingTests
         var first = habit.Log(from, advanceDueDate: false).Value;
         habit.Log(from.AddDays(1), advanceDueDate: false);
         habit.Log(from.AddDays(2), advanceDueDate: false);
-        habit.LoadScheduleLogsForRead(habit.Logs.Concat([first]).ToList());
+        habit.Log(from, advanceDueDate: false).IsFailure.Should().BeTrue();
+        habit.Logs.Count(log => log.Id == first.Id).Should().Be(1);
         var result = (await Handler([habit]).Handle(new GetHabitRankingQuery(user, from, from.AddDays(2)), default)).Value;
         result.Rows.Should().ContainSingle().Which.CompletedCount.Should().Be(2);
         result.Rows[0].Name.Should().Be(habit.Title);
