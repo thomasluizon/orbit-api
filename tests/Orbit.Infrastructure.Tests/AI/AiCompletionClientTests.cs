@@ -8,6 +8,8 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using FluentAssertions.Execution;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -103,25 +105,45 @@ public class AiCompletionClientTests
     }
 
     [Theory]
-    [InlineData("text")]
-    [InlineData("json")]
-    public async Task BackgroundCalls_RecordPurposeLatencyAndOneTracePerRun(string kind)
+    [InlineData("text", AiModelTier.Primary)]
+    [InlineData("text", AiModelTier.SubTask)]
+    [InlineData("json", AiModelTier.Primary)]
+    [InlineData("json", AiModelTier.SubTask)]
+    public async Task BackgroundCalls_RecordPurposeLatencyAndOneTracePerRun(string kind, AiModelTier tier)
     {
+        var handler = new CapturingHandler();
         var usage = Substitute.For<IAiUsageRecorder>();
-        var client = new AiCompletionClient(BuildResponsesClient(new CapturingHandler()), NullLogger<AiCompletionClient>.Instance, usage);
-        for (var index = 0; index < 2; index++)
+        var inner = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usage);
+        var estimates = Substitute.For<IAiRequestCostEstimator>();
+        estimates.EstimateMicroDollarsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(1000L);
+        var client = new BudgetedAiCompletionClient(inner, Substitute.For<IAiDailyBudget>(),
+            Substitute.For<IHttpContextAccessor>(), NullLogger<BudgetedAiCompletionClient>.Instance, estimates);
+        var firstUser = Guid.NewGuid();
+        var secondUser = Guid.NewGuid();
+        foreach (var userId in new[] { firstUser, firstUser, secondUser })
         {
+            using var context = AiCallContext.Begin(userId);
             if (kind == "json")
-                await client.CompleteJsonAsync<Probe>("private system", "private user", purpose: "daily_summary");
+                await client.CompleteJsonAsync<Probe>("private system", "private user", purpose: "daily_summary", tier: tier);
             else
-                await client.CompleteTextAsync("private system", "private user", purpose: "daily_summary");
+                await client.CompleteTextAsync("private system", "private user", purpose: "daily_summary", tier: tier);
+
+            using var document = JsonDocument.Parse(handler.LastRequestBody!);
+            using var assertions = new AssertionScope();
+            document.RootElement.TryGetProperty("prompt_cache_key", out var cacheKey).Should().BeTrue();
+            if (cacheKey.ValueKind == JsonValueKind.String)
+                cacheKey.GetString().Should().Be(userId.ToString("N"));
+            document.RootElement.TryGetProperty("safety_identifier", out var safetyIdentifier).Should().BeTrue();
+            if (safetyIdentifier.ValueKind == JsonValueKind.String)
+                safetyIdentifier.GetString().Should().Be(userId.ToString("N"));
+            usage.ReceivedCalls().Last().GetArguments()[7].Should().Be(userId);
         }
         var calls = usage.ReceivedCalls().ToList();
-        calls.Should().HaveCount(2);
+        calls.Should().HaveCount(3);
         calls.Should().OnlyContain(call => (string)call.GetArguments()[0]! == "daily_summary");
         var metadata = calls.Select(call => (AiCallTelemetry)call.GetArguments()[8]!).ToList();
         metadata.Should().OnlyContain(call => call.LatencySeconds >= 0 && !call.IsError && call.HasUsage && call.ToolNames.Count == 0);
-        metadata.Select(call => call.TraceId).Distinct().Should().HaveCount(2);
+        metadata.Select(call => call.TraceId).Distinct().Should().HaveCount(3);
         JsonSerializer.Serialize(metadata).Should().NotContain("private");
     }
 
@@ -163,6 +185,8 @@ public class AiCompletionClientTests
         document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
         document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         document.RootElement.TryGetProperty("temperature", out _).Should().BeFalse();
+        document.RootElement.TryGetProperty("prompt_cache_key", out _).Should().BeFalse();
+        document.RootElement.TryGetProperty("safety_identifier", out _).Should().BeFalse();
         await usage.Received(1).RecordAsync(kind, "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), null, Arg.Any<AiCallTelemetry>());
     }
 
@@ -181,15 +205,20 @@ public class AiCompletionClientTests
         document.RootElement.TryGetProperty("include", out _).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task CompleteJsonAsync_WithUserId_AttributesRecordedUsage()
+    [Theory]
+    [InlineData(AiModelTier.Primary, false)]
+    [InlineData(AiModelTier.SubTask, false)]
+    [InlineData(AiModelTier.Primary, true)]
+    [InlineData(AiModelTier.SubTask, true)]
+    public async Task CompleteJsonAsync_WithUserId_AttributesRecordedUsage(AiModelTier tier, bool ambientUser)
     {
         var handler = new CapturingHandler();
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
         var client = new AiCompletionClient(BuildResponsesClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var userId = Guid.NewGuid();
+        using var context = ambientUser ? AiCallContext.Begin(Guid.NewGuid()) : null;
 
-        await client.CompleteJsonAsync<Probe>("system", "user", userId: userId);
+        await client.CompleteJsonAsync<Probe>("system", "user", tier: tier, userId: userId);
 
         await usageRecorder.Received(1).RecordAsync(
             "json", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
