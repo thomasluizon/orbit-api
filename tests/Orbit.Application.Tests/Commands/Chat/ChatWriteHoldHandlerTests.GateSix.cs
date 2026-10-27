@@ -142,7 +142,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         stored.OperationId.Should().Be(AccountChangeSet.OperationName);
         pending.Items.Should().HaveCount(2);
         pending.Items!.Single(item => item.EntityId == habits[1].Id).Fields.Should()
-            .Contain(field => field.Field == "action" && field.NewValue == "Skip occurrence" && !field.IsEditable);
+            .Contain(field => field.Field == "action" && field.NewValue == "Skip" && !field.IsEditable);
         habits[0].Title.Should().Be("Post Lunch");
         habits[1].NextDueDate.Should().Be(Today);
         _mediator.Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success("updated"));

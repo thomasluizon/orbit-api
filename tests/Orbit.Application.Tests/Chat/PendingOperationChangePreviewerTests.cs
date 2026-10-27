@@ -420,12 +420,12 @@ public sealed class PendingOperationChangePreviewerTests
     }
 
     [Theory]
-    [InlineData("skip_habit", false, "en", "Skip occurrence")]
-    [InlineData("bulk_skip_habits", false, "en", "Skip occurrence")]
-    [InlineData("bulk_skip_habits", true, "en", "Skip occurrence")]
-    [InlineData("skip_habit", false, "pt-BR", "Pular ocorrência")]
-    [InlineData("bulk_skip_habits", false, "pt-BR", "Pular ocorrência")]
-    [InlineData("bulk_skip_habits", true, "pt-BR", "Pular ocorrência")]
+    [InlineData("skip_habit", false, "en", "Skip")]
+    [InlineData("bulk_skip_habits", false, "en", "Skip")]
+    [InlineData("bulk_skip_habits", true, "en", "Skip")]
+    [InlineData("skip_habit", false, "pt-BR", "Pular")]
+    [InlineData("bulk_skip_habits", false, "pt-BR", "Pular")]
+    [InlineData("bulk_skip_habits", true, "pt-BR", "Pular")]
     public async Task SkipPreview_IdentifiesTheActionAlongsideTheOccurrence(string operation, bool revised, string locale, string label)
     {
         var habit = CreateHabit("Walk", null);

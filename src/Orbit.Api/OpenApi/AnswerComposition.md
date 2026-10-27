@@ -75,8 +75,8 @@ Revisions preserve unnamed fields and items. Suggestion refinements retain the m
 validated cadence and explicit days; the server does not infer a replacement schedule from
 instruction keywords.
 
-Skip previews include a noneditable action row, localized as "Skip occurrence" or
-"Pular ocorrência", alongside the user's local occurrence date. Eligible skip operations
+Skip previews include a noneditable action row, localized as "Skip" or
+"Pular", alongside the user's local occurrence date. Eligible skip operations
 can share one atomic approval with other account changes. Skips with active streak-goal
 side effects remain outside atomic bundles. Existing-parent wrappers in structured creation
 arguments contribute their children under the resolved parent rather than duplicate parents.

@@ -74,7 +74,7 @@ public sealed partial class PendingOperationChangePreviewer(
     private static PendingOperationChangePreview? LocalizeActions(PendingOperationChangePreview? preview, AgentClientContext? client)
     {
         if (preview is null) return null;
-        var skip = Orbit.Application.Common.LocaleHelper.IsPortuguese(client?.Locale) ? "Pular ocorrência" : "Skip occurrence";
+        var skip = Orbit.Application.Common.LocaleHelper.IsPortuguese(client?.Locale) ? "Pular" : "Skip";
         PendingOperationChange Localize(PendingOperationChange field) =>
             field is { Field: "action", NewValue: "skip" } ? field with { NewValue = skip } : field;
         return preview with
