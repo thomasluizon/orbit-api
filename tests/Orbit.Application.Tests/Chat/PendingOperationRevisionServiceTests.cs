@@ -47,7 +47,7 @@ public sealed class PendingOperationRevisionServiceTests
     [Fact]
     public async Task RefreshAsync_RegeneratesStoredIntentAndPersistsNewFingerprint()
     {
-        var habit = CreateHabit("First");
+        var habit = CreateHabit("First", "🦷");
         SetupHabits([habit]);
         var pendingId = Guid.NewGuid();
         var arguments = JsonDocument.Parse("""{"filter":{"all":true},"updates":{"emoji":"A"}}""")
@@ -70,6 +70,7 @@ public sealed class PendingOperationRevisionServiceTests
         result.Preview.Items.Should().ContainSingle()
             .Which.ItemId.Should().Be(habit.Id.ToString());
         result.Preview.Items[0].Fields.Should().Contain(field => field.Field == "emoji");
+        AssertPreviewEmoji(result.Preview, "🦷");
         result.Preview.PreviewFingerprint.Should().NotBe("stale-fingerprint");
         var fingerprint = AgentOperationFingerprint.Compute("bulk_update_habits", arguments.GetRawText());
         _store.Received(1).Revise(_userId, pendingId, fingerprint,
@@ -81,6 +82,7 @@ public sealed class PendingOperationRevisionServiceTests
                 [new RevisedPendingOperationItem(habit.Id.ToString())]),
             CancellationToken.None);
         revision.IsSuccess.Should().BeTrue();
+        AssertPreviewEmoji(revision.Preview!, "🦷");
     }
 
     [Theory]
@@ -448,8 +450,18 @@ public sealed class PendingOperationRevisionServiceTests
             .Returns(habits);
     }
 
-    private Habit CreateHabit(string title) => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
-        _userId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25))).Value;
+    private static void AssertPreviewEmoji(PendingOperationChangePreview preview, string expected)
+    {
+        var json = JsonSerializer.SerializeToElement(preview, JsonSerializerOptions.Web);
+        json.GetProperty("items")[0].GetProperty("entityEmoji").GetString().Should().Be(expected);
+        foreach (var field in json.GetProperty("items")[0].GetProperty("fields").EnumerateArray())
+            field.GetProperty("entityEmoji").GetString().Should().Be(expected);
+        foreach (var field in json.GetProperty("changes").EnumerateArray())
+            field.GetProperty("entityEmoji").GetString().Should().Be(expected);
+    }
+
+    private Habit CreateHabit(string title, string? emoji = null) => Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+        _userId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 9, 25), Emoji: emoji)).Value;
 
     private static bool RevisedArgsMatch(string json, Guid id, string emoji)
     {

@@ -157,7 +157,9 @@ public record PendingOperationItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<PendingOperationFieldOptions>? FieldOptions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    PendingOperationPlacement? Placement = null);
+    PendingOperationPlacement? Placement = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? EntityEmoji = null);
 
 public record PendingOperationPlacement(
     string Selected,
@@ -182,7 +184,9 @@ public record PendingOperationChange(
     string? NewValue,
     string ValueType,
     JsonElement? ProposedValue = null,
-    bool IsEditable = false);
+    bool IsEditable = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? EntityEmoji = null);
 
 public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
