@@ -133,7 +133,10 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
             var end = index + title.Length;
             if ((index == 0 || !char.IsLetterOrDigit(message[index - 1]))
                 && (end == message.Length || !char.IsLetterOrDigit(message[end])))
-                return message.Substring(index, title.Length);
+            {
+                var typed = message.Substring(index, title.Length);
+                return char.IsLower(typed[0]) && char.IsUpper(title[0]) ? title[0] + typed[1..] : typed;
+            }
             start = end;
         }
         return null;

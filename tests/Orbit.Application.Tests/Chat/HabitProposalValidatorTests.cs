@@ -210,6 +210,20 @@ public class HabitProposalValidatorTests
         localized.GetProperty("sub_habits")[0].GetProperty("title").GetString().Should().Be(child);
     }
 
+    [Theory]
+    [InlineData("pt-BR", "Tenho uma aula extra amanhã", "Aula extra", "Aula extra")]
+    [InlineData("en-US", "Post lunch: take vitamin D", "Take vitamin D", "Take vitamin D")]
+    [InlineData("pt-BR", "Crie tomar vitamina D", "tomar vitamina D", "tomar vitamina D")]
+    [InlineData("en-US", "Track my iPhone screen time", "iPhone screen time", "iPhone screen time")]
+    public void SuppliedTitles_KeepTheComposedCapitalOnALowercaseStart(string locale, string message, string title, string expected)
+    {
+        var proposal = JsonSerializer.SerializeToElement(new { title });
+
+        var localized = HabitProposalValidator.LocalizeTextDates(proposal, locale, message);
+
+        localized.GetProperty("title").GetString().Should().Be(expected);
+    }
+
     [Fact]
     public void ComposedTitle_WholeWordsAreRequiredBeforeTreatingItAsSupplied()
     {

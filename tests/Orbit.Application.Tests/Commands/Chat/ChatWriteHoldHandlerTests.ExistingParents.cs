@@ -41,7 +41,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _mediator.DidNotReceive().Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>());
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.ParentHabitId == parents[0].Id
-            && habit.Title == "take vitamin D" && habit.FrequencyUnit == FrequencyUnit.Week
+            && habit.Title == "Take vitamin D" && habit.FrequencyUnit == FrequencyUnit.Week
             && habit.FrequencyQuantity == 1 && habit.DueTime == new TimeOnly(13, 0) && habit.Emoji == "💊"), Arg.Any<CancellationToken>());
         parents[0].ChecklistItems.Should().ContainSingle(item => item.Text == "Coffee" && item.IsChecked);
     }
@@ -169,7 +169,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var approved = await _executor.ExecuteAsync(new(_userId, after.OperationId, after.Arguments,
             after.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
-        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == "take vitamin D"
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == "Take vitamin D"
             && habit.ParentHabitId == parents[0].Id && habit.Description == "Keep with food"
             && habit.FrequencyUnit == FrequencyUnit.Week && habit.DueTime == new TimeOnly(13, 0)), Arg.Any<CancellationToken>());
     }
@@ -323,11 +323,9 @@ public sealed partial class ChatWriteHoldHandlerTests
         var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
             stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
-        var expectedVitamin = language == "en" ? "take vitamin D" : "tomar vitamina D";
-        var expectedStatin = language == "en" ? "take rovustatina" : "tomar rovustatina";
-        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == expectedVitamin
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == vitamin
             && habit.ParentHabitId == parents[0].Id && habit.FrequencyUnit == FrequencyUnit.Week), Arg.Any<CancellationToken>());
-        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == expectedStatin
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == statin
             && habit.ParentHabitId == parents[1].Id && habit.FrequencyUnit == FrequencyUnit.Day), Arg.Any<CancellationToken>());
     }
 
