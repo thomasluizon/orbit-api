@@ -199,7 +199,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool ShouldComposeReadFallbacks(ProcessUserChatCommand request, ChatContext context,
-        ToolExecutionAccumulator results) => results.OperationResults.Count > 0
+        ToolExecutionAccumulator results) => results.AskBlock is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
         && results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags));
 

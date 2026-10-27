@@ -274,7 +274,8 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool IsMissingHabitLookupRound(ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, IReadOnlyList<AiToolCall> calls) => UsesComposition(request, context)
-        && request.BlockAnswer is null && calls is [{ Name: "query_habits" }]
+        && request.BlockAnswer is null && HabitReadMessages.IsSingleStreakRead(request.Message)
+        && calls is [{ Name: "query_habits" }]
         && results.OperationResults is [{ ReadBlock: { } read }] && HabitReadMessages.IsMissingMetricsLookup(read);
 
     private bool IsDeclaredTerminalReadRound(AiResponse response, ProcessUserChatCommand request,

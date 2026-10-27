@@ -14,6 +14,31 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class SkippedHabitReadTests
 {
+    [Fact]
+    public async Task QueryHabits_SkipMarkersBelongOnlyToTheReturnedPage()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var db = factory.Context;
+        var today = new DateOnly(2026, 10, 27);
+        var user = User.Create("Reader", "skip-page@example.test").Value;
+        var habits = Enumerable.Range(0, 2).Select(index => Habit.Create(new HabitCreateParams(HabitSchedule.Flexible,
+            user.Id, "Walk " + index, FrequencyUnit.Day, 1, today)).Value).ToArray();
+        foreach (var habit in habits) habit.SkipFlexible(today).IsSuccess.Should().BeTrue();
+        db.Users.Add(user);
+        db.Habits.AddRange(habits);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
+        var tool = new QueryHabitsTool(new GenericRepository<Habit>(db), new GenericRepository<User>(db), dates,
+            new HabitScheduleLogReader(db));
+
+        var result = await tool.ExecuteAsync(JsonDocument.Parse("""{"date":"today","limit":1,"offset":1}""").RootElement, user.Id, default);
+
+        var card = result.Payload.Should().BeOfType<HabitListCard>().Subject;
+        card.SkippedIds.Should().Equal(card.Items.Should().ContainSingle().Which.Id);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

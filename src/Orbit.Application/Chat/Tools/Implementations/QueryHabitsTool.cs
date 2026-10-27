@@ -98,9 +98,10 @@ public class QueryHabitsTool(
         foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
             .OrderBy(h => h.Position).ThenBy(h => h.Id))
             AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs, parentTitles);
+        var page = rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList();
         return new ToolResult(true, EntityName: output,
             Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
-                rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList(),
+                page,
                 query.Schedule?.Date, TotalCount: rows.Count,
                 SourceRevision: ReadRevision.Hash(new
                 {
@@ -109,7 +110,8 @@ public class QueryHabitsTool(
                     ScheduleRevision = query.Schedule?.Facts.SourceRevision
                 }))
             {
-                SkippedIds = query.Schedule?.Facts.SkippedIds.Select(id => id.ToString()).ToHashSet() ?? []
+                SkippedIds = query.Schedule?.Facts.SkippedIds.Select(id => id.ToString())
+                    .Intersect(page.Select(item => item.Id)).ToHashSet() ?? []
             });
     }
 
@@ -280,7 +282,7 @@ public class QueryHabitsTool(
         {
             var done = results.Count(habit => schedule.Facts.DoneTodayIds.Contains(habit.Id));
             var skipped = results.Count(habit => schedule.Facts.SkippedIds.Contains(habit.Id));
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Returned schedule for {schedule.Date:yyyy-MM-dd}: {done} done, {skipped} skipped, {results.Count - done - skipped} remaining (top-level entries).");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Returned schedule for {schedule.Date:yyyy-MM-dd}: {done} done, {results.Count - done - skipped} remaining, {skipped} skipped (top-level entries).");
         }
         if (results.Count == 0)
             sb.AppendLine("No habits found matching the given filters.");

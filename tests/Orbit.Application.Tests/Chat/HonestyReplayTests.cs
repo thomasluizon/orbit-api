@@ -106,6 +106,29 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
+    [Fact]
+    public async Task HonestyReplay_EmptyLookupPreservesOtherRequestedWork()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(query, RealAskTool());
+        UseProductionReadExecutor(query);
+        SetupAiResponse(HonestyReplay("missing-query"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.Success(ToolResponse("ask", "schedule", ChoiceArguments)));
+
+        var result = await handler.Handle(new(UserId, "Check my piano streak, then create a habit.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block
+            .Should().BeOfType<AstraChoiceBlock>().Which.Question.Should().Be("When?");
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("en", "Caminhada: skipped today.")]
     [InlineData("pt-BR", "Caminhada: hábito pulado hoje.")]
