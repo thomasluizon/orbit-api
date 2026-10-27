@@ -56,11 +56,11 @@ every declared call ran, every tool is read-only, every result succeeded and has
 and no clarification, write or pending operation remains. Invalid ranking projections cannot
 complete the round. A prerequisite lookup or a request needing another read or write declares
 false and keeps the tool loop. A failed terminal read or a missing projection requests
-continuation. A single successful `query_habits` read with a nonempty `search`,
-`include_metrics: true`, complete metadata and zero total rows also completes immediately.
-It yields the localized missing-habit and unavailable-streak text without numeric results,
-even when the model marked that lookup as a prerequisite. This exception uses the typed
-result and its scope. Multiple calls or any other work keep the ordinary completion rules.
+continuation. A successful `query_habits` read with a nonempty `search`,
+`include_metrics: true`, complete metadata and zero total rows follows the same completion
+rules. When declared complete, it yields the localized missing-habit and unavailable-streak
+text without numeric results. A prerequisite lookup keeps the tool loop even when empty,
+so the model can request creation details or prepare the remaining change.
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
 message-based rewriting. Habit clarification and streak selection live in the prompt and

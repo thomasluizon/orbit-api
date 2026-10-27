@@ -18,9 +18,11 @@ by selecting their `toolCalls` arrays, filtering the missing case to `query_habi
 
 The additional complete clarification cases construct `AiResponse` at the same
 repository-owned port. They model the expected structured output in both languages;
-they are not provider captures or evidence of live model adherence. The empty-lookup
-cases assert completion from the produced typed scope and completeness metadata.
-Compound nonterminal reads assert continuation into an issued `ask` block. Neither
+they are not provider captures or evidence of live model adherence. The terminal
+empty-lookup cases set the captured call's completion flag to true and assert the honest
+no-data composition in both languages. The compound nonterminal case replays the single
+captured prerequisite lookup with its false completion flag and an empty repository
+result, then asserts continuation into an issued `ask` block for creation details. Neither
 tool selection nor response composition depends on matching the person's message.
 
 Stored option labels and habit titles stay verbatim. Locale rules apply to generated

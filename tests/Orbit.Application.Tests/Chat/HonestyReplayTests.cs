@@ -96,7 +96,11 @@ public partial class ProcessUserChatCommandHandlerTests
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(query);
         UseProductionReadExecutor(query);
-        SetupAiResponse(HonestyReplay("missing-query"));
+        var response = HonestyReplay("missing-query");
+        var lookup = response.ToolCalls!.Single();
+        var arguments = lookup.Args.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);
+        arguments[TerminalReadDirective.CompleteArgument] = JsonSerializer.SerializeToElement(true);
+        SetupAiResponse(response with { ToolCalls = [lookup with { Args = JsonSerializer.SerializeToElement(arguments) }] });
         ContinueWithReadDirective("No data.");
 
         var result = await handler.Handle(new(UserId, message,
@@ -135,15 +139,12 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<Habit>());
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
-        var goals = CompositionTool("query_goals");
-        var handler = CreateHandler(query, goals, RealAskTool());
-        UseProductionReadExecutor(query, goals);
-        SetupAiResponse(HonestyReplay("missing-query") with
-        {
-            ToolCalls = [.. HonestyReplay("missing-query").ToolCalls!,
-                new("query_goals", "goals", ParseArguments("{\"orbit_read_complete\":false}"))]
-        });
+        var handler = CreateHandler(query, RealAskTool());
+        UseProductionReadExecutor(query);
+        SetupAiResponse(HonestyReplay("missing-query"));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success(ToolResponse("ask", "schedule", ChoiceArguments)));
@@ -152,10 +153,13 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true)), default);
 
         result.IsSuccess.Should().BeTrue();
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1
+                && results[0].Name == "query_habits" && results[0].Success),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block
             .Should().BeOfType<AstraChoiceBlock>().Which.Question.Should().Be("When?");
-        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
     }
 
     [Theory]
