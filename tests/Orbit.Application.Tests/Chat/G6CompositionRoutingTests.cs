@@ -212,6 +212,51 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task G6_EmptyPrerequisiteReadContinuesToPendingWrite()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([]);
+        var lookup = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var create = new CreateHabitTool(_userDateService, _mediator);
+        var handler = CreateHandler(lookup, create);
+        UseProductionReadExecutor(lookup);
+        var arguments = ParseArguments("{\"title\":\"Walking\",\"frequency_unit\":\"Day\"}");
+        var previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo,
+            _userDateService, new AiToolRegistry([create]));
+        var preview = (await previewer.PreviewAsync(UserId, create.Name, arguments)).Value;
+        var pending = new PendingAgentOperation(Guid.NewGuid(), create.Name, create.Name, create.Name,
+            AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10),
+            Changes: preview?.Changes, ChangeTargetCount: preview?.ChangeTargetCount, Items: preview?.Items,
+            PreviewFingerprint: preview?.PreviewFingerprint);
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(call => call.OperationId == create.Name),
+            Arg.Any<CancellationToken>()).Returns(new AgentExecuteOperationResponse(
+                new AgentOperationResult(create.Name, create.Name, AgentRiskClass.Low,
+                    AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.PendingConfirmation),
+                PendingOperation: pending));
+        SetupAiResponse(ToolResponse(lookup.Name, "lookup", "{\"search\":\"Walking\",\"orbit_read_complete\":false}"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse(create.Name, "create", arguments.GetRawText())),
+                Result.Success(new AiResponse()));
+
+        var result = await handler.Handle(new(UserId, "Create Walking if it does not exist.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PendingOperations.Should().ContainSingle().Which.Id.Should().Be(pending.Id);
+        result.Value.PendingOperations![0].Items.Should().ContainSingle().Which.EntityName.Should().Be("Walking");
+        result.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.Success);
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1
+                && results[0].Name == lookup.Name && results[0].Success),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await _mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.Habits.Commands.CreateHabitCommand>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task G6_CompleteEmptyReadRoundNeedsNoNarrative()
     {
         SetupUserAndPayGate();
@@ -219,7 +264,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var habits = CompositionTool("query_habits", empty: true);
         var handler = CreateHandler(habits);
         UseProductionReadExecutor(habits);
-        SetupAiResponse(ToolResponse(habits.Name, "empty", "{\"orbit_read_complete\":false}"));
+        SetupAiResponse(ToolResponse(habits.Name, "empty", "{\"orbit_read_complete\":true}"));
 
         var result = await handler.Handle(new(UserId, "Show the available entries.", ClientContext: new(SupportsParts: true,
             PartKinds: ["habitList"], SupportsHabitListCard: true)), default);

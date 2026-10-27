@@ -50,9 +50,10 @@ Deterministic fallback text is already grounded by its typed producer.
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
 It is true when the current reads answer the request and false for prerequisite lookups or
 remaining tools. Independent reads belong in one round. The server removes the argument before
-execution and can finish complete read plans in later rounds as well. A round whose successful
-typed reads are all complete empty lists needs no narrative continuation even if the model
-marks it incomplete. Other incomplete plans continue through the existing model-service port.
+execution and can finish complete read plans in later rounds as well. Every read must declare
+`orbit_read_complete: true`, including reads that return complete empty lists. Incomplete plans
+continue through the existing model-service port so prerequisite lookups can lead to remaining
+reads or approval-gated write previews.
 Dependent reads, writes,
 failures, missing projections and invalid rankings retain their existing handling.
 

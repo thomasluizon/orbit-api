@@ -265,17 +265,12 @@ public partial class ProcessUserChatCommandHandler
     private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
-        (IsDeclaredTerminalReadRound(response, request, context, iteration)
-            || UsesComposition(request, context) && IsCompleteEmptyReadRound(calls, results))
+        IsDeclaredTerminalReadRound(response, request, context, iteration)
         && calls.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
         && calls.Count == response.ToolCalls!.Count
         && outcomes.Count == calls.Count && toolResults.Count == calls.Count && toolResults.All(result => result.Success)
         && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
         && CanCompleteComposition(request, context, results);
-
-    private static bool IsCompleteEmptyReadRound(IReadOnlyList<AiToolCall> calls, ToolExecutionAccumulator results) =>
-        calls.Count > 0 && calls.All(call => results.QueryReads.TryGetValue(call.Id, out var read)
-            && EmptyCompositionText(read, null) is not null);
 
     private bool IsDeclaredTerminalReadRound(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, int iteration) =>
