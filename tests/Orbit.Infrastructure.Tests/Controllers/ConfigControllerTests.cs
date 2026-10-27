@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -33,7 +34,7 @@ public class ConfigControllerTests : IDisposable
         _dbContext = new OrbitDbContext(options);
         _dbContext.Database.EnsureCreated();
 
-        _controller = new ConfigController(_configService, new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())), _logger);
+        _controller = new ConfigController(_configService, new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()), _logger);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);

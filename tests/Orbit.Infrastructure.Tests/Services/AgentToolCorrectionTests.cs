@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -65,7 +66,7 @@ public sealed partial class AgentToolCorrectionTests : IDisposable
         _store = new PendingAgentOperationStore(_db, settings);
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
-        var policy = new AgentPolicyEvaluator(_db, catalog, _store, bridge, settings, new FeatureFlagService(_db, _cache));
+        var policy = new AgentPolicyEvaluator(_db, catalog, _store, bridge, settings, new FeatureFlagService(_db, _cache, Substitute.For<IHostEnvironment>()));
         _ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
         _previewer = new PendingOperationChangePreviewer(habits, goals, tags, dates, _registry);

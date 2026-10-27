@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -111,7 +112,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         _executor = new AgentOperationExecutor(
             _catalogService,
             new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
-                new FeatureFlagService(_dbContext, _flagCache)),
+                new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>())),
             Substitute.For<IAgentAuditService>(),
             ownership,
             stepUpBridge,
