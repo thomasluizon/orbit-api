@@ -24,7 +24,7 @@ public partial class ProcessUserChatCommandHandler
         {
             Payload = new
             {
-                instruction = "This conversation has not shown a preview. The attempted revision failed and changed nothing. If the person asked to create a habit, call create_habit, bulk_create_habits or create_sub_habit with the requested details to prepare a new approval preview. Keep the older preview unchanged. Otherwise emit no tool calls. Do not claim anything was saved."
+                instruction = "This turn has not produced a preview. The attempted revision failed and changed nothing. If the person asked to create a habit, call create_habit, bulk_create_habits or create_sub_habit with the requested details to prepare a new approval preview. Keep the older preview unchanged. Otherwise emit no tool calls. Do not claim anything was saved."
             }
         };
         ct.ThrowIfCancellationRequested();
@@ -61,7 +61,6 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, int iteration, long tokens) =>
         IsExplicitHabitCreate(request.Message)
         && request.BlockAnswer is null && request.ConfirmationToken is null
-        && request.History?.Any(message => ChatHistoryMessage.NormalizeRole(message.Role) == ChatHistoryMessage.AssistantRole) != true
         && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
         && results.OperationResults.Count == 1 && iteration < ChatTurnLimits.MaxToolIterations
         && HasPreviewRecoveryBudget(context, tokens + 1);

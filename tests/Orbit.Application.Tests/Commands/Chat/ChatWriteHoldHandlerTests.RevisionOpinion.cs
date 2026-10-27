@@ -212,11 +212,15 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Theory]
-    [InlineData("en", false)]
-    [InlineData("pt-BR", false)]
-    [InlineData("en", true)]
-    [InlineData("pt-BR", true)]
-    public async Task FreshCreate_ProviderReplayRecoversMisroutedRevisionWithoutChangingOlderPreview(string language, bool composition)
+    [InlineData("en", false, false)]
+    [InlineData("pt-BR", false, false)]
+    [InlineData("en", true, false)]
+    [InlineData("pt-BR", true, false)]
+    [InlineData("en", false, true)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, true)]
+    public async Task FreshCreate_ProviderReplayRecoversMisroutedRevisionWithoutChangingOlderPreview(string language, bool composition, bool history)
     {
         _user.SetLanguage("en");
         if (composition)
@@ -247,6 +251,7 @@ public sealed partial class ChatWriteHoldHandlerTests
                 call.Arg<AiConversationContext>(), call.Arg<IReadOnlyList<AiToolCallResult>>(), null, call.Arg<CancellationToken>()));
 
         var result = await CreateHandler().Handle(new(_userId, capture.GetProperty("create_message").GetString()!,
+            History: history ? [new("user", "Hello"), new("assistant", "Hello, how can I help?")] : null,
             ClientContext: new(Locale: language, SupportsParts: true, SupportsPendingOperationChanges: true)), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
