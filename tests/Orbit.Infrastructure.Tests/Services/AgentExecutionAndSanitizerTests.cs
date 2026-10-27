@@ -28,7 +28,7 @@ using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class AgentExecutionAndSanitizerTests
+public partial class AgentExecutionAndSanitizerTests
 {
     private static readonly JsonElement EmptySchema = JsonDocument.Parse("{}").RootElement.Clone();
     private static readonly Guid UserId = Guid.NewGuid();
@@ -664,12 +664,14 @@ public class AgentExecutionAndSanitizerTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task AgentOperationExecutor_ReturnsToolFailure()
+    [Theory]
+    [InlineData("create_habit", true, "write")]
+    [InlineData("get_retrospective", false, "read")]
+    public async Task AgentOperationExecutor_ReturnsToolFailure(string operationId, bool isMutation, string access)
     {
         var catalog = Substitute.For<IAgentCatalogService>();
-        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
-        var operation = CreateOperation("create_habit", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: isMutation);
+        var operation = CreateOperation(operationId, capability.Id, isMutation: isMutation, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
         catalog.GetOperation(operation.Id).Returns(operation);
         catalog.GetCapability(capability.Id).Returns(capability);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
@@ -678,7 +680,7 @@ public class AgentExecutionAndSanitizerTests
         var executor = CreateExecutor(
             catalog,
             policyEvaluator: policy,
-            toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, _) => Task.FromResult(new ToolResult(false, EntityId: UserId.ToString(), Error: "tool_failed")))]));
+            toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, _) => Task.FromResult(new ToolResult(false, EntityId: UserId.ToString(), Error: "tool_failed")), isReadOnly: !isMutation)]));
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             UserId,
@@ -689,6 +691,8 @@ public class AgentExecutionAndSanitizerTests
 
         response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
         response.Operation.PolicyReason.Should().Be("tool_failed");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(response.Operation, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        json.RootElement.GetProperty("access").GetString().Should().Be(access);
         response.PolicyDenial.Should().BeNull();
     }
 

@@ -574,10 +574,10 @@ public partial class ProcessUserChatCommandHandler
         if (capability is null)
             return UnsupportedByPolicyOutcome(call, tool);
 
+        var access = tool.IsReadOnly ? "read" : "write";
         Func<Task>? onExecutionStarted = null;
         if (request.StreamSink is { } streamSink && request.ClientContext?.SupportsToolSteps == true)
         {
-            var access = tool.IsReadOnly ? "read" : "write";
             onExecutionStarted = () => executionResults.EmitToolStepAsync(capability.Domain, access, streamSink);
         }
 
@@ -586,7 +586,7 @@ public partial class ProcessUserChatCommandHandler
             : await operationExecutor.ExecuteAsync(correctionRequest with { OnExecutionStarted = onExecutionStarted }, cancellationToken);
         executionResponse = RevisedPreviewResponse(call, executionResponse);
         RegisterPreviewDiscussion(call, executionResponse, executionResults);
-        var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation, request.ClientContext);
+        var operationResult = StatusCardBuilder.ForClient(executionResponse.Operation with { Access = access }, request.ClientContext);
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
 
@@ -702,8 +702,9 @@ public partial class ProcessUserChatCommandHandler
                 == AgentOperationFingerprint.Canonicalize(newValue.GetRawText())
             : replacement.NewValue == previous.NewValue;
 
-    private static ToolCallOutcome UnknownToolOutcome(AiToolCall call)
+    private ToolCallOutcome UnknownToolOutcome(AiToolCall call)
     {
+        var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
         return new ToolCallOutcome(
             new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"),
             new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}").WithToolResultMessage(call, key: "unknownTool", parameters: new(ToolName: call.Name)),
@@ -713,7 +714,8 @@ public partial class ProcessUserChatCommandHandler
                 AgentRiskClass.Low,
                 AgentConfirmationRequirement.None,
                 AgentOperationStatus.UnsupportedByPolicy,
-                PolicyReason: UnsupportedByPolicyReason),
+                PolicyReason: UnsupportedByPolicyReason,
+                Access: capability is null ? null : capability.IsMutation ? "write" : "read"),
             new AgentPolicyDenial(
                 call.Name,
                 call.Name,
@@ -735,7 +737,8 @@ public partial class ProcessUserChatCommandHandler
                 AgentConfirmationRequirement.None,
                 AgentOperationStatus.UnsupportedByPolicy,
                 Summary: BuildOperationSummary(call),
-                PolicyReason: UnsupportedByPolicyReason),
+                PolicyReason: UnsupportedByPolicyReason,
+                Access: tool.IsReadOnly ? "read" : "write"),
             new AgentPolicyDenial(
                 call.Name,
                 call.Name,
