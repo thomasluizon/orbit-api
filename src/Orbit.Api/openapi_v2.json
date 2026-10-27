@@ -21897,11 +21897,17 @@
             "format": "date"
           },
           "dueTime": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "time"
           },
           "dueEndTime": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "time"
           },
           "reminderMinutesBefore": {

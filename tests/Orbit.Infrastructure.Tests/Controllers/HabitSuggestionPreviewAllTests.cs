@@ -192,11 +192,14 @@ public sealed class HabitSuggestionPreviewAllTests : IAsyncDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task PreviewAll_OneDraft_ReturnsTheSingleEndpointPreview(bool adjustment)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task PreviewAll_OneDraft_ReturnsTheSingleEndpointPreview(bool adjustment, bool untimed)
     {
         var draft = adjustment ? Draft("Read", 23) with { ExistingHabitId = _existing.Id } : Draft();
+        if (untimed) draft = draft with { DueTime = null, DueEndTime = null };
         var single = await Post("/api/chat/habit-suggestions/preview", new { draft, language = "en" });
         var batch = await Post("/api/chat/habit-suggestions/preview-all", new { drafts = new[] { draft }, language = "en" });
         batch.Status.Should().Be(single.Status).And.Be(200);

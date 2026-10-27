@@ -37,8 +37,8 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
             ["title"] = draft.Title,
             ["emoji"] = draft.Emoji,
             ["due_date"] = draft.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            ["due_time"] = draft.DueTime.ToString("HH:mm", CultureInfo.InvariantCulture),
-            ["due_end_time"] = draft.DueEndTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+            ["due_time"] = draft.DueTime?.ToString("HH:mm", CultureInfo.InvariantCulture),
+            ["due_end_time"] = draft.DueEndTime?.ToString("HH:mm", CultureInfo.InvariantCulture),
             ["days"] = draft.Days.Select(day => day.ToString()).ToArray(),
             ["is_general"] = false,
             ["is_flexible"] = false,
@@ -52,6 +52,8 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
         {
             fields["habit_id"] = existing.ToString();
             clearFields.Add("end_date");
+            if (!draft.DueTime.HasValue) clearFields.Add("due_time");
+            if (!draft.DueEndTime.HasValue) clearFields.Add("due_end_time");
         }
         if (draft.FrequencyUnit is { } unit)
         {

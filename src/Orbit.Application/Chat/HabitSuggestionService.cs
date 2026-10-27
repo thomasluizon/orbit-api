@@ -31,7 +31,13 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var generated = await generator.GenerateAsync(request, ct);
-            if (generated.IsFailure) return generated.PropagateError<HabitSuggestionsCard>();
+            if (generated.IsFailure)
+            {
+                if (generated.ErrorCode != "HABIT_SUGGESTION_INVALID")
+                    return generated.PropagateError<HabitSuggestionsCard>();
+                request = request with { Correction = generated.Error };
+                continue;
+            }
             var result = Normalize(generated.Value, request);
             if (result.IsSuccess) return result;
             request = request with { Correction = result.Error };
@@ -130,11 +136,12 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     private static Result<HabitSuggestionsCard> Invalid(string reason) => Result.Failure<HabitSuggestionsCard>(reason, "HABIT_SUGGESTION_INVALID");
     private static bool HasScheduleConflict(Habit entity, HabitSuggestionDraft draft, IEnumerable<Habit> habits, int weekStart)
     {
+        if (draft.DueTime is not { } start || draft.DueEndTime is not { } end) return false;
         var timed = habits.Where(habit => habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();
         return HabitScheduleService.GetScheduledDates(entity, draft.DueDate, draft.DueDate.AddDays(366), weekStart)
             .Any(day => timed.Any(habit => HabitScheduleService.IsHabitDueOnDate(habit, day, weekStart)
-                && draft.DueTime.ToTimeSpan() < (habit.DueEndTime?.ToTimeSpan() ?? habit.DueTime.GetValueOrDefault().ToTimeSpan().Add(TimeSpan.FromMinutes(1)))
-                && draft.DueEndTime > habit.DueTime));
+                && start.ToTimeSpan() < (habit.DueEndTime?.ToTimeSpan() ?? habit.DueTime.GetValueOrDefault().ToTimeSpan().Add(TimeSpan.FromMinutes(1)))
+                && end > habit.DueTime));
     }
     private static bool SameSuggestion(HabitSuggestionDraft other, HabitSuggestionDraft candidate) =>
         other.Id == candidate.Id || HabitNameMatcher.Normalize(other.Title) == HabitNameMatcher.Normalize(candidate.Title)

@@ -40,6 +40,25 @@ public class HabitSuggestionDraftTests
     }
 
     [Theory]
+    [InlineData("Habit")]
+    [InlineData("Task")]
+    public void UntimedDraft_PreservesNullTimes(string type)
+    {
+        var draft = Draft() with
+        {
+            Type = type,
+            DueTime = null,
+            DueEndTime = null,
+            FrequencyUnit = type == "Task" ? null : FrequencyUnit.Day,
+            FrequencyQuantity = type == "Task" ? null : 1
+        };
+        var result = draft.ToHabit(Guid.NewGuid());
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.DueTime.Should().BeNull();
+        result.Value.DueEndTime.Should().BeNull();
+    }
+
+    [Theory]
     [InlineData("type")]
     [InlineData("title")]
     [InlineData("emoji")]
@@ -47,6 +66,10 @@ public class HabitSuggestionDraftTests
     [InlineData("quantity")]
     [InlineData("time")]
     [InlineData("time_precision")]
+    [InlineData("end_precision")]
+    [InlineData("missing_start")]
+    [InlineData("missing_end")]
+    [InlineData("equal_times")]
     [InlineData("weekday")]
     [InlineData("reminder")]
     [InlineData("checklist")]
@@ -62,6 +85,10 @@ public class HabitSuggestionDraftTests
             "quantity" => Draft() with { FrequencyQuantity = 0 },
             "time" => Draft() with { DueEndTime = new(21, 0) },
             "time_precision" => Draft() with { DueTime = new(22, 0, 30) },
+            "end_precision" => Draft() with { DueEndTime = new(22, 15, 30) },
+            "missing_start" => Draft() with { DueTime = null },
+            "missing_end" => Draft() with { DueEndTime = null },
+            "equal_times" => Draft() with { DueEndTime = new(22, 0) },
             "weekday" => Draft() with { Days = [(DayOfWeek)99] },
             "reminder" => Draft() with { ReminderMinutesBefore = -1 },
             "checklist" => Draft() with { ChecklistItems = [""] },
