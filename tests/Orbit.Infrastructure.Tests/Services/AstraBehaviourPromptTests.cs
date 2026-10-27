@@ -9,6 +9,20 @@ public class AstraBehaviourPromptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void QuestionBlock_GroupsOnlyNecessaryMissingInputAfterReadingAccount(bool composition)
+    {
+        var prompt = Build(composition);
+        prompt.Should().Contain("When the client supports form question")
+            .And.Contain("group only the missing inputs needed to finish the request")
+            .And.Contain("never ask for information the account can answer")
+            .And.Contain("Otherwise ask one question at a time");
+        prompt.Should().NotContain("Never ask more than one question at a time.");
+        prompt.Should().NotContain("Pick the SINGLE most blocking question. NEVER ask more than one at a time.");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void IncompleteHabitEdit_AsksForTargetAndChangeWithFreeText(bool composition)
     {
         var prompt = Build(composition);

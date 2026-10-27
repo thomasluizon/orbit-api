@@ -10,4 +10,7 @@ public sealed record AskToolArguments(
     IReadOnlyList<AstraBlockItem>? Items = null,
     bool MultiSelect = false,
     bool AllowFreeText = false,
-    string? Action = null);
+    string? Action = null,
+    IReadOnlyList<AstraQuestion>? Questions = null,
+    string? Intro = null,
+    AstraQuestionProgress? Progress = null);

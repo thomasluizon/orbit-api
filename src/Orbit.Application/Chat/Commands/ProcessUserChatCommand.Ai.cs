@@ -60,17 +60,7 @@ public partial class ProcessUserChatCommandHandler
         var availableTools = ai.ToolRegistry.GetAll();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
-        var askEnabled = request.AuthMethod == AgentAuthMethod.Jwt
-            && request.ClientContext?.SupportsParts == true
-            && request.ClientContext.PartKinds?.Any(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList) == true
-            && !context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled);
-        if (!askEnabled && toolNames.Contains("ask"))
-            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
-                "The client cannot display ask blocks on this turn. Ask clarification questions in prose and do not call ask.");
-        if (askEnabled)
-            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
-                "Use ask when one short answer decides the next step, or several suggested items can be acted on together. Never use ask for a yes/no question the write preview already asks. At most one ask block per reply. An ask call ends the tool round: put it last and make no further tool calls. Supported ask forms: "
-                + string.Join(", ", request.ClientContext!.PartKinds!.Where(kind => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList)));
+        dynamicContext = AddAskContext(dynamicContext, request, context, toolNames);
 
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(

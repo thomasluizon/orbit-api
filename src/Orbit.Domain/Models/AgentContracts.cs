@@ -270,6 +270,7 @@ public static class AstraBlockKinds
 {
     public const string Choice = "choice";
     public const string PickList = "pickList";
+    public const string Question = "question";
 }
 
 public record AgentClientContext(

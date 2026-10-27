@@ -968,8 +968,14 @@
             "required": true,
             "values": [
               "choice",
-              "pickList"
+              "pickList",
+              "question"
             ]
+          },
+          {
+            "name": "intro",
+            "type": "string",
+            "required": false
           },
           {
             "name": "items",
@@ -1037,7 +1043,110 @@
             "required": true
           },
           {
+            "name": "progress",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "progress.current",
+            "type": "integer",
+            "required": true
+          },
+          {
+            "name": "progress.total",
+            "type": "integer",
+            "required": true
+          },
+          {
             "name": "question",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "questions",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "questions[].allowFreeText",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "questions[].highLabel",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "questions[].id",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "questions[].lowLabel",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "questions[].max",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "questions[].min",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "questions[].options",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "questions[].options[].id",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "questions[].options[].label",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "questions[].options[].recommended",
+            "type": "boolean",
+            "required": false
+          },
+          {
+            "name": "questions[].prompt",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "questions[].step",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "questions[].type",
+            "type": "string",
+            "required": true,
+            "values": [
+              "multipleChoice",
+              "scale",
+              "singleChoice",
+              "slider",
+              "yesNo"
+            ]
+          },
+          {
+            "name": "questions[].unit",
             "type": "string",
             "required": false
           },

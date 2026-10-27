@@ -12,7 +12,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat;
 
-public class AstraBlockAnswerServiceTests
+public partial class AstraBlockAnswerServiceTests
 {
     private readonly IIssuedAstraBlockStore _store = Substitute.For<IIssuedAstraBlockStore>();
     private readonly IUnitOfWork _work = Substitute.For<IUnitOfWork>();

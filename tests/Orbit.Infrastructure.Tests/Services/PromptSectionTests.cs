@@ -145,7 +145,9 @@ public class GlobalRulesSectionTests
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
-        result.Should().Contain("ONE targeted question");
+        result.Should().Contain("Ask one targeted question");
+        result.Should().Contain("When the client supports form question");
+        result.Should().Contain("Otherwise ask one question at a time");
         result.Should().Contain("Structuring Strategy");
     }
 
@@ -246,8 +248,10 @@ public class StructuringStrategySectionTests
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new StructuringStrategySection().Build(ctx);
 
-        result.Should().Contain("Ask ONE targeted clarifying question");
-        result.Should().Contain("NEVER ask more than one");
+        result.Should().Contain("Ask for missing input");
+        result.Should().Contain("When form question is supported, group only necessary missing input in one block");
+        result.Should().Contain("Otherwise ask the single most blocking question");
+        result.Should().NotContain("NEVER ask more than one at a time");
     }
 
     [Fact]
