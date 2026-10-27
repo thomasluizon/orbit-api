@@ -52,6 +52,8 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
         }.ToString();
         _connection = new SqliteConnection(connectionString);
         _connection.Open();
+        _connection.CreateFunction<string, string>("md5", value => Convert.ToHexStringLower(
+            System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(value))), isDeterministic: true);
 
         var options = new DbContextOptionsBuilder<OrbitDbContext>();
         void Configure(SqliteDbContextOptionsBuilder sqlite)
@@ -87,12 +89,14 @@ internal sealed class SqliteOrbitDbContextFactory : IDisposable
     private sealed class EncryptionModelCacheKeyFactory : IModelCacheKeyFactory
     {
         public object Create(DbContext context, bool designTime) =>
-            (context.GetType(), context is OrbitDbContext orbit && orbit.HasEncryptionService, designTime);
+            (context.GetType(), (context as SqliteCompatOrbitDbContext)?.Encryption, designTime);
     }
 
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options, IEncryptionService? encryption)
         : OrbitDbContext(options, encryption)
     {
+        internal IEncryptionService? Encryption { get; } = encryption;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
