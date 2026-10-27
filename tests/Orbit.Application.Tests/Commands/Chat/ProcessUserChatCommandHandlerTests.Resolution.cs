@@ -398,7 +398,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Registre água."), default);
 
         result.Value.PendingOperations.Should().ContainSingle();
-        await _habitRepo.Received(2).FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+        await _habitRepo.Received(4).FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>());
         await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Is<IReadOnlyList<AiToolCallResult>>(values => values.Where(value => value.Payload != null)

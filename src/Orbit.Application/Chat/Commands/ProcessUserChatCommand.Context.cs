@@ -5,6 +5,7 @@ using Orbit.Application.Chat;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -18,18 +19,26 @@ public partial class ProcessUserChatCommandHandler
         LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var userHabits = await data.HabitRepository.FindAsync(
-            h => h.UserId == request.UserId,
-            q => q.Include(habit => habit.Tags),
-            cancellationToken);
-        var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var weekStartDay = await execution.UserDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
-        var todayFacts = await HabitTodaySnapshot.ReadAsync(
-            userHabits, userToday, weekStartDay, execution.ScheduleLogReader, cancellationToken);
-        var todayHabits = userHabits.Where(habit => !habit.IsCompleted
-            || (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && todayFacts.DoneTodayIds.Contains(habit.Id)).ToList();
-        var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday, todayFacts);
+        var includeChecklists = request.ClientContext?.SupportsPendingOperationPlacement == true;
+        var candidates = await data.HabitRepository.ProjectAsync(
+            h => h.UserId == request.UserId,
+            q => ChatHabitCandidate.Select(q, userToday, includeChecklists),
+            cancellationToken);
+        var userHabits = candidates.Select(candidate => candidate.ToHabit(request.UserId)).ToArray();
+        var doneTodayIds = candidates.Where(candidate => candidate.CompletedToday)
+            .Select(candidate => candidate.Schedule.Id).ToHashSet();
+        var (promptHabitIndex, todayFacts) = await SelectPromptHabitIndexAsync(
+            userHabits, userToday, weekStartDay, doneTodayIds, execution.ScheduleLogReader, cancellationToken);
+        var promptIds = promptHabitIndex.Habits.Select(habit => habit.Id).ToHashSet();
+        IReadOnlyList<Habit> promptHabits = promptIds.Count == 0 ? [] : await data.HabitRepository.FindAsync(
+            h => h.UserId == request.UserId && promptIds.Contains(h.Id),
+            q => q.Include(habit => habit.Tags), cancellationToken);
+        var hydratedById = promptHabits.Where(habit => promptIds.Contains(habit.Id)).ToDictionary(habit => habit.Id);
+        var hydratedPrompt = promptHabitIndex.Habits
+            .Select(habit => hydratedById.GetValueOrDefault(habit.Id, habit)).ToList();
+        var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         if (promptHabitIndex.IsPartial)
         {
             LogPromptHabitIndexTruncated(
@@ -65,8 +74,7 @@ public partial class ProcessUserChatCommandHandler
         return Result.Success(new ChatContext(
             userHabits,
             activeHabits,
-            todayHabits,
-            promptHabitIndex.Habits,
+            hydratedPrompt,
             promptHabitIndex.IsPartial,
             user,
             hasProAccess,
@@ -77,6 +85,34 @@ public partial class ProcessUserChatCommandHandler
             userToday,
             todayFacts,
             dbStopwatch.ElapsedMilliseconds));
+    }
+
+    internal static async Task<(PromptHabitIndex Index, HabitTodaySnapshot Facts)> SelectPromptHabitIndexAsync(
+        IReadOnlyList<Habit> habits, DateOnly today, int weekStartDay, IReadOnlySet<Guid> doneTodayIds,
+        IHabitScheduleLogReader reader, CancellationToken ct)
+    {
+        var days = doneTodayIds.Select(id => new HabitScheduleLogDay(id, today, 1, 0, true)).ToArray();
+        var facts = HabitTodaySnapshot.Build(habits, today, weekStartDay, days, new HashSet<Guid>());
+        var needsHistory = habits.Where(habit =>
+                habit.Schedule == HabitSchedule.Flexible && facts.TodayIds.Contains(habit.Id) && !doneTodayIds.Contains(habit.Id)
+                || habit.Schedule == HabitSchedule.Recurring && facts.OverdueIds.Contains(habit.Id))
+            .Select(habit => habit.Id).ToHashSet();
+        while (true)
+        {
+            var index = BuildPromptHabitIndex(habits, today, facts);
+            var unresolved = index.Habits.Where(habit => needsHistory.Contains(habit.Id)).ToArray();
+            if (unresolved.Length == 0)
+                return (index, facts);
+
+            var resolved = await HabitTodaySnapshot.ReadAsync(unresolved, today, weekStartDay, reader, ct);
+            var resolvedIds = unresolved.Select(habit => habit.Id).ToHashSet();
+            facts = facts with
+            {
+                TodayIds = facts.TodayIds.Except(resolvedIds).Concat(resolved.TodayIds).ToHashSet(),
+                OverdueIds = facts.OverdueIds.Except(resolvedIds).Concat(resolved.OverdueIds).ToHashSet()
+            };
+            needsHistory.ExceptWith(resolvedIds);
+        }
     }
 
     internal static PromptHabitIndex BuildPromptHabitIndex(
@@ -186,7 +222,6 @@ public partial class ProcessUserChatCommandHandler
     private sealed record ChatContext(
         IReadOnlyList<Habit> UserHabits,
         List<Habit> ActiveHabits,
-        List<Habit> TodayHabits,
         List<Habit> PromptHabits,
         bool IsPromptHabitIndexPartial,
         User? User,

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
@@ -406,6 +407,14 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
+        if (writeCalls.Count > 0 && !executionResults.HasMutationContext)
+        {
+            var habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
+                query => query.Include(habit => habit.Tags), cancellationToken);
+            executionResults.AllHabits = habits;
+            executionResults.Habits = habits.Where(habit => !habit.IsCompleted).ToList();
+            executionResults.HasMutationContext = true;
+        }
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);

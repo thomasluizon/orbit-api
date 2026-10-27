@@ -177,6 +177,10 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         var habitRepo = Substitute.For<IGenericRepository<Habit>>();
         habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits);
+        habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<ChatHabitCandidate>)call.Arg<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>()(
+                habits.AsQueryable().Where(call.Arg<Expression<Func<Habit, bool>>>())).ToArray());
         var goalRepo = Substitute.For<IGenericRepository<Goal>>();
         goalRepo.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<Goal>());

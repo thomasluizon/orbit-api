@@ -651,5 +651,15 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             .Returns(new List<Habit>().AsReadOnly());
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit>().AsReadOnly());
+        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var predicate = call.Arg<Expression<Func<Habit, bool>>>();
+                var habits = await _habitRepo.FindAsync(predicate,
+                    query => query.Include(habit => habit.Tags), call.Arg<CancellationToken>());
+                return (IReadOnlyList<ChatHabitCandidate>)call.Arg<Func<IQueryable<Habit>, IQueryable<ChatHabitCandidate>>>()(
+                    habits.Where(predicate.Compile()).AsQueryable()).ToArray();
+            });
     }
 }
