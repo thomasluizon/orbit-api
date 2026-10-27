@@ -331,11 +331,42 @@ public class GetRetrospectiveQueryHandlerTests
     [InlineData("pt-BR", true)]
     [InlineData("en", false)]
     [InlineData("pt-BR", false)]
-    public async Task Handle_NoHabits_ReturnsEmptyRetrospective(string language, bool generateNarrative)
+    public async Task Handle_NoHabits_ReturnsFailure(string language, bool generateNarrative)
     {
         StubHabits();
 
         var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language, generateNarrative), default);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NoHabitsForPeriod);
+        result.Error.Should().Be(ErrorMessages.NoHabitsForPeriod.Message);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Handle_HabitsButNoCompletions_ReturnsFailure(string language)
+    {
+        StubHabits(CreateDailyHabit());
+        StubNarrative(SampleNarrative);
+
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language), default);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.NoHabitsForPeriod);
+        result.Error.Should().Be(ErrorMessages.NoHabitsForPeriod.Message);
+    }
+
+    [Theory]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    public async Task Handle_NoHabits_ReturnsEmptyRetrospective(string language, bool generateNarrative)
+    {
+        StubHabits();
+
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language, generateNarrative, AllowEmptyPeriod: true), default);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Metrics.TotalScheduled.Should().Be(0);
@@ -351,6 +382,10 @@ public class GetRetrospectiveQueryHandlerTests
         result.Value.Narrative.Should().Be(new RetrospectiveNarrative("", "", "", ""));
         result.Value.FromCache.Should().BeFalse();
         _retroService.ReceivedCalls().Should().BeEmpty();
+
+        var legacyResult = await HandleWeek();
+        legacyResult.IsFailure.Should().BeTrue();
+        legacyResult.ErrorCode.Should().Be(ErrorCodes.NoHabitsForPeriod);
     }
 
     [Fact]
@@ -377,7 +412,7 @@ public class GetRetrospectiveQueryHandlerTests
         var habit = CreateDailyHabit();
         StubHabits(habit);
 
-        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language), default);
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language, AllowEmptyPeriod: true), default);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Metrics.TotalScheduled.Should().Be(7);
@@ -387,6 +422,10 @@ public class GetRetrospectiveQueryHandlerTests
         result.Value.Narrative.Should().Be(new RetrospectiveNarrative("", "", "", ""));
         result.Value.FromCache.Should().BeFalse();
         _retroService.ReceivedCalls().Should().BeEmpty();
+
+        var legacyResult = await HandleWeek();
+        legacyResult.IsFailure.Should().BeTrue();
+        legacyResult.ErrorCode.Should().Be(ErrorCodes.NoHabitsForPeriod);
     }
 
     [Fact]

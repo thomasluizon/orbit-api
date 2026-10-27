@@ -46,7 +46,8 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
         dateFrom = JsonArgumentParser.ParseDateOnly(args, "date_from") ?? dateFrom;
         dateTo = JsonArgumentParser.ParseDateOnly(args, "date_to") ?? dateTo;
         var result = await mediator.Send(
-            new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language, JsonArgumentParser.GetOptionalBool(args, "generate_narrative") ?? true), ct);
+            new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language, JsonArgumentParser.GetOptionalBool(args, "generate_narrative") ?? true,
+                AllowEmptyPeriod: true), ct);
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)

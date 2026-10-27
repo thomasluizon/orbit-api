@@ -79,7 +79,7 @@ public partial class ProcessUserChatCommandHandlerTests
         events.Should().NotContain(item => item.Type == "delta");
         narrative.ReceivedCalls().Should().BeEmpty();
         await _mediator.Received(1).Send(Arg.Is<GetRetrospectiveQuery>(query =>
-            query.GenerateNarrative && query.Language == language && query.DateFrom == from && query.DateTo == Today),
+            query.AllowEmptyPeriod && query.GenerateNarrative && query.Language == language && query.DateFrom == from && query.DateTo == Today),
             Arg.Any<CancellationToken>());
 
         var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value,
