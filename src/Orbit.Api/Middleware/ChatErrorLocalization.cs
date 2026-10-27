@@ -17,9 +17,12 @@ internal static class ChatErrorLocalization
     public static async Task<string> MessageAsync(HttpContext context, string? code, string fallback,
         IReadOnlyList<object?>? args = null)
     {
-        var portuguese = PreferredLocale(context) is { } locale ? LocaleHelper.IsPortuguese(locale)
-            : context.RequestServices.GetService<IRequestLanguageResolver>() is { } resolver
-                ? await resolver.IsPortugueseAsync(context, context.RequestAborted)
+        var locale = PreferredLocale(context);
+        var resolver = context.RequestServices?.GetService<IRequestLanguageResolver>();
+        if (locale is null && resolver is null && string.IsNullOrWhiteSpace(context.Request.Headers.AcceptLanguage))
+            return fallback;
+        var portuguese = locale is not null ? LocaleHelper.IsPortuguese(locale)
+            : resolver is not null ? await resolver.IsPortugueseAsync(context, context.RequestAborted)
                 : LocaleHelper.IsPortugueseAcceptLanguage(context.Request.Headers.AcceptLanguage);
         return ErrorCopy.TryResolve(code, portuguese, args ?? [], out var message) ? message : fallback;
     }
