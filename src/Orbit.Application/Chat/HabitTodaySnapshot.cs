@@ -12,6 +12,8 @@ internal sealed record HabitTodaySnapshot(
     IReadOnlySet<Guid> OverdueIds,
     IReadOnlySet<Guid> DoneTodayIds, string? SourceRevision = null)
 {
+    internal IReadOnlySet<Guid> SkippedIds { get; init; } = new HashSet<Guid>();
+
     internal static async Task<HabitTodaySnapshot> ReadAsync(
         IReadOnlyList<Habit> habits,
         DateOnly date,
@@ -78,7 +80,11 @@ internal sealed record HabitTodaySnapshot(
             scheduled.Where(item => item.isOverdue).Select(item => item.habit.Id).ToHashSet(),
             active.Concat(completedToday)
                 .Where(habit => !habit.IsBadHabit && logFacts.HasCompleted(habit.Id, today, today))
-                .Select(habit => habit.Id).ToHashSet());
+                .Select(habit => habit.Id).ToHashSet())
+        {
+            SkippedIds = logDays.Where(day => day.Date == today && day.SkippedCount > 0 && day.CompletedCount == 0)
+                .Select(day => day.HabitId).ToHashSet()
+        };
     }
 
     internal static HabitTodaySnapshot FromLoadedHabits(IReadOnlyList<Habit> habits, DateOnly today)

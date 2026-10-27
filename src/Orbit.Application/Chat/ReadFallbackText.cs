@@ -27,6 +27,10 @@ internal sealed class ReadFallbackText(string? language, string? timeZone)
 
     internal string Format(object block) => block switch
     {
+        HabitListCard card when HabitReadMessages.Missing(card, _portuguese ? "pt-BR" : "en") is { } missing => missing,
+        HabitListCard card when HabitReadMessages.Skipped(card, _portuguese ? "pt-BR" : "en") is { } skipped =>
+            Lines(card.Items.Where(item => !card.SkippedIds.Contains(item.Id)).Select(item => $"{item.Title} ({Text(item.Status)})")
+                .Append(skipped)),
         HabitListCard card => Lines(new[] { card.Date is { } date ? Date(date) : Text(card.Scope), Total("habits", card.Items.Count) }
             .Concat(card.Items.Select(item => $"{item.Title} ({Text(item.Status)})"))),
         RecordListCard { Kind: "habitHistory" } card => Lines(new[] { HistoryHeading(card) }

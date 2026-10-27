@@ -1,0 +1,31 @@
+{
+  "sourceAttempt": "ambiguity-en-r1",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "choice",
+        "question": "Which habit would you like to change?",
+        "title": "Choose a habit",
+        "multiSelect": false,
+        "allowFreeText": false,
+        "options": [
+          {
+            "id": "water",
+            "label": "Water",
+            "description": "Daily habit"
+          },
+          {
+            "id": "walk",
+            "label": "Walk",
+            "description": "Daily habit"
+          }
+        ],
+        "action": null,
+        "items": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

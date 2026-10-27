@@ -56,7 +56,21 @@ every declared call ran, every tool is read-only, every result succeeded and has
 and no clarification, write or pending operation remains. Invalid ranking projections cannot
 complete the round. A prerequisite lookup or a request needing another read or write declares
 false and keeps the tool loop. A failed terminal read or a missing projection requests
-continuation. Legacy clients without parts keep their existing readable path; unsupported
+continuation. A successful `query_habits` read with a nonempty `search`,
+`include_metrics: true`, complete metadata and zero total rows follows the same completion
+rules. When declared complete, it yields the localized missing-habit and unavailable-streak
+text without numeric results. A prerequisite lookup keeps the tool loop even when empty,
+so the model can request creation details or prepare the remaining change.
+An issued `ask` block ends the turn and suppresses read completion and readable read
+fallbacks. Its question and options are the model's structured output, preserved without
+message-based rewriting. Habit clarification and streak selection live in the prompt and
+tool contract.
+
+Skipped habit reads retain their dated skip facts, including active skip receipts for
+recurring habits. They exclude skipped entries from completed and remaining totals.
+The existing habit-list wire statuses cannot express a skip, so these reads use localized
+text produced from the typed skip facts and stored titles. Stored titles remain verbatim.
+Legacy clients without parts keep their existing readable path; unsupported
 block kinds use typed readable fallbacks. The parts and family kill flags still apply.
 
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
@@ -73,6 +87,12 @@ identifier. This fallback also covers parent-preview recovery, current previews 
 replay, and the parts kill flag. It is independent of `astra_block_first`; disabling composition
 must preserve readable legacy answers. Stream reset and replacement text agree with the final
 response and recorded history. A pending preview keeps contextual follow-ups suppressed.
+
+Daily Astra allowance exhaustion retains HTTP 403 with `errorCode: PAY_GATE` and the same
+code on SSE errors. Its localized reason states the allowance limit; free accounts also
+receive the existing Pro upgrade sentence. Account language selects the initial copy,
+and HTTP/SSE localization uses internal copy arguments to preserve the quota reason.
+Those arguments are excluded from the wire response. Other Pro gates retain their copy.
 
 ## Append-only follow-up context
 
