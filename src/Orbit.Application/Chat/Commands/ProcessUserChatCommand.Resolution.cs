@@ -209,6 +209,11 @@ public partial class ProcessUserChatCommandHandler
 
     private static AiToolCall BindCreationOperation(AiToolCall call, JsonObject arguments, JsonArray proposed, bool hasHeadings)
     {
+        if (call.Name != BulkCreateHabits && proposed.Count > 1)
+        {
+            call = call with { Name = BulkCreateHabits };
+            arguments = new JsonObject();
+        }
         if (call.Name == BulkCreateHabits)
             arguments[ToolArgumentNames.Habits] = proposed;
         else

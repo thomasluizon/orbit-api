@@ -119,6 +119,47 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Fact]
+    public async Task GateSix_SingleExistingRoutineWrapperPreservesEveryChildThroughApproval()
+    {
+        var parent = ParentAccount("en")[0];
+        ScriptToolCall("""
+            {"title":"Post Lunch","frequency_unit":"Day","sub_habits":[
+                {"title":"Take vitamin D","frequency_unit":"Week","frequency_quantity":1},
+                {"title":"Drink water","frequency_unit":"Day","frequency_quantity":1}
+            ],"orbit_write_complete":true}
+            """, "create_habit");
+
+        var result = await CreateHandler().Handle(new(_userId,
+            "Post Lunch: Take vitamin D once a week and Drink water every day"), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var pending = result.Value.PendingOperations.Should().ContainSingle().Which;
+        pending.Items!.Select(item => item.EntityName).Should().BeEquivalentTo("Take vitamin D", "Drink water");
+        pending.Items.Should().OnlyContain(item => item.EntityId == null
+            && item.Fields.Any(field => field.Field == "parent_habit_id" && field.ProposedValue!.Value.GetGuid() == parent.Id));
+        var stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        stored.OperationId.Should().Be("bulk_create_habits");
+        var children = stored.Arguments.GetProperty("habits").EnumerateArray().ToArray();
+        children.Select(child => child.GetProperty("title").GetString()).Should().BeEquivalentTo("Take vitamin D", "Drink water");
+        children.Should().OnlyContain(child => child.GetProperty("parent_habit_id").GetGuid() == parent.Id);
+        children[0].GetProperty("frequency_unit").GetString().Should().Be("Week");
+        children[1].GetProperty("frequency_unit").GetString().Should().Be("Day");
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
+            stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+
+        approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, approved.Operation.PolicyReason);
+        foreach (var title in new[] { "Take vitamin D", "Drink water" })
+            await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.ParentHabitId == parent.Id
+                && habit.Title == title), Arg.Any<CancellationToken>());
+        await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GateSix_RenameAndSkipUseOneApprovalWithAnExplicitSkipAction()
     {
         var habits = ParentAccount("en");

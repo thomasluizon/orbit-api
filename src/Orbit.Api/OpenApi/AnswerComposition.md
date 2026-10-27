@@ -78,8 +78,11 @@ instruction keywords.
 Skip previews include a noneditable action row, localized as "Skip" or
 "Pular", alongside the user's local occurrence date. Eligible skip operations
 can share one atomic approval with other account changes. Skips with active streak-goal
-side effects remain outside atomic bundles. Existing-parent wrappers in structured creation
-arguments contribute their children under the resolved parent rather than duplicate parents.
+side effects remain outside atomic bundles. A partial mutation result aborts the entire bundle,
+rolling back every member write and confirmation consumption so the approval remains available
+for retry. Existing-parent wrappers in structured creation arguments contribute their children
+under the resolved parent rather than duplicate parents. A single-create wrapper with several
+children becomes a bulk creation so the preview and execution retain every sibling.
 
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
 preview/outcome before read parts and reports each operation once. Preview, edit, reject,

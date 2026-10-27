@@ -87,7 +87,7 @@ public partial class AgentOperationExecutor
         {
             var result = await ExecutePolicyAndToolAsync(member, toolRegistry.GetTool(member.Operation.Id), new OperationPolicyState(), ct);
             results.Add(result.Operation);
-            if (result.Operation.Status != AgentOperationStatus.Succeeded)
+            if (result.Operation.Status != AgentOperationStatus.Succeeded || IsPartialMutation(result.Operation.Payload))
                 return new ToolResult(false, Error: result.Operation.PolicyReason ?? result.Operation.ErrorCode ?? "change_set_failed", Payload: results);
         }
         var lostReservation = AccountChangeSet.Reservations(execution.Arguments).Any(member =>
@@ -95,5 +95,12 @@ public partial class AgentOperationExecutor
         if (lostReservation)
             throw new InvalidOperationException("An approved account change lost its reservation.");
         return new ToolResult(true, Payload: results);
+    }
+
+    private static bool IsPartialMutation(object? result)
+    {
+        var payload = JsonSerializer.SerializeToElement(result);
+        return payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("partial", out var partial) && partial.ValueKind == JsonValueKind.True;
     }
 }
