@@ -12,7 +12,7 @@ public class FeatureToolsTests
     [Theory]
     [InlineData("freezes", "Streak freezes are part of Orbit Pro. Some free accounts have them too.")]
     [InlineData("gamification", "XP, levels, and achievements are part of Orbit Pro. Some free accounts have them too.")]
-    [InlineData("paygate", "**AI messages** are capped at **5** per day. Pro raises this to **50** per day.")]
+    [InlineData("paygate", "**AI messages** are capped at **5** per day. Pro includes **250** per local calendar week")]
     public async Task DescribeFeature_ChatAndMcpServeTheSameEmbeddedBody(string key, string expectedClaim)
     {
         IFeatureExplanationService features = new FeatureExplanationService();

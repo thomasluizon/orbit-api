@@ -64,7 +64,7 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages,
                 Arg.Any<CancellationToken>()).Returns(1);
             config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages,
-                Arg.Any<CancellationToken>()).Returns(50);
+                Arg.Any<CancellationToken>()).Returns(250);
             var dates = Substitute.For<IUserDateService>();
             dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 1, 1));
             var gate = new PayGateService(new GenericRepository<Habit>(db), new GenericRepository<User>(db),
@@ -116,7 +116,7 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         denied.GetProperty("type").GetString().Should().Be("error");
         denied.GetProperty("code").GetString().Should().Be(Result.PayGateErrorCode);
         denied.GetProperty("error").GetString().Should().Be(
-            "You've reached your daily AI message limit (1). Upgrade to Pro for 50 messages per day.");
+            "You've reached your daily AI message limit (1). Upgrade to Pro for 250 messages per week.");
         var deniedReplay = CreateController(services, userId, "next-key");
         await deniedReplay.ProcessChatStream("Next message", null, null, default,
             clientContext: "{\"locale\":\"en\"}");
