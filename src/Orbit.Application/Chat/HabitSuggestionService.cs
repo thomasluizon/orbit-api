@@ -136,12 +136,11 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     private static Result<HabitSuggestionsCard> Invalid(string reason) => Result.Failure<HabitSuggestionsCard>(reason, "HABIT_SUGGESTION_INVALID");
     private static bool HasScheduleConflict(Habit entity, HabitSuggestionDraft draft, IEnumerable<Habit> habits, int weekStart)
     {
-        if (draft.DueTime is not { } start || draft.DueEndTime is not { } end) return false;
         var timed = habits.Where(habit => habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();
         return HabitScheduleService.GetScheduledDates(entity, draft.DueDate, draft.DueDate.AddDays(366), weekStart)
             .Any(day => timed.Any(habit => HabitScheduleService.IsHabitDueOnDate(habit, day, weekStart)
-                && start.ToTimeSpan() < (habit.DueEndTime?.ToTimeSpan() ?? habit.DueTime.GetValueOrDefault().ToTimeSpan().Add(TimeSpan.FromMinutes(1)))
-                && end > habit.DueTime));
+                && draft.DueTime.ToTimeSpan() < (habit.DueEndTime?.ToTimeSpan() ?? habit.DueTime.GetValueOrDefault().ToTimeSpan().Add(TimeSpan.FromMinutes(1)))
+                && draft.DueEndTime > habit.DueTime));
     }
     private static bool SameSuggestion(HabitSuggestionDraft other, HabitSuggestionDraft candidate) =>
         other.Id == candidate.Id || HabitNameMatcher.Normalize(other.Title) == HabitNameMatcher.Normalize(candidate.Title)

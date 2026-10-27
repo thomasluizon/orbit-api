@@ -2,6 +2,7 @@ using System.ClientModel.Primitives;
 using System.Linq.Expressions;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -30,20 +31,23 @@ public sealed class HabitSuggestionReplayTests
     [InlineData("pt-BR", false)]
     [InlineData("en", true)]
     [InlineData("pt-BR", true)]
-    public async Task UntimedModelResponse_SuggestAndRefineKeepCards(string language, bool refine)
+    public async Task NullTimes_UseCorrectionAndReturnTimedCards(string language, bool refine)
     {
-        using var replay = new ReplayHandler(ModelResponse(language, refine));
+        using var replay = new ReplayHandler(ModelResponse(language, refine), TimedModelResponse(language, refine));
         var result = await Run(replay, language, refine);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Drafts.Should().HaveCount(refine ? 1 : 3);
         result.Value.Language.Should().Be(language);
         var draft = result.Value.Drafts[0];
-        ((TimeOnly?)draft.DueTime).Should().BeNull();
-        ((TimeOnly?)draft.DueEndTime).Should().BeNull();
+        draft.DueTime.Should().Be(new TimeOnly(21, 30));
+        draft.DueEndTime.Should().Be(new TimeOnly(21, 45));
         draft.ToHabit(_userId).IsSuccess.Should().BeTrue();
         if (refine) draft.Id.Should().Be(Original().Id);
-        replay.RequestCount.Should().Be(1);
+        replay.RequestCount.Should().Be(2);
+        replay.CorrectionAt(0).Should().BeNull();
+        replay.CorrectionAt(1).Should().Contain("dueTime").And.Contain("dueEndTime")
+            .And.Contain("non-null HH:mm").And.Contain("end after start");
     }
 
     [Theory]
@@ -53,28 +57,46 @@ public sealed class HabitSuggestionReplayTests
     [InlineData("pt-BR", true)]
     public async Task MalformedDraft_UsesCorrectionAndReturnsCards(string language, bool refine)
     {
-        var valid = ModelResponse(language, refine);
-        using var replay = new ReplayHandler(valid.Replace("\"dueTime\": null", "\"dueTime\": \"not-a-time\""), valid);
+        var valid = TimedModelResponse(language, refine);
+        using var replay = new ReplayHandler(ModelResponse(language, refine).Replace("\"dueTime\": null", "\"dueTime\": \"not-a-time\""), valid);
         var result = await Run(replay, language, refine);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Drafts.Should().HaveCount(refine ? 1 : 3);
         replay.RequestCount.Should().Be(2);
-        replay.Requests[1].Should().Contain("correction").And.Contain("valid");
+        replay.CorrectionAt(1).Should().Contain("non-null HH:mm");
     }
 
     [Theory]
-    [InlineData("en")]
-    [InlineData("pt-BR")]
-    public async Task RepeatedMalformedResponse_ReturnsUnavailableAfterOneCorrection(string language)
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    public async Task RepeatedNullTimes_ReturnUnavailableAfterOneCorrection(string language, bool refine)
     {
-        using var replay = new ReplayHandler(ModelResponse(language, true)
-            .Replace("\"dueTime\": null", "\"dueTime\": \"not-a-time\""));
-        var result = await Run(replay, language, true);
+        using var replay = new ReplayHandler(ModelResponse(language, refine));
+        var result = await Run(replay, language, refine);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("HABIT_SUGGESTION_UNAVAILABLE");
         replay.RequestCount.Should().Be(2);
+        replay.CorrectionAt(1).Should().Contain("non-null HH:mm");
+    }
+
+    [Theory]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", true)]
+    public async Task InvalidTimeRange_UsesValidationCorrectionAndReturnsCards(string language, bool refine)
+    {
+        var valid = TimedModelResponse(language, refine);
+        using var replay = new ReplayHandler(valid.Replace("21:45", "21:15"), valid);
+
+        var result = await Run(replay, language, refine);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Drafts.Should().HaveCount(refine ? 1 : 3);
+        replay.RequestCount.Should().Be(2);
+        replay.CorrectionAt(1).Should().NotBeNullOrWhiteSpace();
     }
 
     private async Task<Result<HabitSuggestionsCard>> Run(ReplayHandler replay, string language, bool refine)
@@ -102,7 +124,7 @@ public sealed class HabitSuggestionReplayTests
         var moderation = Substitute.For<IContentModerationService>();
         moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
         var result = await new RefineHabitSuggestionQueryHandler(service, gate, Substitute.For<IUnitOfWork>(), moderation)
-            .Handle(new(_userId, Original(), language == "en" ? "Remove the time" : "Remova o horário", language), default);
+            .Handle(new(_userId, Original(), language == "en" ? "Move it earlier" : "Mova para mais cedo", language), default);
         return result.IsSuccess
             ? Result.Success(new HabitSuggestionsCard(language, [result.Value]))
             : Result.Failure<HabitSuggestionsCard>(result.Error, result.ErrorCode);
@@ -110,6 +132,10 @@ public sealed class HabitSuggestionReplayTests
 
     private HabitSuggestionDraft Original() => new(Guid.Parse("164940d3-f222-4270-861f-53ddc586bf24"), "📖", "Read", "Habit",
         FrequencyUnit.Day, 1, [], _today, new(22, 0), new(22, 15), null, [], "A quiet pause before bed.");
+
+    private static string TimedModelResponse(string language, bool refine) => ModelResponse(language, refine)
+        .Replace("\"dueTime\": null", "\"dueTime\":\"21:30\"")
+        .Replace("\"dueEndTime\":null", "\"dueEndTime\":\"21:45\"");
 
     private static string ModelResponse(string language, bool refine)
     {
@@ -133,6 +159,14 @@ public sealed class HabitSuggestionReplayTests
     {
         public int RequestCount => Requests.Count;
         public List<string> Requests { get; } = [];
+
+        public string? CorrectionAt(int index)
+        {
+            using var request = JsonDocument.Parse(Requests[index]);
+            using var prompt = JsonDocument.Parse(request.RootElement.GetProperty("input")[1]
+                .GetProperty("content")[0].GetProperty("text").GetString()!);
+            return prompt.RootElement.GetProperty("correction").GetString();
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {

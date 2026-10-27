@@ -32,7 +32,7 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         {
             logger.LogWarning("Habit draft response contained invalid field values");
             return Result.Failure<IReadOnlyList<HabitSuggestionDraft>>(
-                "Return valid JSON field values for every draft. Use null for both times of an untimed draft, or HH:mm strings with end after start.",
+                "Return valid JSON field values for every draft. Both dueTime and dueEndTime are required non-null HH:mm strings with end after start.",
                 "HABIT_SUGGESTION_INVALID");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -48,15 +48,15 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         Each draft has: id (new UUID), emoji (one emoji), title, type (Task or Habit),
         frequencyUnit (Day, Week, Month, Year, or null for Task), frequencyQuantity (positive integer, null for Task),
         days (English weekday names, only for Day with quantity 1; otherwise []), dueDate (YYYY-MM-DD),
-        dueTime and dueEndTime (both null for untimed drafts, or both HH:mm with end after start),
+        dueTime and dueEndTime (required non-null HH:mm strings for every draft, with end after start),
         reminderMinutesBefore (null unless requested),
         checklistItems (short strings or []), reason (one short sentence), existingHabitId (UUID or null).
         Return exactly count drafts. Write titles, checklist items and reasons in the requested language.
         Read every existing habit and goal. Connect drafts to the person's goals and routines when relevant.
         Never duplicate an existing activity, including synonyms: offer an adjustment using existingHabitId instead.
         Never change an existing habit just because it shares a theme. New activities have existingHabitId null.
-        When suggesting a timed draft, choose a realistic duration and an unoccupied time using existing schedules and other drafts.
-        An untimed habit does not reserve a clock interval; a timed habit without an end reserves its start minute.
+        For every draft, choose a realistic duration and an unoccupied time using existing schedules and other drafts.
+        Existing untimed habits do not reserve a clock interval; an existing timed habit without an end reserves its start minute.
         Keep the user's requested time and cadence. Start on or after today, within the coming year.
         For a refinement, return only the original draft rewritten following instruction, retaining its id and existingHabitId.
         Keep fields unrelated to that instruction. Never add other drafts during refinement.

@@ -21784,17 +21784,11 @@
             "format": "date"
           },
           "dueTime": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": "string",
             "format": "time"
           },
           "dueEndTime": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": "string",
             "format": "time"
           },
           "reminderMinutesBefore": {

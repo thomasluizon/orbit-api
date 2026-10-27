@@ -9,7 +9,7 @@ namespace Orbit.Domain.Models;
 public sealed record HabitSuggestionDraft(
     Guid Id, string Emoji, string Title, string Type,
     FrequencyUnit? FrequencyUnit, int? FrequencyQuantity, IReadOnlyList<DayOfWeek> Days,
-    DateOnly DueDate, TimeOnly? DueTime, TimeOnly? DueEndTime,
+    DateOnly DueDate, TimeOnly DueTime, TimeOnly DueEndTime,
     int? ReminderMinutesBefore, IReadOnlyList<string> ChecklistItems, string Reason,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ExistingHabitId = null)
 {
@@ -18,10 +18,8 @@ public sealed record HabitSuggestionDraft(
         if (Id == Guid.Empty || string.IsNullOrWhiteSpace(Emoji) || Emoji.Length > 10
             || string.IsNullOrWhiteSpace(Reason) || Reason.Length > 240 || Reason.Contains('\n')
             || !HasValidSchedule() || ChecklistItems is null
-            || DueDate == default || DueTime.HasValue != DueEndTime.HasValue
-            || DueEndTime <= DueTime || ExistingHabitId == Guid.Empty
-            || DueTime is { } start && start.Ticks % TimeSpan.TicksPerMinute != 0
-            || DueEndTime is { } end && end.Ticks % TimeSpan.TicksPerMinute != 0
+            || DueDate == default || DueEndTime <= DueTime || ExistingHabitId == Guid.Empty
+            || DueTime.Ticks % TimeSpan.TicksPerMinute != 0 || DueEndTime.Ticks % TimeSpan.TicksPerMinute != 0
             || ReminderMinutesBefore is < 0 or > 1440
             || ChecklistItems.Any(string.IsNullOrWhiteSpace))
             return Result.Failure<Habit>("Invalid habit suggestion.", "HABIT_SUGGESTION_INVALID");
