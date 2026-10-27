@@ -4,6 +4,8 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] ReadFallback =>
     [
+        ("chat.read.coaching", "Make the first step small and choose a moment that is easy to remember.", "Comece com um passo pequeno e escolha um momento fácil de lembrar."),
+        ("chat.read.planHelp", "Open Plan and billing to check the features available on your plan.", "Abra Planos e assinatura para conferir os recursos do seu plano."),
         ("chat.read.habitsEmpty", "No habits match this request.", "Nenhum hábito encontrado para esta busca."),
         ("chat.read.goalsEmpty", "No goals match this request.", "Nenhuma meta encontrada para esta busca."),
         ("chat.read.recordsEmpty", "No records match this request.", "Nenhum registro encontrado para esta busca."),

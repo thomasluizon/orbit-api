@@ -9,7 +9,9 @@ applies `PersistComposedChatResponses`, which adds encrypted recording storage a
 In the existing admin feature flag screen, add evaluation accounts to `astra_block_first`.
 The backing API is `POST /api/admin/feature-flags`; use `list` and `enable_for_accounts` with the exact key and account emails.
 Verify `GET /api/config` reports that account's flag enabled and a parts-capable chat response
-leads with the requested supported kind. Confirm legacy and missing-kind fallbacks separately.
+leads with the requested supported kind without framing prose. Check that complete empty habit
+lists offer Today, provider failures retain calendar recovery, and independent reads need no
+narrative model call. Confirm legacy and missing-kind fallbacks separately.
 Keep global activation off until #26 records passing English and Portuguese real-pipeline
 composition cases and #1620 supports the consumer contract.
 

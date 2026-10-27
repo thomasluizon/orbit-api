@@ -48,16 +48,30 @@ Partial and recovery states keep their relevant typed blocks. Unknown directives
 Deterministic fallback text is already grounded by its typed producer.
 
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
-It is true only when the first round fully answers the request and false for prerequisite
-lookups or any remaining read or write. This signal travels in the structured tool call, so
-completion does not depend on assistant text accompanying a tool call. The server removes
-the argument before execution. The server skips continuation only when every call declares completion,
-every declared call ran, every tool is read-only, every result succeeded and has a typed block,
-and no clarification, write or pending operation remains. Invalid ranking projections cannot
-complete the round. A prerequisite lookup or a request needing another read or write declares
-false and keeps the tool loop. A failed terminal read or a missing projection requests
-continuation. Legacy clients without parts keep their existing readable path; unsupported
-block kinds use typed readable fallbacks. The parts and family kill flags still apply.
+It is true when the current reads answer the request and false for prerequisite lookups or
+remaining tools. Independent reads belong in one round. The server removes the argument before
+execution and can finish complete read plans in later rounds as well. Successful independent
+subjects explicitly requested by a listing request, or complete empty lookups, do not need a
+narrative continuation even if the model marks the round incomplete. Dependent reads, writes,
+failures, missing projections and invalid rankings retain their existing handling.
+
+The composition read planner corrects a habit-month call for a provider/connection/sync
+request to the existing calendar read. A simultaneous explicit calendar call takes precedence.
+Habit listings use the habit query rather than an unrequested month. A successful single-match
+habit lookup for a metrics question feeds the existing metrics tool directly through the same
+operation gateway, without another model call. Names, permissions, dates and calculations
+remain owned by those producers. Plan-feature navigation uses `describe_feature` and its
+existing subscription surface. Profile/settings requests do not read subscription data unless
+the plan is also requested. Explicit coaching requests offer no record tools; an invalid tool
+plan becomes short advice without executing a read or holding a write. Explicit record-change
+requests retain their approval path.
+
+Legacy clients without parts keep their readable path; unsupported kinds use typed fallbacks.
+The parts and family kill flags still apply. No contract field changes type or optionality.
+The API regression fixtures replay #26's executed tool arguments at the model-service port;
+they do not claim raw provider output. The partial-list fixture has 51 habits, so limit 100
+truthfully produces complete data and limit 50 produces partial data with a cursor. #1822 owns
+the disconnected-calendar stale expectation. #26 owns the live bilingual rerun before activation.
 
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
 preview/outcome before read parts and reports each operation once. Preview, edit, reject,

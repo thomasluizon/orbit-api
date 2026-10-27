@@ -19,7 +19,8 @@ public partial class ProcessUserChatCommandHandler
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
-            && (operation.ReadBlock is not null || operation.Payload is HabitSuggestionsCard
+            && (operation.ReadBlock is not null || PlanHelpText(request, results, context.Language) is not null
+                || operation.Payload is HabitSuggestionsCard
                 || operation.Payload is HabitRankingResponse ranking && HabitRankingCardBuilder.Build(ranking) is not null));
 
     private ChatResponse CompleteCompositionWithoutNarrative(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
@@ -68,6 +69,8 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
         if (SuggestionAnswer(results) is { } suggestions) return suggestions;
+        if (PlanHelpText(request, results, language) is { } help)
+            return new ResponseCards(help, Parts: [new ChatTextPart(help)]) { ServerComposedText = true };
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)

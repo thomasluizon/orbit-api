@@ -1,0 +1,18 @@
+{
+  "caseId": "composition-plan-en",
+  "repeat": 1,
+  "reason": "No-data answer must contain one to three short lines without headings, lists or paragraphs.",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"accountRows\",\"block\":{\"title\":\"Your plan\",\"rows\":[{\"label\":\"Plan\",\"value\":\"Orbit Pro\"},{\"label\":\"Trial ends\",\"value\":\"Oct 31, 2026\"},{\"label\":\"Plan ends\",\"value\":\"Not set\"},{\"label\":\"Interval\",\"value\":\"Not set\"},{\"label\":\"Provider\",\"value\":\"Not set\"},{\"label\":\"Lifetime access\",\"value\":\"No\"},{\"label\":\"Astra messages used\",\"value\":\"708 / 50\"}]}}]}",
+  "toolCalls": [
+    {
+      "name": "get_subscription_overview",
+      "arguments": {
+        "include_status": true,
+        "include_billing": false,
+        "include_plans": true,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

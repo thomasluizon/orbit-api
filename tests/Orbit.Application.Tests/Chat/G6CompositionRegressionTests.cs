@@ -91,6 +91,9 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Parts!.OfType<ChatBlockPart>().Select(part => ((AccountRowsCard)part.Block).Kind)
             .Should().Equal(compound ? ["profile", "plan"] : ["profile"]);
+        if (!compound)
+            await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(call =>
+                call.OperationId == "get_subscription_overview"), Arg.Any<CancellationToken>());
     }
 
     [Theory]
