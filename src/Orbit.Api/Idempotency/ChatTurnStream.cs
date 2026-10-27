@@ -125,6 +125,6 @@ public sealed class ChatTurnStream(
 
     private static async Task<ChatStreamEvent> InterruptedAsync(HttpContext http, Guid turnId) =>
         (await ChatErrorLocalization.FailureAsync(http, 503, "CHAT_TURN_INTERRUPTED",
-            "The turn was interrupted. Its effects may be partial; do not resend it with another key.")) with
+            "The reply was interrupted, and some changes may already be saved. Check your habits before you ask again, so nothing happens twice.")) with
         { TurnId = turnId, State = "interrupted" };
 }
