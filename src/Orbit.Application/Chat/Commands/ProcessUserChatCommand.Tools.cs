@@ -23,7 +23,8 @@ public partial class ProcessUserChatCommandHandler
         var aiResponse = initialResponse;
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
-        var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
+        long totalBudgetTokens = initialResponse.RequestBudgetTokenCount ?? initialResponse.ReportedTokenCount;
+        var tokenBudgetExceeded = totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
         RejectedCallCorrection? correction = null;
@@ -33,6 +34,7 @@ public partial class ProcessUserChatCommandHandler
             LogAiRequestTokenCeilingReached(
                 logger,
                 totalReportedTokens,
+                totalBudgetTokens,
                 AppConstants.MaxAiRequestTotalTokens,
                 iteration);
         }
@@ -51,7 +53,7 @@ public partial class ProcessUserChatCommandHandler
                 context,
                 executionResults,
                 iteration,
-                totalReportedTokens,
+                totalBudgetTokens,
                 correction,
                 language,
                 aiStreamSink,
@@ -70,12 +72,14 @@ public partial class ProcessUserChatCommandHandler
             }
 
             totalReportedTokens += roundResult.Response.ReportedTokenCount;
-            tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
+            totalBudgetTokens += roundResult.Response.RequestBudgetTokenCount ?? roundResult.Response.ReportedTokenCount;
+            tokenBudgetExceeded = totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
             if (tokenBudgetExceeded)
             {
                 LogAiRequestTokenCeilingReached(
                     logger,
                     totalReportedTokens,
+                    totalBudgetTokens,
                     AppConstants.MaxAiRequestTotalTokens,
                     iteration);
             }
@@ -108,9 +112,13 @@ public partial class ProcessUserChatCommandHandler
             && ai.ToolRegistry.GetTool(operation.OperationId) is { IsReadOnly: false });
 
     private ToolLoopResult RecoverOutcomeContinuation(ProcessUserChatCommand request,
-        ToolExecutionAccumulator results, ToolLoopResult loop)
+        ToolExecutionAccumulator results, ToolLoopResult loop, string? language, CancellationToken cancellationToken)
     {
-        if (request.BlockAnswer is not null || loop.ProviderError is null)
+        if (request.BlockAnswer is not null)
+            return loop;
+        if (loop.TokenBudgetExceeded && RecoverBudgetOutcome(request, results, language, cancellationToken) is { } recovery)
+            return loop with { FinalResponse = recovery, ProviderError = null };
+        if (loop.ProviderError is null)
             return loop;
         foreach (var pending in results.PendingOperations.ToArray())
             if (!IsCurrentPendingOutcome(request.UserId, pending, results))
@@ -157,7 +165,7 @@ public partial class ProcessUserChatCommandHandler
         ChatContext context,
         ToolExecutionAccumulator executionResults,
         int iteration,
-        long totalReportedTokens,
+        long totalBudgetTokens,
         RejectedCallCorrection? correction,
         string? language,
         Func<AiStreamEvent, Task>? aiStreamSink,
@@ -190,18 +198,18 @@ public partial class ProcessUserChatCommandHandler
             return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
 
         if (executionResults.AskBlock is not null)
-            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
+            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
 
         if (CanCompleteReadRound(aiResponse, request, context, executionResults, iteration,
             orderedCalls, outcomesByCallId, toolResults))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0 });
+            return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
         }
 
         if (hadToolFailure && !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration))
         {
-            if (!HasCorrectionAllowance(request, executionResults, iteration, totalReportedTokens))
+            if (!HasCorrectionAllowance(request, executionResults, iteration, totalBudgetTokens))
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
             correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
             OfferCorrections(toolResults, outcomesByCallId);
@@ -210,6 +218,7 @@ public partial class ProcessUserChatCommandHandler
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
                 "The ask call ended this turn. Ask in plain text and make no further tool calls."));
+        RetireConsumedReads(aiResponse.ConversationContext, executionResults, toolResults);
         cancellationToken.ThrowIfCancellationRequested();
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
             correction is null ? aiStreamSink : null, cancellationToken);
@@ -227,6 +236,16 @@ public partial class ProcessUserChatCommandHandler
         return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value,
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
+    }
+
+    private void RetireConsumedReads(AiConversationContext? conversation, ToolExecutionAccumulator results,
+        IReadOnlyList<AiToolCallResult> currentResults)
+    {
+        if (results.PendingOperations.Count == 0 || conversation is null) return;
+        conversation.RetiredReadCallIds = results.ToolResults
+            .Where(result => result.Success && currentResults.All(current => current.Id != result.Id)
+                && ai.ToolRegistry.GetTool(result.Name)?.IsReadOnly == true)
+            .Select(result => result.Id).ToArray();
     }
 
     private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool
@@ -257,6 +276,12 @@ public partial class ProcessUserChatCommandHandler
     {
         if (errorCode != "AI_DAILY_BUDGET_EXCEEDED" || request.BlockAnswer is not null)
             return null;
+        return RecoverBudgetOutcome(request, results, language, cancellationToken);
+    }
+
+    private AiResponse? RecoverBudgetOutcome(ProcessUserChatCommand request,
+        ToolExecutionAccumulator results, string? language, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         var hasSavedActions = results.ActionResults.Any(action => action.Status == ActionStatus.Success
             && action.Params is not { Count: <= 0 } and not { Partial: true, Count: null }
@@ -331,8 +356,8 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool HasCorrectionAllowance(ProcessUserChatCommand request, ToolExecutionAccumulator results,
-        int iteration, long totalReportedTokens) =>
-        iteration < ChatTurnLimits.MaxToolIterations && totalReportedTokens < AppConstants.MaxAiRequestTotalTokens
+        int iteration, long totalBudgetTokens) =>
+        iteration < ChatTurnLimits.MaxToolIterations && totalBudgetTokens < AppConstants.MaxAiRequestTotalTokens
         && request.BlockAnswer is null && request.ConfirmationToken is null
         && RejectedCallCorrection.CanRecover(results.CorrectionOccurrences);
 

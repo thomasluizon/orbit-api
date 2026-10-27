@@ -530,7 +530,7 @@ public partial class ProcessUserChatCommandHandler(
         await CombinePendingChangesAsync(request, executionResults, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         var recoveredPreviewOnly = toolLoopResult.ProviderError is not null && !HasSucceededWrite(executionResults);
-        toolLoopResult = RecoverOutcomeContinuation(request, executionResults, toolLoopResult);
+        toolLoopResult = RecoverOutcomeContinuation(request, executionResults, toolLoopResult, userLanguage, cancellationToken);
         var aiResponse = toolLoopResult.FinalResponse;
         var iterations = toolLoopResult.Iterations;
         if (MustFailToolTurn(request, toolLoopResult))
@@ -1220,10 +1220,11 @@ public partial class ProcessUserChatCommandHandler(
         int retainedEntryCount,
         int maxEntries);
 
-    [LoggerMessage(EventId = 28, Level = LogLevel.Warning, Message = "AI request token ceiling reached. TotalReportedTokens={TotalReportedTokens} MaxTokens={MaxTokens} ToolIterations={ToolIterations}")]
+    [LoggerMessage(EventId = 28, Level = LogLevel.Warning, Message = "AI request token ceiling reached. TotalReportedTokens={TotalReportedTokens} BudgetTokens={BudgetTokens} MaxTokens={MaxTokens} ToolIterations={ToolIterations}")]
     private static partial void LogAiRequestTokenCeilingReached(
         ILogger logger,
         long totalReportedTokens,
+        long budgetTokens,
         int maxTokens,
         int toolIterations);
 
