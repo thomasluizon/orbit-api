@@ -1,5 +1,4 @@
 using FluentAssertions;
-using System.Linq.Expressions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -11,6 +10,7 @@ using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Tests.Shared;
 
 namespace Orbit.Application.Tests.Chat;
 
@@ -277,14 +277,9 @@ public class HabitRankingTests
 
     private static GetHabitRankingQueryHandler Handler(IEnumerable<Habit> habits, IUserDateService? dates = null)
     {
-        var repository = Substitute.For<IGenericRepository<Habit>>();
-        repository.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(1)(
-                habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).AsQueryable()).ToList());
         dates ??= Substitute.For<IUserDateService>();
         dates.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
-        return new GetHabitRankingQueryHandler(repository, dates, Tokens,
+        return new GetHabitRankingQueryHandler(new InMemoryHabitRankingReader(habits), dates, Tokens,
             Substitute.For<IProductAnalytics>(), NullLogger<GetHabitRankingQueryHandler>.Instance);
     }
 }

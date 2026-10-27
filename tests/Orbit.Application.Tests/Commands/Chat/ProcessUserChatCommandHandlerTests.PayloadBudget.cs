@@ -1,3 +1,4 @@
+using Orbit.Tests.Shared;
 #pragma warning disable OPENAI001
 
 using System.ClientModel;
@@ -153,17 +154,13 @@ public partial class ProcessUserChatCommandHandlerTests
                 .PadRight(AppConstants.MaxHabitTitleLength, '\u6f22')
                 : $"Daily habit {index:D3} " + new string('x', 50), FrequencyUnit.Day, 1, Today)).Value).ToList();
         foreach (var habit in habits) habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
-        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
-                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(1)(
-                habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToList());
         var tokens = new HabitRankingTokenService(Options.Create(new JwtSettings
         {
             SecretKey = "payload-budget-ranking-signing-secret",
             Issuer = "test",
             Audience = "test"
         }));
-        var queryHandler = new GetHabitRankingQueryHandler(_habitRepo, _userDateService, tokens,
+        var queryHandler = new GetHabitRankingQueryHandler(new InMemoryHabitRankingReader(habits), _userDateService, tokens,
             _productAnalytics, NullLogger<GetHabitRankingQueryHandler>.Instance);
         _mediator.Send(Arg.Any<GetHabitRankingQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => queryHandler.Handle(call.Arg<GetHabitRankingQuery>(), call.Arg<CancellationToken>()));

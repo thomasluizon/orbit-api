@@ -191,6 +191,13 @@ have no dependency on optional AI narrative generation.
 
 ## Exact read metadata and recovery
 
+`AgentOperationResult` appends optional `access` with `"read"` or `"write"` for
+every known tool or capability, including failed and policy-denied operations.
+Chat responses and final stream responses use the same field. Missing metadata
+omits the field and means unknown. Clients can distinguish read failures from
+write failures without maintaining a tool-name list. Deploy the API before the
+consumer in thomasluizon/orbit-tickets#1808 uses this field.
+
 All affected card types append optional `read` metadata. `AgentOperationResult`
 optionally carries `readBlock: { kind, block, read }`. The metadata is:
 

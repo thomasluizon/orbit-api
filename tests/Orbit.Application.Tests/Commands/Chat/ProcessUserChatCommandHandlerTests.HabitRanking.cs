@@ -1,3 +1,4 @@
+using Orbit.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -30,14 +31,10 @@ public partial class ProcessUserChatCommandHandlerTests
             Issuer = "test",
             Audience = "test"
         }));
-        var handler = new GetHabitRankingQueryHandler(_habitRepo, _userDateService, tokens,
+        var handler = new GetHabitRankingQueryHandler(new InMemoryHabitRankingReader([habit]), _userDateService, tokens,
             _productAnalytics, NullLogger<GetHabitRankingQueryHandler>.Instance);
         _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns([habit]);
-        _habitRepo.ProjectAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(),
-                Arg.Any<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<HabitRankingRow>>>(1)(
-                new[] { habit }.Where(call.ArgAt<System.Linq.Expressions.Expression<Func<Habit, bool>>>(0).Compile()).AsQueryable()).ToList());
         return (await handler.Handle(new GetHabitRankingQuery(UserId, Today, Today.AddDays(1)), default)).Value;
     }
 

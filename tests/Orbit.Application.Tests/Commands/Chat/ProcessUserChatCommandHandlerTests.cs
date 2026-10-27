@@ -3385,15 +3385,17 @@ public partial class ProcessUserChatCommandHandlerTests
             capturedPrompt.Should().NotContain(MetricsCardBuilder.PromptInstruction);
     }
 
-    [Fact]
-    public async Task Handle_ToolCallWithFailure_ReturnsFailedAction()
+    [Theory]
+    [InlineData("delete_habit", false, "write")]
+    [InlineData("get_retrospective", true, "read")]
+    public async Task Handle_ToolCallWithFailure_ReturnsFailedAction(string toolName, bool isReadOnly, string access)
     {
         SetupUserAndPayGate();
 
         var mockTool = Substitute.For<IAiTool>();
-        mockTool.Name.Returns("delete_habit");
+        mockTool.Name.Returns(toolName);
         mockTool.Description.Returns("Deletes a habit");
-        mockTool.IsReadOnly.Returns(false);
+        mockTool.IsReadOnly.Returns(isReadOnly);
         mockTool.GetParameterSchema().Returns(new { type = "object" });
         mockTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
             .Returns(new ToolResult(false, Error: "Habit not found."));
@@ -3403,7 +3405,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("delete_habit", "call_1", toolCallArgs)],
+            ToolCalls = [new AiToolCall(toolName, "call_1", toolCallArgs)],
             ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
@@ -3416,9 +3418,17 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Actions.Should().HaveCount(1);
-        result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
-        result.Value.Actions[0].Error.Should().Be(EnglishToolFailureMessage);
+        if (isReadOnly)
+            result.Value.Actions.Should().BeEmpty();
+        else
+        {
+            result.Value.Actions.Should().ContainSingle().Which.Status.Should().Be(ActionStatus.Failed);
+            result.Value.Actions[0].Error.Should().Be(EnglishToolFailureMessage);
+        }
+        result.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Failed);
+        using var json = JsonDocument.Parse(ChatStreamEvent.Final(result.Value).ToJson());
+        json.RootElement.GetProperty("response").GetProperty("operations")[0]
+            .GetProperty("access").GetString().Should().Be(access);
         result.Value.AiMessage.Should().Be(EnglishToolFailureMessage);
     }
 

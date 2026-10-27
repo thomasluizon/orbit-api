@@ -58,7 +58,7 @@ public record GetRetrospectiveQuery(
     DateOnly DateFrom,
     DateOnly DateTo,
     string Period,
-    string Language, bool GenerateNarrative = true) : IRequest<Result<RetrospectiveResponse>>;
+    string Language, bool GenerateNarrative = true, bool AllowEmptyPeriod = false) : IRequest<Result<RetrospectiveResponse>>;
 
 public class GetRetrospectiveQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -93,7 +93,7 @@ public class GetRetrospectiveQueryHandler(
 
         var habitList = habits.ToList();
 
-        if (habitList.Count == 0)
+        if (!request.AllowEmptyPeriod && habitList.Count == 0)
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
 
         var streakState = await userStreakService.CalculateAsync(
@@ -108,10 +108,10 @@ public class GetRetrospectiveQueryHandler(
             streakState?.LongestStreak ?? 0,
             weekStartDay);
 
-        if (request.GenerateNarrative && metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
+        if (!request.AllowEmptyPeriod && request.GenerateNarrative && metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
 
-        if (!request.GenerateNarrative)
+        if (!request.GenerateNarrative || (metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0))
             return Result.Success(new RetrospectiveResponse(request.Period, metrics,
                 new RetrospectiveNarrative(string.Empty, string.Empty, string.Empty, string.Empty), false,
                 request.DateFrom, request.DateTo, Orbit.Application.Chat.ReadRevision.Hash(new

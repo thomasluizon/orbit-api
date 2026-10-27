@@ -7,11 +7,46 @@ using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public class ChatToolTraceContractTests
 {
+    [Fact]
+    public void RegisteredChatTools_AccessAgreesWithCapabilityMutation()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.AddOrbitAiServices();
+        var toolTypes = typeof(IAiTool).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IAiTool).IsAssignableFrom(type));
+        var dependencies = toolTypes.Append(typeof(BulkHabitReplayPlanner))
+            .SelectMany(type => type.GetConstructors())
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .Where(type => type.IsInterface).Distinct();
+        foreach (var type in dependencies)
+            builder.Services.AddSingleton(type, Substitute.For([type], []));
+        using var provider = builder.Services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var tools = scope.ServiceProvider.GetRequiredService<AiToolRegistry>().GetAll();
+        var catalog = new AgentCatalogService(tools);
+
+        tools.Should().NotBeEmpty();
+        foreach (var tool in tools)
+        {
+            var capability = catalog.GetCapabilityByChatTool(tool.Name);
+            if (tool is IChatOnlyAiTool)
+            {
+                capability.Should().BeNull();
+                continue;
+            }
+            capability.Should().NotBeNull($"registered tool {tool.Name} needs capability metadata");
+            tool.IsReadOnly.Should().Be(!capability!.IsMutation, $"{tool.Name} must have consistent access metadata");
+            catalog.GetOperation(tool.Name)!.IsMutation.Should().Be(capability.IsMutation);
+        }
+    }
+
     private static readonly IReadOnlyDictionary<string, string> PublicFields = new Dictionary<string, string>
     {
         ["manage_api_keys.key_id"] = "The identifier selects a key to revoke and cannot authenticate a request.",

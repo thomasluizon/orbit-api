@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Application.Subscriptions;
 
@@ -47,8 +48,9 @@ public class GetSubscriptionOverviewTool(IMediator mediator) : IAiTool
         if (includeBilling)
         {
             var billingResult = await mediator.Send(new GetBillingDetailsQuery(userId), ct);
-            if (billingResult.IsFailure) return ToolResult.FromFailure(billingResult);
-            billing = billingResult.Value;
+            if (billingResult.IsFailure && billingResult.ErrorCode is not (ErrorCodes.NoActiveSubscription or ErrorCodes.SubscriptionNotFound))
+                return ToolResult.FromFailure(billingResult);
+            billing = billingResult.IsSuccess ? billingResult.Value : null;
         }
 
         if (includePlans)
