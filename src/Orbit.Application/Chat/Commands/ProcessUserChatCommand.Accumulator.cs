@@ -47,6 +47,13 @@ public partial class ProcessUserChatCommandHandler
         public ChatBlockPart? AskBlock { get; set; }
         public bool HasBudgetRecovery { get; set; }
         public bool IsPreviewDiscussion { get; set; }
+        public string? PreviewDiscussionText { get; private set; }
+
+        public void CapturePreviewDiscussionText(string? text)
+        {
+            if (IsPreviewDiscussion && !string.IsNullOrWhiteSpace(text))
+                PreviewDiscussionText ??= text;
+        }
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];

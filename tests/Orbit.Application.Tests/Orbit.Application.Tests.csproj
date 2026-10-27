@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <None Update="Fixtures/TerminalReads/*.json.gz" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/PendingRevisions/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

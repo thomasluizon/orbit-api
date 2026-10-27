@@ -185,9 +185,10 @@ public partial class ProcessUserChatCommandHandler
     {
         if (results.IsPreviewDiscussion)
         {
-            var sentence = PreviewOpinionSentence(parsed.VisibleText);
+            var sentence = FramingSentence(results.PreviewDiscussionText ?? parsed.VisibleText, context, results);
             return new ResponseCards(sentence,
-                Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(sentence)] : null);
+                Parts: request.ClientContext?.SupportsParts == true
+                    ? sentence is null ? [] : [new ChatTextPart(sentence)] : null);
         }
         if (UsesComposition(request, context))
             return ComposeAnswer(parsed, truncated, language, request, context, results);
@@ -198,9 +199,6 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool SuppressPreviewNarrative(ToolExecutionAccumulator results) =>
         HasPendingWritePreview(results) && !results.IsPreviewDiscussion && !HasResolutionQuestion(results) && !results.HasBudgetRecovery;
-
-    private static string PreviewOpinionSentence(string? text) => Regex.Split(ShortText(text, 1), @"(?<=[.!?])\s+",
-        RegexOptions.None, TimeSpan.FromSeconds(1))[0];
 
     private static ResponseCards ApplyBudgetRecovery(ResponseCards cards, ToolExecutionAccumulator results,
         AiResponse response, ProcessUserChatCommand request)
