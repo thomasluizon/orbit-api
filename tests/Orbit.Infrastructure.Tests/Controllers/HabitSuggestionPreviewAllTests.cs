@@ -201,6 +201,64 @@ public sealed class HabitSuggestionPreviewAllTests : IAsyncDisposable
         var batch = await Post("/api/chat/habit-suggestions/preview-all", new { drafts = new[] { draft }, language = "en" });
         batch.Status.Should().Be(single.Status).And.Be(200);
         batch.Body.GetRawText().Should().Be(single.Body.GetRawText());
+        var preview = JsonSerializer.Deserialize<AgentExecuteOperationResponse>(batch.Body, Json)!;
+        var id = preview.PendingOperation!.Id;
+        var confirmed = await Post($"/api/ai/pending-operations/{id}/confirm", new { });
+        confirmed.Status.Should().Be(200, confirmed.Body.ToString());
+        var approved = await Post($"/api/ai/pending-operations/{id}/execute", new
+        { confirmationToken = confirmed.Body.GetProperty("confirmationToken").GetString() });
+        approved.Status.Should().Be(200, approved.Body.ToString());
+        JsonSerializer.Deserialize<AgentExecuteOperationResponse>(approved.Body, Json)!.Operation.Status
+            .Should().Be(AgentOperationStatus.Succeeded, approved.Body.ToString());
+        using var after = _database.CreateContext();
+        after.Habits.Should().HaveCount(adjustment ? 1 : 2);
+        var saved = after.Habits.Single(habit => habit.Title == draft.Title);
+        saved.DueTime.Should().Be(draft.DueTime);
+        saved.DueEndTime.Should().Be(draft.DueEndTime);
+        if (adjustment) saved.Id.Should().Be(_existing.Id);
+    }
+
+    [Fact]
+    public async Task PreviewAll_RepeatedAdjustmentTarget_ReturnsIndexedErrorAndStagesNothing()
+    {
+        var drafts = new[]
+        {
+            Draft("Read", 20) with { ExistingHabitId = _existing.Id },
+            Draft("Reading", 21) with { ExistingHabitId = _existing.Id }
+        };
+        var response = await Post("/api/chat/habit-suggestions/preview-all", new { drafts, language = "en" });
+        AssertRejectedBatch(response, 1);
+    }
+
+    [Fact]
+    public async Task PreviewAll_OverlappingNewDrafts_ReturnsIndexedErrorAndStagesNothing()
+    {
+        var response = await Post("/api/chat/habit-suggestions/preview-all", new
+        { drafts = new[] { Draft(), Draft("Walk", 20) }, language = "en" });
+        AssertRejectedBatch(response, 1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreviewAll_DuplicateIdentityOrNormalizedName_ReturnsIndexedErrorAndStagesNothing(bool duplicateId)
+    {
+        var first = Draft();
+        var duplicate = duplicateId ? Draft("Walk", 21) with { Id = first.Id } : Draft("STRETCH", 21);
+        var response = await Post("/api/chat/habit-suggestions/preview-all", new
+        { drafts = new[] { first, Draft("Pause", 19), duplicate }, language = "en" });
+        AssertRejectedBatch(response, 2);
+    }
+
+    private void AssertRejectedBatch((int Status, JsonElement Body) response, int draftIndex)
+    {
+        response.Status.Should().Be(400, response.Body.ToString());
+        response.Body.GetProperty("errorCode").GetString().Should().Be("HABIT_SUGGESTION_UNAVAILABLE");
+        response.Body.GetProperty("draftIndex").GetInt32().Should().Be(draftIndex);
+        _app.Services.GetRequiredService<IPendingAgentOperationStore>().GetAwaiting(_userId).Should().BeEmpty();
+        using var after = _database.CreateContext();
+        after.PendingAgentOperations.Should().BeEmpty();
+        after.Habits.Should().ContainSingle().Which.DueTime.Should().Be(new TimeOnly(22, 0));
     }
 
     [Fact]

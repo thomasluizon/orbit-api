@@ -29,13 +29,10 @@ public sealed class PreviewAllHabitSuggestionsCommandHandler(HabitSuggestionServ
     {
         if (request.Drafts is null || !HabitSuggestionsCard.IsValidDraftCount(request.Drafts.Count))
             return Result.Failure<AgentExecuteOperationResponse>("Invalid suggestion count.", ValidationErrorCodes.HabitSuggestionCount);
-        var drafts = new List<HabitSuggestionDraft>();
-        for (var index = 0; index < request.Drafts.Count; index++)
-        {
-            var checkedDraft = await suggestions.CheckForPreviewAsync(request.UserId, request.Drafts[index], request.Language, ct);
-            if (checkedDraft.IsFailure) return new HabitSuggestionPreviewFailure(checkedDraft, index);
-            drafts.Add(checkedDraft.Value);
-        }
+        var checkedDrafts = await suggestions.CheckAllForPreviewAsync(request.UserId, request.Drafts, request.Language, ct);
+        if (checkedDrafts is HabitSuggestionSetFailure failure)
+            return new HabitSuggestionPreviewFailure(failure, failure.DraftIndex);
+        var drafts = checkedDrafts.Value.Drafts;
         var pending = new List<PendingAgentOperation>();
         var complete = false;
         try
