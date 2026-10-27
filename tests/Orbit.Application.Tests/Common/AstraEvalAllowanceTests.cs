@@ -49,7 +49,7 @@ public class AstraEvalAllowanceTests
             var result = await gate.TryConsumeAiMessage(user.Id, work);
             result.IsSuccess.Should().Be(exempt);
             if (!exempt)
-                result.ErrorCode.Should().Be("PAY_GATE");
+                result.ErrorCode.Should().Be(ErrorCodes.PayGate);
         }
 
         user.GetAiMessagesUsedForQuota(today).Should().Be(limit + (exempt ? 2 : 0));

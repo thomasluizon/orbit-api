@@ -68,10 +68,7 @@ public partial class ProcessUserChatCommandHandlerTests
             if (mode == "parts")
             {
                 result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Kind.Should().Be(kind);
-                if (kind == "daySummary")
-                    result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().NotMatchRegex(@"\d");
-                else
-                    result.Value.AiMessage.Should().BeNullOrEmpty();
+                result.Value.AiMessage.Should().BeNullOrEmpty();
             }
             else if (mode == "legacy")
             {
@@ -135,18 +132,18 @@ public partial class ProcessUserChatCommandHandlerTests
             turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
     }
 
-    private IAiTool CompositionTool(string name, string? kind = null)
+    private IAiTool CompositionTool(string name, string? kind = null, bool empty = false)
     {
         if (name == "get_daily_summary") return SummaryReadTool();
         var period = new PeriodHabitMetrics(new(Today.AddDays(-6), Today), 3, 2, 1, 7, 100m / 7, 0, 1);
         object payload = name switch
         {
-            "query_habits" => new HabitListCard("all", []),
-            "query_goals" => new GoalListCard([]),
+            "query_habits" => new HabitListCard("all", empty ? [] : [new(Guid.NewGuid().ToString(), "Reading", null, 0, false, "none")]),
+            "query_goals" => new GoalListCard(empty ? [] : [new(Guid.NewGuid().ToString(), "Reading", 0, 5, "books", null)]),
             "get_habit_metrics" => new HabitMetrics(3, 8, 50, 60, 20, Today, Guid.NewGuid(), "Read") { Period = period },
             "get_period_analytics" => new PeriodAnalyticsResponse(new("positiveLogRecords", "records", 3, period, new("day", [])),
                 kind == "periodComparison" ? new("positiveLogRecords", "records", period, period, 3, 3, 0, 0) : null, "revision"),
-            "get_habit_history" => new HabitHistoryRead(0, [], "revision"),
+            "get_habit_history" => new HabitHistoryRead(empty ? 0 : 1, empty ? [] : [new(Guid.NewGuid(), Today, 1, DateTime.UnixEpoch)], "revision"),
             "get_retrospective" => new RetrospectiveResponse("week", Metrics(totalScheduled: 7),
                 new("Highlights", "Missed", "Trends", "Suggestion"), true, Today.AddDays(-6), Today),
             "get_calendar_overview" => new CalendarOverviewPayload([], null, []),
@@ -154,10 +151,10 @@ public partial class ProcessUserChatCommandHandlerTests
                 new GamificationProfileResponse(120, 3, "Level", "level", 100, 200, 80, 0, 0, [], [],
                     7, 9, Today, true, false, new NextRewardCarrot(4, "Next", 80, null)), null,
                 new StreakInfoResponse(7, 9, Today, 1, 2, 3, false, [], 0, 3, 0, 2, true, false, null, 0)),
-            "get_notifications" => new GetNotificationsResponse([], 0),
-            "list_tags" => Array.Empty<TagResponse>(),
-            "get_checklist_templates" => Array.Empty<ChecklistTemplateResponse>(),
-            "get_api_keys" => Array.Empty<ApiKeyResponse>(),
+            "get_notifications" => new GetNotificationsResponse(empty ? [] : [new(Guid.NewGuid(), "Reading", "Read", null, null, false, DateTime.UnixEpoch)], empty ? 0 : 1),
+            "list_tags" => empty ? Array.Empty<TagResponse>() : new TagResponse[] { new(Guid.NewGuid(), "Reading", "blue") },
+            "get_checklist_templates" => empty ? Array.Empty<ChecklistTemplateResponse>() : new ChecklistTemplateResponse[] { new(Guid.NewGuid(), "Reading", []) },
+            "get_api_keys" => empty ? Array.Empty<ApiKeyResponse>() : new ApiKeyResponse[] { new(Guid.NewGuid(), "Reader", "orb_", [], true, null, DateTime.UnixEpoch, null, false) },
             "get_profile" => JsonSerializer.Deserialize<ProfileResponse>("{\"Name\":\"Reader\",\"Email\":\"reader@example.test\",\"Plan\":\"Free\",\"LevelTitle\":\"Level\"}")
                 ?? throw new InvalidOperationException("Profile fixture is required."),
             "get_subscription_overview" => new SubscriptionOverviewPayload(new("Free", false, false, null, null, 0, 10, false, null, null), null, null),
@@ -179,8 +176,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.FollowUps.Should().Equal("Show my habits?");
         result.FollowUpContext.Should().ContainSingle().Which.Should().BeEquivalentTo(
-            new { Label = "Show my habits?", Question = "Show my habits?", Context = "query_habits", Target = "habits" });
-        result.RelatedSurfaces.Should().Contain("habits");
+            new { Label = "Show my habits?", Question = "Show my habits?", Context = "query_habits", Target = "today" });
+        result.RelatedSurfaces.Should().BeNull();
         _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result, ChatStreamEvent.SerializerOptions)));
         var replay = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result, ChatStreamEvent.SerializerOptions),
@@ -208,11 +205,9 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
-        result.Value.Parts.Should().HaveCount(2);
-        result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(sentence);
-        result.Value.Parts[1].Should().BeOfType<ChatBlockPart>()
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<HabitRankingCard>().Which.Ranking.Should().Be(ranking);
-        result.Value.AiMessage.Should().Be(sentence);
+        result.Value.AiMessage.Should().BeNullOrEmpty();
     }
 
     [Fact]
@@ -472,7 +467,7 @@ public partial class ProcessUserChatCommandHandlerTests
             return new GetHabitMetricsTool(_mediator);
         }
         _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>([]));
+            .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>([new(Guid.NewGuid(), Today, 1, DateTime.UnixEpoch)]));
         return new GetHabitHistoryTool(_mediator);
     }
 
@@ -580,6 +575,8 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([CreateHabit("Reading")]);
         var tool = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);

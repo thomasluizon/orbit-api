@@ -1,0 +1,39 @@
+{
+  "caseId": "composition-calendar-sync-pt-BR",
+  "repeat": 2,
+  "reason": "O texto externo repete o intervalo de 01/10/2026 a 27/10/2026 já exibido no bloco de calendário, violando a proibição de duplicar fatos.",
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"Calendário de hábitos: 01/10/2026 a 27/10/2026\\nRegistros: positivo = conclusão, zero = pulado; em hábitos ruins, positivo = deslize.\\nBeber água: 21/10/2026, 23/10/2026, 24/10/2026, 25/10/2026, 26/10/2026, 27/10/2026\\n  26/10/2026: 1\\n  25/10/2026: 1\\n  24/10/2026: 1\\n  23/10/2026: 1\\n  21/10/2026: 1\\nCaminhada: 22/10/2026, 25/10/2026, 27/10/2026\\n  25/10/2026: 1\\n  22/10/2026: 1\"},{\"type\":\"block\",\"kind\":\"calendar\",\"block\":{\"title\":\"Calendário\",\"count\":0,\"events\":[],\"sync\":{\"label\":\"Sincronização do calendário\",\"value\":\"Sincronização desativada\"},\"empty\":\"Nenhum evento por aqui ainda.\",\"window\":\"1 de out. de 2026 - 27 de out. de 2026\",\"recovery\":\"Alguns registros estão indisponíveis.\"}}]}",
+  "toolCalls": [
+    {
+      "name": "get_habit_month",
+      "arguments": {
+        "relative_period": "this_month",
+        "period_count": null,
+        "date_from": null,
+        "date_to": null,
+        "language": "pt-BR",
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "get_calendar_overview",
+      "arguments": {
+        "relative_period": "this_month",
+        "period_count": null,
+        "as_of": null,
+        "calendar_ids": null,
+        "date_from": null,
+        "date_to": null,
+        "window_from_utc": null,
+        "window_to_utc": null,
+        "include_calendars": true,
+        "include_events": true,
+        "include_auto_sync_state": true,
+        "include_suggestions": false,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

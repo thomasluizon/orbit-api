@@ -22828,6 +22828,12 @@
           "isEditable": {
             "type": "boolean",
             "default": false
+          },
+          "entityEmoji": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -22971,6 +22977,12 @@
               {
                 "$ref": "#/components/schemas/PendingOperationPlacement"
               }
+            ]
+          },
+          "entityEmoji": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }

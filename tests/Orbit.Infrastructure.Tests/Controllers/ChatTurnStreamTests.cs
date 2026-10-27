@@ -43,6 +43,12 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         var mediator = Substitute.For<IMediator>();
         var userId = Guid.NewGuid();
         using var services = new ChatTurnStreamTestServices(mediator, userId);
+        await using (var setup = services.Provider.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<OrbitDbContext>();
+            (await db.Users.SingleAsync()).StartTrial(DateTime.UtcNow.AddDays(-1));
+            await db.SaveChangesAsync();
+        }
         var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var executions = 0;
@@ -54,8 +60,17 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             var command = call.Arg<ProcessUserChatCommand>();
             await using var scope = services.Provider.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-            var user = await db.Users.SingleAsync();
-            user.IncrementAiMessageCount(new DateOnly(2026, 1, 1));
+            var config = Substitute.For<IAppConfigService>();
+            config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages,
+                Arg.Any<CancellationToken>()).Returns(1);
+            config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages,
+                Arg.Any<CancellationToken>()).Returns(50);
+            var dates = Substitute.For<IUserDateService>();
+            dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 1, 1));
+            var gate = new PayGateService(new GenericRepository<Habit>(db), new GenericRepository<User>(db),
+                config, dates, Substitute.For<IFeatureFlagService>());
+            var allowance = await gate.TryConsumeAiMessage(userId, new UnitOfWork(db, new DatabaseConnectionSettings()));
+            if (allowance.IsFailure) return allowance.PropagateError<ChatResponse>();
             db.ConversationTurns.Add(ConversationTurn.Create(userId, command.TurnId!.Value, "user",
                 DateTime.UtcNow, null, command.Message, "[]").Value);
             await db.SaveChangesAsync();
@@ -93,6 +108,23 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         output.WriteLine("Joined acknowledgement: " + events[0].GetRawText());
         output.WriteLine("Completed replay acknowledgement: " + Events(replay)[0].GetRawText());
         output.WriteLine("Persisted terminal event: " + events[1].GetRawText());
+
+        var exhausted = CreateController(services, userId, "next-key");
+        await exhausted.ProcessChatStream("Next message", null, null, default,
+            clientContext: "{\"locale\":\"en\"}");
+        var denied = Events(exhausted).Last();
+        denied.GetProperty("type").GetString().Should().Be("error");
+        denied.GetProperty("code").GetString().Should().Be(Result.PayGateErrorCode);
+        denied.GetProperty("error").GetString().Should().Be(
+            "You've reached your daily AI message limit (1). Upgrade to Pro for 50 messages per day.");
+        var deniedReplay = CreateController(services, userId, "next-key");
+        await deniedReplay.ProcessChatStream("Next message", null, null, default,
+            clientContext: "{\"locale\":\"en\"}");
+        Events(deniedReplay).Last().GetRawText().Should().Be(denied.GetRawText());
+        executions.Should().Be(2);
+        await context.Entry(await context.Users.SingleAsync()).ReloadAsync();
+        (await context.Users.SingleAsync()).AiMessagesUsedToday.Should().Be(1);
+        (await context.ConversationTurns.CountAsync()).Should().Be(1);
     }
 
     [Fact]

@@ -4,6 +4,9 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] ReadFallback =>
     [
+        ("chat.read.habitsEmpty", "No habits match this request.", "Nenhum hábito encontrado para esta busca."),
+        ("chat.read.goalsEmpty", "No goals match this request.", "Nenhuma meta encontrada para esta busca."),
+        ("chat.read.recordsEmpty", "No records match this request.", "Nenhum registro encontrado para esta busca."),
         ("chat.read.positiveLogRecords", "Completions", "Conclusões"),
         ("chat.read.completedHabits", "Habits completed", "Hábitos concluídos"),
         ("chat.read.distinctLoggedDates", "Days with logs", "Dias com registros"),
@@ -23,6 +26,9 @@ public static partial class ErrorCopy
         ("chat.read.overdue", "Overdue", "Atrasado"),
         ("chat.read.general", "General", "Geral"),
         ("chat.read.done", "Completed", "Concluído"),
+        ("chat.read.skippedToday", "skipped today", "pulado hoje"),
+        ("chat.read.skippedOnDate", "skipped on this date", "pulado nesta data"),
+        ("chat.read.missingHabitStreak", "No matching habit was found, so its streak is unavailable.", "Não encontrei um hábito correspondente para consultar a sequência."),
         ("chat.read.none", "Not completed", "Não concluído"),
         ("chat.read.dayDone", "Completed / scheduled", "Concluídos / agendados"),
         ("chat.read.streak", "Current streak", "Sequência atual"),

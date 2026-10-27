@@ -60,18 +60,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.EvalTrace.ToolCalls.Should().ContainSingle().Which.Status.Should().Be("Succeeded");
         result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block
             .Should().BeOfType<HabitRankingCard>().Which.Ranking.Should().Be(ranking);
-        var safe = text.StartsWith("Here is", StringComparison.Ordinal) || text.StartsWith("Aqui está", StringComparison.Ordinal);
-        if (safe)
-        {
-            var sentence = language == "en" ? "Here is your habit ranking." : "Aqui está o ranking dos seus hábitos.";
-            result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(sentence);
-            result.Value.AiMessage.Should().Be(sentence);
-        }
-        else
-        {
-            result.Value.Parts.Should().ContainSingle();
-            result.Value.AiMessage.Should().BeNullOrEmpty();
-        }
+        result.Value.Parts.Should().ContainSingle();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
         events.Should().NotContain(item => item.Type == "delta");
         events.Should().Contain(item => item.Type == "round");
         var recordedJson = System.Text.Json.JsonSerializer.Serialize(result.Value with { EvalTrace = null }, ChatStreamEvent.SerializerOptions);
@@ -166,7 +156,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Kind).Should().Equal("habitList", "goalList");
-        result.Value.Parts![0].Should().BeOfType<ChatTextPart>();
+        result.Value.Parts![0].Should().BeOfType<ChatBlockPart>();
         await _aiIntentService.Received(complete ? 0 : 1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
@@ -222,8 +212,8 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         if (enabled)
         {
-            result.Value.AiMessage.Should().Be("Here is your habit ranking.");
-            result.Value.Parts![0].Should().BeOfType<ChatTextPart>();
+            result.Value.AiMessage.Should().BeNullOrEmpty();
+            result.Value.Parts![0].Should().BeOfType<ChatBlockPart>();
         }
     }
 }

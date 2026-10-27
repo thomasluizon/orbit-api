@@ -1,0 +1,20 @@
+{
+  "caseId": "composition-error-pt-BR",
+  "repeat": 1,
+  "reason": "Missing typed data block.",
+  "answer": "Calendário de hábitos: 01/10/2026 a 27/10/2026\nRegistros: positivo = conclusão, zero = pulado; em hábitos ruins, positivo = deslize.\nBeber água: 21/10/2026, 23/10/2026, 24/10/2026, 25/10/2026, 26/10/2026, 27/10/2026\n  26/10/2026: 1\n  25/10/2026: 1\n  24/10/2026: 1\n  23/10/2026: 1\n  21/10/2026: 1\nCaminhada: 22/10/2026, 25/10/2026, 27/10/2026\n  25/10/2026: 1\n  22/10/2026: 1",
+  "toolCalls": [
+    {
+      "name": "get_habit_month",
+      "arguments": {
+        "relative_period": "this_month",
+        "period_count": null,
+        "date_from": null,
+        "date_to": null,
+        "language": "pt-BR",
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}
