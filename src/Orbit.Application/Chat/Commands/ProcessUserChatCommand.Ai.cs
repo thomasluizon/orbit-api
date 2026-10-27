@@ -74,7 +74,7 @@ public partial class ProcessUserChatCommandHandler
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
             data.HabitRepository, data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
-        foreach (var pending in PriorPreviews(request))
+        foreach (var pending in execution.PendingOperationStore.GetAwaiting(request.UserId))
         {
             var preview = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, cancellationToken, request.ClientContext);
             if (preview.IsSuccess && preview.Value is { } value)
@@ -91,7 +91,6 @@ public partial class ProcessUserChatCommandHandler
                 "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
         var toolDeclarations = ai.ToolRegistry.GetAll()
-            .Where(tool => PendingPreviewRouting.OffersTool(tool.Name, request.Message))
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
             .Select(tool => (object)new
             {
@@ -136,10 +135,6 @@ public partial class ProcessUserChatCommandHandler
         tool.IsReadOnly
             ? UsesComposition(request, context) ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema()) : tool.GetParameterSchema()
             : TerminalWriteDirective.WithCompletionArgument(tool.GetParameterSchema());
-
-    private IReadOnlyList<PendingAgentOperationExecution> PriorPreviews(ProcessUserChatCommand request) =>
-        PendingPreviewRouting.OffersPriorPreviews(request.Message)
-            ? execution.PendingOperationStore.GetAwaiting(request.UserId) : [];
 
     private static string AppendCardPromptInstructions(
         string prompt, ProcessUserChatCommand request, ChatContext context,
