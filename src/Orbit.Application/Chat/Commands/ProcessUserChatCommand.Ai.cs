@@ -51,6 +51,7 @@ public partial class ProcessUserChatCommandHandler
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
             HabitModelInstructions.TitleLanguage(context.Language),
+            TerminalWriteDirective.Instruction,
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
             request.ClientContext?.SupportsPendingOperationPlacement == true
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
@@ -88,9 +89,7 @@ public partial class ProcessUserChatCommandHandler
                 description = tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
                     ? tool.Description + Environment.NewLine + HabitModelInstructions.Titles
                     : tool.Description,
-                parameters = UsesComposition(request, context) && tool.IsReadOnly
-                    ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema())
-                    : tool.GetParameterSchema()
+                parameters = ChatToolSchema(tool, request, context)
             })
             .ToList();
 
@@ -122,6 +121,11 @@ public partial class ProcessUserChatCommandHandler
             aiStreamSink,
             cancellationToken);
     }
+
+    private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context) =>
+        tool.IsReadOnly
+            ? UsesComposition(request, context) ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema()) : tool.GetParameterSchema()
+            : TerminalWriteDirective.WithCompletionArgument(tool.GetParameterSchema());
 
     private static string AppendCardPromptInstructions(
         string prompt, ProcessUserChatCommand request, ChatContext context,

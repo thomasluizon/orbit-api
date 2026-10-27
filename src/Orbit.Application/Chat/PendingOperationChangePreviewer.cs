@@ -68,7 +68,20 @@ public sealed partial class PendingOperationChangePreviewer(
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
         if (operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits)
             return Result.Success(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext));
-        return Result.Success(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken));
+        return Result.Success(LocalizeActions(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken), clientContext));
+    }
+
+    private static PendingOperationChangePreview? LocalizeActions(PendingOperationChangePreview? preview, AgentClientContext? client)
+    {
+        if (preview is null) return null;
+        var skip = Orbit.Application.Common.LocaleHelper.IsPortuguese(client?.Locale) ? "Pular" : "Skip";
+        PendingOperationChange Localize(PendingOperationChange field) =>
+            field is { Field: "action", NewValue: "skip" } ? field with { NewValue = skip } : field;
+        return preview with
+        {
+            Changes = preview.Changes.Select(Localize).ToArray(),
+            Items = preview.Items?.Select(item => item with { Fields = item.Fields.Select(Localize).ToArray() }).ToArray()
+        };
     }
 
     private async Task<bool> HasMissingSearchAsync(Guid userId, string operationId, JsonElement arguments,
@@ -87,7 +100,7 @@ public sealed partial class PendingOperationChangePreviewer(
     private async Task<PendingOperationChangePreview?> PreviewChangesAsync(
         Guid userId, string operationId, JsonElement arguments, CancellationToken cancellationToken)
     {
-        arguments = await ResolveUnlogDateAsync(userId, operationId, arguments, cancellationToken);
+        arguments = await ResolveOccurrenceDateAsync(userId, operationId, arguments, cancellationToken);
         if (HasLogDates(operationId, arguments))
             return await PreviewLogDatesAsync(userId, operationId, arguments, cancellationToken);
         if (operationId == BulkCreateHabits)
@@ -144,7 +157,7 @@ public sealed partial class PendingOperationChangePreviewer(
             }
             else
             {
-                fields.Add(BuildActionChange(habit, operationId, arguments, revisedItems,
+                fields.AddRange(BuildActionChanges(habit, operationId, arguments, revisedItems,
                     isRevised, today));
                 actualChangeCount = fields.Count;
             }
@@ -186,11 +199,11 @@ public sealed partial class PendingOperationChangePreviewer(
             : BuildPreview(operationId, [], []);
     }
 
-    private async Task<JsonElement> ResolveUnlogDateAsync(Guid userId, string operationId,
+    private async Task<JsonElement> ResolveOccurrenceDateAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken)
     {
-        if (operationId == "unlog_habit" && arguments.ValueKind == JsonValueKind.Object
-            && !arguments.TryGetProperty("date", out _))
+        if (operationId is "unlog_habit" or "skip_habit" && arguments.ValueKind == JsonValueKind.Object
+            && (!arguments.TryGetProperty("date", out var date) || date.ValueKind == JsonValueKind.Null))
         {
             var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
             var resolved = arguments.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);
@@ -330,7 +343,9 @@ public sealed partial class PendingOperationChangePreviewer(
             var itemId = stableIds.TryGetValue((item.HabitId, item.Date), out var stableId)
                 ? stableId : multipleDates ? $"{habit.Id}:{date}" : habit.Id.ToString();
             return new PendingOperationItem(itemId,
-                habit.Id, habit.Title, [change], FingerprintHabit(habit), RemovesData: false, EntityEmoji: habit.Emoji);
+                habit.Id, habit.Title, operationId == "bulk_skip_habits"
+                    ? [change, AgentArgumentPreview.SkipAction(habit.Id, habit.Title, habit.Emoji)] : [change],
+                FingerprintHabit(habit), RemovesData: false, EntityEmoji: habit.Emoji);
         }).ToList();
         return BuildPreview(operationId, datedPreview.Take(10).SelectMany(item => item.Fields).ToList(), datedPreview);
     }
@@ -485,6 +500,14 @@ public sealed partial class PendingOperationChangePreviewer(
             tag.Color,
             tag.IsDeleted
         }));
+
+    private static IEnumerable<PendingOperationChange> BuildActionChanges(Habit habit, string operationId,
+        JsonElement arguments, JsonElement revisedItems, bool isRevised, DateOnly today)
+    {
+        yield return BuildActionChange(habit, operationId, arguments, revisedItems, isRevised, today);
+        if (operationId == "bulk_skip_habits")
+            yield return AgentArgumentPreview.SkipAction(habit.Id, habit.Title, habit.Emoji);
+    }
 
     private static PendingOperationChange BuildActionChange(Habit habit, string operationId,
         JsonElement arguments, JsonElement revisedItems, bool isRevised, DateOnly today)

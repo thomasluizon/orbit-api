@@ -13,6 +13,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Validators;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Common;
@@ -61,6 +62,7 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 3, 20));
+        dates.GetUserWeekStartDayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(1);
 
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -74,7 +76,10 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
                 cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
             })
             .AddSingleton<IValidator<BulkCreateHabitsCommand>, BulkCreateHabitsCommandValidator>()
+            .AddSingleton<IValidator<BulkSkipHabitsCommand>, BulkSkipHabitsCommandValidator>()
             .AddSingleton<IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>>(_afterWriteFailure)
+            .AddSingleton<IGenericRepository<Habit>>(new GenericRepository<Habit>(context))
+            .AddSingleton<IGenericRepository<HabitLog>>(new GenericRepository<HabitLog>(context))
             .AddSingleton(new BulkCreateHabitsRepositories(
                 new GenericRepository<Habit>(context),
                 new GenericRepository<GoogleCalendarSyncSuggestion>(context),
@@ -86,7 +91,11 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
             .BuildServiceProvider();
 
         var tool = new BulkCreateHabitsTool(_provider.GetRequiredService<IMediator>());
-        var catalog = new AgentCatalogService([tool]);
+        var skip = new BulkSkipHabitsTool(_provider.GetRequiredService<IMediator>(),
+            _provider.GetRequiredService<IGenericRepository<Habit>>(), dates,
+            new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), work));
+        _registry = new AiToolRegistry([tool, skip]);
+        var catalog = new AgentCatalogService(_registry.GetAll());
         var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, settings, new FeatureFlagService(context, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
         _audit.RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -97,7 +106,6 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
-        _registry = new AiToolRegistry([tool]);
         _previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(context),
             new GenericRepository<Goal>(context), new GenericRepository<Tag>(context), dates, _registry);
         _executor = new AgentOperationExecutor(

@@ -1,14 +1,25 @@
 using System.Globalization;
 using System.Text.Json;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class SkipHabitTool(IMediator mediator, IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool
+public class SkipHabitTool(IMediator mediator, IGenericRepository<Habit> habitRepository) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public async Task<bool> SupportsAtomicExecutionAsync(Guid userId, JsonElement arguments, CancellationToken ct)
+    {
+        if (!HabitToolHelpers.TryParseHabitId(arguments, out var id)) return false;
+        var habits = await habitRepository.FindAsync(habit => habit.Id == id && habit.UserId == userId,
+            query => query.Include(habit => habit.Goals), ct);
+        return habits is [var habit] && (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General
+            || !habit.Goals.Any(goal => goal.Type == GoalType.Streak && goal.Status == GoalStatus.Active));
+    }
+
     public string Name => "skip_habit";
 
     public string Description =>

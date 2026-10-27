@@ -155,6 +155,7 @@ public partial class ProcessUserChatCommandHandler
             results.InvalidCalls[call.Id] = "Habits must be an array of objects.";
             return null;
         }
+        items = HabitHeadingParents.UnwrapExistingParents(items, results.ParentHeadings);
         var allHaveHeadings = items.Count > 0 && items.OfType<JsonObject>()
             .All(item => HabitHeadingParents.ForItem(item, results.ParentHeadings) is not null);
         if (allHaveHeadings)
@@ -208,6 +209,11 @@ public partial class ProcessUserChatCommandHandler
 
     private static AiToolCall BindCreationOperation(AiToolCall call, JsonObject arguments, JsonArray proposed, bool hasHeadings)
     {
+        if (call.Name != BulkCreateHabits && proposed.Count > 1)
+        {
+            call = call with { Name = BulkCreateHabits };
+            arguments = new JsonObject();
+        }
         if (call.Name == BulkCreateHabits)
             arguments[ToolArgumentNames.Habits] = proposed;
         else

@@ -1,0 +1,33 @@
+{
+  "caseId": "composition-medical-batch-pt-BR",
+  "toolCalls": [
+    {
+      "name": "revise_pending_changes",
+      "arguments": {
+        "pending_operation_id": "[redacted]",
+        "answer_question": false,
+        "items": [],
+        "remove_item_ids": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "PendingConfirmation"
+    },
+    {
+      "name": "revise_pending_changes",
+      "arguments": {
+        "pending_operation_id": "[redacted]",
+        "answer_question": false,
+        "items": [],
+        "remove_item_ids": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "orbit_read_complete": false
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "answer": "{\"pendingOperations\":[{\"count\":1,\"items\":[{\"title\":\"Exame de colesterol domiciliar\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Exame de colesterol domiciliar\"},{\"field\":\"description\",\"newValue\":\"Exame domiciliar.\"},{\"field\":\"due_date\",\"newValue\":\"2026-10-26\"},{\"field\":\"due_time\",\"newValue\":\"15:50\"},{\"field\":\"emoji\",\"newValue\":\"🩺\"},{\"field\":\"frequency_unit\",\"newValue\":\"OneTime\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"parent_habit_id\",\"movesToRoot\":true}]}]}],\"parts\":[]}"
+}

@@ -327,7 +327,7 @@ public sealed partial class PendingOperationChangePreviewerTests
         var retained = preview!.Items.Should().ContainSingle().Subject;
         retained.ItemId.Should().Be(itemId);
         retained.EntityId.Should().Be(habit.Id);
-        retained.Fields.Should().ContainSingle().Which.NewValue.Should().Be("2026-10-17");
+        retained.Fields.Single(field => field.Field == "date").NewValue.Should().Be("2026-10-17");
     }
 
     [Theory]
@@ -406,6 +406,48 @@ public sealed partial class PendingOperationChangePreviewerTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SkipPreview_DefaultOccurrenceUsesTheUsersLocalToday(bool explicitNull)
+    {
+        var habit = CreateHabit("Walk", null);
+        Setup([habit]);
+        var arguments = explicitNull ? JsonSerializer.Serialize(new { habit_id = habit.Id, date = (string?)null })
+            : JsonSerializer.Serialize(new { habit_id = habit.Id });
+
+        var preview = await Preview("skip_habit", arguments);
+
+        preview!.Items!.Single().Fields.Should().Contain(field => field.Field == "date" && field.NewValue == "2026-09-25");
+    }
+
+    [Theory]
+    [InlineData("skip_habit", false, "en", "Skip")]
+    [InlineData("bulk_skip_habits", false, "en", "Skip")]
+    [InlineData("bulk_skip_habits", true, "en", "Skip")]
+    [InlineData("skip_habit", false, "pt-BR", "Pular")]
+    [InlineData("bulk_skip_habits", false, "pt-BR", "Pular")]
+    [InlineData("bulk_skip_habits", true, "pt-BR", "Pular")]
+    public async Task SkipPreview_IdentifiesTheActionAlongsideTheOccurrence(string operation, bool revised, string locale, string label)
+    {
+        var habit = CreateHabit("Walk", "🚶");
+        Setup([habit]);
+        var arguments = operation == "skip_habit"
+            ? JsonSerializer.Serialize(new { habit_id = habit.Id, date = "2026-09-25" })
+            : revised
+                ? JsonSerializer.Serialize(new { revised_items = new[] { new { habit_id = habit.Id, date = "2026-09-25" } } })
+                : JsonSerializer.Serialize(new { habit_ids = new[] { habit.Id }, date = "2026-09-25" });
+
+        var preview = await Preview(operation, arguments, new(Locale: locale));
+
+        var item = preview!.Items.Should().ContainSingle().Which;
+        item.Fields.Should().Contain(field => field.Field == "action" && field.NewValue == label
+            && field.ValueType == "action" && !field.IsEditable);
+        item.Fields.Single(field => field.Field == "action").ProposedValue!.Value.GetString().Should().Be("skip");
+        item.Fields.Should().Contain(field => field.Field == "date" && field.NewValue == "2026-09-25");
+        AssertEmoji(preview, habit.Emoji);
+    }
+
+    [Theory]
     [InlineData("bulk_delete_habits", "delete")]
     [InlineData("bulk_log_habits", "date")]
     [InlineData("bulk_skip_habits", "date")]
@@ -417,9 +459,9 @@ public sealed partial class PendingOperationChangePreviewerTests
 
         preview!.Items.Should().HaveCount(2);
         preview.Items!.SelectMany(item => item.Fields).Select(change => change.Field)
-            .Should().OnlyContain(value => value == field);
-        preview.Items.SelectMany(item => item.Fields).Select(change => change.IsEditable)
-            .Should().OnlyContain(value => value == (field == "date"));
+            .Should().OnlyContain(value => value == field || operationId == "bulk_skip_habits" && value == "action");
+        preview.Items.SelectMany(item => item.Fields)
+            .Should().OnlyContain(change => change.IsEditable == (change.Field == "date"));
     }
 
     [Theory]

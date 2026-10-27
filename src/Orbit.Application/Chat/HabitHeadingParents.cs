@@ -32,6 +32,30 @@ internal static partial class HabitHeadingParents
         return matches.Length == 1 ? matches[0] : null;
     }
 
+    public static JsonArray UnwrapExistingParents(JsonArray items, IReadOnlyList<Heading> headings)
+    {
+        var output = new JsonArray();
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            var heading = headings.FirstOrDefault(heading =>
+                NormalizeName(heading.Name) == NormalizeName(item["title"]?.ToString()));
+            if (heading is { Candidates.Count: > 0 } && item["sub_habits"] is JsonArray { Count: > 0 } children)
+            {
+                foreach (var child in children.OfType<JsonObject>())
+                {
+                    var addition = (JsonObject)child.DeepClone();
+                    Bind(addition, heading, removeInventedDescription: false);
+                    output.Add(addition);
+                }
+            }
+            else
+                output.Add(item.DeepClone());
+        }
+        return output;
+    }
+
+    private static string NormalizeName(string? name) => HabitNameMatcher.Normalize(name ?? string.Empty);
+
     public static bool Bind(JsonObject item, Heading heading, bool removeInventedDescription)
     {
         item.Remove(CandidateIdsField);

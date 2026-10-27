@@ -1,0 +1,56 @@
+{
+  "caseId": "composition-avoid-form-pt-BR",
+  "toolCalls": [
+    {
+      "name": "create_habit",
+      "arguments": {
+        "title": "Fumar",
+        "description": null,
+        "emoji": "🚭",
+        "frequency_unit": "Day",
+        "frequency_quantity": 1,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": "2026-10-27",
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_bad_habit": true,
+        "is_general": false,
+        "is_flexible": false,
+        "checklist_items": null,
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": null,
+        "reminder_times": null,
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "slip_alert_enabled": null,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": null
+      },
+      "resultStatus": "PendingConfirmation"
+    },
+    {
+      "name": "revise_pending_changes",
+      "arguments": {
+        "pending_operation_id": "[redacted]",
+        "answer_question": false,
+        "items": [
+          {
+            "item_id": "0",
+            "edits_json": "{\"title\":\"Não fumar\",\"is_bad_habit\":false}"
+          }
+        ],
+        "remove_item_ids": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "answer": "{\"pendingOperations\":[{\"count\":1,\"items\":[{\"title\":\"Não fumar\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Não fumar\"},{\"field\":\"due_date\",\"newValue\":\"2026-10-27\"},{\"field\":\"emoji\",\"newValue\":\"🚭\"},{\"field\":\"frequency_quantity\",\"newValue\":\"1\"},{\"field\":\"frequency_unit\",\"newValue\":\"Day\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"}]}]}],\"parts\":[]}"
+}

@@ -14,9 +14,12 @@ public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
         CancellationToken ct, AgentClientContext? clientContext = null, bool requireAllMembers = false)
     {
         if (operations.Count < 2) return null;
-        var members = operations.Select(pending => store.GetExecution(userId, pending.Id))
-            .OfType<PendingAgentOperationExecution>()
-            .Where(member => AiToolAtomicity.Supports(registry.GetTool(member.OperationId), member.Arguments)).ToArray();
+        var eligible = new List<PendingAgentOperationExecution>();
+        foreach (var operation in operations)
+            if (store.GetExecution(userId, operation.Id) is { } member
+                && await AiToolAtomicity.SupportsAsync(registry.GetTool(member.OperationId), userId, member.Arguments, ct))
+                eligible.Add(member);
+        var members = eligible.ToArray();
         if (members.Length < 2 || members.Any(member => member.RequiresReproposal)) return null;
         if (requireAllMembers && members.Length != operations.Count) return null;
         var arguments = AccountChangeSet.BuildArguments(members);

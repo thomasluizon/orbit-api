@@ -92,6 +92,31 @@ The partial-list fixture has 51 habits, so limit 100 truthfully produces complet
 limit 50 produces partial data with a cursor. #1822 owns the disconnected-calendar stale
 expectation. #26 owns the live bilingual rerun before activation.
 
+Each write tool declares the required boolean `orbit_write_complete` argument. The model
+sets it to true only when the round covers every requested change, including dates, times
+and bounded preparation items. A remaining lookup or dependent write declares false. The
+server strips the argument before validation, execution, previews and persistence. It ends
+the write loop when every declared call ran, every call is a write with a populated pending
+preview or a coalesced preview, and at least one pending preview remains. Incomplete or
+failed writes retain continuation. Completion uses structured tool calls and typed preview
+results, never patterns in the person's message.
+
+Registered tools and awaiting previews remain available to the model regardless of message
+wording or date count. The prompt distinguishes a fresh request from a correction; the
+model selects creation or `revise_pending_changes` and supplies the target preview and edits.
+Revisions preserve unnamed fields and items. Suggestion refinements retain the model's
+validated cadence and explicit days; the server does not infer a replacement schedule from
+instruction keywords.
+
+Skip previews include a noneditable action row, localized as "Skip" or
+"Pular", alongside the user's local occurrence date. Eligible skip operations
+can share one atomic approval with other account changes. Skips with active streak-goal
+side effects remain outside atomic bundles. A partial mutation result aborts the entire bundle,
+rolling back every member write and confirmation consumption so the approval remains available
+for retry. Existing-parent wrappers in structured creation arguments contribute their children
+under the resolved parent rather than duplicate parents. A single-create wrapper with several
+children becomes a bulk creation so the preview and execution retain every sibling.
+
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
 preview/outcome before read parts and reports each operation once. Preview, edit, reject,
 partial results and uncertain execution retain the existing operation gateway. Repeated
