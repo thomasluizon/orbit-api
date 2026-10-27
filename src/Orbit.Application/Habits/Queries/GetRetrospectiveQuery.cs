@@ -93,9 +93,6 @@ public class GetRetrospectiveQueryHandler(
 
         var habitList = habits.ToList();
 
-        if (habitList.Count == 0)
-            return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
-
         var streakState = await userStreakService.CalculateAsync(
             request.UserId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
@@ -108,10 +105,7 @@ public class GetRetrospectiveQueryHandler(
             streakState?.LongestStreak ?? 0,
             weekStartDay);
 
-        if (request.GenerateNarrative && metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0)
-            return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
-
-        if (!request.GenerateNarrative)
+        if (!request.GenerateNarrative || (metrics.TotalCompletions == 0 && metrics.BadHabitSlips == 0))
             return Result.Success(new RetrospectiveResponse(request.Period, metrics,
                 new RetrospectiveNarrative(string.Empty, string.Empty, string.Empty, string.Empty), false,
                 request.DateFrom, request.DateTo, Orbit.Application.Chat.ReadRevision.Hash(new

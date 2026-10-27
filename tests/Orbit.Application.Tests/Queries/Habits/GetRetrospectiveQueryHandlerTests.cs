@@ -326,15 +326,31 @@ public class GetRetrospectiveQueryHandlerTests
         result.IsFailure.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task Handle_NoHabits_ReturnsFailure()
+    [Theory]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    public async Task Handle_NoHabits_ReturnsEmptyRetrospective(string language, bool generateNarrative)
     {
         StubHabits();
 
-        var result = await HandleWeek();
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language, generateNarrative), default);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.NoHabitsForPeriod.Message);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Metrics.TotalScheduled.Should().Be(0);
+        result.Value.Metrics.TotalCompletions.Should().Be(0);
+        result.Value.Metrics.PeriodDays.Should().Be(7);
+        result.Value.Metrics.TopHabits.Should().BeEmpty();
+        result.Value.Metrics.NeedsAttention.Should().BeEmpty();
+        result.Value.Metrics.CompletionSeries!.Points.Should().HaveCount(7)
+            .And.OnlyContain(point => point.Scheduled == 0 && point.Completed == 0 && point.CompletionRate == null);
+        result.Value.DateFrom.Should().Be(DateFrom);
+        result.Value.DateTo.Should().Be(DateTo);
+        result.Value.SourceRevision.Should().NotBeNullOrEmpty();
+        result.Value.Narrative.Should().Be(new RetrospectiveNarrative("", "", "", ""));
+        result.Value.FromCache.Should().BeFalse();
+        _retroService.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
@@ -353,16 +369,24 @@ public class GetRetrospectiveQueryHandlerTests
         result.Error.Should().Contain("AI service error");
     }
 
-    [Fact]
-    public async Task Handle_HabitsButNoCompletions_ReturnsFailure()
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Handle_HabitsButNoCompletions_ReturnsScheduledMetrics(string language)
     {
-        StubHabits(CreateDailyHabit());
-        StubNarrative(SampleNarrative);
+        var habit = CreateDailyHabit();
+        StubHabits(habit);
 
-        var result = await HandleWeek();
+        var result = await _handler.Handle(new(UserId, DateFrom, DateTo, "week", language), default);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.NoHabitsForPeriod.Message);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Metrics.TotalScheduled.Should().Be(7);
+        result.Value.Metrics.TotalCompletions.Should().Be(0);
+        result.Value.Metrics.CompletionRate.Should().Be(0);
+        result.Value.Metrics.NeedsAttention.Should().ContainSingle().Which.HabitId.Should().Be(habit.Id);
+        result.Value.Narrative.Should().Be(new RetrospectiveNarrative("", "", "", ""));
+        result.Value.FromCache.Should().BeFalse();
+        _retroService.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
