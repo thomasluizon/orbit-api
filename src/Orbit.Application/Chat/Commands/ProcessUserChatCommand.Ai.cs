@@ -95,8 +95,7 @@ public partial class ProcessUserChatCommandHandler
             {
                 name = tool.Name,
                 description = tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
-                    or "update_habit" or "bulk_update_habits"
-                    ? tool.Description + Environment.NewLine + HabitModelInstructions.TitleLanguage(context.Language)
+                    ? tool.Description + Environment.NewLine + HabitModelInstructions.Titles
                     : tool.Description,
                 parameters = UsesComposition(request, context) && tool.IsReadOnly
                     ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema())

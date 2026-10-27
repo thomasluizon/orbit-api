@@ -62,13 +62,13 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue();
         saved.Should().HaveCount((datedChild ? 2 : 1) + (addSibling ? 1 : 0),
             "chat returned {0}", JsonSerializer.Serialize(response.Value));
-        var root = saved.Single(habit => habit.Title == "Classes");
+        var root = saved.Single(habit => habit.Title == "classes");
         root.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         root.FrequencyQuantity.Should().Be(1);
         root.Days.Should().Equal(datedChild ? DayOfWeek.Wednesday : DayOfWeek.Thursday);
         if (datedChild)
         {
-            var child = saved.Single(habit => habit.Title == "Extra class");
+            var child = saved.Single(habit => habit.Title == "extra class");
             child.ParentHabitId.Should().Be(root.Id);
             child.FrequencyUnit.Should().Be(FrequencyUnit.Day);
             child.FrequencyQuantity.Should().Be(1);

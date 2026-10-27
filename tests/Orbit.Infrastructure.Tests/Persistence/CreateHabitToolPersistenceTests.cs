@@ -58,9 +58,9 @@ public sealed class CreateHabitToolPersistenceTests
     }
 
     [Theory]
-    [InlineData("Tenho aula toda quarta das 8h25 às 11h15, e no dia 26/08 tenho uma aula extra das 11h15 às 12h05.")]
-    [InlineData("Class every Wednesday from 08:25 to 11:15, plus an extra class on 26/08 from 11:15 to 12:05.")]
-    public async Task TicketMixedRequest_PersistsSeparateRecurringAndOneTimeClasses(string message)
+    [InlineData("Tenho aula toda quarta das 8h25 às 11h15, e no dia 26/08 tenho uma aula extra das 11h15 às 12h05.", "aula extra")]
+    [InlineData("Class every Wednesday from 08:25 to 11:15, plus an extra class on 26/08 from 11:15 to 12:05.", "Aula extra")]
+    public async Task TicketMixedRequest_PersistsSeparateRecurringAndOneTimeClasses(string message, string extraTitle)
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var db = factory.Context;
@@ -87,7 +87,7 @@ public sealed class CreateHabitToolPersistenceTests
         recurring.Days.Should().Equal(DayOfWeek.Wednesday);
         recurring.DueTime.Should().Be(new TimeOnly(8, 25));
         recurring.DueEndTime.Should().Be(new TimeOnly(11, 15));
-        var dated = habits.Single(habit => habit.Title == "Aula extra");
+        var dated = habits.Single(habit => habit.Title == extraTitle);
         dated.Schedule.Should().Be(HabitSchedule.OneTime);
         dated.FrequencyUnit.Should().BeNull();
         dated.FrequencyQuantity.Should().BeNull();

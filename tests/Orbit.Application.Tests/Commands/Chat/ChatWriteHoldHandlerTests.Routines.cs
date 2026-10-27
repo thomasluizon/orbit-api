@@ -57,6 +57,11 @@ public sealed partial class ChatWriteHoldHandlerTests
             (_, true) => "Every evening at 9:30 PM: read 20 minutes, stretch for 10 minutes, and lights out at 11 PM, as one evening routine",
             _ => "Build me a calm evening routine: read 20 minutes, stretch, and lights out by 11"
         };
+        var expectedTitle = explicitCadence ? title
+            : language == "pt-BR" ? "rotina tranquila da noite" : "calm evening routine";
+        var expectedRead = language == "pt-BR" ? "ler 20 minutos" : "read 20 minutes";
+        var expectedStretch = explicitCadence ? stretch + " 10 min" : language == "pt-BR" ? "alongar" : "stretch";
+        var expectedLightsOut = language == "pt-BR" ? "apagar as luzes" : "lights out";
 
         var result = await CreateHandler().Handle(new(_userId, message,
             ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true)), default);
@@ -67,11 +72,11 @@ public sealed partial class ChatWriteHoldHandlerTests
         var routine = RoutineArguments(stored.Arguments);
         routine.GetProperty("frequency_unit").GetString().Should().Be("Day");
         routine.GetProperty("frequency_quantity").GetInt32().Should().Be(1);
-        routine.GetProperty("title").GetString().Should().Be(title);
+        routine.GetProperty("title").GetString().Should().Be(expectedTitle);
         var children = routine.GetProperty("sub_habits");
         children.GetArrayLength().Should().Be(3);
-        children[0].GetProperty("title").GetString().Should().Be(read);
-        children[1].GetProperty("title").GetString().Should().Be(explicitCadence ? stretch + " 10 min" : stretch);
+        children[0].GetProperty("title").GetString().Should().Be(expectedRead);
+        children[1].GetProperty("title").GetString().Should().Be(expectedStretch);
         children[2].GetProperty("due_time").GetString().Should().Be("23:00");
         if (explicitCadence)
             routine.GetProperty("due_time").GetString().Should().Be("21:30");
@@ -97,7 +102,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
             var revised = RoutineArguments(stored.Arguments);
             revised.GetProperty("frequency_quantity").GetInt32().Should().Be(2);
-            revised.GetProperty("title").GetString().Should().Be(title);
+            revised.GetProperty("title").GetString().Should().Be(expectedTitle);
             revised.GetProperty("sub_habits").GetRawText().Should().Be(children.GetRawText());
             stored.PreviewFingerprint.Should().NotBe(pending.PreviewFingerprint);
             await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
@@ -112,13 +117,13 @@ public sealed partial class ChatWriteHoldHandlerTests
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         saved.Should().HaveCount(4);
         var parent = saved.Should().ContainSingle(habit => habit.ParentHabitId == null).Which;
-        parent.Title.Should().Be(title);
+        parent.Title.Should().Be(expectedTitle);
         parent.FrequencyUnit.Should().Be(Orbit.Domain.Enums.FrequencyUnit.Day);
         parent.FrequencyQuantity.Should().Be(editCadence ? 2 : 1);
         parent.DueTime.Should().Be(explicitCadence ? new TimeOnly(21, 30) : null);
         saved.Where(habit => habit.ParentHabitId == parent.Id).Should().HaveCount(3)
-            .And.Contain(habit => habit.Title == read)
-            .And.Contain(habit => habit.Title == lightsOut && habit.DueTime == new TimeOnly(23, 0));
+            .And.Contain(habit => habit.Title == expectedRead)
+            .And.Contain(habit => habit.Title == expectedLightsOut && habit.DueTime == new TimeOnly(23, 0));
         _pendingOperationStore.GetExecution(_userId, pending.Id).Should().BeNull();
     }
 }

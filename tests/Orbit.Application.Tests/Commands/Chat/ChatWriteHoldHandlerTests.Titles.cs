@@ -52,7 +52,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             .Where(value => value.GetProperty("name").GetString() is "create_habit" or "bulk_create_habits"
                 or "create_sub_habit" or "update_habit" or "bulk_update_habits"))
         {
-            declaration.GetProperty("description").GetString().Should().Contain(languageRule)
+            declaration.GetProperty("description").GetString().Should().Contain("use the request language supplied for this turn")
                 .And.Contain("Preserve a title the person quoted or named verbatim");
         }
     }

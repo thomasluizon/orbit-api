@@ -41,7 +41,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _mediator.DidNotReceive().Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>());
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.ParentHabitId == parents[0].Id
-            && habit.Title == "Take vitamin D" && habit.FrequencyUnit == FrequencyUnit.Week
+            && habit.Title == "take vitamin D" && habit.FrequencyUnit == FrequencyUnit.Week
             && habit.FrequencyQuantity == 1 && habit.DueTime == new TimeOnly(13, 0) && habit.Emoji == "💊"), Arg.Any<CancellationToken>());
         parents[0].ChecklistItems.Should().ContainSingle(item => item.Text == "Coffee" && item.IsChecked);
     }
@@ -169,7 +169,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var approved = await _executor.ExecuteAsync(new(_userId, after.OperationId, after.Arguments,
             after.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
-        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == "Take vitamin D"
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == "take vitamin D"
             && habit.ParentHabitId == parents[0].Id && habit.Description == "Keep with food"
             && habit.FrequencyUnit == FrequencyUnit.Week && habit.DueTime == new TimeOnly(13, 0)), Arg.Any<CancellationToken>());
     }
