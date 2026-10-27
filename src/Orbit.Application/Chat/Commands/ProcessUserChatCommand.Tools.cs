@@ -21,7 +21,7 @@ public partial class ProcessUserChatCommandHandler
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
-        var aiResponse = initialResponse;
+        var aiResponse = HabitChangeClarification.CompleteText(initialResponse, request.Message, language);
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         long totalBudgetTokens = initialResponse.RequestBudgetTokenCount ?? initialResponse.ReportedTokenCount;
@@ -265,11 +265,17 @@ public partial class ProcessUserChatCommandHandler
     private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
-        IsDeclaredTerminalReadRound(response, request, context, iteration)
+        (IsDeclaredTerminalReadRound(response, request, context, iteration)
+            || IsMissingHabitLookupRound(request, context, results, calls))
         && calls.Count == response.ToolCalls!.Count
         && outcomes.Count == calls.Count && toolResults.Count == calls.Count && toolResults.All(result => result.Success)
         && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
         && CanCompleteComposition(request, context, results);
+
+    private static bool IsMissingHabitLookupRound(ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, IReadOnlyList<AiToolCall> calls) => UsesComposition(request, context)
+        && request.BlockAnswer is null && calls is [{ Name: "query_habits" }]
+        && results.OperationResults is [{ ReadBlock: { } read }] && HabitReadMessages.IsMissingMetricsLookup(read);
 
     private bool IsDeclaredTerminalReadRound(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, int iteration) =>

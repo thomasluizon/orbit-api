@@ -44,7 +44,7 @@ public class PayGateServiceExpiredCycleTests
             results.Add(await sut.TryConsumeAiMessage(userId, unitOfWork));
 
         results.Count(result => result.IsSuccess).Should().Be(0);
-        results.Count(result => result.IsFailure && result.ErrorCode == "PAY_GATE").Should().Be(6);
+        results.Count(result => result.IsFailure && result.ErrorCode == ErrorCodes.AiMessageLimitReached).Should().Be(6);
         user.AiMessagesUsedToday.Should().Be(5);
         user.AiMessagesLocalDate.Should().Be(today.AddDays(1));
         await unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -87,7 +87,7 @@ public class PayGateServiceExpiredCycleTests
 
         secondDateResults.Should().OnlyContain(result => result.IsSuccess);
         returnToFirstDate.IsFailure.Should().BeTrue();
-        returnToFirstDate.ErrorCode.Should().Be("PAY_GATE");
+        returnToFirstDate.ErrorCode.Should().Be(ErrorCodes.AiMessageLimitReached);
         user.AiMessagesUsedToday.Should().Be(5);
         user.AiMessagesLocalDate.Should().Be(secondDate);
         await unitOfWork.Received(5).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -128,7 +128,7 @@ public class PayGateServiceExpiredCycleTests
 
         fifth.IsSuccess.Should().BeTrue();
         sixth.IsFailure.Should().BeTrue();
-        sixth.ErrorCode.Should().Be("PAY_GATE");
+        sixth.ErrorCode.Should().Be(ErrorCodes.AiMessageLimitReached);
         nextDay.IsSuccess.Should().BeTrue();
         user.AiMessagesUsedToday.Should().Be(1);
         user.AiMessagesLocalDate.Should().Be(today.AddDays(1));

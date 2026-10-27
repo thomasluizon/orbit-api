@@ -28,6 +28,15 @@ public partial class ProcessUserChatCommandHandler
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
         if (!result.Success || result.Payload is not AstraBlockDefinition definition)
             return Failed(result.Error ?? "Invalid ask arguments.");
+        if (definition.Form == AstraBlockKinds.Choice && HabitChangeClarification.IsUnspecified(request.Message))
+        {
+            var reader = await data.UserRepository.GetByIdAsync(request.UserId, ct);
+            definition = definition with
+            {
+                Title = HabitChangeClarification.Question(ChatLocale.Resolve(request.ClientContext, reader?.Language)),
+                AllowFreeText = true
+            };
+        }
         var block = IssuedAstraBlock.Create(request.UserId, definition);
         await execution.BlockStore.AddAsync(block, ct);
         object payload = definition.Form == AstraBlockKinds.Choice

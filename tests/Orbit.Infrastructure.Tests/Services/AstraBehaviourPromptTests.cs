@@ -77,6 +77,18 @@ public class AstraBehaviourPromptTests
         prompt.Should().Contain("Do not add unrequested entity headings");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NamedHabitStreak_RequiresScopedLookupInsteadOfAccountStatistics(bool composition)
+    {
+        var prompt = Build(composition);
+
+        prompt.Should().Contain("For a named activity's streak, first call query_habits with search and include_metrics true");
+        prompt.Should().Contain("Do not substitute get_gamification_overview or get_period_analytics for a named habit's streak");
+        prompt.Should().Contain("Never call get_habit_metrics with an empty or invented habit_id");
+    }
+
     private static string Build(bool composition)
     {
         var builder = new SystemPromptBuilder();
