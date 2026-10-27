@@ -50,11 +50,8 @@ public class PayGateService(
                     var messageLimit = user.HasProAccess ? proLimit : freeLimit;
                     if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)
                     {
-                        var errorMessage = user.HasProAccess
-                            ? $"You've reached your daily AI message limit ({messageLimit})."
-                            : $"You've reached your daily AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per day.";
-
-                        return Task.FromResult(Result.PayGateFailure(errorMessage));
+                        return Task.FromResult(Result.Failure(new AppError(ErrorCodes.AiMessageLimitReached,
+                            ErrorCopy.Resolve(ErrorCodes.AiMessageLimitReached, false))));
                     }
                 }
 

@@ -184,6 +184,7 @@ public static partial class ErrorCopy
     private static readonly (string Code, string En, string PtBr)[] Billing =
     [
         (ErrorCodes.PayGate, "This is a Pro feature.", "Este é um recurso Pro."),
+        (ErrorCodes.AiMessageLimitReached, "You've used your daily Astra message allowance. Come back tomorrow.", "Você usou todas as mensagens da Astra de hoje. Volte amanhã."),
         (ErrorCodes.SubscriptionNotFound, "We could not find a subscription on this account.", "Não encontramos nenhuma assinatura nesta conta."),
         (ErrorCodes.NoActiveSubscription, "This account has no active subscription.", "Esta conta não tem assinatura ativa."),
         (ErrorCodes.InvalidBillingInterval, "Choose the monthly or the yearly plan.", "Escolha o plano mensal ou o anual."),

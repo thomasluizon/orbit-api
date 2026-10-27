@@ -21,6 +21,7 @@ public static class ResultActionResultExtensions
         [FeatureFlagActions.NotFound] = StatusCodes.Status404NotFound,
         [FeatureFlagActions.AlreadyExists] = StatusCodes.Status409Conflict,
         [Result.PayGateErrorCode] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.AiMessageLimitReached] = StatusCodes.Status403Forbidden,
         [ErrorCodes.NoPermission] = StatusCodes.Status403Forbidden,
         [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,
 

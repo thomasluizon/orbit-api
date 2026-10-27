@@ -504,10 +504,8 @@ public class PayGateServiceTests
             result.IsSuccess.Should().Be(allowed);
             if (!allowed)
             {
-                result.ErrorCode.Should().Be("PAY_GATE");
-                result.Error.Should().Be(pro
-                    ? "You've reached your daily AI message limit (50)."
-                    : "You've reached your daily AI message limit (5). Upgrade to Pro for 50 messages per day.");
+                result.ErrorCode.Should().Be(ErrorCodes.AiMessageLimitReached);
+                result.Error.Should().Be("You've used your daily Astra message allowance. Come back tomorrow.");
             }
             user.AiMessagesUsedToday.Should().Be(limit + 1 + (allowed ? 1 : 0));
             await work.Received(allowed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
