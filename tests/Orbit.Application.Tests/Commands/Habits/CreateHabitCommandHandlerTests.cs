@@ -349,7 +349,7 @@ public class CreateHabitCommandHandlerTests
         var repos = new CreateHabitRepositories(_habitRepo, _tagRepo, _goalRepo);
         var handler = new CreateHabitCommandHandler(
             repos, _userDateService,
-            new PayGateService(_habitRepo, userRepository, appConfig, _userDateService),
+            new PayGateService(_habitRepo, userRepository, appConfig, _userDateService, Substitute.For<IFeatureFlagService>()),
             _gamificationService, _goalCompletionService, _unitOfWork, _cache,
             Substitute.For<ILogger<CreateHabitCommandHandler>>());
 

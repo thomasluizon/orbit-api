@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
@@ -45,7 +46,7 @@ public class FeatureFlagOperationTests
         using var factory = new SqliteOrbitDbContextFactory();
         var context = factory.Context;
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var resolver = new FeatureFlagService(context, cache);
+        var resolver = new FeatureFlagService(context, cache, Substitute.For<IHostEnvironment>());
         var admin = User.Create("Admin", "admin@example.com").Value;
         admin.GrantAdmin();
         var account = User.Create("Account", "account@example.com").Value;

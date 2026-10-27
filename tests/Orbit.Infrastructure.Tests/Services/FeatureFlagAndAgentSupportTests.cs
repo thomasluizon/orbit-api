@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using HttpContextExtensions = Orbit.Api.Extensions.HttpContextExtensions;
 using System.Net;
 using System.Security.Claims;
@@ -89,7 +90,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         _dbContext.AppFeatureFlagAccounts.AddRange(AppFeatureFlagAccount.Create("targeted", accountA.Id), AppFeatureFlagAccount.Create("paid", accountA.Id));
         await _dbContext.SaveChangesAsync();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var service = new FeatureFlagService(_dbContext, cache);
+        var service = new FeatureFlagService(_dbContext, cache, Substitute.For<IHostEnvironment>());
 
         (await service.GetEnabledKeysForUserAsync(accountA.Id)).Should().Equal("targeted");
         (await service.GetEnabledKeysForUserAsync(accountB.Id)).Should().BeEmpty();
@@ -115,7 +116,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("disabled", false, null, "Disabled"));
         await _dbContext.SaveChangesAsync();
 
-        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
+        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>());
 
         var result = await service.GetEnabledKeysForUserAsync(user.Id);
 
@@ -125,7 +126,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     [Fact]
     public async Task FeatureFlagService_ReturnsEmptyWhenUserIsMissing()
     {
-        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
+        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>());
 
         var result = await service.GetEnabledKeysForUserAsync(Guid.NewGuid());
 
@@ -142,7 +143,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("stale_plan", true, unknownRequirement, "Stale plan"));
         await _dbContext.SaveChangesAsync();
 
-        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
+        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>());
 
         var result = await service.GetEnabledKeysForUserAsync(user.Id);
 

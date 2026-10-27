@@ -164,6 +164,7 @@ public partial class OAuthPostgresRetryTests
             await using var services = new ServiceCollection()
                 .AddScoped(_ => RetryContext(database, failure))
                 .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
+                .AddSingleton(Substitute.For<IFeatureFlagService>())
                 .AddSingleton(config).AddSingleton(dates).BuildServiceProvider();
             var budget = new AiDailyBudget(services.GetRequiredService<IServiceScopeFactory>());
 

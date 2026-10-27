@@ -9,7 +9,8 @@ public class PayGateService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
     IAppConfigService appConfig,
-    IUserDateService userDateService) : IPayGateService
+    IUserDateService userDateService,
+    IFeatureFlagService featureFlags) : IPayGateService
 {
     public async Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default)
     {
@@ -35,6 +36,8 @@ public class PayGateService(
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var unmetered = (await featureFlags.GetEnabledKeysForUserAsync(userId, ct))
+            .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
 
         var consumption = await ConcurrencyRetry.ExecuteAsync(
             userRepository,
@@ -42,7 +45,7 @@ public class PayGateService(
             token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
             user =>
             {
-                if (!IsProductionSmokeAccount(user.Email))
+                if (!unmetered && !IsProductionSmokeAccount(user.Email))
                 {
                     var messageLimit = user.HasProAccess ? proLimit : freeLimit;
                     if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)

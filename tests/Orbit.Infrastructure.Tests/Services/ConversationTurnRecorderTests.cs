@@ -205,6 +205,7 @@ public class ConversationTurnRecorderTests
             services.AddSingleton<IEncryptionService>(encryption);
             services.AddScoped<IUnitOfWork>(sp => new UnitOfWork(sp.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()));
             services.AddMemoryCache();
+            services.AddSingleton(NSubstitute.Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
             services.AddScoped<IFeatureFlagService, FeatureFlagService>();
             _provider = services.BuildServiceProvider();
             Recorder = new ConversationTurnRecorder(_provider.GetRequiredService<IServiceScopeFactory>(),

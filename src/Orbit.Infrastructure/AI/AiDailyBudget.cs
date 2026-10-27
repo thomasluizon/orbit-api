@@ -25,6 +25,9 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         var config = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
         var dates = scope.ServiceProvider.GetRequiredService<IUserDateService>();
+        var flags = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
+        var unmetered = (await flags.GetEnabledKeysForUserAsync(userId, cancellationToken))
+            .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
         var user = await db.Users.AsNoTracking().SingleAsync(user => user.Id == userId, cancellationToken);
         var localDate = await dates.GetUserTodayAsync(userId, cancellationToken);
         var pro = user.HasProAccess;
@@ -44,7 +47,7 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
                     ? EF.Property<long>(call, "ChargedTokens") * LegacyMaxMicroDollarsPerToken
                     : call.ChargedMicroDollars)
                 }).SingleOrDefaultAsync(token);
-            if ((totals?.Calls ?? 0) >= callLimit || reservedMicroDollars > spendLimit - (totals?.MicroDollars ?? 0))
+            if (!unmetered && ((totals?.Calls ?? 0) >= callLimit || reservedMicroDollars > spendLimit - (totals?.MicroDollars ?? 0)))
                 throw new AiBudgetExceededException();
             var call = AiBudgetCall.Reserve(userId, localDate, reservedMicroDollars);
             db.AiBudgetCalls.Add(call);

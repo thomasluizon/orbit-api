@@ -465,6 +465,13 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "astra_eval_unmetered",
+                            Description = "Staging-only allowance exemption for Astra evaluation accounts",
+                            Enabled = false,
+                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Key = "redesign",
                             Description = "Serve the redesigned web and Android builds to this account",
                             Enabled = false,

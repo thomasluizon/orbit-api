@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using System.Security.Claims;
 using System.Linq.Expressions;
 using System.Text.Json;
@@ -100,7 +101,7 @@ public class McpConfirmationGateTests : IDisposable
         var manageApiKeysTool = new ManageApiKeysTool(mediator);
         _catalogService = new AgentCatalogService([getApiKeysTool, manageApiKeysTool]);
         _pendingOperationStore = new PendingAgentOperationStore(_dbContext, settings);
-        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, _authorization, settings, new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
+        _policyEvaluator = new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, _authorization, settings, new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
 
         var emailService = Substitute.For<IEmailService>();
         emailService.SendVerificationCodeAsync(

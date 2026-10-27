@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
@@ -51,7 +52,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
             Substitute.For<IAgentStepUpService>());
         _policy = new AgentPolicyEvaluator(_db, _catalog, _store,
             Substitute.For<IAgentStepUpAuthorizationBridge>(), settings,
-            new FeatureFlagService(_db, new MemoryCache(new MemoryCacheOptions())));
+            new FeatureFlagService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
     }
 
     internal static async Task<ClaimsPrincipal> Authenticate(Guid userId, Guid? familyId,

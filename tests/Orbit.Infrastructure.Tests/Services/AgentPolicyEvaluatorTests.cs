@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Caching.Memory;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -60,7 +61,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
             _settings,
-            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
+            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
     }
 
     public void Dispose()
@@ -387,7 +388,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
             Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
-            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
+            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
 
         var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,
@@ -428,7 +429,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             _pendingOperationStore,
             _stepUpAuthorizationBridge,
             Options.Create(new AgentPlatformSettings { ShadowModeEnabled = true }),
-            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions())));
+            new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
         var decision = shadowEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.HabitsDelete,
             _userId,

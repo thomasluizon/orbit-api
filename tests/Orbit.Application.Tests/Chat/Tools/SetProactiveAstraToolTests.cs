@@ -155,7 +155,7 @@ public sealed class SetProactiveAstraToolTests
         services.AddSingleton(unitOfWork);
         services.AddSingleton<IPayGateService>(new PayGateService(
             Substitute.For<IGenericRepository<Habit>>(), repository,
-            Substitute.For<IAppConfigService>(), Substitute.For<IUserDateService>()));
+            Substitute.For<IAppConfigService>(), Substitute.For<IUserDateService>(), Substitute.For<IFeatureFlagService>()));
         return services.BuildServiceProvider();
     }
 }

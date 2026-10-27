@@ -37,7 +37,7 @@ public class PayGateServiceExpiredCycleTests
             Substitute.For<IGenericRepository<Habit>>(),
             userRepository,
             appConfig,
-            userDateService);
+            userDateService, Substitute.For<IFeatureFlagService>());
 
         var results = new List<Result>();
         for (var i = 0; i < 6; i++)
@@ -78,7 +78,7 @@ public class PayGateServiceExpiredCycleTests
             Substitute.For<IGenericRepository<Habit>>(),
             userRepository,
             appConfig,
-            userDateService);
+            userDateService, Substitute.For<IFeatureFlagService>());
 
         var secondDateResults = new List<Result>();
         for (var i = 0; i < 5; i++)
@@ -120,7 +120,7 @@ public class PayGateServiceExpiredCycleTests
             Substitute.For<IGenericRepository<Habit>>(),
             userRepository,
             appConfig,
-            userDateService);
+            userDateService, Substitute.For<IFeatureFlagService>());
 
         var fifth = await sut.TryConsumeAiMessage(userId, unitOfWork);
         var sixth = await sut.TryConsumeAiMessage(userId, unitOfWork);
@@ -161,7 +161,7 @@ public class PayGateServiceExpiredCycleTests
             Substitute.For<IGenericRepository<Habit>>(),
             userRepository,
             appConfig,
-            userDateService);
+            userDateService, Substitute.For<IFeatureFlagService>());
 
         var result = await sut.TryConsumeAiMessage(userId, unitOfWork);
 
