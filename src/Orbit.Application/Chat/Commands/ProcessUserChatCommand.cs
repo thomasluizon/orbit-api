@@ -256,10 +256,11 @@ public partial class ProcessUserChatCommandHandler(
                 }
                 return prepared.Crisis != CrisisLocales.None
                     ? HandleCrisisTurnAsync(request with { Message = prepared.Message }, prepared.Crisis, captureMessage: true)
-                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken, prepared.AnsweredAtUtc, choiceContext);
-            }, cancellationToken, (_, token) => ModerateInputAsync(request, token), async (_, token) =>
+                    : HandleTurnAsync(request with { Message = prepared.Message }, recording, evalTrace, cancellationToken,
+                        prepared.AnsweredAtUtc, choiceContext, prepared.SafetyText);
+            }, cancellationToken, (safetyText, token) => ModerateInputAsync(request, token, safetyText), async (safetyText, token) =>
             {
-                var loaded = await LoadModeratedContextAsync(request, token);
+                var loaded = await LoadModeratedContextAsync(request, token, safetyText);
                 choiceContext = loaded.Context;
                 return loaded.Check;
             });
@@ -289,10 +290,10 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     private async Task<(Result<ModerationResult> Check, ChatContext? Context)> LoadModeratedContextAsync(
-        ProcessUserChatCommand request, CancellationToken cancellationToken)
+        ProcessUserChatCommand request, CancellationToken cancellationToken, string? safetyText = null)
     {
         using var contextCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var moderationTask = ModerateInputAsync(request, cancellationToken);
+        var moderationTask = ModerateInputAsync(request, cancellationToken, safetyText);
         if (moderationTask.IsCompleted)
         {
             var completedCheck = await moderationTask;
@@ -339,10 +340,11 @@ public partial class ProcessUserChatCommandHandler(
         }
     }
 
-    private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken)
+    private async Task<Result<ModerationResult>> ModerateInputAsync(ProcessUserChatCommand request, CancellationToken cancellationToken,
+        string? safetyText = null)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Moderation);
-        var input = JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
+        var input = safetyText ?? JsonSerializer.Serialize(new { request.Message, request.History, request.BlockAnswer });
         var check = await moderation.CheckTextAsync(input, cancellationToken);
         if (check.Unavailable)
             return Result.Failure<ModerationResult>(ErrorMessages.AiUnavailable);
@@ -382,7 +384,7 @@ public partial class ProcessUserChatCommandHandler(
 
     private async Task<Result<ChatResponse>> HandleTurnAsync(ProcessUserChatCommand request, ChatTurnState recording,
         ChatEvalTraceCollector? evalTrace, CancellationToken cancellationToken,
-        DateTime? answeredAtUtc = null, ChatContext? loadedContext = null)
+        DateTime? answeredAtUtc = null, ChatContext? loadedContext = null, string? safetyText = null)
     {
         using var turnCancellation = CreateBlockTurnCancellation(cancellationToken, answeredAtUtc);
         cancellationToken = turnCancellation.Token;
@@ -401,7 +403,8 @@ public partial class ProcessUserChatCommandHandler(
         var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
         try
         {
-            var result = await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch, answeredAtUtc, cancellationToken);
+            var result = await HandleLoadedTurnAsync(request, context, recording, evalTrace, telemetry, totalStopwatch,
+                answeredAtUtc, cancellationToken, safetyText);
             if (result.IsFailure && result.ErrorCode == ErrorCodes.AiEmptyResponse)
             {
                 logger.LogWarning("Empty AI completion at round {RoundIndex} for {UserId} {CorrelationId}",
@@ -456,9 +459,9 @@ public partial class ProcessUserChatCommandHandler(
 
     private async Task<Result<ChatResponse>> HandleLoadedTurnAsync(
         ProcessUserChatCommand request, ChatContext context, ChatTurnState recording, ChatEvalTraceCollector? evalTrace, AiTurnTelemetry telemetry,
-        System.Diagnostics.Stopwatch totalStopwatch, DateTime? answeredAtUtc, CancellationToken cancellationToken)
+        System.Diagnostics.Stopwatch totalStopwatch, DateTime? answeredAtUtc, CancellationToken cancellationToken, string? safetyText)
     {
-        var detectedCrisisLocales = CrisisSupportGuard.Detect(request.Message);
+        var detectedCrisisLocales = CrisisSupportGuard.Detect(safetyText ?? request.Message);
         var crisisTurn = CrisisSupportGuard.IsEnabled(detectedCrisisLocales, context.EnabledFeatureFlags);
         if (crisisTurn)
             return await HandleCrisisTurnAsync(request, detectedCrisisLocales);

@@ -16,7 +16,7 @@ namespace Orbit.Application.Chat;
 public sealed record PreparedAstraBlockAnswer(
     string Message, ChatResponse? Response = null, CrisisLocales Crisis = CrisisLocales.None,
     DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false,
-    bool MessageAllowanceConsumed = false, ModerationResult? ModeratedInput = null);
+    bool MessageAllowanceConsumed = false, ModerationResult? ModeratedInput = null, string? SafetyText = null);
 
 public sealed class AstraBlockAnswerService(
     IIssuedAstraBlockStore store,
@@ -200,7 +200,7 @@ public sealed class AstraBlockAnswerService(
                     if (inputCheck.IsFailure)
                         return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
                     if (inputCheck.Value.Flagged)
-                        return Result.Success(new PreparedAstraBlockAnswer(message, ModeratedInput: inputCheck.Value));
+                        return Result.Success(new PreparedAstraBlockAnswer(message, ModeratedInput: inputCheck.Value, SafetyText: safetyText));
                 }
                 var now = TimeProvider.System.GetUtcNow().UtcDateTime;
                 var answeredAtUtc = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
@@ -229,7 +229,7 @@ public sealed class AstraBlockAnswerService(
                         IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
                         response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
-                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed));
+                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed, SafetyText: safetyText));
             }, ct);
         }
         catch (AnswerRejectedException exception)

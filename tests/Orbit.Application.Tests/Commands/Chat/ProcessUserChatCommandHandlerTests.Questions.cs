@@ -8,12 +8,128 @@ using Orbit.Application.Common;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Theory]
+    [InlineData("en", "How are you feeling?", "I'm feeling good", "I want to hurt myself", "Let's plan your next step.")]
+    [InlineData("pt-BR", "Como você está se sentindo?", "Estou me sentindo bem", "Quero me machucar", "Vamos planejar seu próximo passo.")]
+    public async Task QuestionAnswer_UnselectedCrisisOption_UsesModelAndNormalAllowance(
+        string locale, string prompt, string fine, string distress, string reply)
+    {
+        var user = User.Create("Person", "question-safety@example.com").Value;
+        user.SetLanguage(locale);
+        SetupUserAndPayGate(user);
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var block = IssuedAstraBlock.Create(UserId, new("question", "", [], [], Questions:
+            [new("feeling", "singleChoice", prompt, [new("fine", fine), new("distress", distress)])]));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        SetupAiResponse(new AiResponse { TextMessage = reply });
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer",
+            BlockAnswer: new(block.Id, [], Answers: [new("feeling", ["fine"])]),
+            ClientContext: new(SupportsMessageAllowance: true, Locale: locale)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(reply)
+            .And.NotContain(CrisisSupportGuard.EnglishSupport).And.NotContain(CrisisSupportGuard.PortugueseSupport)
+            .And.NotContain("988").And.NotContain("188");
+        result.Value.MessageAllowanceConsumed.Should().BeTrue();
+        await _payGate.Received(1).TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request =>
+                ModelReceivesQuestionAndAnswer(request.UserMessage, prompt, distress)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await _blockStore.Received(1).CompleteAnswerAsync(block.Id, UserId, Arg.Any<DateTime>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    private static bool ModelReceivesQuestionAndAnswer(string message, string prompt, string distress)
+    {
+        using var data = JsonDocument.Parse(message);
+        var root = data.RootElement;
+        return root.GetProperty("questions")[0].GetProperty("prompt").GetString() == prompt
+            && root.GetProperty("questions")[0].GetProperty("options")[1].GetProperty("label").GetString() == distress
+            && root.GetProperty("answers")[0].GetProperty("selectedIds")[0].GetString() == "fine";
+    }
+
+    [Theory]
+    [InlineData("en", "I want to hurt myself", "988", false)]
+    [InlineData("en", "I want to hurt myself", "988", true)]
+    [InlineData("pt-BR", "Quero me machucar", "188", false)]
+    [InlineData("pt-BR", "Quero me machucar", "188", true)]
+    public async Task QuestionAnswer_SelectedOrCustomCrisisDisclosure_ReturnsSupportWithoutAllowance(
+        string locale, string distress, string resource, bool custom)
+    {
+        var user = User.Create("Person", "question-crisis@example.com").Value;
+        user.SetLanguage(locale);
+        SetupUserAndPayGate(user, payGatePass: false);
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var block = IssuedAstraBlock.Create(UserId, new("question", "", [], [], Questions:
+            [new("feeling", "singleChoice", "Feeling?", [new("fine", "Fine"), new("distress", distress)], AllowFreeText: true)]));
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        _blockStore.MarkAnsweredAsync(block.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        var answer = custom ? new AstraQuestionAnswer("feeling", FreeText: distress) : new("feeling", ["distress"]);
+
+        var result = await CreateHandler().Handle(new(UserId, "My answer",
+            BlockAnswer: new(block.Id, [], Answers: [answer]),
+            ClientContext: new(SupportsMessageAllowance: true, Locale: locale)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Contain(resource);
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
+        await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
+        await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData("question")]
+    [InlineData("choice")]
+    [InlineData("pickList")]
+    public async Task BlockAnswer_ModerationChecksSelectedInputInsteadOfRequestEnvelope(string form)
+    {
+        SetupUserAndPayGate();
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        const string selected = "Selected input";
+        const string custom = "Custom answer";
+        var definition = form switch
+        {
+            "question" => new AstraBlockDefinition(form, "", [], [], Questions:
+                [new("feeling", "multipleChoice", "Feeling?", [new("fine", selected), new("other", "Unselected input")], AllowFreeText: true)]),
+            "choice" => new(form, "Feeling?", [new("fine", selected), new("other", "Unselected input")], [], AllowFreeText: true),
+            _ => new(form, "Choose", [], [new("fine", selected, ParseArguments("{\"title\":\"Walk\"}"))], true, Action: "create_habits")
+        };
+        var block = IssuedAstraBlock.Create(UserId, definition);
+        _blockStore.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        string? checkedInput = null;
+        _moderation.CheckTextAsync(Arg.Do<string>(value => checkedInput = value), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult(true, false, ["violence"]));
+        var answer = form == "question"
+            ? new AstraBlockAnswer(block.Id, [], Answers: [new("feeling", ["fine"], FreeText: custom)])
+            : new(block.Id, ["fine"], form == "choice" ? custom : null);
+
+        var result = await CreateHandler().Handle(new(UserId, "Request envelope",
+            History: [new("assistant", "Earlier assistant content")], BlockAnswer: answer,
+            ClientContext: new(SupportsMessageAllowance: true)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        checkedInput.Should().Contain(selected).And.NotContain("Unselected input")
+            .And.NotContain("Request envelope").And.NotContain("Earlier assistant content");
+        if (form != "pickList")
+            checkedInput.Should().Contain(custom);
+        result.Value.MessageAllowanceConsumed.Should().BeFalse();
+        await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _blockStore.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
+        await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
+    }
+
     [Theory]
     [InlineData("en", "choice", true, null)]
     [InlineData("pt-BR", "choice", true, null)]
