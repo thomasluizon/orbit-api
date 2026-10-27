@@ -17284,6 +17284,421 @@
           }
         }
       },
+      "AstraBlockAnswer": {
+        "required": [
+          "blockId",
+          "selectedIds"
+        ],
+        "type": "object",
+        "properties": {
+          "blockId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "selectedIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "freeText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "questionId"
+              ],
+              "type": "object",
+              "properties": {
+                "questionId": {
+                  "type": "string"
+                },
+                "selectedIds": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "number": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "boolean": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "freeText": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "AstraQuestion": {
+        "required": [
+          "id",
+          "type",
+          "prompt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "singleChoice",
+              "multipleChoice",
+              "scale",
+              "slider",
+              "yesNo"
+            ],
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "options": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "id",
+                "label"
+              ],
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "recommended": {
+                  "type": "boolean",
+                  "default": false
+                }
+              }
+            }
+          },
+          "allowFreeText": {
+            "type": "boolean",
+            "default": false
+          },
+          "lowLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "highLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "min": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "max": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "step": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AstraQuestionAnswer": {
+        "required": [
+          "questionId"
+        ],
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string"
+          },
+          "selectedIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "number": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "boolean": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "freeText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AstraQuestionBlock": {
+        "required": [
+          "blockId",
+          "questions",
+          "expiresAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "blockId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "required": [
+                "id",
+                "type",
+                "prompt"
+              ],
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "singleChoice",
+                    "multipleChoice",
+                    "scale",
+                    "slider",
+                    "yesNo"
+                  ],
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "required": [
+                      "id",
+                      "label"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "recommended": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    }
+                  }
+                },
+                "allowFreeText": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "lowLabel": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "highLabel": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "min": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "max": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "step": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                  "type": [
+                    "null",
+                    "number",
+                    "string"
+                  ],
+                  "format": "double"
+                },
+                "unit": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intro": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "progress": {
+            "required": [
+              "current",
+              "total"
+            ],
+            "type": "object",
+            "properties": {
+              "current": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "format": "int32"
+              },
+              "total": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "format": "int32"
+              }
+            }
+          }
+        }
+      },
+      "AstraQuestionOption": {
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "recommended": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "AstraQuestionProgress": {
+        "required": [
+          "current",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "current": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "AuthorizeRequest": {
         "required": [
           "redirectUri"

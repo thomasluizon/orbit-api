@@ -15,6 +15,39 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData("en", "choice", true, null)]
+    [InlineData("pt-BR", "choice", true, null)]
+    [InlineData("en", "Question", true, null)]
+    [InlineData("en", "question", false, null)]
+    [InlineData("pt-BR", "question", true, FeatureFlagKeys.AstraAskBlocksDisabled)]
+    [InlineData("en", "question", true, FeatureFlagKeys.AstraPartsDisabled)]
+    public async Task Question_UnsupportedClientsAndFlagsFallBackWithoutIssuing(string locale, string kind, bool parts, string? flag)
+    {
+        var user = User.Create("Person", "fallback@example.com").Value;
+        user.SetLanguage(locale);
+        SetupUserAndPayGate(user);
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>()).Returns(flag is null ? [] : [flag]);
+        var arguments = JsonSerializer.Serialize(new
+        {
+            form = "question",
+            questions = new[] { new { id = "q", type = "yesNo", prompt = "Ready?" } }
+        });
+        SetupAiResponse(ToolResponse("ask", "question", arguments));
+        var fallback = locale == "pt-BR" ? "Tudo pronto?" : "Ready?";
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = fallback }));
+
+        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan",
+            ClientContext: new(SupportsParts: parts, PartKinds: [kind], Locale: locale)), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be(fallback);
+        result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
+        await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+    }
+
+    [Theory]
     [InlineData("en", "Energy?", "Low", "High")]
     [InlineData("pt-BR", "Energia?", "Baixa", "Alta")]
     public async Task Question_IssuesPartAndFeedsStructuredAnswerIntoNextTurn(string locale, string prompt, string low, string high)

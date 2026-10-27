@@ -36,8 +36,8 @@ public static class AstraQuestionRules
         definition.Title.Length <= 120 && (definition.Intro is null || Text(definition.Intro, 500))
         && definition.Options.Count == 0 && definition.Items.Count == 0 && definition.Action is null
         && !definition.MultiSelect && !definition.AllowFreeText
-        && (definition.Progress is null || definition.Progress.Current >= 1
-            && definition.Progress.Total >= definition.Progress.Current)
+        && (definition.Progress is null || definition.Progress.Current >= 0
+            && definition.Progress.Total >= 1 && definition.Progress.Total >= definition.Progress.Current)
         && definition.Questions is { Count: >= 1 and <= 10 } questions
         && questions.All(IsValidQuestion)
         && questions.Select(question => question.Id).Distinct(StringComparer.Ordinal).Count() == questions.Count;

@@ -37,10 +37,10 @@ public class StructuringStrategySection : IPromptSection
             - User explicitly lists them as distinct habits
             - They would not make sense grouped under one parent
 
-            ### Ask ONE targeted clarifying question when:
+            ### Ask for missing input when:
             - No usable preview can be proposed, such as a request to change an item where multiple account items match and no target can be selected safely.
             - Optional times, inferred routine cadence and routine structure are editable preview fields. They never require a question before a routine preview.
-            - Pick the SINGLE most blocking question. NEVER ask more than one at a time.
+            - When form question is supported, group only necessary missing input in one block. Otherwise ask the single most blocking question.
             - NEVER ask if the user already gave a clear answer elsewhere in the message.
             - After the user answers, act immediately. Do not ask a second round of questions.
 

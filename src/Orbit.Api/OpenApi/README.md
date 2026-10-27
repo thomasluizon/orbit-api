@@ -1,5 +1,9 @@
 # Selecting an OpenAPI artifact
 
+The negotiated Astra `question` block and structured next-turn answers are
+documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract
+before the renderer in thomasluizon/orbit-tickets#1828 advertises support.
+
 [artifacts.json](artifacts.json) is the checked publication catalog. Generation,
 freshness and compatibility use the same declarations. Each entry contains exactly
 `id`, `httpVersion`, `revision`, `documentName`, `path`, `deprecated` and `replacement`.

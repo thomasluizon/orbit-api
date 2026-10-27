@@ -11,6 +11,19 @@ public class AstraQuestionTests
     private static AstraBlockDefinition Definition(AstraQuestion question) => new("question", "", [], [], Questions: [question]);
 
     [Theory]
+    [InlineData(0, 1, true)]
+    [InlineData(1, 1, true)]
+    [InlineData(-1, 1, false)]
+    [InlineData(0, 0, false)]
+    [InlineData(2, 1, false)]
+    public void Progress_AcceptsZeroThroughTotal(int current, int total, bool valid)
+    {
+        var create = () => IssuedAstraBlock.Create(Guid.NewGuid(), Definition(Choice()) with { Progress = new(current, total) });
+        if (valid) create.Should().NotThrow();
+        else create.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
     [InlineData("singleChoice")]
     [InlineData("multipleChoice")]
     [InlineData("scale")]

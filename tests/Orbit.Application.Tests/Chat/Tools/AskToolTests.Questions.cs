@@ -6,6 +6,20 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public partial class AskToolTests
 {
+    [Fact]
+    public async Task Question_ProviderOptionalNullPlaceholdersAreOmittedRecursively()
+    {
+        using var args = JsonDocument.Parse("""
+            {"form":"question","title":null,"question":null,"intro":null,"progress":null,
+             "options":null,"items":null,"action":null,"multiSelect":null,"allowFreeText":null,
+             "questions":[{"id":"q","type":"yesNo","prompt":"Ready?","options":null,
+               "allowFreeText":null,"lowLabel":null,"highLabel":null,"min":null,"max":null,"step":null,"unit":null}]}
+            """);
+        var result = await _tool.ExecuteAsync(args.RootElement, UserId, default);
+        result.Success.Should().BeTrue();
+        result.Payload.Should().BeOfType<AstraBlockDefinition>().Which.Questions!.Single().AllowFreeText.Should().BeFalse();
+    }
+
     [Theory]
     [InlineData("en", "Energy?", "Low", "High")]
     [InlineData("pt-BR", "Energia?", "Baixa", "Alta")]

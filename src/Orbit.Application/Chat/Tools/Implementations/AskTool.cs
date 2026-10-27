@@ -36,7 +36,7 @@ public sealed class AskTool(
                 progress = new
                 {
                     type = "object",
-                    properties = new { current = new { type = "integer", minimum = 1 }, total = new { type = "integer", minimum = 1 } },
+                    properties = new { current = new { type = "integer", minimum = 0 }, total = new { type = "integer", minimum = 1 } },
                     required = new[] { "current", "total" }
                 },
                 questions = new
