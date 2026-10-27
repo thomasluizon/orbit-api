@@ -393,6 +393,7 @@ public static partial class ServiceCollectionExtensions
     private static void ConfigureOrbitOpenApi(Microsoft.AspNetCore.OpenApi.OpenApiOptions options, OpenApiArtifact artifact)
     {
         options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+        options.AddDocumentTransformer<QuestionBlockDocumentTransformer>();
         var group = "v" + artifact.HttpVersion.Split('.')[0];
         options.ShouldInclude = description => description.GroupName is null || description.GroupName == group;
         options.AddDocumentTransformer((document, _, _) =>
@@ -420,6 +421,9 @@ public static partial class ServiceCollectionExtensions
         var type = Nullable.GetUnderlyingType(context.JsonTypeInfo.Type) ?? context.JsonTypeInfo.Type;
         if (type == typeof(Orbit.Application.Chat.ReadBlockCard))
             schema.Discriminator = null;
+        if (type == typeof(AstraQuestion) && schema.Properties?["type"] is OpenApiSchema questionType)
+            questionType.Enum = new[] { "singleChoice", "multipleChoice", "scale", "slider", "yesNo" }
+                .Select(value => (JsonNode)JsonValue.Create(value)).ToList();
         if (context.JsonPropertyInfo?.AttributeProvider is PropertyInfo pendingProperty
             && pendingProperty.DeclaringType == typeof(PendingOperationItem)
             && pendingProperty.Name == nameof(PendingOperationItem.FieldOptions))

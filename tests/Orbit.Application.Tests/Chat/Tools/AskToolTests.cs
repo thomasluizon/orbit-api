@@ -12,7 +12,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
-public class AskToolTests
+public partial class AskToolTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IUserDateService _dates = Substitute.For<IUserDateService>();

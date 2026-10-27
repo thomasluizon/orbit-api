@@ -14,7 +14,7 @@ public sealed class AskTool(
     IUserDateService userDateService) : IChatOnlyAiTool
 {
     public string Name => "ask";
-    public string Description => "Ask a choice question or offer a pick list for a bulk preview. Ends the reply. Never request approval or repeat a preview question.";
+    public string Description => "Ask for missing input with a question block, a choice, or a pick list for a bulk preview. Read account data first. Ends the reply. Never request approval or repeat a preview question.";
     public bool IsReadOnly => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -27,11 +27,59 @@ public sealed class AskTool(
             type = "object",
             properties = new
             {
-                form = new { type = "string", @enum = new[] { "choice", "pickList" } },
+                form = new { type = "string", @enum = new[] { "choice", "pickList", "question" } },
                 question = new { type = "string", maxLength = 120, description = "Question, at most 120 characters." },
                 title = new { type = "string" },
                 multiSelect = new { type = "boolean" },
                 allowFreeText = new { type = "boolean" },
+                intro = new { type = "string", maxLength = 500 },
+                progress = new
+                {
+                    type = "object",
+                    properties = new { current = new { type = "integer", minimum = 0 }, total = new { type = "integer", minimum = 1 } },
+                    required = new[] { "current", "total" }
+                },
+                questions = new
+                {
+                    type = "array",
+                    minItems = 1,
+                    maxItems = 10,
+                    items = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            id = new { type = "string", maxLength = 80 },
+                            type = new { type = "string", @enum = new[] { "singleChoice", "multipleChoice", "scale", "slider", "yesNo" } },
+                            prompt = new { type = "string", maxLength = 500 },
+                            options = new
+                            {
+                                type = "array",
+                                minItems = 2,
+                                maxItems = 10,
+                                items = new
+                                {
+                                    type = "object",
+                                    properties = new
+                                    {
+                                        id = new { type = "string", maxLength = 80 },
+                                        label = new { type = "string", maxLength = 120 },
+                                        recommended = new { type = "boolean", description = "At most one recommended option, only for singleChoice." }
+                                    },
+                                    required = new[] { "id", "label" }
+                                }
+                            },
+                            allowFreeText = new { type = "boolean", description = "Allow a custom answer for singleChoice, multipleChoice, or yesNo." },
+                            lowLabel = new { type = "string", maxLength = 120, description = "Required label for 1 on a scale." },
+                            highLabel = new { type = "string", maxLength = 120, description = "Required label for 5 on a scale." },
+                            min = new { type = "number", minimum = -1000000000, maximum = 1000000000 },
+                            max = new { type = "number", minimum = -1000000000, maximum = 1000000000 },
+                            step = new { type = "number", description = "Positive slider step dividing max minus min exactly." },
+                            unit = new { type = "string", maxLength = 24, description = "Required slider unit in the person's language." }
+                        },
+                        required = new[] { "id", "type", "prompt" }
+                    }
+                },
                 options = new
                 {
                     type = "array",
