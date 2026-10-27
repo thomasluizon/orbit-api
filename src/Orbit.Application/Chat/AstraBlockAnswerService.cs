@@ -65,7 +65,7 @@ public sealed class AstraBlockAnswerService(
                 if (result.ErrorCode != ErrorCodes.AiEmptyResponse)
                     return result;
                 var user = await users.GetByIdAsync(request.UserId, ct);
-                result = Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, user?.Language, null, ct));
+                result = Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, ChatLocale.Resolve(request.ClientContext, user?.Language), null, ct));
             }
             using (ChatTurnTimer.Measure(ChatPhase.Save))
                 await unitOfWork.ExecuteInTransactionAsync(async token =>
@@ -261,8 +261,8 @@ public sealed class AstraBlockAnswerService(
         if (flags.Contains(FeatureFlagKeys.AstraBlockFirst))
             return ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
                 PendingOperations: [preview.PendingOperation], CorrelationId: request.CorrelationId, Parts: []),
-                request.ClientContext, flags, user?.Language);
-        var line = LocaleHelper.IsPortuguese(user?.Language) ? "Nada foi salvo." : "Nothing has been saved.";
+                request.ClientContext, flags, ChatLocale.Resolve(request.ClientContext, user?.Language));
+        var line = LocaleHelper.IsPortuguese(ChatLocale.Resolve(request.ClientContext, user?.Language)) ? "Nada foi salvo." : "Nothing has been saved.";
         return new ChatResponse(line, [], PendingOperations: [preview.PendingOperation],
             CorrelationId: request.CorrelationId,
             Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
@@ -278,7 +278,7 @@ public sealed class AstraBlockAnswerService(
         var flags = await featureFlags.GetEnabledKeysForUserAsync(userId, ct);
         var user = await users.GetByIdAsync(userId, ct);
         if (stored.PendingOperations is not { Count: > 0 } pending)
-            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags, user?.Language, user?.TimeZone);
+            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags, ChatLocale.Resolve(request.ClientContext, user?.Language), user?.TimeZone);
         var current = new List<PendingAgentOperation>();
         foreach (var operation in pending)
         {
@@ -300,7 +300,7 @@ public sealed class AstraBlockAnswerService(
             });
         }
         return ChatResponseNegotiation.ForClient(stored with { PendingOperations = current }, request.ClientContext, flags,
-            user?.Language, user?.TimeZone);
+            ChatLocale.Resolve(request.ClientContext, user?.Language), user?.TimeZone);
     }
 
     private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)

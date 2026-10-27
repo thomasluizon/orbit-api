@@ -297,6 +297,12 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         if (clientContextError is not null)
             return ChatInputParseResult.Failed(clientContextError);
 
+        if (string.IsNullOrWhiteSpace(parsedClientContext?.Locale)
+            && !string.IsNullOrWhiteSpace(Request.Headers.AcceptLanguage))
+            parsedClientContext = (parsedClientContext ?? new AgentClientContext()) with
+            {
+                Locale = LocaleHelper.IsPortugueseAcceptLanguage(Request.Headers.AcceptLanguage) ? "pt-BR" : "en"
+            };
         return ChatInputParseResult.Ok(imageData, imageMimeType, chatHistory, parsedClientContext);
     }
 

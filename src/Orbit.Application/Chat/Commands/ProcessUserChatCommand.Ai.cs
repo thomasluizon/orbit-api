@@ -272,7 +272,7 @@ public partial class ProcessUserChatCommandHandler
         var (featureFlags, userTags, checklistTemplateNames, activeHabits, activeGoals) = inputs;
         return new AgentContextSnapshot(
             hasProAccess ? "pro" : "free",
-            user?.Language,
+            ChatLocale.Resolve(clientContext, user?.Language),
             user?.TimeZone,
             hasProAccess && (user?.AiSummaryEnabled ?? true),
             user?.WeekStartDay ?? 1,

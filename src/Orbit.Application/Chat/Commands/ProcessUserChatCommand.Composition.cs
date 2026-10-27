@@ -24,7 +24,7 @@ public partial class ProcessUserChatCommandHandler
 
     private ChatResponse CompleteCompositionWithoutNarrative(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
-        var cards = ComposeAnswer(FollowUpDirective.Parse(null), false, GetUserLanguage(context.User), request, context, results);
+        var cards = ComposeAnswer(FollowUpDirective.Parse(null), false, context.Language, request, context, results);
         CaptureResponseCardEvents(request, context, cards);
         return new ChatResponse(cards.AiMessage, [], results.OperationResults, CorrelationId: request.CorrelationId,
             RelatedSurfaces: results.RelatedSurfaces, Parts: cards.Parts)
@@ -108,7 +108,7 @@ public partial class ProcessUserChatCommandHandler
     {
         var composition = UsesComposition(request, context);
         var hasPreview = HasPendingWritePreview(executionResults);
-        var language = GetUserLanguage(context.User);
+        var language = context.Language;
         var parsedResponse = FollowUpDirective.Parse(StripJsonWrapper(aiResponse.TextMessage));
         var followUps = CanEmitFollowUps(request, toolLoopResult, executionResults, aiResponse)
             ? parsedResponse.FollowUps

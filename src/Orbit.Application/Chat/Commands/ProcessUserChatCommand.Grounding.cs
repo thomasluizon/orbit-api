@@ -24,7 +24,7 @@ public partial class ProcessUserChatCommandHandler
             .Concat(context.ActiveGoals.Select(goal => goal.Title))
             .Concat(context.UserTags.Select(tag => tag.Name))
             .Concat(context.ChecklistTemplateNames).ToArray(),
-        GetUserLanguage(context.User));
+        context.Language);
 
     private static async Task<string?> GetGroundedCachedFaqAnswerAsync(
         (string Key, string Locale)? match, GroundingTurn turn, ProcessUserChatCommand request, bool suppressDeltas = false)

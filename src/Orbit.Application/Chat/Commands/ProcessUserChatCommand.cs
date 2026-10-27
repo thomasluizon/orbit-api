@@ -353,7 +353,7 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request, ModerationResult check, CancellationToken cancellationToken)
     {
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
-        var isPortuguese = LocaleHelper.IsPortuguese(user?.Language);
+        var isPortuguese = LocaleHelper.IsPortuguese(ChatLocale.Resolve(request.ClientContext, user?.Language));
         if (check.Categories.Any(category => category is "self-harm" or "self-harm/intent" or "self-harm/instructions"))
             return await HandleCrisisTurnAsync(request,
                 isPortuguese ? CrisisLocales.Portuguese : CrisisLocales.English, captureMessage: true);
@@ -407,13 +407,13 @@ public partial class ProcessUserChatCommandHandler(
                 logger.LogWarning("Empty AI completion at round {RoundIndex} for {UserId} {CorrelationId}",
                     telemetry.RoundCount, request.UserId, request.CorrelationId);
                 return request.BlockAnswer is not null ? result
-                    : Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.User?.Language, null, cancellationToken));
+                    : Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.Language, null, cancellationToken));
             }
             if (result.IsSuccess)
             {
                 var readable = ChatResponseNegotiation.ForPendingPreview(result.Value,
                     ApplyClientKillFlags(request, context.EnabledFeatureFlags).ClientContext?.SupportsParts == true,
-                    GetUserLanguage(context.User));
+                    context.Language);
                 if (!ReferenceEquals(readable, result.Value))
                 {
                     if (request.StreamSink is { } sink)
@@ -434,7 +434,7 @@ public partial class ProcessUserChatCommandHandler(
                 }).ToDictionary(group => group.Key, group => group.Count());
                 logger.LogWarning("Empty composed AI answer at round {RoundIndex}; output kinds {OutputKinds} for {UserId} {CorrelationId}",
                     telemetry.RoundCount, JsonSerializer.Serialize(outputKinds), request.UserId, request.CorrelationId);
-                return Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.User?.Language, result.Value, cancellationToken));
+                return Result.Success(await ChatResponseNegotiation.RecoverEmptyAnswerAsync(request, context.Language, result.Value, cancellationToken));
             }
             return result;
         }
@@ -466,7 +466,7 @@ public partial class ProcessUserChatCommandHandler(
         request = ApplyClientKillFlags(request, context.EnabledFeatureFlags);
         CaptureFollowUpSentEvent(request, context.User);
 
-        var userLanguage = GetUserLanguage(context.User);
+        var userLanguage = context.Language;
         GroundingTurn groundingTurn;
         using (ChatTurnTimer.Measure(ChatPhase.ContextLoad))
             groundingTurn = await LoadGroundingTurnAsync(context, cancellationToken);
@@ -615,8 +615,6 @@ public partial class ProcessUserChatCommandHandler(
 
     private static string GetAnalyticsPlan(User? user) =>
         user?.Plan.ToString() ?? nameof(UserPlan.Free);
-
-    private static string? GetUserLanguage(User? user) => user?.Language;
 
     private static ProcessUserChatCommand ApplyClientKillFlags(
         ProcessUserChatCommand request,
@@ -934,11 +932,11 @@ public partial class ProcessUserChatCommandHandler(
     {
         try
         {
-            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags, context.User?.Language, context.User?.TimeZone);
+            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags, context.Language, context.User?.TimeZone);
             var boundRead = ResolveQueryRead(aiMessage, executionResults);
             if (boundRead is not null && ReadEnabled(boundRead, request.ClientContext, context.EnabledFeatureFlags))
                 return ResponseFromRead(StripAllDirectives(aiMessage), ForClient(boundRead, request.ClientContext, context.EnabledFeatureFlags));
-            return RetainCompatibleCards(await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken), request.ClientContext, context.User?.Language, context.User?.TimeZone);
+            return RetainCompatibleCards(await BuildResponseCardsAsync(aiMessage, request, context, executionResults, cancellationToken), request.ClientContext, context.Language, context.User?.TimeZone);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

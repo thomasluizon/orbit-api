@@ -43,8 +43,8 @@ public partial class ProcessUserChatCommandHandler
         if (supported && card is not null && (cards.Parts?.OfType<ChatBlockPart>().Count() ?? 0) < 3)
             return cards with { Parts = (cards.Parts ?? []).Append(new ChatBlockPart(HabitRankingCardBuilder.Kind, card)).ToArray() };
         var readable = failed
-            ? ToolFailureMessage(context.User?.Language)
-            : HabitRankingCardBuilder.Readable(ranking, context.User?.Language);
+            ? ToolFailureMessage(context.Language)
+            : HabitRankingCardBuilder.Readable(ranking, context.Language);
         return cards with
         {
             AiMessage = string.Join("\n\n", new[] { cards.AiMessage, readable }.Where(text => !string.IsNullOrWhiteSpace(text))),
