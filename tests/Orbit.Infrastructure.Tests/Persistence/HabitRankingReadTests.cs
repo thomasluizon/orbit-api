@@ -42,7 +42,8 @@ public class HabitRankingReadTests(ITestOutputHelper output)
         (await handler.Handle(new GetHabitRankingQuery(Guid.NewGuid(), from, from.AddDays(30)), default))
             .IsSuccess.Should().BeTrue();
 
-        sql.Should().Contain("GROUP BY").And.Contain("count(DISTINCT").And.Contain("LEFT JOIN")
+        sql.Should().Contain("GROUP BY").And.NotContain("DISTINCT").And.Contain("LEFT JOIN")
+            .And.Contain("EXISTS")
             .And.NotContain("\"Note\"").And.NotContain("\"ChecklistItems\"");
         output.WriteLine(sql);
     }

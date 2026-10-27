@@ -153,11 +153,12 @@ public sealed class GetHabitRankingQueryHandler(
                 && (h.Schedule == HabitSchedule.Recurring || h.Schedule == HabitSchedule.Flexible) && !h.IsBadHabit
                 && (query.HabitIds.Count == 0 || query.HabitIds.Contains(h.Id)),
             q => q.SelectMany(h => h.Logs.Where(l => !l.IsDeleted && !l.IsSlip && l.Value > 0
-                    && l.Date >= query.DateFrom && l.Date < query.DateToExclusive).DefaultIfEmpty(),
+                    && l.Date >= query.DateFrom && l.Date < query.DateToExclusive
+                    && q.Any(owner => owner.Id == l.HabitId)).DefaultIfEmpty(),
                 (h, log) => new { h.Id, h.Title, h.Emoji, h.ParentHabitId, LogId = log == null ? (Guid?)null : log.Id })
                 .GroupBy(row => new { row.Id, row.Title, row.Emoji, row.ParentHabitId })
                 .Select(group => new HabitRankingRow(0, group.Key.Id, group.Key.Title, group.Key.Emoji,
-                    group.Key.ParentHabitId, group.Select(row => row.LogId).Distinct().Count(id => id != null))), ct);
+                    group.Key.ParentHabitId, group.Count(row => row.LogId != null))), ct);
     }
 
     private async Task<Result<HabitRankingDefinition>> ResolveAsync(GetHabitRankingQuery request, CancellationToken ct)
