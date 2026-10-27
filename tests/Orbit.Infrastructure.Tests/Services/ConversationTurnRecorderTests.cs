@@ -164,18 +164,40 @@ public class ConversationTurnRecorderTests
         rows.Should().HaveCount(2).And.OnlyContain(turn => turn.TurnId == next.TurnId);
     }
 
-    [Fact]
-    public async Task Consumer_BlockedWrite_ShutdownHonorsDeadline()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Consumer_BlockedWrite_ShutdownHonorsDeadline(bool deadlineAlreadyExpired)
     {
-        var blocker = new BlockingSaveInterceptor();
-        using var fixture = new Fixture(interceptor: blocker);
-        blocker.Block = true;
+        var blocker = new BlockingWrite();
+        using var fixture = new Fixture(unitOfWork: blocker.Work);
         fixture.Recorder.TryRecord(Capture(fixture.User.Id)).Should().BeTrue();
         await fixture.Recorder.StartAsync(CancellationToken.None);
-        await blocker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        await fixture.Recorder.StopAsync(deadline.Token).WaitAsync(TimeSpan.FromSeconds(2));
-        await blocker.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var consumer = fixture.Recorder.ExecuteTask ?? throw new InvalidOperationException("Recorder did not start");
+        var writeToken = await blocker.Entered.Task;
+        using var deadline = new CancellationTokenSource();
+        if (deadlineAlreadyExpired)
+            deadline.Cancel();
+        var stopping = fixture.Recorder.StopAsync(deadline.Token);
+        try
+        {
+            if (deadlineAlreadyExpired)
+                writeToken.IsCancellationRequested.Should().BeTrue("an expired deadline must cancel the write before waiting for it");
+            else
+                deadline.Cancel();
+            await stopping;
+            writeToken.IsCancellationRequested.Should().BeTrue();
+            consumer.IsCompleted.Should().BeFalse("shutdown must return while the write is still held at the gate");
+        }
+        finally
+        {
+            fixture.Recorder.Dispose();
+            blocker.Release.TrySetResult();
+            await consumer;
+            await stopping;
+        }
+        blocker.CancellationObserved.Task.IsCompletedSuccessfully.Should().BeTrue();
+        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
     }
 
     private static ConversationTurnCapture Capture(Guid userId) => new(userId, Guid.NewGuid(), DateTime.UtcNow,
@@ -189,7 +211,8 @@ public class ConversationTurnRecorderTests
         public ConversationTurnRecorder Recorder { get; }
         private readonly ServiceProvider _provider;
 
-        public Fixture(bool flagEnabled = true, bool encryptionConfigured = true, IInterceptor? interceptor = null)
+        public Fixture(bool flagEnabled = true, bool encryptionConfigured = true, IInterceptor? interceptor = null,
+            IUnitOfWork? unitOfWork = null)
         {
             var encryption = new EncryptionService(Options.Create(new EncryptionSettings
             {
@@ -203,7 +226,7 @@ public class ConversationTurnRecorderTests
             var services = new ServiceCollection();
             services.AddScoped(_ => Database.CreateContext());
             services.AddSingleton<IEncryptionService>(encryption);
-            services.AddScoped<IUnitOfWork>(sp => new UnitOfWork(sp.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()));
+            services.AddScoped<IUnitOfWork>(sp => unitOfWork ?? new UnitOfWork(sp.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()));
             services.AddMemoryCache();
             services.AddSingleton(NSubstitute.Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
             services.AddScoped<IFeatureFlagService, FeatureFlagService>();
@@ -248,21 +271,35 @@ public class ConversationTurnRecorderTests
         }
     }
 
-    private sealed class BlockingSaveInterceptor : SaveChangesInterceptor
+    private sealed class BlockingWrite
     {
-        public bool Block { get; set; }
+        public IUnitOfWork Work { get; } = Substitute.For<IUnitOfWork>();
         public TaskCompletionSource CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        public TaskCompletionSource<CancellationToken> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public BlockingWrite()
         {
-            if (Block)
+            Work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
+                .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
+            Work.SaveChangesAsync(Arg.Any<CancellationToken>())
+                .Returns(call => WaitAsync(call.Arg<CancellationToken>()));
+        }
+
+        private async Task<int> WaitAsync(CancellationToken cancellationToken)
+        {
+            Entered.TrySetResult(cancellationToken);
+            try
             {
-                Entered.TrySetResult();
-                try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
-                catch (OperationCanceledException) { CancellationObserved.TrySetResult(); throw; }
+                await Release.Task;
+                cancellationToken.ThrowIfCancellationRequested();
             }
-            return result;
+            catch (OperationCanceledException)
+            {
+                CancellationObserved.TrySetResult();
+                throw;
+            }
+            return 0;
         }
     }
 }
