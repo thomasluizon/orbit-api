@@ -27,13 +27,15 @@ public class GetSubscriptionStatusQueryHandler(
             user.IsTrialActive,
             user.TrialEndsAt,
             user.PlanExpiresAt,
-            user.GetAiMessagesUsedToday(today),
+            user.GetAiMessagesUsedForQuota(today),
             await payGate.GetAiMessageLimit(user.Id, cancellationToken),
             user.IsLifetimePro,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
             user.SubscriptionSource.ToApiValue(),
             user.SubscriptionLapseReason.ToApiValue(),
             user.SubscriptionEndedAtUtc,
-            user.SubscriptionSource.ToBillingProvider()));
+            user.SubscriptionSource.ToBillingProvider(),
+            AiAllowancePeriod.For(today, user.HasProAccess, user.WeekStartDay).Name,
+            AiAllowanceReset.GetResetsAtUtc(user, today)));
     }
 }

@@ -14,10 +14,10 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public partial class LocalizedErrorResultFilterTests
 {
     [Theory]
-    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 50 messages per day.")]
-    [InlineData(true, "en", "You've reached your daily AI message limit (50).")]
-    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 50 mensagens por dia.")]
-    [InlineData(true, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (50).")]
+    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 250 messages per week.")]
+    [InlineData(true, "en", "You've reached your weekly AI message limit (250).")]
+    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 250 mensagens por semana.")]
+    [InlineData(true, "pt-BR", "Você atingiu seu limite semanal de mensagens de IA (250).")]
     public async Task ExhaustedAstraAllowance_LocalizesTheQuotaReasonThroughHttpAndStream(bool pro, string locale, string expected)
     {
         var today = new DateOnly(2026, 10, 27);
@@ -25,7 +25,7 @@ public partial class LocalizedErrorResultFilterTests
         user.SetLanguage(locale);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         if (pro) user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
-        var limit = pro ? 50 : 5;
+        var limit = pro ? 250 : 5;
         for (var index = 0; index < limit; index++) user.IncrementAiMessageCount(today);
         var users = Substitute.For<IGenericRepository<User>>();
         users.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
@@ -34,7 +34,7 @@ public partial class LocalizedErrorResultFilterTests
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today);
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, 5, Arg.Any<CancellationToken>()).Returns(5);
-        config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, 50, Arg.Any<CancellationToken>()).Returns(50);
+        config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, 250, Arg.Any<CancellationToken>()).Returns(250);
         var work = Substitute.For<IUnitOfWork>();
         var gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), users, config, dates,
             Substitute.For<IFeatureFlagService>());

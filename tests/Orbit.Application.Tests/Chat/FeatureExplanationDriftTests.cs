@@ -92,7 +92,7 @@ public class FeatureExplanationDriftTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Paygate_QuotaClaimMatchesEnforcedDailyWindow(bool pro)
+    public async Task Paygate_QuotaClaimMatchesEnforcedPlanPeriod(bool pro)
     {
         var user = User.Create("Quota reader", "quota@example.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
@@ -119,11 +119,16 @@ public class FeatureExplanationDriftTests
 
         (await gate.TryConsumeAiMessage(user.Id, work)).IsFailure.Should().BeTrue();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today.AddDays(1));
+        (await gate.TryConsumeAiMessage(user.Id, work)).IsSuccess.Should().Be(!pro);
+        if (pro)
+            dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today.AddDays(5));
+        else
+            dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(today.AddDays(2));
         (await gate.TryConsumeAiMessage(user.Id, work)).IsSuccess.Should().BeTrue();
         user.AiMessagesUsedToday.Should().Be(1);
         Body("paygate").Should().Contain(
-            $"**AI messages** are capped at **{N(AppConstants.DefaultFreeAiMessages)}** per day. Pro raises this to **{N(AppConstants.DefaultProAiMessages)}** per day.",
-            "paygate.md must describe the enforced daily quota and its plan limits");
+            $"**AI messages** are capped at **{N(AppConstants.DefaultFreeAiMessages)}** per day. Pro includes **{N(AppConstants.DefaultProAiMessages)}** per local calendar week, resetting at midnight on the person's chosen week start day in their time zone.",
+            "paygate.md must describe the enforced plan periods and limits");
     }
 
     [Theory]

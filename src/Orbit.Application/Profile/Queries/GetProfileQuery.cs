@@ -63,7 +63,9 @@ public record ProfileResponse(
     bool? MarketingEmailConsent = null,
     DateOnly? LastCompletionDate = null,
     int? ActiveApiKeyCount = null,
-    string? BillingProvider = null);
+    string? BillingProvider = null,
+    string? AiMessagesPeriod = null,
+    DateTime? AiMessagesResetsAt = null);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -129,7 +131,7 @@ public class GetProfileQueryHandler(
             user.IsTrialActive,
             user.TrialEndsAt,
             user.PlanExpiresAt,
-            user.GetAiMessagesUsedToday(today),
+            user.GetAiMessagesUsedForQuota(today),
             aiMessageLimit,
             user.HasImportedCalendar,
             user.HasSeenImportPrompt,
@@ -161,6 +163,8 @@ public class GetProfileQueryHandler(
             user.MarketingEmailConsent,
             lastCompletionDate,
             activeApiKeyCount,
-            user.SubscriptionSource.ToBillingProvider()));
+            user.SubscriptionSource.ToBillingProvider(),
+            AiAllowancePeriod.For(today, user.HasProAccess, user.WeekStartDay).Name,
+            AiAllowanceReset.GetResetsAtUtc(user, today)));
     }
 }

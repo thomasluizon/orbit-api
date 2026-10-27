@@ -51,8 +51,8 @@ public class AstraBlockAnswerRecoveryTests
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(date);
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>()).Returns(5);
-        config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(50);
-        config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(50);
+        config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(250);
+        config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(250);
         var users = new GenericRepository<User>(db);
         var quota = new PayGateService(new GenericRepository<Habit>(db), users, config, dates, Substitute.For<IFeatureFlagService>());
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
@@ -108,7 +108,7 @@ public class AstraBlockAnswerRecoveryTests
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(date);
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>()).Returns(5);
-        config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(50);
+        config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(250);
         var quota = new PayGateService(new GenericRepository<Habit>(db), users, config, dates, Substitute.For<IFeatureFlagService>());
         var store = new IssuedAstraBlockStore(db);
         var work = new UnitOfWork(db, new DatabaseConnectionSettings());

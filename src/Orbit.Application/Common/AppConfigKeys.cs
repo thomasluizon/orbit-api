@@ -8,7 +8,7 @@ public static class AppConfigKeys
     public const string MaxReferrals = "MaxReferrals";
     public const string FreeMaxHabits = "FreeMaxHabits";
     public const string FreeAiMessagesPerDay = "FreeAiMessagesPerDay";
-    public const string ProAiMessagesPerDay = "ProAiMessagesPerDay";
+    public const string ProAiMessagesPerWeek = "ProAiMessagesPerWeek";
     public const string FreeAiCallsPerDay = "FreeAiCallsPerDay";
     public const string ProAiCallsPerDay = "ProAiCallsPerDay";
     public const string FreeAiMicroDollarsPerDay = "FreeAiMicroDollarsPerDay";

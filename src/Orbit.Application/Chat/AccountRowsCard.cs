@@ -10,7 +10,9 @@ public record AccountRowsCard(
     string Kind, IReadOnlyList<AccountRow> Rows,
     string? ReferralCode = null, string? ReferralLink = null,
     string SurfaceId = "profile",
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
+    string? AiMessagesPeriod = null,
+    DateTime? AiMessagesResetsAt = null) : ReadBlockCard;
 
 public static class AccountRowsCardBuilder
 {
@@ -43,7 +45,7 @@ public static class AccountRowsCardBuilder
             new("source", profile.SubscriptionSource, "enum"),
             new("lifetime", profile.IsLifetimePro.ToString().ToLowerInvariant(), "boolean"),
             new("astraAllowance", $"{profile.AiMessagesUsed}/{profile.AiMessagesLimit}", "count")
-        ]);
+        ], AiMessagesPeriod: profile.AiMessagesPeriod, AiMessagesResetsAt: profile.AiMessagesResetsAt);
 
     public static AccountRowsCard Referral(ReferralDashboardResponse dashboard) =>
         new("referral",
@@ -65,7 +67,7 @@ public static class AccountRowsCardBuilder
             new("source", status.Source, "enum"),
             new("lifetime", status.IsLifetimePro.ToString().ToLowerInvariant(), "boolean"),
             new("astraAllowance", $"{status.AiMessagesUsed}/{status.AiMessagesLimit}", "count")
-        ]);
+        ], AiMessagesPeriod: status.AiMessagesPeriod, AiMessagesResetsAt: status.AiMessagesResetsAt);
 
     private static string? Iso(DateTime? date) => date?.ToString("O", CultureInfo.InvariantCulture);
 }

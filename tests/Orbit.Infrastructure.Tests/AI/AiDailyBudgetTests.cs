@@ -32,6 +32,39 @@ public class AiDailyBudgetTests
     private static readonly DateOnly Today = new(2026, 1, 2);
 
     [Theory]
+    [InlineData(false, 0, true)]
+    [InlineData(false, 1, false)]
+    [InlineData(true, 0, true)]
+    [InlineData(true, 0, false)]
+    [InlineData(true, 1, true)]
+    [InlineData(true, 1, false)]
+    public async Task SafetyBudget_ProPersistsUntilWeekStartWhileFreeResetsDaily(bool pro, int weekStartDay, bool callsExhausted)
+    {
+        using var fixture = new BudgetFixture(pro);
+        fixture.User.SetWeekStartDay(weekStartDay).IsSuccess.Should().BeTrue();
+        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, Today,
+            callsExhausted ? 1 : pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay));
+        await fixture.Database.Context.SaveChangesAsync();
+        if (callsExhausted)
+            fixture.Config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerDay : AppConfigKeys.FreeAiCallsPerDay,
+                Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+        fixture.Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today.AddDays(1));
+
+        if (pro)
+        {
+            var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
+            await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+            fixture.Handler.Completions.Should().Be(0);
+            fixture.Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                .Returns(new DateOnly(2026, 1, weekStartDay == 0 ? 4 : 5));
+        }
+
+        await fixture.Client.CompleteTextAsync("system", "write");
+
+        fixture.Handler.Completions.Should().Be(1);
+    }
+
+    [Theory]
     [InlineData("Staging", true, "calls")]
     [InlineData("Staging", true, "spend")]
     [InlineData("Staging", true, "legacy")]
@@ -119,7 +152,7 @@ public class AiDailyBudgetTests
     [Theory]
     [InlineData(false, 5)]
     [InlineData(true, 50)]
-    public async Task TypicalWrites_FitUnderDailySpendCeiling(bool pro, int messages)
+    public async Task TypicalWrites_FitUnderSpendCeiling(bool pro, int messages)
     {
         (pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay)
             .Should().Be(pro ? 120_000 : 20_000);
@@ -456,6 +489,7 @@ public class AiDailyBudgetTests
         internal SqliteOrbitDbContextFactory Database { get; } = new();
         internal User User { get; }
         internal IAppConfigService Config { get; } = Substitute.For<IAppConfigService>();
+        internal IUserDateService Dates { get; } = Substitute.For<IUserDateService>();
         internal HttpContextAccessor Http { get; } = new() { HttpContext = new DefaultHttpContext() };
         internal ModelHandler Handler { get; }
         internal BudgetedAiCompletionClient Client { get; }
@@ -476,7 +510,7 @@ public class AiDailyBudgetTests
             SetUser(User.Id);
             Config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));
             Config.GetAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<long>(1));
-            var dates = Substitute.For<IUserDateService>();
+            var dates = Dates;
             dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
             _provider = new ServiceCollection()
                 .AddScoped(_ => Database.CreateContext())

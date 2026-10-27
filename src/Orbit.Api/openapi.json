@@ -16223,6 +16223,19 @@
                 "$ref": "#/components/schemas/ReadBlockMetadata"
               }
             ]
+          },
+          "aiMessagesPeriod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiMessagesResetsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -24177,6 +24190,19 @@
               "null",
               "string"
             ]
+          },
+          "aiMessagesPeriod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiMessagesResetsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -24362,6 +24388,19 @@
                 "$ref": "#/components/schemas/ReadBlockMetadata"
               }
             ]
+          },
+          "aiMessagesPeriod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiMessagesResetsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -26503,6 +26542,19 @@
               "null",
               "string"
             ]
+          },
+          "aiMessagesPeriod": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiMessagesResetsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },

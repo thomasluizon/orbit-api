@@ -35,7 +35,8 @@ public class SubscriptionTools(
         return $"Plan: {(u.HasProAccess ? "Pro" : "Free")}\n" +
                (u.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n") : "") +
                (u.PlanExpiresAt is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n") : "") +
-               $"Daily AI Messages: {u.GetAiMessagesUsedToday(today)}/{aiLimit}\n" +
+               $"AI Messages ({(u.HasProAccess ? "week" : "day")}): {u.GetAiMessagesUsedForQuota(today)}/{aiLimit}\n" +
+               $"AI Messages reset: {AiAllowanceReset.GetResetsAtUtc(u, today):O}\n" +
                (u.IsLifetimePro ? "Lifetime Pro: Yes\n" : "") +
                (u.SubscriptionInterval is not null ? $"Billing: {u.SubscriptionInterval.ToString()!.ToLowerInvariant()}" : "");
     }

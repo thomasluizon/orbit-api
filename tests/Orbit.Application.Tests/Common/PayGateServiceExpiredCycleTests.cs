@@ -29,7 +29,7 @@ public class PayGateServiceExpiredCycleTests
             .Returns(user);
         var appConfig = Substitute.For<IAppConfigService>();
         appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
-        appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        appConfig.GetAsync("ProAiMessagesPerWeek", 250, Arg.Any<CancellationToken>()).Returns(250);
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
         var unitOfWork = Substitute.For<IUnitOfWork>();
@@ -69,7 +69,7 @@ public class PayGateServiceExpiredCycleTests
             .Returns(user);
         var appConfig = Substitute.For<IAppConfigService>();
         appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
-        appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        appConfig.GetAsync("ProAiMessagesPerWeek", 250, Arg.Any<CancellationToken>()).Returns(250);
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>())
             .Returns(secondDate, secondDate, secondDate, secondDate, secondDate, firstDate);
@@ -111,7 +111,7 @@ public class PayGateServiceExpiredCycleTests
             .Returns(user);
         var appConfig = Substitute.For<IAppConfigService>();
         appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
-        appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        appConfig.GetAsync("ProAiMessagesPerWeek", 250, Arg.Any<CancellationToken>()).Returns(250);
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>())
             .Returns(today, today, today.AddDays(1));
@@ -153,7 +153,7 @@ public class PayGateServiceExpiredCycleTests
             .Returns(user);
         var appConfig = Substitute.For<IAppConfigService>();
         appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
-        appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        appConfig.GetAsync("ProAiMessagesPerWeek", 250, Arg.Any<CancellationToken>()).Returns(250);
         var userDateService = Substitute.For<IUserDateService>();
         userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(today);
         var unitOfWork = Substitute.For<IUnitOfWork>();

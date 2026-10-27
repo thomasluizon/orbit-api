@@ -63,7 +63,7 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             var config = Substitute.For<IAppConfigService>();
             config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages,
                 Arg.Any<CancellationToken>()).Returns(1);
-            config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages,
+            config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages,
                 Arg.Any<CancellationToken>()).Returns(50);
             var dates = Substitute.For<IUserDateService>();
             dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 1, 1));

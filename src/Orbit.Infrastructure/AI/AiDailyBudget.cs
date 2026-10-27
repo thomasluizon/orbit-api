@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
@@ -31,14 +32,15 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var user = await db.Users.AsNoTracking().SingleAsync(user => user.Id == userId, cancellationToken);
         var localDate = await dates.GetUserTodayAsync(userId, cancellationToken);
         var pro = user.HasProAccess;
+        var period = AiAllowancePeriod.For(localDate, pro, user.WeekStartDay);
         var callLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerDay : AppConfigKeys.FreeAiCallsPerDay,
             pro ? AppConfigKeys.DefaultProAiCallsPerDay : AppConfigKeys.DefaultFreeAiCallsPerDay, cancellationToken);
         var spendLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiMicroDollarsPerDay : AppConfigKeys.FreeAiMicroDollarsPerDay,
             pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay, cancellationToken);
         return await work.ExecuteInTransactionAsync(async token =>
         {
-            await work.AcquireAdvisoryLockAsync($"ai-budget:{userId}:{localDate:yyyy-MM-dd}", token);
-            var query = db.AiBudgetCalls.Where(call => call.UserId == userId && call.LocalDate == localDate);
+            await work.AcquireAdvisoryLockAsync($"ai-budget:{userId}:{period.Start:yyyy-MM-dd}", token);
+            var query = db.AiBudgetCalls.Where(call => call.UserId == userId && call.LocalDate >= period.Start && call.LocalDate < period.End);
             var totals = await query.GroupBy(call => call.UserId)
                 .Select(group => new
                 {

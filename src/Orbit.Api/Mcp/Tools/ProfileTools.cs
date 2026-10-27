@@ -28,7 +28,8 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
                (p.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial ends: {p.TrialEndsAt:yyyy-MM-dd}\n") : "") +
                (p.TimeZone is not null ? $"Timezone: {p.TimeZone}\n" : "") +
                (p.Language is not null ? $"Language: {p.Language}\n" : "") +
-               $"AI Messages: {p.AiMessagesUsed}/{p.AiMessagesLimit}\n" +
+               $"AI Messages ({p.AiMessagesPeriod}): {p.AiMessagesUsed}/{p.AiMessagesLimit}\n" +
+               $"AI Messages reset: {p.AiMessagesResetsAt:O}\n" +
                $"Level: {p.Level} ({p.LevelTitle}) - {p.TotalXp} XP\n" +
                $"Week starts on: {(p.WeekStartDay == 0 ? "Sunday" : "Monday")}\n" +
                $"Clock: {(p.Uses24HourClock ? "24-hour" : "12-hour")}";

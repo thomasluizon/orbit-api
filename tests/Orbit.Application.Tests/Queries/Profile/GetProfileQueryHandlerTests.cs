@@ -246,7 +246,7 @@ public class GetProfileQueryHandlerTests
     {
         var user = CreateTestUser("John Doe");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(50);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(250);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -275,8 +275,8 @@ public class GetProfileQueryHandlerTests
             user.IsTrialActive,
             user.TrialEndsAt,
             user.PlanExpiresAt,
-            AiMessagesUsed = user.AiMessagesUsedToday,
-            AiMessagesLimit = 50,
+            AiMessagesUsed = user.GetAiMessagesUsedForQuota(Today),
+            AiMessagesLimit = 250,
             user.HasImportedCalendar,
             user.HasSeenImportPrompt,
             HasGoogleConnection = false,
@@ -322,6 +322,8 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessagesUsed.Should().Be(0);
         result.Value.AiMessagesLimit.Should().Be(5);
+        result.Value.AiMessagesPeriod.Should().Be("day");
+        result.Value.AiMessagesResetsAt.Should().Be(new DateTime(2026, 4, 4, 0, 0, 0, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -515,7 +517,7 @@ public class GetProfileQueryHandlerTests
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
 
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(50);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(250);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -528,7 +530,7 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Plan.Should().Be("pro");
         result.Value.HasProAccess.Should().BeTrue();
-        result.Value.AiMessagesLimit.Should().Be(50);
+        result.Value.AiMessagesLimit.Should().Be(250);
     }
 
     [Fact]

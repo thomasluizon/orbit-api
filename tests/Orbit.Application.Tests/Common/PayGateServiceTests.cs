@@ -31,7 +31,7 @@ public class PayGateServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultFreeMaxHabits);
         _appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
-        _appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        _appConfig.GetAsync("ProAiMessagesPerWeek", 250, Arg.Any<CancellationToken>()).Returns(250);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _appConfig.GetAsync("DailySummaryProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("RetrospectiveProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
@@ -256,7 +256,7 @@ public class PayGateServiceTests
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(50);
+        limit.Should().Be(250);
     }
 
     [Fact]
@@ -282,14 +282,14 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task GetAiMessageLimit_ActiveTrial_ReturnsProDailyLimit()
+    public async Task GetAiMessageLimit_ActiveTrial_ReturnsProWeeklyLimit()
     {
         var user = CreateFreeUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(50);
+        limit.Should().Be(250);
     }
 
     [Fact]
@@ -506,8 +506,8 @@ public class PayGateServiceTests
             {
                 result.ErrorCode.Should().Be(ErrorCodes.PayGate);
                 result.Error.Should().Be(pro
-                    ? $"You've reached your daily AI message limit ({limit})."
-                    : $"You've reached your daily AI message limit ({limit}). Upgrade to Pro for 50 messages per day.");
+                    ? $"You've reached your weekly AI message limit ({limit})."
+                    : $"You've reached your daily AI message limit ({limit}). Upgrade to Pro for 250 messages per week.");
             }
             user.AiMessagesUsedToday.Should().Be(limit + 1 + (allowed ? 1 : 0));
             await work.Received(allowed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -515,16 +515,16 @@ public class PayGateServiceTests
     }
 
     [Theory]
-    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 50 messages per day.")]
-    [InlineData(true, "en", "You've reached your daily AI message limit (50).")]
-    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 50 mensagens por dia.")]
-    [InlineData(true, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (50).")]
+    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 250 messages per week.")]
+    [InlineData(true, "en", "You've reached your weekly AI message limit (250).")]
+    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 250 mensagens por semana.")]
+    [InlineData(true, "pt-BR", "Você atingiu seu limite semanal de mensagens de IA (250).")]
     public async Task TryConsumeAiMessage_ExhaustedAllowancePreservesPayGateAndAccountLanguage(bool pro, string language, string expected)
     {
         var user = pro ? CreateProUser() : CreateFreeUser();
         user.SetLanguage(language);
         if (!pro) user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        var limit = pro ? 50 : 5;
+        var limit = pro ? 250 : 5;
         for (var index = 0; index < limit; index++) user.IncrementAiMessageCount(Today);
         _userRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(user);

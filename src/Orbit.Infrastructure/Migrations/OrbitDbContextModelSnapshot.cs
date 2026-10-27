@@ -17,7 +17,7 @@ namespace Orbit.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -370,6 +370,12 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
+                            Key = "ProAiMessagesPerWeek",
+                            Description = "Weekly AI message limit for Pro users",
+                            Value = "250"
+                        },
+                        new
+                        {
                             Key = "FreeAiCallsPerDay",
                             Description = "Daily AI call safety budget for Free users",
                             Value = "45"
@@ -377,7 +383,7 @@ namespace Orbit.Infrastructure.Migrations
                         new
                         {
                             Key = "ProAiCallsPerDay",
-                            Description = "Daily AI call safety budget for Pro users",
+                            Description = "Weekly AI call safety budget for Pro users",
                             Value = "450"
                         },
                         new
@@ -389,7 +395,7 @@ namespace Orbit.Infrastructure.Migrations
                         new
                         {
                             Key = "ProAiMicroDollarsPerDay",
-                            Description = "Daily AI safety budget for Pro users in USD micro-dollars",
+                            Description = "Weekly AI safety budget for Pro users in USD micro-dollars",
                             Value = "120000"
                         },
                         new
@@ -2245,8 +2251,14 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly?>("AiMessagesLocalDate")
                         .HasColumnType("date");
 
+                    b.Property<int>("AiMessagesUsedThisWeek")
+                        .HasColumnType("integer");
+
                     b.Property<int>("AiMessagesUsedToday")
                         .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("AiMessagesWeekStart")
+                        .HasColumnType("date");
 
                     b.Property<bool>("AiSummaryEnabled")
                         .HasColumnType("boolean");

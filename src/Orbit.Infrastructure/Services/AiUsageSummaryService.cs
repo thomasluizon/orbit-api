@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
@@ -81,7 +82,7 @@ public partial class AiUsageSummaryService(
             AppConstants.DefaultFreeAiMessages,
             cancellationToken);
         var proLimit = await appConfig.GetAsync(
-            AppConfigKeys.ProAiMessagesPerDay,
+            AppConfigKeys.ProAiMessagesPerWeek,
             AppConstants.DefaultProAiMessages,
             cancellationToken);
 
@@ -141,13 +142,13 @@ public partial class AiUsageSummaryService(
             return string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: no active users");
 
         var messageCounts = activeUsers
-            .Select(user => user.AiMessagesUsedToday)
+            .Select(user => user.GetAiMessagesUsedToday(date))
             .Order()
             .ToList();
         var mean = messageCounts.Average();
         var p95Index = (int)Math.Ceiling(messageCounts.Count * 0.95) - 1;
-        var freeCapHits = activeUsers.Count(user => !user.HasProAccess && user.AiMessagesUsedToday >= freeLimit);
-        var proCapHits = activeUsers.Count(user => user.HasProAccess && user.AiMessagesUsedToday >= proLimit);
+        var freeCapHits = activeUsers.Count(user => !user.HasProAccess && user.GetAiMessagesUsedToday(date) >= freeLimit);
+        var proCapHits = activeUsers.Count(user => user.HasProAccess && user.AiMessagesWeekStart >= AiAllowancePeriod.For(date, true, user.WeekStartDay).Start && user.AiMessagesUsedThisWeek >= proLimit);
 
         return string.Create(CultureInfo.InvariantCulture, $"Astra quota {date:yyyy-MM-dd}: free_cap_hits={freeCapHits}; pro_cap_hits={proCapHits}; ") +
             $"mean_messages_per_active_user={mean.ToString("F2", CultureInfo.InvariantCulture)}; " +
