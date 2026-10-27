@@ -2,6 +2,8 @@
 
 Tracks thomasluizon/orbit-tickets#1617. The API owns composition; #1620 owns the consumer
 and #26 owns real-call bilingual assertions in `evals/astra/`. No second eval harness applies.
+The [copy inventory](AnswerCompositionCopy.md) lists the retained en and pt-BR states and
+the exact model instructions for coordinator approval.
 
 The database flag `astra_block_first` is seeded off. Composition requires `supportsParts`
 after kill flags, advertised `partKinds`, and existing card/subtype capabilities. Disabling
@@ -11,8 +13,8 @@ Successful typed results supply blocks and query identities. Directives cannot e
 success or determine the leading position. Tool-call structure selects answers without request
 keywords. A lookup is a prerequisite when all its typed entity IDs first appear in that result
 and supply arguments to later tool rounds. Calls in the same round cannot consume each other's
-results. Explicitly requested subjects select the relevant successful reads. When no subject can be resolved,
-successful reads render in recorded operation order, including independent reads
+results. The model selects requested subjects through its tool calls and arguments;
+the server never filters reads by words in the person's message. Successful reads render in recorded operation order, including independent reads
 alongside a pending preview or write outcome. Rankings use the complete count result and retain
 their produced position. Only equivalent query families, kinds and canonical scopes deduplicate;
 different entity IDs, date windows and metrics remain distinct, including history scopes.
@@ -50,26 +52,29 @@ Deterministic fallback text is already grounded by its typed producer.
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
 It is true when the current reads answer the request and false for prerequisite lookups or
 remaining tools. Independent reads belong in one round. The server removes the argument before
-execution and can finish complete read plans in later rounds as well. Successful independent
-subjects explicitly requested by a listing request, or complete empty lookups, do not need a
-narrative continuation even if the model marks the round incomplete. Dependent reads, writes,
+execution and can finish complete read plans in later rounds as well. A round whose successful
+typed reads are all complete empty lists needs no narrative continuation even if the model
+marks it incomplete. Other incomplete plans continue through the existing model-service port.
+Dependent reads, writes,
 failures, missing projections and invalid rankings retain their existing handling.
 
-The composition read planner corrects a habit-month call for a provider/connection/sync
-request to the existing calendar read. A simultaneous explicit calendar call takes precedence.
-Habit listings use the habit query rather than an unrequested month. A successful single-match
-habit lookup for a metrics question feeds the existing metrics tool directly through the same
-operation gateway, without another model call. Names, permissions, dates and calculations
-remain owned by those producers. Plan-feature navigation uses `describe_feature` and its
-existing subscription surface. Profile/settings requests do not read subscription data unless
-the plan is also requested. Explicit coaching requests offer no record tools; an invalid tool
-plan becomes short advice without executing a read or holding a write. Explicit record-change
-requests retain their approval path.
+The full registered tool set remains available regardless of message wording or language.
+Composition never renames calls, invokes an uncalled tool, or substitutes fixed advice.
+Prompt instructions direct provider/connection/sync reads to `get_calendar_overview`, habit
+month reads to `get_habit_month`, focused metrics to `get_habit_metrics`, profile/settings
+to `get_profile`, and plan-feature help to `describe_feature`. Coaching uses the model's
+short answer unless a record change is explicitly requested. These are model instructions,
+not server routing rules. A mistaken tool selection remains visible as its actual typed
+result or negotiated readable fallback; it cannot fabricate the expected family. A dependent
+metrics lookup requires the model's subsequent metrics call. Names, permissions, dates and
+calculations remain owned by the existing producers and every write retains approval.
 
 Legacy clients without parts keep their readable path; unsupported kinds use typed fallbacks.
 The parts and family kill flags still apply. No contract field changes type or optionality.
 The API regression fixtures replay #26's executed tool arguments at the model-service port;
-they do not claim raw provider output. The partial-list fixture has 51 habits, so limit 100
+they do not claim raw provider output or correct erroneous calls by rewriting them. Tests
+verify unchanged tool availability, faithful dispatch, typed dependency selection, incomplete
+plan continuation, complete-empty termination and later-round terminal reads. The partial-list fixture has 51 habits, so limit 100
 truthfully produces complete data and limit 50 produces partial data with a cursor. #1822 owns
 the disconnected-calendar stale expectation. #26 owns the live bilingual rerun before activation.
 

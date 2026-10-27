@@ -12,6 +12,11 @@ they do not invent provider message items, call IDs or response envelopes. Synth
 IDs used by the test producer replace redacted account IDs where necessary.
 `Fixtures/TerminalReads` separately covers the real provider/SDK response boundary.
 
+Captured plans are replayed without correcting their tool names. Wrong-family calls remain
+their actual typed results or negotiated readable fallbacks. Corrected structured plans are
+separate tests; only a subsequent model call can request a dependent read. Fixtures do not
+authorize message keyword routing, fixed advice or hiding tools from the model.
+
 The partial fixture seeds 51 habits. Failed attempts request limit 100; passing
 attempts request limit 50. Complete is truthful when all 51 rows are returned.
 The rendered answer shows three rows because the consumer preview samples them.

@@ -19,8 +19,7 @@ public partial class ProcessUserChatCommandHandler
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
-            && (operation.ReadBlock is not null || PlanHelpText(request, results, context.Language) is not null
-                || operation.Payload is HabitSuggestionsCard
+            && (operation.ReadBlock is not null || operation.Payload is HabitSuggestionsCard
                 || operation.Payload is HabitRankingResponse ranking && HabitRankingCardBuilder.Build(ranking) is not null));
 
     private ChatResponse CompleteCompositionWithoutNarrative(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
@@ -69,8 +68,6 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
         if (SuggestionAnswer(results) is { } suggestions) return suggestions;
-        if (PlanHelpText(request, results, language) is { } help)
-            return new ResponseCards(help, Parts: [new ChatTextPart(help)]) { ServerComposedText = true };
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)
@@ -228,9 +225,7 @@ public partial class ProcessUserChatCommandHandler
             return built;
         }
 
-        var reads = SelectCompositionReads(candidates, results).ToList();
-        var requested = reads.Where(read => MentionsSubject(request.Message, read)).ToList();
-        var selected = (requested.Count > 0 ? requested : reads).Select(read => read.Read.QueryId).ToHashSet();
+        var selected = SelectCompositionReads(candidates, results).Select(read => read.Read.QueryId).ToHashSet();
         var seenScopes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var operation in results.OperationResults.Where(operation => operation.Status == AgentOperationStatus.Succeeded))
         {
@@ -413,7 +408,7 @@ public partial class ProcessUserChatCommandHandler
         "goalList" => "goals?|metas?|objetivos?",
         "metrics" => "metrics|m[eé]tricas|progress|progresso|statistics|estat[ií]sticas",
         "streak" => "streak|sequ[eê]ncia|level|n[ií]vel|achievements?|conquistas?",
-        "daySummary" => "summar[a-z]*|overview|resum[a-z]*",
+        "daySummary" => "summary|overview|resumo|day summary|resumo do dia",
         "habitMonth" => "habits?|h[aá]bitos?|month|m[eê]s|calend[aá]rio|calendar",
         "calendar" => "calendar|calend[aá]rio|events?|eventos?|sync|sincroniza[cç][aã]o",
         "periodInsight" => "recap|retrospectiv[ao]|resumo",

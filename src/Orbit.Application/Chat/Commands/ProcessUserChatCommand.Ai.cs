@@ -56,7 +56,7 @@ public partial class ProcessUserChatCommandHandler
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
-        var availableTools = CompositionTools(request, context);
+        var availableTools = ai.ToolRegistry.GetAll();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
         var askEnabled = request.AuthMethod == AgentAuthMethod.Jwt

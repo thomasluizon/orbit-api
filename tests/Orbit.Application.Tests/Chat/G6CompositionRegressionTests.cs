@@ -71,7 +71,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
-    public async Task G6_ProfileKeepsOnlyExplicitlyRequestedAccountSubjects(bool compound, bool omittedProfile)
+    public async Task G6_AccountBlocksFollowTheStructuredPlan(bool compound, bool omittedProfile)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -92,10 +92,9 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Parts!.OfType<ChatBlockPart>().Select(part => ((AccountRowsCard)part.Block).Kind)
-            .Should().Equal(compound ? ["profile", "plan"] : ["profile"]);
-        if (!compound)
-            await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(call =>
-                call.OperationId == "get_subscription_overview"), Arg.Any<CancellationToken>());
+            .Should().Equal(omittedProfile ? ["plan"] : ["profile", "plan"]);
+        await _operationExecutor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(call =>
+            call.OperationId == "get_subscription_overview"), Arg.Any<CancellationToken>());
     }
 
     [Theory]

@@ -21,7 +21,7 @@ public partial class ProcessUserChatCommandHandler
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
-        var aiResponse = NormalizeCompositionReadPlan(initialResponse, request, context);
+        var aiResponse = initialResponse;
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         long totalBudgetTokens = initialResponse.RequestBudgetTokenCount ?? initialResponse.ReportedTokenCount;
@@ -64,7 +64,7 @@ public partial class ProcessUserChatCommandHandler
             if (roundResult.ProviderError is not null)
                 return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
 
-            aiResponse = NormalizeCompositionReadPlan(roundResult.Response, request, context);
+            aiResponse = roundResult.Response;
             correction = roundResult.Correction;
             hasUnexecutedCalls = aiResponse.HasToolCalls;
             if (roundResult.HadToolFailure)
@@ -189,7 +189,6 @@ public partial class ProcessUserChatCommandHandler
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
-        var completedMetrics = await CompleteFocusedMetricsReadAsync(correction is null, request, context, executionResults, orderedCalls, cancellationToken);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
         var hadToolFailure = outcomesByCallId.Values.Any(outcome => outcome.OperationResult?.Status == AgentOperationStatus.Failed);
 
@@ -201,7 +200,7 @@ public partial class ProcessUserChatCommandHandler
         if (BulkNoChangesMessage(executionResults, language) is { } noChanges)
             return new ToolRoundResult(new AiResponse { TextMessage = noChanges });
 
-        if (HasTerminalCompositionSurface(executionResults, completedMetrics))
+        if (executionResults.AskBlock is not null)
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
 
         if (CanCompleteReadRound(aiResponse, request, context, executionResults, iteration,
@@ -267,12 +266,16 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
         (IsDeclaredTerminalReadRound(response, request, context, iteration)
-            || UsesComposition(request, context) && SatisfiesIndependentReadRequest(request, results))
+            || UsesComposition(request, context) && IsCompleteEmptyReadRound(calls, results))
         && calls.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
         && calls.Count == response.ToolCalls!.Count
         && outcomes.Count == calls.Count && toolResults.Count == calls.Count && toolResults.All(result => result.Success)
         && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
         && CanCompleteComposition(request, context, results);
+
+    private static bool IsCompleteEmptyReadRound(IReadOnlyList<AiToolCall> calls, ToolExecutionAccumulator results) =>
+        calls.Count > 0 && calls.All(call => results.QueryReads.TryGetValue(call.Id, out var read)
+            && EmptyCompositionText(read, null) is not null);
 
     private bool IsDeclaredTerminalReadRound(AiResponse response, ProcessUserChatCommand request,
         ChatContext context, int iteration) =>

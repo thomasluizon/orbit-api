@@ -10,8 +10,10 @@ In the existing admin feature flag screen, add evaluation accounts to `astra_blo
 The backing API is `POST /api/admin/feature-flags`; use `list` and `enable_for_accounts` with the exact key and account emails.
 Verify `GET /api/config` reports that account's flag enabled and a parts-capable chat response
 leads with the requested supported kind without framing prose. Check that complete empty habit
-lists offer Today, provider failures retain calendar recovery, and independent reads need no
-narrative model call. Confirm legacy and missing-kind fallbacks separately.
+lists offer Today and explicit provider reads retain calendar recovery. Complete typed read
+plans and rounds of complete empty lists need no narrative model call; other incomplete
+plans continue. Confirm legacy and missing-kind fallbacks separately. Tool selection belongs
+to the model; composition does not route tools or select blocks from message keywords.
 Keep global activation off until #26 records passing English and Portuguese real-pipeline
 composition cases and #1620 supports the consumer contract.
 
