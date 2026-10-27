@@ -122,7 +122,7 @@ public partial class AgentChatWriteHoldTests
     {
         var (tools, previewer, inference, work) = await NoChangesToolsAsync(operationId);
         var user = await _dbContext.Users.SingleAsync();
-        user.SetLanguage(language);
+        user.SetLanguage(language == "en" ? "pt-BR" : "en");
         var executor = CreateExecutor(tools, previewer);
         var intent = Substitute.For<IAiIntentService>();
         intent.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -171,7 +171,7 @@ public partial class AgentChatWriteHoldTests
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean());
 
         var response = await handler.Handle(new(_userId, message,
-            ClientContext: new AgentClientContext(Locale: language == "en" ? "pt-BR" : "en", SupportsParts: supportsParts)), default);
+            ClientContext: new AgentClientContext(Locale: language, SupportsParts: supportsParts)), default);
 
         response.IsSuccess.Should().BeTrue(response.Error);
         response.Value.AiMessage.Should().Be(expected);

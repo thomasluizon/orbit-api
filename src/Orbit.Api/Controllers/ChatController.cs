@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.Middleware;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
@@ -243,34 +244,27 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             var result = await mediator.Send(command, cancellationToken);
             var finalEvent = result.IsSuccess
                 ? ChatStreamEvent.Final(result.Value)
-                : ToErrorEvent(result);
+                : await ChatErrorLocalization.FailureAsync(HttpContext, result.ResolveErrorStatus(), result.ErrorCode, result.Error, result.ErrorArgs);
             await WriteEventAsync(finalEvent, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Client disconnected mid-stream; there is nothing left to write back. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
         }
-        catch (ValidationException ex)
+        catch (ValidationException)
         {
             await WriteEventAsync(
-                ChatStreamEvent.Failure(StatusCodes.Status400BadRequest, ex.Message),
+                await ChatErrorLocalization.FailureAsync(HttpContext, StatusCodes.Status400BadRequest, ErrorCodes.ValidationError, ErrorMessages.ValidationError.Message),
                 cancellationToken);
         }
         catch (Exception ex)
         {
             LogChatStreamFailed(logger, ex);
             await WriteEventAsync(
-                ChatStreamEvent.Failure(
-                    StatusCodes.Status500InternalServerError,
-                    ErrorMessages.AiUnavailable.Message,
-                    ErrorMessages.AiUnavailable.Code),
+                await ChatErrorLocalization.FailureAsync(HttpContext, StatusCodes.Status500InternalServerError,
+                    ErrorMessages.AiUnavailable.Code, ErrorMessages.AiUnavailable.Message),
                 cancellationToken);
         }
-    }
-
-    private static ChatStreamEvent ToErrorEvent(Result<ChatResponse> result)
-    {
-        return ChatStreamEvent.Failure(result.ResolveErrorStatus(), result.Error, result.ErrorCode);
     }
 
     private async Task WriteEventAsync(ChatStreamEvent streamEvent, CancellationToken cancellationToken)
@@ -282,6 +276,21 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private async Task<ChatInputParseResult> ParseChatInputsAsync(
         string message, string? history, IFormFile? image, string? clientContext, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(Request.Headers.AcceptLanguage))
+            ChatErrorLocalization.SetLocale(HttpContext,
+                LocaleHelper.IsPortugueseAcceptLanguage(Request.Headers.AcceptLanguage) ? "pt-BR" : "en");
+        var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
+        if (clientContextError is not null)
+            return ChatInputParseResult.Failed(clientContextError);
+
+        if (string.IsNullOrWhiteSpace(parsedClientContext?.Locale)
+            && !string.IsNullOrWhiteSpace(Request.Headers.AcceptLanguage))
+            parsedClientContext = (parsedClientContext ?? new AgentClientContext()) with
+            {
+                Locale = LocaleHelper.IsPortugueseAcceptLanguage(Request.Headers.AcceptLanguage) ? "pt-BR" : "en"
+            };
+        ChatErrorLocalization.SetLocale(HttpContext, parsedClientContext?.Locale);
+
         if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
             return ChatInputParseResult.Failed(BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody()));
 
@@ -292,10 +301,6 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         var (chatHistory, historyError) = ParseChatHistory(history);
         if (historyError is not null)
             return ChatInputParseResult.Failed(historyError);
-
-        var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
-        if (clientContextError is not null)
-            return ChatInputParseResult.Failed(clientContextError);
 
         return ChatInputParseResult.Ok(imageData, imageMimeType, chatHistory, parsedClientContext);
     }

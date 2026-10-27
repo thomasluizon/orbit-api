@@ -211,7 +211,7 @@ public partial class ProcessUserChatCommandHandler
         var parts = reads.Select(read => request.ClientContext?.SupportsParts == true
                 && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
             ? (ChatResponsePart)new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)
-            : new ChatTextPart(ReadFallback(read.Block, context.User?.Language, context.User?.TimeZone))).ToArray();
+            : new ChatTextPart(ReadFallback(read.Block, context.Language, context.User?.TimeZone))).ToArray();
         return cards with
         {
             AiMessage = JoinPartText(parts),
@@ -240,7 +240,7 @@ public partial class ProcessUserChatCommandHandler
                     Parts = (cards.Parts ?? []).Append(new ChatBlockPart(read.Kind,
                     ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)).ToArray()
                 };
-            else if (ReadFallback(read.Block, context.User?.Language, context.User?.TimeZone) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
+            else if (ReadFallback(read.Block, context.Language, context.User?.TimeZone) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
                 cards = cards with
                 {
                     AiMessage = string.Join("\n\n", new[] { cards.AiMessage, text }.Where(value => !string.IsNullOrWhiteSpace(value))),

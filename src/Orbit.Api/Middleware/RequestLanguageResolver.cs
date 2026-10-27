@@ -18,6 +18,8 @@ internal sealed class RequestLanguageResolver(IGenericRepository<User> userRepos
 {
     public async ValueTask<bool> IsPortugueseAsync(HttpContext context, CancellationToken cancellationToken)
     {
+        if (ChatErrorLocalization.PreferredLocale(context) is { } chatLocale)
+            return LocaleHelper.IsPortuguese(chatLocale);
         var storedLanguage = await GetStoredLanguageAsync(context, cancellationToken);
 
         return storedLanguage is not null

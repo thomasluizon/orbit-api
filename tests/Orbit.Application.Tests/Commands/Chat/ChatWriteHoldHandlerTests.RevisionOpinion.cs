@@ -12,6 +12,7 @@ using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
@@ -157,19 +158,143 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
-    private sealed class RevisionOpinionResponseHandler(JsonElement responses, bool question) : HttpMessageHandler
+    [Theory]
+    [InlineData("en", "pt-BR", false)]
+    [InlineData("pt-BR", "en", false)]
+    [InlineData("en", "pt-BR", true)]
+    [InlineData("pt-BR", "en", true)]
+    public async Task FailedRevision_ProviderReplayUsesRequestLocale(string language, string profileLanguage, bool composition)
+    {
+        _user.SetLanguage(profileLanguage);
+        if (composition)
+            _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+        using var fixture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory, "Fixtures", "PendingRevisions", language + ".json")));
+        var capture = fixture.RootElement;
+        using var transport = new RevisionOpinionResponseHandler(capture.GetProperty("responses").Clone(), false);
+        using var http = new HttpClient(transport);
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(new AiSettings { ApiKey = "test-key", MaxRetries = 0 }),
+            NullLogger<AiCompletionClient>.Instance, usage, new HttpClientPipelineTransport(http));
+        var budgeted = new BudgetedAiCompletionClient(client, Substitute.For<IAiDailyBudget>(), new HttpContextAccessor(),
+            NullLogger<BudgetedAiCompletionClient>.Instance, Substitute.For<IAiRequestCostEstimator>());
+        var adapter = new AiIntentService(budgeted, usage, NullLogger<AiIntentService>.Instance);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>()).Returns(call => adapter.SendWithToolsAsync(
+                call.Arg<AiToolRequest>(), null, call.Arg<CancellationToken>()));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call => adapter.ContinueWithToolResultsAsync(
+                call.Arg<AiConversationContext>(), call.Arg<IReadOnlyList<AiToolCallResult>>(), null, call.Arg<CancellationToken>()));
+        var handler = CreateHandler();
+        var clientContext = new AgentClientContext(Locale: language, SupportsParts: true, SupportsPendingOperationChanges: true);
+        var first = await handler.Handle(new(_userId, capture.GetProperty("create_message").GetString()!, ClientContext: clientContext), default);
+        var pending = first.Value.PendingOperations.Should().ContainSingle().Which;
+        var before = _pendingOperationStore.GetExecution(_userId, pending.Id)!.Arguments.GetRawText();
+        transport.PendingId = pending.Id;
+        transport.ItemId = pending.Items!.Single().ItemId;
+        transport.RejectRevision = true;
+        var events = new List<ChatStreamEvent>();
+
+        var result = await handler.Handle(new(_userId, language == "en" ? "Move it to an invalid time." : "Mude para um horário inválido.",
+            History: [new("assistant", JsonSerializer.Serialize(first.Value, ChatStreamEvent.SerializerOptions))],
+            ClientContext: clientContext, StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        transport.Requests.Should().Be(3);
+        result.Value.Operations.Should().ContainSingle().Which.PolicyReason.Should().Be("invalid_revision");
+        var expected = language == "en" ? "I couldn't complete that. Please try again." : "Não consegui concluir isso. Tente novamente.";
+        result.Value.AiMessage.Should().Be(expected);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expected);
+        events.Where(item => item.Type == "delta").Should().OnlyContain(item => item.Text == expected);
+        _pendingOperationStore.GetExecution(_userId, pending.Id)!.Arguments.GetRawText().Should().Be(before);
+        _pendingOperationStore.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("en", false, false)]
+    [InlineData("pt-BR", false, false)]
+    [InlineData("en", true, false)]
+    [InlineData("pt-BR", true, false)]
+    [InlineData("en", false, true)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, true)]
+    public async Task FreshCreate_ProviderReplayRecoversMisroutedRevisionWithoutChangingOlderPreview(string language, bool composition, bool history)
+    {
+        _user.SetLanguage("en");
+        if (composition)
+            _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+        ScriptToolCall(JsonSerializer.Serialize(new { title = language == "en" ? "Read 10 pages" : "Read 20 pages", frequency_unit = "Day", due_time = "21:00" }));
+        var first = await CreateHandler().Handle(new(_userId, "Create a daily reading habit",
+            ClientContext: new(Locale: "en", SupportsParts: true, SupportsPendingOperationChanges: true)), default);
+        var old = first.Value.PendingOperations.Should().ContainSingle().Which;
+        var before = _pendingOperationStore.GetExecution(_userId, old.Id)!.Arguments.GetRawText();
+        using var fixture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory, "Fixtures", "PendingRevisions", language + ".json")));
+        var capture = fixture.RootElement;
+        using var transport = new RevisionOpinionResponseHandler(capture.GetProperty("responses").Clone(), false, 2)
+        { PendingId = old.Id, ItemId = old.Items!.Single().ItemId, RejectRevision = true, RecoverCreate = true };
+        using var http = new HttpClient(transport);
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(new AiSettings { ApiKey = "test-key", MaxRetries = 0 }),
+            NullLogger<AiCompletionClient>.Instance, usage, new HttpClientPipelineTransport(http));
+        var budgeted = new BudgetedAiCompletionClient(client, Substitute.For<IAiDailyBudget>(), new HttpContextAccessor(),
+            NullLogger<BudgetedAiCompletionClient>.Instance, Substitute.For<IAiRequestCostEstimator>());
+        var adapter = new AiIntentService(budgeted, usage, NullLogger<AiIntentService>.Instance);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>()).Returns(call => adapter.SendWithToolsAsync(
+                call.Arg<AiToolRequest>(), null, call.Arg<CancellationToken>()));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call => adapter.ContinueWithToolResultsAsync(
+                call.Arg<AiConversationContext>(), call.Arg<IReadOnlyList<AiToolCallResult>>(), null, call.Arg<CancellationToken>()));
+
+        var result = await CreateHandler().Handle(new(_userId, capture.GetProperty("create_message").GetString()!,
+            History: history ? [new("user", "Hello"), new("assistant", "Hello, how can I help?")] : null,
+            ClientContext: new(Locale: language, SupportsParts: true, SupportsPendingOperationChanges: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var pending = result.Value.PendingOperations.Should().ContainSingle().Which;
+        pending.Id.Should().NotBe(old.Id);
+        pending.Items.Should().ContainSingle().Which.EntityName.Should().Be(language == "en" ? "Read 20 pages" : "Ler 20 páginas");
+        _pendingOperationStore.GetExecution(_userId, old.Id)!.Arguments.GetRawText().Should().Be(before);
+        _pendingOperationStore.GetAwaiting(_userId).Should().HaveCount(2);
+        result.Value.Operations.Should().NotContain(operation => operation.Status == AgentOperationStatus.Failed);
+        result.Value.Actions.Should().BeEmpty();
+        transport.Requests.Should().Be(4);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class RevisionOpinionResponseHandler(JsonElement responses, bool question, int initialRequests = 0) : HttpMessageHandler
     {
         public Guid PendingId { get; set; }
         public string ItemId { get; set; } = string.Empty;
-        public int Requests { get; private set; }
+        public bool RejectRevision { get; set; }
+        public bool RecoverCreate { get; set; }
+        public int Requests { get; private set; } = initialRequests;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (Requests >= responses.GetArrayLength())
                 throw new InvalidOperationException("The replay requested an unexpected model round.");
-            var response = responses[Requests++].GetRawText()
+            var index = RecoverCreate && Requests == 3 ? 0 : Requests;
+            Requests++;
+            var response = responses[index].GetRawText()
                 .Replace("{{pending_id}}", PendingId.ToString(), StringComparison.Ordinal)
                 .Replace("{{item_id}}", ItemId, StringComparison.Ordinal);
+            if (RejectRevision)
+            {
+                var envelope = System.Text.Json.Nodes.JsonNode.Parse(response)!;
+                foreach (var output in envelope["output"]!.AsArray())
+                    if (output?["name"]?.GetValue<string>() == "revise_pending_changes")
+                    {
+                        var arguments = System.Text.Json.Nodes.JsonNode.Parse(output["arguments"]!.GetValue<string>())!;
+                        arguments["items"]![0]!["edits_json"] = "{\"due_time\":\"invalid\"}";
+                        output["arguments"] = arguments.ToJsonString();
+                    }
+                response = envelope.ToJsonString();
+            }
             if (!question)
                 response = response.Replace("\\\"answer_question\\\":true", "\\\"answer_question\\\":false", StringComparison.Ordinal);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)

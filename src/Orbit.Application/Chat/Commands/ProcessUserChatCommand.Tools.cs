@@ -212,6 +212,9 @@ public partial class ProcessUserChatCommandHandler
 
         if (hadToolFailure && !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration))
         {
+            if (await TryRecoverFreshCreateAsync(aiResponse, orderedCalls, outcomesByCallId, toolResults,
+                request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
+                return recovered;
             if (!HasCorrectionAllowance(request, context, executionResults, iteration, totalBudgetTokens))
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
             correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
@@ -494,7 +497,7 @@ public partial class ProcessUserChatCommandHandler
                     using (ChatTurnTimer.Measure(ChatPhase.Save))
                         await execution.UnitOfWork.SaveChangesAsync(token);
                     var user = await data.UserRepository.GetByIdAsync(request.UserId, token);
-                    var line = CommittedWriteMessage(GetUserLanguage(user), actions.Length > 0);
+                    var line = CommittedWriteMessage(ChatLocale.Resolve(request.ClientContext, user?.Language), actions.Length > 0);
                     var recovery = new ChatResponse(line, actions, PendingOperations: pending, CorrelationId: request.CorrelationId,
                         Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(line)] : null);
                     if (!await execution.BlockStore.CheckpointAnswerAsync(block.Id, request.UserId, claim,

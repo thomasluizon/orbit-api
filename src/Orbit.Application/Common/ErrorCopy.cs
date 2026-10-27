@@ -23,6 +23,8 @@ public static partial class ErrorCopy
         (ErrorCodes.UpgradeRequired, "This version of Orbit is no longer supported. Update the app to continue.", "Esta versão do Orbit não é mais suportada. Atualize o aplicativo para continuar."),
         (ErrorCodes.NoPermission, "This habit belongs to another account, so you cannot delete it.", "Este hábito é de outra conta, então você não pode excluí-lo."),
         (ErrorCodes.HabitNotOwned, "This habit belongs to another account.", "Este hábito é de outra conta."),
+        ("CHAT_TURN_KEY_CONFLICT", "The turn key belongs to another payload.", "Este identificador já foi usado para outro pedido."),
+        ("CHAT_TURN_INTERRUPTED", "The reply was interrupted, and some changes may already be saved. Check your habits before you ask again, so nothing happens twice.", "A resposta foi interrompida e algumas alterações podem já ter sido aplicadas. Confira seus hábitos antes de pedir de novo, para não repetir nada."),
         (ErrorCodes.ValidationError, "Some of the details need a change before we can save this.", "Alguns dados precisam de ajuste antes de salvarmos isto."),
         (ErrorCodes.RateLimited, "You are doing that faster than we can keep up. Wait a moment and try again.", "Você está fazendo isso mais rápido do que conseguimos acompanhar. Espere um instante e tente de novo."),
         (ErrorCodes.InternalServerError, "We could not finish that. Try again, and write to support if it keeps happening.", "Não conseguimos concluir isso. Tente de novo, e escreva para o suporte se continuar."),
