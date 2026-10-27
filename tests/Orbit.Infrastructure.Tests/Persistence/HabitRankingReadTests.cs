@@ -231,6 +231,31 @@ public class HabitRankingReadTests(ITestOutputHelper output)
         Key = Convert.ToBase64String(new byte[32])
     }), NullLogger<EncryptionService>.Instance);
 
+    [Fact]
+    public async Task Ranking_UsesItsEncryptionKey_WhenAnotherEncryptedModelIsCached()
+    {
+        using var first = new SqliteOrbitDbContextFactory(CreateEncryption());
+        var encryption = new EncryptionService(Options.Create(new EncryptionSettings
+        {
+            Key = Convert.ToBase64String(Enumerable.Repeat((byte)1, 32).ToArray())
+        }), NullLogger<EncryptionService>.Instance);
+        using var second = new SqliteOrbitDbContextFactory(encryption);
+        var user = User.Create("Ranking user", "keys@example.test").Value;
+        var from = new DateOnly(2024, 1, 1);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id,
+            "Different key", FrequencyUnit.Day, 1, DueDate: from)).Value;
+        habit.Log(from, advanceDueDate: false);
+        second.Context.Users.Add(user);
+        second.Context.Habits.Add(habit);
+        await second.Context.SaveChangesAsync();
+        var definition = HabitRankingDefinition.Create(user.Id, from, from.AddDays(1), "UTC",
+            HabitRankingDefinition.CompletionLogRecords, null, 20).Value;
+
+        var page = await new HabitRankingReader(second.Context, encryption).ReadAsync(definition, 0);
+
+        page.Rows.Should().ContainSingle().Which.Name.Should().Be("Different key");
+    }
+
     private sealed class MeasuringEncryption(IEncryptionService inner) : IEncryptionService
     {
         internal int DecryptCalls { get; private set; }
