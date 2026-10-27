@@ -14,7 +14,8 @@ public sealed record AgentPreviewTarget(
     Guid EntityId,
     string EntityName,
     IReadOnlyDictionary<string, string?> CurrentValues,
-    string StateFingerprint);
+    string StateFingerprint,
+    string? EntityEmoji = null);
 
 /// <summary>
 /// Builds the approval preview of a held chat write from its own arguments: one item, one row
@@ -56,6 +57,8 @@ public static class AgentArgumentPreview
         var itemId = target is null ? "0" : target.EntityId.ToString();
         var entityId = target?.EntityId ?? Guid.Empty;
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
+        var entityEmoji = target is not null ? target.EntityEmoji
+            : operationId is "create_habit" or "create_sub_habit" ? DraftEmoji(arguments) : null;
         var fields = arguments.EnumerateObject()
             .OrderBy(property => property.Name != "title")
             .ThenBy(property => property.Name, StringComparer.Ordinal)
@@ -71,18 +74,24 @@ public static class AgentArgumentPreview
                     && AgentArgumentSchema.Declares(editableSchema, property.Name)
                     && AgentEditableArguments.IsConsumed(operationId, arguments, property.Name)
                     && !(operationId == "skip_habit" && property.Name == "date"
-                        && target?.CurrentValues.GetValueOrDefault("frequency_unit") == string.Empty)))
+                        && target?.CurrentValues.GetValueOrDefault("frequency_unit") == string.Empty),
+                EntityEmoji: entityEmoji))
             .ToList();
 
         var item = new PendingOperationItem(itemId, target?.EntityId, entityName, fields,
             target?.StateFingerprint ?? AgentOperationFingerprint.Compute(operationId, itemId),
             RemovesData: operationId is "create_habit" or "log_habit" or "unlog_habit" or "skip_habit" or "update_habit"
-                ? false : null);
+                ? false : null, EntityEmoji: entityEmoji);
         var fingerprint = AgentOperationFingerprint.Compute(
             operationId, JsonSerializer.Serialize<IReadOnlyList<PendingOperationItem>>([item]));
 
         return new PendingOperationChangePreview(fields, 1, [item], fingerprint);
     }
+
+    internal static string? DraftEmoji(JsonElement arguments) =>
+        arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("emoji", out var value)
+            && value.ValueKind == JsonValueKind.String && value.GetString() is { } emoji
+            && !string.IsNullOrWhiteSpace(emoji) ? emoji.Trim() : null;
 
     private static bool IsEditable(string field) =>
         !FixedFields.Contains(field) && !IsIdentifier(field);

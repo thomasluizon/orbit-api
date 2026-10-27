@@ -49,6 +49,14 @@ on streams). Self-harm flags and phrase-guard crises keep returning support as
 successful turns for every client. Deploy the API before the paired consumer in
 thomasluizon/orbit-tickets#1708 advertises this capability.
 
+Pending operation `items`, their `fields`, and `changes` append optional nullable
+`entityEmoji`. Habit targets use the stored habit emoji at preview time, including
+when the proposal changes that emoji. New habits use their draft emoji. Habits
+without an emoji and non-habit targets omit the field. Single writes, bulk writes,
+account change sets, suggestion previews and pending revisions share this contract.
+Deploy the API before the consumer in thomasluizon/orbit-tickets#1823 renders it.
+Tracks thomasluizon/orbit-tickets#1832.
+
 `PUT /api/habits/{id}` accepts optional nullable `tagIds` in both HTTP versions.
 Omission or null preserves tags, an empty array clears them, and a supplied array
 replaces the assignment together with core fields, checklist and requested goals.
