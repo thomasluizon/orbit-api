@@ -160,7 +160,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     [Theory]
     [InlineData("en", "Caminhada: skipped today.")]
-    [InlineData("pt-BR", "Caminhada: hábito pulado hoje.")]
+    [InlineData("pt-BR", "Caminhada: pulado hoje.")]
     public async Task HonestyReplay_SkippedHabitUsesDatedDataAndLocalizedStatus(string language, string expected)
     {
         var today = new DateOnly(2026, 10, 27);
