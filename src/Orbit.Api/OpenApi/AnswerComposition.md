@@ -2,8 +2,6 @@
 
 Tracks thomasluizon/orbit-tickets#1617. The API owns composition; #1620 owns the consumer
 and #26 owns real-call bilingual assertions in `evals/astra/`. No second eval harness applies.
-The [copy inventory](AnswerCompositionCopy.md) lists the retained en and pt-BR states and
-the exact model instructions for coordinator approval.
 
 The database flag `astra_block_first` is seeded off. Composition requires `supportsParts`
 after kill flags, advertised `partKinds`, and existing card/subtype capabilities. Disabling
