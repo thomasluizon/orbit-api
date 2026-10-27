@@ -12,6 +12,7 @@ using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
@@ -196,6 +197,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var events = new List<ChatStreamEvent>();
 
         var result = await handler.Handle(new(_userId, language == "en" ? "Move it to an invalid time." : "Mude para um horário inválido.",
+            History: [new("assistant", JsonSerializer.Serialize(first.Value, ChatStreamEvent.SerializerOptions))],
             ClientContext: clientContext, StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
@@ -209,18 +211,71 @@ public sealed partial class ChatWriteHoldHandlerTests
         _pendingOperationStore.IsAwaitingConfirmation(_userId, pending.Id).Should().BeTrue();
     }
 
-    private sealed class RevisionOpinionResponseHandler(JsonElement responses, bool question) : HttpMessageHandler
+    [Theory]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    public async Task FreshCreate_ProviderReplayRecoversMisroutedRevisionWithoutChangingOlderPreview(string language, bool composition)
+    {
+        _user.SetLanguage("en");
+        if (composition)
+            _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
+                .Returns([FeatureFlagKeys.AstraBlockFirst]);
+        ScriptToolCall(JsonSerializer.Serialize(new { title = language == "en" ? "Read 10 pages" : "Read 20 pages", frequency_unit = "Day", due_time = "21:00" }));
+        var first = await CreateHandler().Handle(new(_userId, "Create a daily reading habit",
+            ClientContext: new(Locale: "en", SupportsParts: true, SupportsPendingOperationChanges: true)), default);
+        var old = first.Value.PendingOperations.Should().ContainSingle().Which;
+        var before = _pendingOperationStore.GetExecution(_userId, old.Id)!.Arguments.GetRawText();
+        using var fixture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(
+            AppContext.BaseDirectory, "Fixtures", "PendingRevisions", language + ".json")));
+        var capture = fixture.RootElement;
+        using var transport = new RevisionOpinionResponseHandler(capture.GetProperty("responses").Clone(), false, 2)
+        { PendingId = old.Id, ItemId = old.Items!.Single().ItemId, RejectRevision = true, RecoverCreate = true };
+        using var http = new HttpClient(transport);
+        var usage = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(Options.Create(new AiSettings { ApiKey = "test-key", MaxRetries = 0 }),
+            NullLogger<AiCompletionClient>.Instance, usage, new HttpClientPipelineTransport(http));
+        var budgeted = new BudgetedAiCompletionClient(client, Substitute.For<IAiDailyBudget>(), new HttpContextAccessor(),
+            NullLogger<BudgetedAiCompletionClient>.Instance, Substitute.For<IAiRequestCostEstimator>());
+        var adapter = new AiIntentService(budgeted, usage, NullLogger<AiIntentService>.Instance);
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>()).Returns(call => adapter.SendWithToolsAsync(
+                call.Arg<AiToolRequest>(), null, call.Arg<CancellationToken>()));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call => adapter.ContinueWithToolResultsAsync(
+                call.Arg<AiConversationContext>(), call.Arg<IReadOnlyList<AiToolCallResult>>(), null, call.Arg<CancellationToken>()));
+
+        var result = await CreateHandler().Handle(new(_userId, capture.GetProperty("create_message").GetString()!,
+            ClientContext: new(Locale: language, SupportsParts: true, SupportsPendingOperationChanges: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var pending = result.Value.PendingOperations.Should().ContainSingle().Which;
+        pending.Id.Should().NotBe(old.Id);
+        pending.Items.Should().ContainSingle().Which.EntityName.Should().Be(language == "en" ? "Read 20 pages" : "Ler 20 páginas");
+        _pendingOperationStore.GetExecution(_userId, old.Id)!.Arguments.GetRawText().Should().Be(before);
+        _pendingOperationStore.GetAwaiting(_userId).Should().HaveCount(2);
+        result.Value.Operations.Should().NotContain(operation => operation.Status == AgentOperationStatus.Failed);
+        result.Value.Actions.Should().BeEmpty();
+        transport.Requests.Should().Be(4);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class RevisionOpinionResponseHandler(JsonElement responses, bool question, int initialRequests = 0) : HttpMessageHandler
     {
         public Guid PendingId { get; set; }
         public string ItemId { get; set; } = string.Empty;
         public bool RejectRevision { get; set; }
-        public int Requests { get; private set; }
+        public bool RecoverCreate { get; set; }
+        public int Requests { get; private set; } = initialRequests;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (Requests >= responses.GetArrayLength())
                 throw new InvalidOperationException("The replay requested an unexpected model round.");
-            var response = responses[Requests++].GetRawText()
+            var index = RecoverCreate && Requests == 3 ? 0 : Requests;
+            Requests++;
+            var response = responses[index].GetRawText()
                 .Replace("{{pending_id}}", PendingId.ToString(), StringComparison.Ordinal)
                 .Replace("{{item_id}}", ItemId, StringComparison.Ordinal);
             if (RejectRevision)

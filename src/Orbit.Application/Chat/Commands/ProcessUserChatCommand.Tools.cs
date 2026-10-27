@@ -212,6 +212,9 @@ public partial class ProcessUserChatCommandHandler
 
         if (hadToolFailure && !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration))
         {
+            if (await TryRecoverFreshCreateAsync(aiResponse, orderedCalls, outcomesByCallId, toolResults,
+                request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
+                return recovered;
             if (!HasCorrectionAllowance(request, context, executionResults, iteration, totalBudgetTokens))
                 return new ToolRoundResult(MessageResponse(language), HadToolFailure: true);
             correction = new RejectedCallCorrection(executionResults.CorrectionOccurrences);
