@@ -15,5 +15,9 @@ public sealed class AstraBlockAnswerValidator : AbstractValidator<AstraBlockAnsw
                 && ids.Distinct(StringComparer.Ordinal).Count() == ids.Count)
             .WithCopy(ErrorCodes.AstraBlockInvalidSelection);
         RuleFor(answer => answer.FreeText).MaximumLength(500).WithCopy(ErrorCodes.AstraBlockFreeTextTooLong);
+        RuleFor(answer => answer.Answers).Must(answers => answers is null
+            || answers.Count is >= 1 and <= 10 && answers.All(AstraQuestionRules.IsValidAnswerShape)
+            && answers.Select(answer => answer.QuestionId).Distinct(StringComparer.Ordinal).Count() == answers.Count)
+            .WithCopy(ErrorCodes.AstraBlockInvalidSelection);
     }
 }

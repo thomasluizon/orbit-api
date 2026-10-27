@@ -89,7 +89,7 @@ internal static class ChatResponseNegotiation
         && ProcessUserChatCommandHandler.ReadSubtypeEnabled(value, client)
         && (kind switch
         {
-            "choice" or "pickList" => !flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled),
+            "choice" or "pickList" or "question" => !flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled),
             "habitRanking" => !flags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled),
             _ => ProcessUserChatCommandHandler.ReadKindEnabled(kind, client, flags)
         });
@@ -115,6 +115,7 @@ internal static class ChatResponseNegotiation
             "habitRanking" => typeof(HabitRankingCard),
             "choice" => typeof(AstraChoiceBlock),
             "pickList" => typeof(AstraPickListBlock),
+            "question" => typeof(AstraQuestionBlock),
             _ => null
         };
         try
@@ -135,6 +136,12 @@ internal static class ChatResponseNegotiation
             HabitSuggestionsCard card => HabitSuggestionsPresentation.Readable(card),
             AstraChoiceBlock block => block.Question,
             AstraPickListBlock block => block.Title,
+            AstraQuestionBlock block => string.Join("\n\n", new[] { block.Title, block.Intro }
+                .Where(text => !string.IsNullOrWhiteSpace(text)).Concat(block.Questions.Select(question =>
+                    question.Prompt + (question.Options is { Count: > 0 } options
+                        ? "\n" + string.Join("\n", options.Select(option => "- " + option.Label))
+                        : question.Type == "scale" ? $"\n1: {question.LowLabel}; 5: {question.HighLabel}"
+                        : question.Type == "slider" ? FormattableString.Invariant($"\n{question.Min}..{question.Max} ({question.Step} {question.Unit})") : string.Empty)))),
             null => null,
             _ => ProcessUserChatCommandHandler.ReadFallback(value, language, timeZone)
         };

@@ -189,13 +189,14 @@ public sealed class AstraBlockAnswerService(
                 var answerError = CheckAnswer(definition, answer);
                 if (answerError is not null)
                     return answerError;
-                var isChoice = definition.Form == AstraBlockKinds.Choice;
+                var isChoice = definition.Form != AstraBlockKinds.PickList;
                 var message = BuildMessage(definition, answer);
-                var crisis = await DetectCrisisTurnAsync(request.UserId, message, token);
+                var safetyText = SafetyText(definition, answer, message);
+                var crisis = await DetectCrisisTurnAsync(request.UserId, safetyText, token);
                 var moderationCheck = isChoice ? checkChoiceInput ?? checkInput : checkInput;
                 if (crisis == CrisisLocales.None && moderationCheck is not null)
                 {
-                    var inputCheck = await moderationCheck(message, token);
+                    var inputCheck = await moderationCheck(safetyText, token);
                     if (inputCheck.IsFailure)
                         return inputCheck.PropagateError<PreparedAstraBlockAnswer>();
                     if (inputCheck.Value.Flagged)
@@ -305,12 +306,31 @@ public sealed class AstraBlockAnswerService(
 
     private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)
     {
+        if (definition.Form == AstraBlockKinds.Question)
+            return JsonSerializer.Serialize(new
+            {
+                form = definition.Form,
+                blockId = answer.BlockId,
+                title = definition.Title,
+                questions = definition.Questions,
+                answers = answer.Answers
+            }, ChatStreamEvent.SerializerOptions);
         var labels = definition.Form == AstraBlockKinds.Choice
             ? definition.Options.Where(option => answer.SelectedIds.Contains(option.Id)).Select(option => option.Label)
             : definition.Items.Where(item => answer.SelectedIds.Contains(item.Id)).Select(item => item.Label);
         var message = string.Join(", ", labels.Concat(string.IsNullOrWhiteSpace(answer.FreeText) ? [] : new[] { answer.FreeText }));
         return definition.Form == AstraBlockKinds.Choice ? definition.Title + "\n" + message : message;
     }
+
+    private static string SafetyText(AstraBlockDefinition definition, AstraBlockAnswer answer, string message) =>
+        definition.Form != AstraBlockKinds.Question ? message :
+        string.Join("\n", definition.Questions!.Select(question =>
+        {
+            var value = answer.Answers!.Single(value => value.QuestionId == question.Id);
+            var labels = question.Options?.Where(option => value.SelectedIds?.Contains(option.Id) == true)
+                .Select(option => option.Label) ?? [];
+            return question.Prompt + "\n" + string.Join(", ", labels.Append(value.FreeText ?? string.Empty));
+        }));
 
     private async Task<CrisisLocales> DetectCrisisTurnAsync(Guid userId, string message, CancellationToken ct)
     {
@@ -333,8 +353,8 @@ public sealed class AstraBlockAnswerService(
             new Dictionary<string, object>
             {
                 ["form"] = block.Form,
-                ["selected_count"] = answer.SelectedIds.Count,
-                ["used_free_text"] = !string.IsNullOrWhiteSpace(answer.FreeText),
+                ["selected_count"] = answer.Answers?.Count ?? answer.SelectedIds.Count,
+                ["used_free_text"] = !string.IsNullOrWhiteSpace(answer.FreeText) || answer.Answers?.Any(value => !string.IsNullOrWhiteSpace(value.FreeText)) == true,
                 ["seconds_to_answer"] = Math.Max(0, ((block.AnsweredAtUtc ?? block.CreatedAtUtc) - block.CreatedAtUtc).TotalSeconds)
             });
     }
@@ -354,6 +374,10 @@ public sealed class AstraBlockAnswerService(
 
     private static Result<PreparedAstraBlockAnswer>? CheckAnswer(AstraBlockDefinition block, AstraBlockAnswer answer)
     {
+        if (block.Form == AstraBlockKinds.Question)
+            return AstraQuestionRules.IsValidAnswer(block, answer) ? null : Failure(ErrorCodes.AstraBlockInvalidSelection);
+        if (answer.Answers is not null)
+            return Failure(ErrorCodes.AstraBlockInvalidSelection);
         var ids = block.Form == AstraBlockKinds.Choice ? block.Options.Select(option => option.Id) : block.Items.Select(item => item.Id);
         if (answer.SelectedIds.Except(ids, StringComparer.Ordinal).Any())
             return Failure(ErrorCodes.AstraBlockUnknownSelection);

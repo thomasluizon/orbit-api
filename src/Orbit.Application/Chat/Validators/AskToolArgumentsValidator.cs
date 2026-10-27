@@ -29,5 +29,5 @@ public sealed class AskToolArgumentsValidator : AbstractValidator<AskToolArgumen
     internal static AstraBlockDefinition ToDefinition(AskToolArguments value) => new(
         value.Form, (value.Form == AstraBlockKinds.Choice ? value.Question : value.Title) ?? string.Empty,
         value.Options ?? [], value.Items ?? [], value.Form == AstraBlockKinds.PickList || value.MultiSelect,
-        value.AllowFreeText, value.Action);
+        value.AllowFreeText, value.Action, value.Questions, value.Intro, value.Progress);
 }

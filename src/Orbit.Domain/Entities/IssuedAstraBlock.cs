@@ -29,7 +29,7 @@ public sealed class IssuedAstraBlock : Entity
         if (userId == Guid.Empty)
             throw new ArgumentException("User id is required.", nameof(userId));
         ArgumentNullException.ThrowIfNull(definition);
-        if (string.IsNullOrWhiteSpace(definition.Title))
+        if (definition.Title is null || definition.Form != AstraBlockKinds.Question && string.IsNullOrWhiteSpace(definition.Title))
             throw new ArgumentException("A question or title is required.", nameof(definition));
         ValidateDefinition(definition);
 
@@ -46,12 +46,14 @@ public sealed class IssuedAstraBlock : Entity
 
     private static void ValidateDefinition(AstraBlockDefinition definition)
     {
-        var valid = definition.Form switch
+        var valid = definition.Options is not null && definition.Items is not null && (definition.Form switch
         {
             AstraBlockKinds.Choice => IsValidChoice(definition),
             AstraBlockKinds.PickList => IsValidPickList(definition),
+            AstraBlockKinds.Question => AstraQuestionRules.IsValidDefinition(definition),
             _ => false
-        };
+        }) && (definition.Form == AstraBlockKinds.Question
+            || definition.Questions is null && definition.Intro is null && definition.Progress is null);
         if (!valid)
             throw new ArgumentException("Invalid block definition.", nameof(definition));
     }
@@ -82,13 +84,17 @@ public sealed class IssuedAstraBlock : Entity
     }
 
     public static string SerializeAnswer(AstraBlockAnswer answer) =>
-        JsonSerializer.Serialize(answer with { SelectedIds = answer.SelectedIds.Order(StringComparer.Ordinal).ToArray() });
+        JsonSerializer.Serialize(answer with
+        {
+            SelectedIds = answer.SelectedIds.Order(StringComparer.Ordinal).ToArray(),
+            Answers = answer.Answers?.OrderBy(value => value.QuestionId, StringComparer.Ordinal)
+                .Select(value => value with { SelectedIds = (value.SelectedIds ?? []).Order(StringComparer.Ordinal).ToArray() }).ToArray()
+        });
 
     public bool MatchesAnswer(AstraBlockAnswer answer)
     {
         var stored = AnswerJson is null ? null : JsonSerializer.Deserialize<AstraBlockAnswer>(AnswerJson);
-        return stored is not null && stored.BlockId == answer.BlockId && stored.FreeText == answer.FreeText
-            && stored.SelectedIds.Order(StringComparer.Ordinal).SequenceEqual(answer.SelectedIds.Order(StringComparer.Ordinal));
+        return stored is not null && SerializeAnswer(stored) == SerializeAnswer(answer);
     }
 
 }
