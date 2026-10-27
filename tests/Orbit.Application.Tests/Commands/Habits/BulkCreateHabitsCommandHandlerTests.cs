@@ -332,11 +332,13 @@ public partial class BulkCreateHabitsCommandHandlerTests
         child.IntervalWeeks.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_HabitLimitReached_ReturnsCodedFailure(bool isPtBr)
     {
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit limit reached"));
+            .Returns(Result.Failure(ErrorMessages.HabitLimitReached.Format(1000)));
 
         var items = new List<BulkHabitItem> { new("Habit", null, FrequencyUnit.Day, 1) };
         var command = new BulkCreateHabitsCommand(UserId, items);
@@ -344,7 +346,10 @@ public partial class BulkCreateHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
+        result.ErrorArgs.Should().Equal(1000);
+        ErrorCopy.TryResolve(result.ErrorCode, isPtBr, result.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 1000 hábitos." : "You've reached the 1000 habit limit.");
+        result.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 

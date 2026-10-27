@@ -11,6 +11,37 @@ namespace Orbit.Application.Tests.Common;
 
 public class HabitCeilingLockTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenericEntry_AtHabitCeiling_PreservesLocalizedLimit(bool isPtBr)
+    {
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        var users = Substitute.For<IGenericRepository<User>>();
+        var config = Substitute.For<IAppConfigService>();
+        var unitOfWork = Substitute.For<IUnitOfWork>().PassThroughTransactions<Result<Guid>>();
+        users.GetByIdAsync(Guid.Empty, Arg.Any<CancellationToken>())
+            .Returns(User.Create("Reader", "reader@orbit.test").Value);
+        config.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>()).Returns(37);
+        habits.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(37);
+        var gate = new PayGateService(habits, users, config, Substitute.For<IUserDateService>());
+        var mutated = false;
+
+        var result = await HabitCeilingLock.ExecuteEntryAsync<bool, Guid>(
+            unitOfWork, Guid.Empty, gate, _ => Task.FromResult(Result.Success(true)), state => state,
+            (_, _) =>
+            {
+                mutated = true;
+                return Task.FromResult(Result.Success(Guid.NewGuid()));
+            }, CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.HabitLimitReached);
+        result.ErrorArgs.Should().Equal(37);
+        ErrorCopy.TryResolve(result.ErrorCode, isPtBr, result.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 37 hábitos." : "You've reached the 37 habit limit.");
+        mutated.Should().BeFalse();
+    }
+
     [Fact]
     public async Task ExecuteAsync_LocksUserRowBeforeHabitMutation()
     {
@@ -83,8 +114,10 @@ public class HabitCeilingLockTests
         results.Should().ContainSingle(result => result.IsFailure);
     }
 
-    [Fact]
-    public async Task LockedCreationOverlappingCompletedRootReactivation_RefusesReactivationAtCeiling()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LockedCreationOverlappingCompletedRootReactivation_RefusesReactivationAtCeiling(bool isPtBr)
     {
         const int ceiling = 1000;
         var liveHabitCount = 999;
@@ -142,6 +175,9 @@ public class HabitCeilingLockTests
 
         creationResult.IsSuccess.Should().BeTrue();
         reactivationResult.IsFailure.Should().BeTrue();
+        reactivationResult.ErrorArgs.Should().Equal(ceiling);
+        ErrorCopy.TryResolve(reactivationResult.ErrorCode, isPtBr, reactivationResult.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 1000 hábitos." : "You've reached the 1000 habit limit.");
         reactivationResult.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         reactivationResult.Error.Should().Be("You've reached the 1000 habit limit.");
         reactivated.Should().BeFalse();

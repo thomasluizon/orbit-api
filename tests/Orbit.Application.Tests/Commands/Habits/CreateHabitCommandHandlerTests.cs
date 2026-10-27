@@ -333,8 +333,10 @@ public class CreateHabitCommandHandlerTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_HabitLimitReached_ReturnsCodedFailure()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_HabitLimitReached_ReturnsCodedFailure(bool isPtBr)
     {
         var userRepository = Substitute.For<IGenericRepository<User>>();
         var appConfig = Substitute.For<IAppConfigService>();
@@ -356,6 +358,9 @@ public class CreateHabitCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+        result.ErrorArgs.Should().Equal(1000);
+        ErrorCopy.TryResolve(result.ErrorCode, isPtBr, result.ErrorArgs, out var localized).Should().BeTrue();
+        localized.Should().Be(isPtBr ? "Você chegou ao limite de 1000 hábitos." : "You've reached the 1000 habit limit.");
         result.ErrorCode.Should().Be("HABIT_LIMIT_REACHED");
         result.Error.Should().Be("You've reached the 1000 habit limit.");
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());

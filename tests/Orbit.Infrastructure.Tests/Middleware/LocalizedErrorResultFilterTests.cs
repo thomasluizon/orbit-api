@@ -15,7 +15,7 @@ using NSubstitute;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
-public class LocalizedErrorResultFilterTests
+public partial class LocalizedErrorResultFilterTests
 {
     private static ResultExecutingContext ContextFor(
         IActionResult result, string? acceptLanguage, ClaimsPrincipal? signedInAs = null)
