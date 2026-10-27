@@ -25,8 +25,14 @@ public partial class ProcessUserChatCommandHandler
                 return response.Operation.ReadBlock is { } read
                     ? ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block as HabitListCard : null;
             }
-            return HabitListCardBuilder.Build(scope == HabitListCardBuilder.ScopeToday ? context.TodayHabits : context.ActiveHabits,
-                context.UserToday, scope, context.TodayFacts,
+            var habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
+                query => query.Include(habit => habit.Tags), ct);
+            var facts = await HabitTodaySnapshot.ReadAsync(habits, context.UserToday,
+                context.User?.WeekStartDay ?? 1, execution.ScheduleLogReader, ct);
+            var visible = habits.Where(habit => !habit.IsCompleted || scope == HabitListCardBuilder.ScopeToday
+                && (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General) && facts.DoneTodayIds.Contains(habit.Id)).ToList();
+            return HabitListCardBuilder.Build(visible,
+                context.UserToday, scope, facts,
                 request.ClientContext?.SupportsHabitListDoneStatus == true, remaining);
         }
         if (reads.Count != 1 || reads[0].Status != AgentOperationStatus.Succeeded
