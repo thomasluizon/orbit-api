@@ -15,7 +15,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool IsCoachingRequest(string message) =>
         Mentions(message, "help me|me ajude|me ajuda|how can I|como posso")
-        && Mentions(message, "easier|facilidade|motivation|motiva[cç][aã]o|consistent|consist[eê]ncia")
+        && Mentions(message, "easier|easily|facilidade|motivation|motiva[cç][aã]o|consistent|consist[eê]ncia")
         && !RequestsWrite(message);
 
     private static bool RequestsWrite(string message) => Mentions(message,
@@ -37,10 +37,7 @@ public partial class ProcessUserChatCommandHandler
             };
         if (response.ToolCalls is not { Count: > 0 }) return response;
         var explicitTools = response.ToolCalls.Select(call => call.Name).ToHashSet(StringComparer.Ordinal);
-        var profileOnly = Mentions(request.Message, "profile|perfil|settings|configura[cç][oõ]es")
-            && !Mentions(request.Message, "plan|plano|subscription|assinatura");
-        var calls = response.ToolCalls.Where(call => !profileOnly || call.Name != "get_subscription_overview")
-            .Select(call => (Original: call, Routed: RouteCompositionRead(call, request.Message)))
+        var calls = response.ToolCalls.Select(call => (Original: call, Routed: RouteCompositionRead(call, request.Message)))
             .Where(pair => pair.Original.Name == pair.Routed.Name || !explicitTools.Contains(pair.Routed.Name))
             .Select(pair => pair.Routed).ToArray();
         return response with { ToolCalls = calls };
@@ -63,6 +60,16 @@ public partial class ProcessUserChatCommandHandler
             && !Mentions(message, "month|m[eê]s|calendar|calend[aá]rio") && !RequestsWrite(message)
             && ai.ToolRegistry.GetTool("query_habits") is { IsReadOnly: true })
             return call with { Name = "query_habits", Args = JsonSerializer.SerializeToElement(new { orbit_read_complete = true }) };
+        if (call.Name == "get_subscription_overview" && Mentions(message, "profile|perfil|settings|configura[cç][oõ]es")
+            && !Mentions(message, "plan|plano|subscription|assinatura")
+            && ai.ToolRegistry.GetTool("get_profile") is { IsReadOnly: true })
+            return call with
+            {
+                Name = "get_profile",
+                Args = JsonSerializer.SerializeToElement(call.Args.EnumerateObject()
+                    .Where(property => property.Name == TerminalReadDirective.CompleteArgument)
+                    .ToDictionary(property => property.Name, property => property.Value))
+            };
         if (call.Name == "get_subscription_overview" && IsPlanHelp(message)
             && ai.ToolRegistry.GetTool("describe_feature") is { IsReadOnly: true })
             return call with

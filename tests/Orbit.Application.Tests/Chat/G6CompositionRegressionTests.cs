@@ -68,9 +68,10 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task G6_ProfileKeepsOnlyExplicitlyRequestedAccountSubjects(bool compound)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task G6_ProfileKeepsOnlyExplicitlyRequestedAccountSubjects(bool compound, bool omittedProfile)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -78,12 +79,13 @@ public partial class ProcessUserChatCommandHandlerTests
         var plan = CompositionTool("get_subscription_overview");
         var handler = CreateHandler(profile, plan);
         UseProductionReadExecutor(profile, plan);
-        SetupAiResponse(new AiResponse
+        var response = new AiResponse
         {
             ToolCalls = [new(profile.Name, "profile", ParseArguments("{\"orbit_read_complete\":true}")),
                 new(plan.Name, "plan", ParseArguments("{\"include_status\":true,\"include_billing\":false,\"include_plans\":false,\"orbit_read_complete\":true}"))],
             ConversationContext = TestConversationContext
-        });
+        };
+        SetupAiResponse(omittedProfile ? response with { ToolCalls = [response.ToolCalls![1]] } : response);
 
         var result = await handler.Handle(new(UserId, compound ? "Mostre meu perfil e meu plano" : "Mostre meu perfil e minhas configurações",
             ClientContext: new(SupportsParts: true, PartKinds: ["accountRows"], SupportsAccountRowsCard: true)), default);

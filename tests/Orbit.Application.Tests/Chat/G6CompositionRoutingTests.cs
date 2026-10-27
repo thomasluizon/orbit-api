@@ -38,7 +38,8 @@ public partial class ProcessUserChatCommandHandlerTests
             PartKinds: ["calendar"], SupportsCalendarCard: true)), default);
 
         result.IsSuccess.Should().BeTrue();
-        var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
+        var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>(
+            JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)).Subject;
         block.Kind.Should().Be("calendar");
         var read = ReadBlockTelemetry.Describe(block.Block).Read!;
         read.Completeness.Should().Be("partial");
@@ -200,6 +201,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("Help me create a habit that is easier to start.", true)]
     [InlineData("Me ajude a criar um hábito com mais facilidade.", true)]
     [InlineData("Help me make walking easier to start tomorrow.", false)]
+    [InlineData("Help me start walking more easily tomorrow.", false)]
     public async Task G6_CoachingKeepsExplicitRecordChangesAvailable(string message, bool offersWrite)
     {
         SetupUserAndPayGate();
@@ -229,7 +231,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarNotConnected));
         _mediator.Send(Arg.Any<GetCalendarAutoSyncStateQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<CalendarAutoSyncStateResponse>("PAY_GATE", "Plan unavailable"));
+            .Returns(Result.PayGateFailure<CalendarAutoSyncStateResponse>("Plan unavailable"));
         _mediator.Send(Arg.Any<GetCalendarSyncSuggestionsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new List<CalendarSyncSuggestionItem>()));
         _mediator.Send(Arg.Any<GetUserCalendarsQuery>(), Arg.Any<CancellationToken>())

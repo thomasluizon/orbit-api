@@ -52,7 +52,9 @@ public class SystemPromptBuilderTests
         if (blockFirst)
         {
             prompt.Should().Contain("start with the typed block and use no framing prose");
-            prompt.Should().Contain("contains no figures or claims about the result");
+            prompt.Should().Contain("Never repeat facts displayed by a block");
+            prompt.Should().Contain("get_habit_metrics");
+            prompt.Should().NotContain("When user mentions a NEW activity -> use create_habit");
             prompt.Should().NotContain("Use bullet points with newlines for readability");
         }
         else

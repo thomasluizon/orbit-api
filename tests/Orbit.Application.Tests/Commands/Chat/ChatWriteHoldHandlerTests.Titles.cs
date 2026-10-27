@@ -30,7 +30,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             : portuguese ? new[] { "tomar vitamina D", "tomar rosuvastatina" }
                 : new[] { "take vitamin D", "take rosuvastatin" };
         var message = coaching
-            ? portuguese ? "Me ajude a começar a caminhar com mais facilidade amanhã." : "Help me start walking more easily tomorrow."
+            ? portuguese ? "Crie uma tarefa para amanhã: separar roupa e tênis para caminhar." : "Create a task for tomorrow: set out walking clothes and shoes."
             : portuguese ? "Depois do almoço: tomar vitamina D (uma vez por semana) Antes de dormir: tomar rosuvastatina (todo dia)"
                 : "Post lunch: take vitamin D (once a week) Before bed: take rosuvastatin (everyday)";
         ScriptToolCall(JsonSerializer.Serialize(new
