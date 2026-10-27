@@ -21,7 +21,7 @@ public partial class ProcessUserChatCommandHandler
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
-        var aiResponse = HabitChangeClarification.CompleteText(initialResponse, request.Message, language);
+        var aiResponse = initialResponse;
         var iteration = 0;
         long totalReportedTokens = initialResponse.ReportedTokenCount;
         long totalBudgetTokens = initialResponse.RequestBudgetTokenCount ?? initialResponse.ReportedTokenCount;
@@ -274,7 +274,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool IsMissingHabitLookupRound(ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, IReadOnlyList<AiToolCall> calls) => UsesComposition(request, context)
-        && request.BlockAnswer is null && HabitReadMessages.IsSingleStreakRead(request.Message)
+        && request.BlockAnswer is null
         && calls is [{ Name: "query_habits" }]
         && results.OperationResults is [{ ReadBlock: { } read }] && HabitReadMessages.IsMissingMetricsLookup(read);
 

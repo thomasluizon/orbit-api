@@ -4,7 +4,6 @@ namespace Orbit.Application.Common;
 
 public static class ErrorCodes
 {
-    public const string AiMessageLimitReached = "AI_MESSAGE_LIMIT_REACHED";
     public const string AstraBlockIdRequired = "ASTRA_BLOCK_ID_REQUIRED";
     public const string AstraBlockSelectionRequired = "ASTRA_BLOCK_SELECTION_REQUIRED";
     public const string AstraBlockInvalidSelection = "ASTRA_BLOCK_INVALID_SELECTION";

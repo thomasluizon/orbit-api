@@ -38,7 +38,7 @@ public class Result
     public static Result<T> Failure<T>(string error) => new(default, false, error);
     public static Result<T> Failure<T>(string error, string? errorCode, IReadOnlyList<object?>? errorArgs = null) => new(default, false, error, errorCode, errorArgs);
     public static Result<T> Failure<T>(AppError error) => new(default, false, error.Message, error.Code, error.Args);
-    public static Result PayGateFailure(string error) => new(false, error, PayGateErrorCode);
+    public static Result PayGateFailure(string error, IReadOnlyList<object?>? errorArgs = null) => new(false, error, PayGateErrorCode, errorArgs);
     public static Result<T> PayGateFailure<T>(string error) => new(default, false, error, PayGateErrorCode);
 }
 

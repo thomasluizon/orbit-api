@@ -9,6 +9,20 @@ public class AstraBehaviourPromptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void IncompleteHabitEdit_AsksForTargetAndChangeWithFreeText(bool composition)
+    {
+        var prompt = Build(composition);
+
+        prompt.Should().Contain("When the person asks to change a habit without naming the target or the change, ask both in one short question");
+        prompt.Should().Contain("Which habit would you like to change, and what would you like to change?");
+        prompt.Should().Contain("Qual hábito você quer mudar e o que quer mudar nele?");
+        prompt.Should().Contain("For a choice block, allow free text");
+        prompt.Should().Contain("Do not show a habit list or prepare a write for an unspecified change");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void HabitSuggestions_UsePersonalDraftsInsteadOfAProseList(bool composition)
     {
         var prompt = Build(composition);

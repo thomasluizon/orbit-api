@@ -28,18 +28,48 @@ public partial class ProcessUserChatCommandHandlerTests
         };
     }
 
+    [Fact]
+    public async Task HonestyReplay_AskPreservesCapturedQuestionAndOptions()
+    {
+        const string question = "Which habit would you like to change?";
+        SetupUserAndPayGate();
+        EnableComposition();
+        SetupAiResponse(HonestyReplay("ambiguity-en-r1"));
+
+        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue();
+        var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+        choice.Question.Should().Be(question);
+        choice.AllowFreeText.Should().BeFalse();
+        choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
+        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(block => block.ReadDefinition().Title == question
+            && !block.ReadDefinition().AllowFreeText), Arg.Any<CancellationToken>());
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+    }
+
     [Theory]
-    [InlineData("en", "Change my habit.", "Which habit would you like to change, and what would you like to change?")]
-    [InlineData("pt-BR", "Altere meu hábito.", "Qual hábito você quer mudar e o que quer mudar nele?")]
-    public async Task HonestyReplay_UnspecifiedChangeAsksForTargetAndChange(string language, string message, string question)
+    [InlineData("en", "Which habit would you like to change, and what would you like to change?")]
+    [InlineData("pt-BR", "Qual hábito você quer mudar e o que quer mudar nele?")]
+    public async Task HonestyReplay_StructuredClarificationAsksForTargetAndChange(string language, string question)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         EnableComposition();
-        SetupAiResponse(HonestyReplay("ambiguity-en-r1"));
+        SetupAiResponse(ToolResponse("ask", "clarification", JsonSerializer.Serialize(new
+        {
+            form = "choice",
+            question,
+            allowFreeText = true,
+            options = new[] { new { id = "water", label = "Water" }, new { id = "walk", label = "Walk" } }
+        })));
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, message,
+        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me make a change.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -47,17 +77,14 @@ public partial class ProcessUserChatCommandHandlerTests
             .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
         choice.Question.Should().Be(question);
         choice.AllowFreeText.Should().BeTrue();
-        choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
-        await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(block => block.ReadDefinition().Title == question
-            && block.ReadDefinition().AllowFreeText), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
     [Theory]
-    [InlineData("en", "How many days in a row did I play piano?", "No matching habit was found, so its streak is unavailable.")]
-    [InlineData("pt-BR", "Quantos dias seguidos eu toquei piano?", "Não encontrei um hábito correspondente para consultar a sequência.")]
+    [InlineData("en", "Show my piano progress.", "No matching habit was found, so its streak is unavailable.")]
+    [InlineData("pt-BR", "E o piano?", "Não encontrei um hábito correspondente para consultar a sequência.")]
     public async Task HonestyReplay_MissingNamedHabitReportsUnavailableWithoutFigures(string language, string message, string expected)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
@@ -83,23 +110,20 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("query_habits", true)]
-    [InlineData("delete_habit", true)]
-    [InlineData("query_habits", false)]
-    [InlineData("delete_habit", false)]
-    public async Task UnspecifiedChange_ReplacesListOrWritePlanWithCompletePlainQuestion(string toolName, bool parts)
+    [InlineData("en", "Which habit should I edit, and what should change?")]
+    [InlineData("pt-BR", "Qual hábito devo editar e o que deve mudar?")]
+    public async Task HonestyReplay_PreservesModelClarification(string language, string question)
     {
-        SetupUserAndPayGate();
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
         EnableComposition();
-        var tool = ReadTool(toolName, new(true, Payload: new HabitListCard("all", [])));
-        if (toolName == "delete_habit") tool.IsReadOnly.Returns(false);
-        SetupAiResponse(ToolResponse(toolName, "unrequested", "{}"));
+        SetupAiResponse(new AiResponse { TextMessage = question });
 
-        var result = await CreateHandler(tool).Handle(new(UserId, "Change my habit.",
-            ClientContext: new(SupportsParts: parts, PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
+        var result = await CreateHandler().Handle(new(UserId, "Change my habit."), default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().Be("Which habit would you like to change, and what would you like to change?");
+        result.Value.AiMessage.Should().Be(question);
         result.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
@@ -107,14 +131,19 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task HonestyReplay_EmptyLookupPreservesOtherRequestedWork()
+    public async Task HonestyReplay_NonterminalCompoundReadsContinueToModelQuestion()
     {
         SetupUserAndPayGate();
         EnableComposition();
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
-        var handler = CreateHandler(query, RealAskTool());
-        UseProductionReadExecutor(query);
-        SetupAiResponse(HonestyReplay("missing-query"));
+        var goals = CompositionTool("query_goals");
+        var handler = CreateHandler(query, goals, RealAskTool());
+        UseProductionReadExecutor(query, goals);
+        SetupAiResponse(HonestyReplay("missing-query") with
+        {
+            ToolCalls = [.. HonestyReplay("missing-query").ToolCalls!,
+                new("query_goals", "goals", ParseArguments("{\"orbit_read_complete\":false}"))]
+        });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success(ToolResponse("ask", "schedule", ChoiceArguments)));

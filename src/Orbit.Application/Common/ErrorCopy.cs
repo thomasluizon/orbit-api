@@ -184,7 +184,8 @@ public static partial class ErrorCopy
     private static readonly (string Code, string En, string PtBr)[] Billing =
     [
         (ErrorCodes.PayGate, "This is a Pro feature.", "Este é um recurso Pro."),
-        (ErrorCodes.AiMessageLimitReached, "You've used your daily Astra message allowance. Come back tomorrow.", "Você usou todas as mensagens da Astra de hoje. Volte amanhã."),
+        ("chat.allowance.pro", "You've reached your daily AI message limit ({0}).", "Você atingiu seu limite diário de mensagens de IA ({0})."),
+        ("chat.allowance.free", "You've reached your daily AI message limit ({0}). Upgrade to Pro for {1} messages per day.", "Você atingiu seu limite diário de mensagens de IA ({0}). Assine o Pro para ter {1} mensagens por dia."),
         (ErrorCodes.SubscriptionNotFound, "We could not find a subscription on this account.", "Não encontramos nenhuma assinatura nesta conta."),
         (ErrorCodes.NoActiveSubscription, "This account has no active subscription.", "Esta conta não tem assinatura ativa."),
         (ErrorCodes.InvalidBillingInterval, "Choose the monthly or the yearly plan.", "Escolha o plano mensal ou o anual."),
@@ -349,6 +350,10 @@ public static partial class ErrorCopy
     public static bool TryResolve(
         string? code, bool isPtBr, IReadOnlyList<object?> args, out string message)
     {
+        if (code == ErrorCodes.PayGate && args.Count == 3
+            && args[0] is string key && key is "chat.allowance.pro" or "chat.allowance.free")
+            return TryResolve(key, isPtBr, args.Skip(1).ToArray(), out message);
+
         if (code is null)
         {
             message = string.Empty;

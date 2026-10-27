@@ -504,12 +504,39 @@ public class PayGateServiceTests
             result.IsSuccess.Should().Be(allowed);
             if (!allowed)
             {
-                result.ErrorCode.Should().Be(ErrorCodes.AiMessageLimitReached);
-                result.Error.Should().Be("You've used your daily Astra message allowance. Come back tomorrow.");
+                result.ErrorCode.Should().Be(ErrorCodes.PayGate);
+                result.Error.Should().Be(pro
+                    ? $"You've reached your daily AI message limit ({limit})."
+                    : $"You've reached your daily AI message limit ({limit}). Upgrade to Pro for 50 messages per day.");
             }
             user.AiMessagesUsedToday.Should().Be(limit + 1 + (allowed ? 1 : 0));
             await work.Received(allowed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
         });
+    }
+
+    [Theory]
+    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 50 messages per day.")]
+    [InlineData(true, "en", "You've reached your daily AI message limit (50).")]
+    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 50 mensagens por dia.")]
+    [InlineData(true, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (50).")]
+    public async Task TryConsumeAiMessage_ExhaustedAllowancePreservesPayGateAndAccountLanguage(bool pro, string language, string expected)
+    {
+        var user = pro ? CreateProUser() : CreateFreeUser();
+        user.SetLanguage(language);
+        if (!pro) user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        var limit = pro ? 50 : 5;
+        for (var index = 0; index < limit; index++) user.IncrementAiMessageCount(Today);
+        _userRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(user);
+        var work = Substitute.For<IUnitOfWork>();
+
+        var result = await _sut.TryConsumeAiMessage(UserId, work);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PayGate);
+        result.Error.Should().Be(expected);
+        user.AiMessagesUsedToday.Should().Be(limit);
+        await work.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
     }
 
     private static async Task WithEnvironment(string aspNetEnv, string? smokeEmail, Func<Task> body)

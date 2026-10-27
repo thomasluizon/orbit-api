@@ -14,14 +14,15 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public partial class LocalizedErrorResultFilterTests
 {
     [Theory]
-    [InlineData(false, "en", "You've used your daily Astra message allowance. Come back tomorrow.")]
-    [InlineData(true, "en", "You've used your daily Astra message allowance. Come back tomorrow.")]
-    [InlineData(false, "pt-BR", "Você usou todas as mensagens da Astra de hoje. Volte amanhã.")]
-    [InlineData(true, "pt-BR", "Você usou todas as mensagens da Astra de hoje. Volte amanhã.")]
+    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 50 messages per day.")]
+    [InlineData(true, "en", "You've reached your daily AI message limit (50).")]
+    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 50 mensagens por dia.")]
+    [InlineData(true, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (50).")]
     public async Task ExhaustedAstraAllowance_LocalizesTheQuotaReasonThroughHttpAndStream(bool pro, string locale, string expected)
     {
         var today = new DateOnly(2026, 10, 27);
         var user = User.Create("Reader", "quota@example.test").Value;
+        user.SetLanguage(locale);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         if (pro) user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
         var limit = pro ? 50 : 5;
@@ -39,11 +40,15 @@ public partial class LocalizedErrorResultFilterTests
             Substitute.For<IFeatureFlagService>());
 
         var failure = await gate.TryConsumeAiMessage(user.Id, work);
+        failure.ErrorCode.Should().Be(ErrorCodes.PayGate);
+        failure.Error.Should().Be(expected);
         var context = await RunContext(failure.ToErrorResult(), locale);
 
         var result = context.Result.Should().BeOfType<ObjectResult>().Subject;
         result.StatusCode.Should().Be(403);
-        result.Value.Should().BeOfType<ErrorResponse>().Which.Error.Should().Be(expected);
+        var body = result.Value.Should().BeOfType<ErrorResponse>().Subject;
+        body.ErrorCode.Should().Be(ErrorCodes.PayGate);
+        body.Error.Should().Be(expected);
         ChatErrorLocalization.SetLocale(context.HttpContext, locale);
         (await ChatErrorLocalization.MessageAsync(context.HttpContext, failure.ErrorCode, failure.Error, failure.ErrorArgs))
             .Should().Be(expected);

@@ -50,8 +50,9 @@ public class PayGateService(
                     var messageLimit = user.HasProAccess ? proLimit : freeLimit;
                     if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)
                     {
-                        return Task.FromResult(Result.Failure(new AppError(ErrorCodes.AiMessageLimitReached,
-                            ErrorCopy.Resolve(ErrorCodes.AiMessageLimitReached, false))));
+                        object?[] args = [user.HasProAccess ? "chat.allowance.pro" : "chat.allowance.free", messageLimit, proLimit];
+                        ErrorCopy.TryResolve(ErrorCodes.PayGate, LocaleHelper.IsPortuguese(user.Language), args, out var message);
+                        return Task.FromResult(Result.PayGateFailure(message, args));
                     }
                 }
 
