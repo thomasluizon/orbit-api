@@ -167,6 +167,7 @@ public sealed partial class AiCompletionClient
         int? maxOutputTokens = null,
         Guid? userId = null)
     {
+        userId ??= AiCallContext.Current?.UserId;
         var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
         var options = new CreateResponseOptions
         {
@@ -306,6 +307,7 @@ public sealed partial class AiCompletionClient
         CancellationToken cancellationToken,
         Guid? userId = null)
     {
+        userId ??= AiCallContext.Current?.UserId;
         var stopwatch = Stopwatch.StartNew();
         ResponseResult? response = null;
         var traceId = Guid.NewGuid().ToString("N");
