@@ -591,7 +591,7 @@ public partial class ProcessUserChatCommandHandlerTests
             handlers.Select(handler => handler.Handle(command, CancellationToken.None)));
 
         results.Should().ContainSingle(result => result.IsSuccess);
-        results.Count(result => result.IsFailure && result.ErrorCode == Result.PayGateErrorCode).Should().Be(requestCount - 1);
+        results.Count(result => result.IsFailure && result.ErrorCode == ErrorCodes.AiMessageLimitReached).Should().Be(requestCount - 1);
         persistence.PersistedCount.Should().Be(5);
         persistence.InitialSnapshotCount.Should().Be(requestCount);
         persistence.DistinctInitialSnapshotCount.Should().Be(requestCount);
