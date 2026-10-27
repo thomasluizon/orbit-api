@@ -193,6 +193,33 @@ public class HabitProposalValidatorTests
         localized.GetProperty("due_date").GetString().Should().Be("2026-10-27");
     }
 
+    [Theory]
+    [InlineData("pt-BR", "Revisar ÁGUA 2026-10-27 e Treino 2026-10-27", "ÁGUA 2026-10-27", "Treino 2026-10-27")]
+    [InlineData("en-US", "Review ÁGUA 2026-10-27 and Treino 2026-10-27", "ÁGUA 2026-10-27", "Treino 2026-10-27")]
+    public void SuppliedTitles_PreserveSourceCasingAndDatesInNestedBatchItems(
+        string locale, string message, string parent, string child)
+    {
+        var proposal = JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "água 2026-10-27", sub_habits = new[] { new { title = "treino 2026-10-27" } } } }
+        });
+
+        var localized = HabitProposalValidator.LocalizeTextDates(proposal, locale, message).GetProperty("habits")[0];
+
+        localized.GetProperty("title").GetString().Should().Be(parent);
+        localized.GetProperty("sub_habits")[0].GetProperty("title").GetString().Should().Be(child);
+    }
+
+    [Fact]
+    public void ComposedTitle_WholeWordsAreRequiredBeforeTreatingItAsSupplied()
+    {
+        var proposal = JsonSerializer.SerializeToElement(new { updates = new { title = "Exam 2026-10-27" } });
+
+        var localized = HabitProposalValidator.LocalizeTextDates(proposal, "pt-BR", "PreExam 2026-10-27x");
+
+        localized.GetProperty("updates").GetProperty("title").GetString().Should().Be("Exam 27/10/2026");
+    }
+
     [Fact]
     public void ToolSchemas_KeepScheduleContractWithoutRepeatingPromptGuidance()
     {

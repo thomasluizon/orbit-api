@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandler
                     logger.LogWarning("Agent operation {OperationId} rejected with {ReasonCode}", call.Name, "CORRECTION_PRESERVES_SCHEDULE");
                 }
                 else
-                    calls[id] = call with { Args = HabitProposalValidator.LocalizeTextDates(call.Args, language) };
+                    calls[id] = call with { Args = HabitProposalValidator.LocalizeTextDates(call.Args, language, request.Message) };
                 continue;
             }
             if (call is null || call.Name is not ("create_habit" or "bulk_create_habits" or "create_sub_habit"))
@@ -40,7 +40,7 @@ public partial class ProcessUserChatCommandHandler
                 logger.LogWarning("Agent operation {OperationId} rejected with {ReasonCode}", call.Name, validation.Errors[0].ErrorCode);
                 continue;
             }
-            calls[id] = call with { Args = HabitProposalValidator.LocalizeTextDates(arguments, language) };
+            calls[id] = call with { Args = HabitProposalValidator.LocalizeTextDates(arguments, language, request.Message) };
         }
         CoalesceCreateCalls(calls, results);
     }

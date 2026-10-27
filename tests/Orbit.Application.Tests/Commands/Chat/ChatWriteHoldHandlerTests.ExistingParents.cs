@@ -323,9 +323,11 @@ public sealed partial class ChatWriteHoldHandlerTests
         var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
             stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
-        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == vitamin
+        var expectedVitamin = language == "en" ? "take vitamin D" : "tomar vitamina D";
+        var expectedStatin = language == "en" ? "take rovustatina" : "tomar rovustatina";
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == expectedVitamin
             && habit.ParentHabitId == parents[0].Id && habit.FrequencyUnit == FrequencyUnit.Week), Arg.Any<CancellationToken>());
-        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == statin
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.Title == expectedStatin
             && habit.ParentHabitId == parents[1].Id && habit.FrequencyUnit == FrequencyUnit.Day), Arg.Any<CancellationToken>());
     }
 

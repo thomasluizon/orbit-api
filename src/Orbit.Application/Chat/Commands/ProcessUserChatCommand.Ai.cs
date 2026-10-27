@@ -50,6 +50,7 @@ public partial class ProcessUserChatCommandHandler
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
+            HabitModelInstructions.TitleLanguage(context.Language),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
             request.ClientContext?.SupportsPendingOperationPlacement == true
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
@@ -93,7 +94,10 @@ public partial class ProcessUserChatCommandHandler
             .Select(tool => (object)new
             {
                 name = tool.Name,
-                description = tool.Description,
+                description = tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
+                    or "update_habit" or "bulk_update_habits"
+                    ? tool.Description + Environment.NewLine + HabitModelInstructions.TitleLanguage(context.Language)
+                    : tool.Description,
                 parameters = UsesComposition(request, context) && tool.IsReadOnly
                     ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema())
                     : tool.GetParameterSchema()

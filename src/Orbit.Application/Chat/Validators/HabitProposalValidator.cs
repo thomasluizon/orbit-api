@@ -92,7 +92,7 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
         }
     }
 
-    public static JsonElement LocalizeTextDates(JsonElement arguments, string? locale)
+    public static JsonElement LocalizeTextDates(JsonElement arguments, string? locale, string message = "")
     {
         var culture = CultureInfo.GetCultureInfo(string.IsNullOrWhiteSpace(locale) ? "en-US" : locale);
         var node = JsonNode.Parse(arguments.GetRawText());
@@ -108,13 +108,35 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
             foreach (var (key, value) in obj.ToList())
             {
                 if (key is "title" or "description" && value is JsonValue text && text.TryGetValue<string>(out var content))
+                {
+                    if (key == "title" && SourceTitle(content, message) is { } original)
+                    {
+                        obj[key] = original;
+                        continue;
+                    }
                     obj[key] = IsoDate().Replace(content, match =>
                         DateOnly.TryParseExact(match.Value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                             DateTimeStyles.None, out var date) ? date.ToString("d", culture) : match.Value);
+                }
                 else
                     Visit(value);
             }
         }
+    }
+
+    private static string? SourceTitle(string title, string message)
+    {
+        if (title.Length == 0) return null;
+        var start = 0;
+        while (message.IndexOf(title, start, StringComparison.OrdinalIgnoreCase) is var index && index >= 0)
+        {
+            var end = index + title.Length;
+            if ((index == 0 || !char.IsLetterOrDigit(message[index - 1]))
+                && (end == message.Length || !char.IsLetterOrDigit(message[end])))
+                return message.Substring(index, title.Length);
+            start = end;
+        }
+        return null;
     }
 
     [GeneratedRegex(@"\b(?:\d+|three|two|one|três|tres|dois|um)\s*(?:dias?|days?|horas?|hours?)\s*(?:antes|before)\b|\b(?:até|ate|until|before|antes)\s+(?:(?:o|a|the)\s+)?(?:exame|exam|test|coleta|collection)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
