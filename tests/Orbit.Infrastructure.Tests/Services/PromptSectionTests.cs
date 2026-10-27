@@ -145,7 +145,9 @@ public class GlobalRulesSectionTests
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
-        result.Should().Contain("ONE targeted question");
+        result.Should().Contain("Ask one targeted question");
+        result.Should().Contain("When the client supports form question");
+        result.Should().Contain("Otherwise ask one question at a time");
         result.Should().Contain("Structuring Strategy");
     }
 

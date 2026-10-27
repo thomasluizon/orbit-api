@@ -94,7 +94,20 @@ public sealed class IssuedAstraBlock : Entity
     public bool MatchesAnswer(AstraBlockAnswer answer)
     {
         var stored = AnswerJson is null ? null : JsonSerializer.Deserialize<AstraBlockAnswer>(AnswerJson);
-        return stored is not null && SerializeAnswer(stored) == SerializeAnswer(answer);
+        return stored is not null && stored.BlockId == answer.BlockId && stored.FreeText == answer.FreeText
+            && SameSelection(stored.SelectedIds, answer.SelectedIds) && SameQuestionAnswers(stored.Answers, answer.Answers);
     }
 
+    private static bool SameSelection(IReadOnlyList<string> left, IReadOnlyList<string> right) =>
+        left.Order(StringComparer.Ordinal).SequenceEqual(right.Order(StringComparer.Ordinal));
+
+    private static bool SameQuestionAnswers(IReadOnlyList<AstraQuestionAnswer>? left, IReadOnlyList<AstraQuestionAnswer>? right)
+    {
+        if (left is null || right is null) return left is null && right is null;
+        return left.Count == right.Count && left.OrderBy(value => value.QuestionId, StringComparer.Ordinal)
+            .Zip(right.OrderBy(value => value.QuestionId, StringComparer.Ordinal), (first, second) =>
+                first.QuestionId == second.QuestionId && first.Number == second.Number && first.Boolean == second.Boolean
+                && first.FreeText == second.FreeText && SameSelection(first.SelectedIds ?? [], second.SelectedIds ?? []))
+            .All(matches => matches);
+    }
 }

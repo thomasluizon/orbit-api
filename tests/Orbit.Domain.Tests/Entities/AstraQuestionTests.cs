@@ -149,10 +149,11 @@ public class AstraQuestionTests
     public void Replay_ComparesEveryTypedValueAndNormalizesOrder()
     {
         var block = IssuedAstraBlock.Create(Guid.NewGuid(), new("question", "", [], [], Questions:
-            [Choice("multipleChoice"), new("ready", "yesNo", "Ready?")]));
-        var answer = new AstraBlockAnswer(block.Id, [], Answers: [new("q", ["b", "a"]), new("ready", Boolean: false)]);
+            [Choice("multipleChoice"), new("ready", "yesNo", "Ready?"), new("duration", "slider", "Duration?", Min: 0, Max: 1, Step: 0.1m, Unit: "hours")]));
+        var answer = new AstraBlockAnswer(block.Id, [], Answers: [new("q", ["b", "a"]), new("ready", Boolean: false), new("duration", Number: 0.3m)]);
         typeof(IssuedAstraBlock).GetProperty(nameof(block.AnswerJson))!.SetValue(block, IssuedAstraBlock.SerializeAnswer(answer));
-        block.MatchesAnswer(answer with { Answers = [new("ready", Boolean: false), new("q", ["a", "b"])] }).Should().BeTrue();
-        block.MatchesAnswer(answer with { Answers = [new("q", ["a", "b"]), new("ready", Boolean: true)] }).Should().BeFalse();
+        block.MatchesAnswer(answer with { Answers = [new("ready", Boolean: false), new("q", ["a", "b"]), new("duration", Number: 0.30m)] }).Should().BeTrue();
+        block.MatchesAnswer(answer with { Answers = [new("q", ["a", "b"]), new("ready", Boolean: true), new("duration", Number: 0.3m)] }).Should().BeFalse();
+        block.MatchesAnswer(answer with { Answers = [new("q", ["a", "b"]), new("ready", Boolean: false), new("duration", Number: 0.4m)] }).Should().BeFalse();
     }
 }
