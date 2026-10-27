@@ -1,4 +1,8 @@
 using NSubstitute;
+using FluentAssertions;
+using Orbit.Api.Middleware;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Application.Chat.Commands;
 using Orbit.Domain.Common;
 
@@ -29,4 +33,22 @@ public partial class ChatControllerTests
             command.ClientContext != null && command.ClientContext.Locale == expected
             && (context == null || command.ClientContext.SupportsParts == true)), Arg.Any<CancellationToken>());
     }
+    [Theory]
+    [InlineData("en", "pt-BR", false)]
+    [InlineData("pt-BR", "en", true)]
+    public async Task Chat_ErrorLocalizationUsesRequestBeforeProfile(string locale, string profile, bool portuguese)
+    {
+        var repository = Substitute.For<IGenericRepository<User>>();
+        var user = User.Create("Reader", "reader@example.com").Value;
+        user.SetLanguage(profile);
+        repository.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new ChatResponse("Reply", [])));
+        await _controller.ProcessChat("Hello", null, null, default, clientContext: "{\"locale\":\"" + locale + "\"}");
+
+        var resolved = await new RequestLanguageResolver(repository).IsPortugueseAsync(_controller.HttpContext, default);
+
+        resolved.Should().Be(portuguese);
+    }
+
 }

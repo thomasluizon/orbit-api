@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Api.Hosting;
+using Orbit.Api.Middleware;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
@@ -22,13 +23,14 @@ public sealed class ChatTurnStream(
 {
     public async Task<IActionResult> RunAsync(ProcessUserChatCommand command, HttpContext http, string key, CancellationToken transportToken)
     {
+        ChatErrorLocalization.SetLocale(http, command.ClientContext?.Locale);
         await new ChatTurnKeyValidator().ValidateAndThrowAsync(key, transportToken);
         await new ProcessUserChatCommandValidator().ValidateAndThrowAsync(command, transportToken);
         var candidate = ChatTurn.Create(command.UserId, ChatTurnIdentity.HashKey(key), ChatTurnIdentity.Fingerprint(command),
             TimeProvider.System.GetUtcNow().UtcDateTime.Add(options.Value.Timeout));
         var (turn, claimed) = await store.ClaimAsync(candidate, transportToken);
         if (turn.Fingerprint != candidate.Fingerprint)
-            return new ConflictObjectResult(new { code = "CHAT_TURN_KEY_CONFLICT", error = "The turn key belongs to another payload." });
+            return new ConflictObjectResult(new { code = "CHAT_TURN_KEY_CONFLICT", error = await ChatErrorLocalization.MessageAsync(http, "CHAT_TURN_KEY_CONFLICT", "The turn key belongs to another payload.") });
 
         var connected = true;
         async Task Write(string json)
@@ -64,7 +66,7 @@ public sealed class ChatTurnStream(
                 await Task.Delay(TimeSpan.FromMilliseconds(250), transportToken);
                 turn = await store.ReadAsync(command.UserId, turn.Id, transportToken);
             }
-            await Write(turn.TerminalEvent ?? Interrupted(turn.Id).ToJson());
+            await Write(turn.TerminalEvent ?? (await InterruptedAsync(http, turn.Id)).ToJson());
             return new EmptyResult();
         }
 
@@ -78,7 +80,7 @@ public sealed class ChatTurnStream(
             var lease = await limits.TryAcquireLeaseAsync(ConcurrentChatLimitFilter.PolicyName, partition,
                 AppConstants.MaxConcurrentChatRequestsPerUser, TimeSpan.FromMinutes(5), execution.Token);
             if (!lease.Allowed)
-                terminal = ChatStreamEvent.Failure(429, ErrorMessages.TooManyRequests.Message, ErrorMessages.TooManyRequests.Code);
+                terminal = await ChatErrorLocalization.FailureAsync(http, 429, ErrorMessages.TooManyRequests.Code, ErrorMessages.TooManyRequests.Message);
             else
             {
                 leaseEndAtUtc = lease.WindowEndsAtUtc;
@@ -88,21 +90,21 @@ public sealed class ChatTurnStream(
                     StreamSink = command.BlockAnswer is null ? streamEvent => Write(streamEvent.ToJson()) : null
                 }, execution.Token);
                 terminal = result.IsSuccess ? ChatStreamEvent.Final(result.Value)
-                    : ChatStreamEvent.Failure(result.ResolveErrorStatus(), result.Error, result.ErrorCode);
+                    : await ChatErrorLocalization.FailureAsync(http, result.ResolveErrorStatus(), result.ErrorCode, result.Error, result.ErrorArgs);
             }
         }
-        catch (ValidationException exception)
+        catch (ValidationException)
         {
-            terminal = ChatStreamEvent.Failure(400, exception.Message);
+            terminal = await ChatErrorLocalization.FailureAsync(http, 400, ErrorCodes.ValidationError, ErrorMessages.ValidationError.Message);
         }
         catch (OperationCanceledException) when (execution.IsCancellationRequested)
         {
-            terminal = Interrupted(turn.Id);
+            terminal = await InterruptedAsync(http, turn.Id);
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "Chat turn {TurnId} failed", turn.Id);
-            terminal = ChatStreamEvent.Failure(500, ErrorMessages.AiUnavailable.Message, ErrorMessages.AiUnavailable.Code);
+            terminal = await ChatErrorLocalization.FailureAsync(http, 500, ErrorMessages.AiUnavailable.Code, ErrorMessages.AiUnavailable.Message);
         }
 
         terminal = terminal with { TurnId = turn.Id, State = terminal.State ?? "completed" };
@@ -121,8 +123,8 @@ public sealed class ChatTurnStream(
         return new EmptyResult();
     }
 
-    private static ChatStreamEvent Interrupted(Guid turnId) =>
-        ChatStreamEvent.Failure(503, "The turn was interrupted. Its effects may be partial; do not resend it with another key.",
-            "CHAT_TURN_INTERRUPTED") with
+    private static async Task<ChatStreamEvent> InterruptedAsync(HttpContext http, Guid turnId) =>
+        (await ChatErrorLocalization.FailureAsync(http, 503, "CHAT_TURN_INTERRUPTED",
+            "The turn was interrupted. Its effects may be partial; do not resend it with another key.")) with
         { TurnId = turnId, State = "interrupted" };
 }

@@ -18,6 +18,8 @@ using Orbit.Api.Middleware;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Common;
+using FluentValidation;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Events;
@@ -211,13 +213,15 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         await mediator.Received(1).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task AbandonedReservation_ExpiredKeyNeverExecutesAgain()
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task AbandonedReservation_ExpiredKeyNeverExecutesAgain(string locale)
     {
         var mediator = Substitute.For<IMediator>();
         var userId = Guid.NewGuid();
         using var services = new ChatTurnStreamTestServices(mediator, userId);
-        var command = new ProcessUserChatCommand(userId, "Hello");
+        var command = new ProcessUserChatCommand(userId, "Hello", ClientContext: new(Locale: locale));
         var candidate = ChatTurn.Create(userId, ChatTurnIdentity.HashKey("abandoned"),
             ChatTurnIdentity.Fingerprint(command), DateTime.UtcNow.AddSeconds(-1));
         await services.Provider.GetRequiredService<IChatTurnStore>().ClaimAsync(candidate, default);
@@ -227,6 +231,7 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
             .RunAsync(command, controller.HttpContext, "abandoned", default);
 
         Events(controller).Last().GetProperty("code").GetString().Should().Be("CHAT_TURN_INTERRUPTED");
+        Events(controller).Last().GetProperty("error").GetString().Should().Be(ErrorCopy.Resolve("CHAT_TURN_INTERRUPTED", locale == "pt-BR"));
         Events(controller).Last().GetProperty("turnId").GetGuid().Should().Be(candidate.Id);
         await mediator.DidNotReceiveWithAnyArgs().Send(default(ProcessUserChatCommand)!, default);
     }
@@ -260,6 +265,39 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
 
         Events(retry).Last().GetProperty("code").GetString().Should().Be("CHAT_TURN_INTERRUPTED");
         await mediator.Received(1).Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("pt-BR", false, "result")]
+    [InlineData("pt-BR", true, "result")]
+    [InlineData("en", false, "result")]
+    [InlineData("en", true, "result")]
+    [InlineData("pt-BR", false, "exception")]
+    [InlineData("pt-BR", true, "exception")]
+    [InlineData("pt-BR", false, "validation")]
+    [InlineData("pt-BR", true, "validation")]
+    public async Task StreamFailures_UseRequestLocale(string locale, bool idempotent, string failure)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var userId = Guid.NewGuid();
+        using var services = new ChatTurnStreamTestServices(mediator, userId);
+        mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>()).Returns(_ => failure switch
+        {
+            "exception" => throw new InvalidOperationException("Internal failure"),
+            "validation" => throw new ValidationException("Internal validation detail"),
+            _ => Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable)
+        });
+        var controller = CreateController(services, userId, "locale-key");
+        if (!idempotent) controller.Request.Headers.Remove("Idempotency-Key");
+        controller.Request.Headers.AcceptLanguage = locale == "en" ? "pt-BR" : "en";
+
+        await controller.ProcessChatStream("Hello", null, null, default,
+            clientContext: JsonSerializer.Serialize(new { locale }));
+
+        var terminal = Events(controller).Last();
+        var code = failure == "validation" ? ErrorCodes.ValidationError : ErrorCodes.AiUnavailable;
+        terminal.GetProperty("error").GetString().Should().Be(ErrorCopy.Resolve(code, locale == "pt-BR"));
+        terminal.GetProperty("code").GetString().Should().Be(code);
     }
 
     internal static ChatController CreateController(ChatTurnStreamTestServices services, Guid userId, string key, Stream? body = null)
