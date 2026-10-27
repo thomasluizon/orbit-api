@@ -47,7 +47,7 @@ public sealed class HabitSuggestionPreviewAllTests : IAsyncDisposable
         var user = User.Create("Alex", "suggestions@example.test").Value;
         _userId = user.Id;
         _existing = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read",
-            FrequencyUnit.Day, 1, _today, DueTime: new(22, 0), DueEndTime: new(22, 15))).Value;
+            FrequencyUnit.Day, 1, _today, DueTime: new(22, 0), DueEndTime: new(22, 15), Emoji: "🦷")).Value;
         _database.Context.Users.Add(user);
         _database.Context.Habits.Add(_existing);
         _database.Context.SaveChanges();
@@ -171,6 +171,18 @@ public sealed class HabitSuggestionPreviewAllTests : IAsyncDisposable
         preview.PendingOperation!.Items.Should().HaveCount(3);
         preview.PendingOperation.Items!.Select(item => item.EntityName).Should().Equal(drafts.Select(draft => draft.Title));
         preview.PendingOperation.Items![2].EntityId.Should().Be(_existing.Id);
+        var pending = response.Body.GetProperty("pendingOperation");
+        for (var index = 0; index < drafts.Length; index++)
+        {
+            var item = pending.GetProperty("items")[index];
+            var expectedEmoji = index == 2 ? "🦷" : drafts[index].Emoji;
+            item.GetProperty("entityEmoji").GetString().Should().Be(expectedEmoji);
+            foreach (var field in item.GetProperty("fields").EnumerateArray())
+                field.GetProperty("entityEmoji").GetString().Should().Be(expectedEmoji);
+        }
+        foreach (var change in pending.GetProperty("changes").EnumerateArray())
+            change.GetProperty("entityEmoji").GetString().Should().Be(
+                change.GetProperty("entityId").GetGuid() == _existing.Id ? "🦷" : "📖");
         var store = _app.Services.GetRequiredService<IPendingAgentOperationStore>();
         store.GetAwaiting(_userId).Should().ContainSingle().Which.PendingOperationId.Should().Be(preview.PendingOperation.Id);
         using (var before = _database.CreateContext())

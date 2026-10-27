@@ -16,7 +16,7 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Chat;
 
-public sealed class PendingOperationChangePreviewerTests
+public sealed partial class PendingOperationChangePreviewerTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private readonly IGenericRepository<Habit> _habits = Substitute.For<IGenericRepository<Habit>>();
@@ -178,12 +178,13 @@ public sealed class PendingOperationChangePreviewerTests
     [Fact]
     public async Task Unlog_DefaultDate_PreviewShowsUserToday()
     {
-        var habit = CreateHabit("Beber água", null);
+        var habit = CreateHabit("Beber água", "🦷");
         Setup([habit]);
         var preview = await Preview("unlog_habit", JsonSerializer.Serialize(new { habit_id = habit.Id }));
         preview.Should().NotBeNull();
         preview!.Items.Should().ContainSingle().Which.EntityName.Should().Be(habit.Title);
         preview.Changes.Should().Contain(change => change.Field == "date" && change.NewValue == "2026-09-25");
+        AssertEmoji(preview, "🦷");
     }
 
     [Fact]

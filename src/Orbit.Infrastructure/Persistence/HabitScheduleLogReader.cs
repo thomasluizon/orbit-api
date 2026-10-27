@@ -27,7 +27,12 @@ public sealed class HabitScheduleLogReader(OrbitDbContext context) : IHabitSched
                     json(COALESCE(json_group_array(CAST(julianday("Date") - julianday({fromIso}) AS integer)) FILTER (WHERE CAST("Value" AS numeric) = 0), '[]')),
                     json(COALESCE(json_group_array(DISTINCT CAST(julianday("Date") - julianday({fromIso}) AS integer)) FILTER (WHERE CAST("Value" AS numeric) < 0), '[]'))
                 ) AS "Facts"
-                FROM "HabitLogs"
+                FROM (
+                    SELECT "HabitId", "Date", "Value", "IsDeleted" FROM "HabitLogs"
+                    UNION ALL
+                    SELECT "HabitId", "PreviousDueDate" AS "Date", 0 AS "Value", false AS "IsDeleted"
+                    FROM "HabitSkipUndos" WHERE NOT "IsUndone" AND "SkipLogId" IS NULL
+                ) AS "ScheduleLogs"
                 WHERE "HabitId" IN (SELECT upper(value) FROM json_each({idsJson}))
                   AND "Date" >= {fromIso} AND "Date" <= {toIso} AND NOT "IsDeleted"
                 GROUP BY "HabitId"
@@ -38,7 +43,12 @@ public sealed class HabitScheduleLogReader(OrbitDbContext context) : IHabitSched
                     COALESCE(jsonb_agg("Date" - CAST({fromIso} AS date)) FILTER (WHERE "Value" = 0), '[]'::jsonb),
                     COALESCE(jsonb_agg(DISTINCT "Date" - CAST({fromIso} AS date)) FILTER (WHERE "Value" < 0), '[]'::jsonb)
                 )::text AS "Facts"
-                FROM "HabitLogs"
+                FROM (
+                    SELECT "HabitId", "Date", "Value", "IsDeleted" FROM "HabitLogs"
+                    UNION ALL
+                    SELECT "HabitId", "PreviousDueDate" AS "Date", 0 AS "Value", false AS "IsDeleted"
+                    FROM "HabitSkipUndos" WHERE NOT "IsUndone" AND "SkipLogId" IS NULL
+                ) AS "ScheduleLogs"
                 WHERE "HabitId" IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST({idsJson} AS jsonb)) AS value)
                   AND "Date" >= CAST({fromIso} AS date)
                   AND "Date" <= CAST({toIso} AS date) AND NOT "IsDeleted"

@@ -153,8 +153,10 @@ public sealed partial class PendingOperationChangePreviewer(
                 && fields.All(field => string.Equals(field.OldValue, field.NewValue, StringComparison.Ordinal)))
                 continue;
 
+            fields = fields.Select(field => field with { EntityEmoji = habit.Emoji }).ToList();
             items.Add(new PendingOperationItem(habit.Id.ToString(), habit.Id, habit.Title,
-                fields, FingerprintHabit(habit), RemovesData: operationId == "bulk_delete_habits"));
+                fields, FingerprintHabit(habit), RemovesData: operationId == "bulk_delete_habits",
+                EntityEmoji: habit.Emoji));
             if (items.Count <= 10)
                 rows.AddRange(fields.Take(actualChangeCount));
         }
@@ -324,11 +326,11 @@ public sealed partial class PendingOperationChangePreviewer(
             var habit = byId[item.HabitId];
             var date = item.Date.ToString(DateFormat, CultureInfo.InvariantCulture);
             var change = new PendingOperationChange(habit.Id, habit.Title, "date", null, date,
-                "date", JsonSerializer.SerializeToElement(date), true);
+                "date", JsonSerializer.SerializeToElement(date), true, EntityEmoji: habit.Emoji);
             var itemId = stableIds.TryGetValue((item.HabitId, item.Date), out var stableId)
                 ? stableId : multipleDates ? $"{habit.Id}:{date}" : habit.Id.ToString();
             return new PendingOperationItem(itemId,
-                habit.Id, habit.Title, [change], FingerprintHabit(habit), RemovesData: false);
+                habit.Id, habit.Title, [change], FingerprintHabit(habit), RemovesData: false, EntityEmoji: habit.Emoji);
         }).ToList();
         return BuildPreview(operationId, datedPreview.Take(10).SelectMany(item => item.Fields).ToList(), datedPreview);
     }
@@ -402,7 +404,7 @@ public sealed partial class PendingOperationChangePreviewer(
             values[TagNames] = values[TagIds] = FormatTags(habit);
         var fingerprint = readsTags ? AgentOperationFingerprint.Compute(FingerprintHabit(habit),
             JsonSerializer.Serialize(habit.Tags.OrderBy(tag => tag.Id).Select(FingerprintTag))) : FingerprintHabit(habit);
-        return new AgentPreviewTarget(habit.Id, habit.Title, values, fingerprint);
+        return new AgentPreviewTarget(habit.Id, habit.Title, values, fingerprint, habit.Emoji);
     }
 
     private static bool TryReadId(JsonElement arguments, string field, out Guid id)
@@ -620,8 +622,8 @@ public sealed partial class PendingOperationChangePreviewer(
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter, cancellationToken);
         return BuildPreview("delete_habit", [], habits.Select(habit =>
             new PendingOperationItem(habit.Id.ToString(), habit.Id, habit.Title,
-                [new PendingOperationChange(habit.Id, habit.Title, "delete", null, null, "action")],
-                FingerprintHabit(habit), RemovesData: true)).ToList());
+                [new PendingOperationChange(habit.Id, habit.Title, "delete", null, null, "action", EntityEmoji: habit.Emoji)],
+                FingerprintHabit(habit), RemovesData: true, EntityEmoji: habit.Emoji)).ToList());
     }
 
     private async Task<PendingOperationChangePreview?> PreviewCreateAsync(
@@ -657,11 +659,14 @@ public sealed partial class PendingOperationChangePreviewer(
             var itemId = habit.ValueKind == JsonValueKind.Object
                 && habit.TryGetProperty("preview_item_id", out var storedId)
                 ? storedId.ToString() : index.ToString(CultureInfo.InvariantCulture);
+            var entityEmoji = existing is not null ? existing.Emoji : AgentArgumentPreview.DraftEmoji(habit);
+            fields = fields.Select(field => field with { EntityEmoji = entityEmoji }).ToList();
             items.Add(new PendingOperationItem(itemId, existing?.Id,
                 existing?.Title ?? name, fields, AgentOperationFingerprint.Compute(BulkCreateHabits + parentFingerprint, habit.GetRawText()),
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null,
                 FieldOptions: parentOptions is null && reuseOptions is null ? null
-                    : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray()));
+                    : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray(),
+                EntityEmoji: entityEmoji));
         }
         return BuildPreview(BulkCreateHabits, items.SelectMany(item => item.Fields)
             .Where(field => field.Field == ParentHabitId && field.EntityId != Guid.Empty)

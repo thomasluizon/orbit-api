@@ -48,14 +48,24 @@ Partial and recovery states keep their relevant typed blocks. Unknown directives
 Deterministic fallback text is already grounded by its typed producer.
 
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
-It is true when the current reads answer the request and false for prerequisite lookups or
-remaining tools. Independent reads belong in one round. The server removes the argument before
-execution and can finish complete read plans in later rounds as well. Every read must declare
-`orbit_read_complete: true`, including reads that return complete empty lists. Incomplete plans
-continue through the existing model-service port so prerequisite lookups can lead to remaining
-reads or approval-gated write previews.
-Dependent reads, writes,
-failures, missing projections and invalid rankings retain their existing handling.
+It is true only when the current round fully answers the request and false for prerequisite
+lookups or any remaining read or write. Independent reads belong in one round. This signal
+travels in the structured tool call, so completion does not depend on assistant text accompanying
+a tool call. The server removes the argument before execution and can finish declared-complete
+read plans in later rounds as well. The server skips continuation only when every call declares
+completion, every declared call ran, every tool is read-only, every result succeeded and has
+a typed projection, and no clarification, write or pending operation remains. Invalid ranking
+projections cannot complete the round. A prerequisite lookup or a request needing another read
+or write declares false and keeps the tool loop. A failed terminal read or a missing projection
+requests continuation. A successful `query_habits` read with a nonempty `search`,
+`include_metrics: true`, complete metadata and zero total rows follows the same completion
+rules. When declared complete, it yields the localized missing-habit and unavailable-streak
+text without numeric results. A prerequisite lookup keeps the tool loop even when empty,
+so the model can request creation details or prepare the remaining change.
+An issued `ask` block ends the turn and suppresses read completion and readable read
+fallbacks. Its question and options are the model's structured output, preserved without
+message-based rewriting. Habit clarification and streak selection live in the prompt and
+tool contract.
 
 The full registered tool set remains available regardless of message wording or language.
 Composition never renames calls, invokes an uncalled tool, or substitutes fixed advice.
@@ -68,14 +78,19 @@ result or negotiated readable fallback; it cannot fabricate the expected family.
 metrics lookup requires the model's subsequent metrics call. Names, permissions, dates and
 calculations remain owned by the existing producers and every write retains approval.
 
+Skipped habit reads retain their dated skip facts, including active skip receipts for
+recurring habits. They exclude skipped entries from completed and remaining totals.
+The existing habit-list wire statuses cannot express a skip, so these reads use localized
+text produced from the typed skip facts and stored titles. Stored titles remain verbatim.
 Legacy clients without parts keep their readable path; unsupported kinds use typed fallbacks.
 The parts and family kill flags still apply. No contract field changes type or optionality.
 The API regression fixtures replay #26's executed tool arguments at the model-service port;
 they do not claim raw provider output or correct erroneous calls by rewriting them. Tests
 verify unchanged tool availability, faithful dispatch, typed dependency selection, incomplete
-plan continuation, complete-empty termination and later-round terminal reads. The partial-list fixture has 51 habits, so limit 100
-truthfully produces complete data and limit 50 produces partial data with a cursor. #1822 owns
-the disconnected-calendar stale expectation. #26 owns the live bilingual rerun before activation.
+plan continuation, declared-complete empty termination and later-round terminal reads.
+The partial-list fixture has 51 habits, so limit 100 truthfully produces complete data and
+limit 50 produces partial data with a cursor. #1822 owns the disconnected-calendar stale
+expectation. #26 owns the live bilingual rerun before activation.
 
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
 preview/outcome before read parts and reports each operation once. Preview, edit, reject,
@@ -91,6 +106,12 @@ identifier. This fallback also covers parent-preview recovery, current previews 
 replay, and the parts kill flag. It is independent of `astra_block_first`; disabling composition
 must preserve readable legacy answers. Stream reset and replacement text agree with the final
 response and recorded history. A pending preview keeps contextual follow-ups suppressed.
+
+Daily Astra allowance exhaustion retains HTTP 403 with `errorCode: PAY_GATE` and the same
+code on SSE errors. Its localized reason states the allowance limit; free accounts also
+receive the existing Pro upgrade sentence. Account language selects the initial copy,
+and HTTP/SSE localization uses internal copy arguments to preserve the quota reason.
+Those arguments are excluded from the wire response. Other Pro gates retain their copy.
 
 ## Append-only follow-up context
 

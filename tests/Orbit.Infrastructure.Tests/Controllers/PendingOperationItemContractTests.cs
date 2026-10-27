@@ -6,6 +6,24 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public sealed class PendingOperationItemContractTests
 {
+    [Fact]
+    public void PreviewResponse_AppendsEmojiToItemAndChange()
+    {
+        var change = new PendingOperationChange(Guid.NewGuid(), "Brush teeth", "title", "Old", "New", "text",
+            EntityEmoji: "🦷");
+        var item = new PendingOperationItem("item", change.EntityId, change.EntityName, [change], "state",
+            EntityEmoji: "🦷");
+
+        var json = JsonSerializer.SerializeToElement(item, JsonSerializerOptions.Web);
+
+        json.GetProperty("entityEmoji").GetString().Should().Be("🦷");
+        json.GetProperty("fields")[0].GetProperty("entityEmoji").GetString().Should().Be("🦷");
+        JsonSerializer.Deserialize<PendingOperationItem>(json, JsonSerializerOptions.Web).Should().BeEquivalentTo(item);
+        var legacy = new PendingOperationChange(change.EntityId, change.EntityName, "title", "Old", "New", "text");
+        JsonSerializer.SerializeToElement(legacy, JsonSerializerOptions.Web)
+            .TryGetProperty("entityEmoji", out _).Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -44,6 +62,8 @@ public sealed class PendingOperationItemContractTests
         item.ValidationErrors.Should().BeNull();
         item.FieldOptions.Should().BeNull();
         item.Placement.Should().BeNull();
+        JsonSerializer.SerializeToElement(item, JsonSerializerOptions.Web)
+            .TryGetProperty("entityEmoji", out _).Should().BeFalse();
     }
 
     [Theory]
@@ -62,8 +82,18 @@ public sealed class PendingOperationItemContractTests
         schema.GetProperty("required").EnumerateArray().Select(field => field.GetString())
             .Should().BeEquivalentTo("itemId", "entityId", "entityName", "fields", "stateFingerprint");
         var properties = schema.GetProperty("properties");
+        properties.GetProperty("entityEmoji").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
+        var change = schemas.GetProperty("PendingOperationChange");
+        change.GetProperty("required").EnumerateArray().Select(field => field.GetString())
+            .Should().BeEquivalentTo("entityId", "entityName", "field", "oldValue", "newValue", "valueType");
+        var changeProperties = change.GetProperty("properties");
+        changeProperties.EnumerateObject().Select(property => property.Name).Should().Equal(
+            "entityId", "entityName", "field", "oldValue", "newValue", "valueType", "proposedValue", "isEditable", "entityEmoji");
+        changeProperties.GetProperty("entityEmoji").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement");
+            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement", "entityEmoji");
         properties.GetProperty("placement").GetProperty("oneOf").EnumerateArray()
             .Any(value => value.TryGetProperty("$ref", out var reference)
                 && reference.GetString() == "#/components/schemas/PendingOperationPlacement").Should().BeTrue();
