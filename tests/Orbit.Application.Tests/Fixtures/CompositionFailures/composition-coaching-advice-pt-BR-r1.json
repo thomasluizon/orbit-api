@@ -1,0 +1,51 @@
+{
+  "caseId": "composition-coaching-advice-pt-BR",
+  "repeat": 1,
+  "reason": "No-data answer must contain one to three short lines without headings, lists or paragraphs.",
+  "answer": "{\"pendingOperations\":[{\"count\":1,\"items\":[{\"title\":\"Caminhar com mais facilidade\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Caminhar com mais facilidade\"},{\"field\":\"checklist_items\",\"values\":[{\"text\":\"Preparar tênis e roupa confortável\",\"is_checked\":false},{\"text\":\"Fazer uma caminhada curta e leve\",\"is_checked\":false}]},{\"field\":\"description\",\"newValue\":\"Começar com uma caminhada leve para tornar o hábito mais fácil de iniciar.\"},{\"field\":\"due_date\",\"newValue\":\"2026-10-28\"},{\"field\":\"emoji\",\"newValue\":\"🚶\"},{\"field\":\"frequency_quantity\",\"newValue\":\"1\"},{\"field\":\"frequency_unit\",\"newValue\":\"Day\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"sub_habits\",\"items\":[]}]}]}],\"parts\":[]}",
+  "toolCalls": [
+    {
+      "name": "create_habit",
+      "arguments": {
+        "title": "Caminhar com mais facilidade",
+        "description": "Começar com uma caminhada leve para tornar o hábito mais fácil de iniciar.",
+        "emoji": "🚶",
+        "frequency_unit": "Day",
+        "frequency_quantity": 1,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": "2026-10-28",
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_bad_habit": false,
+        "is_general": false,
+        "is_flexible": false,
+        "checklist_items": [
+          {
+            "text": "Preparar tênis e roupa confortável",
+            "is_checked": false
+          },
+          {
+            "text": "Fazer uma caminhada curta e leve",
+            "is_checked": false
+          }
+        ],
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": null,
+        "reminder_times": null,
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "slip_alert_enabled": null,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": []
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

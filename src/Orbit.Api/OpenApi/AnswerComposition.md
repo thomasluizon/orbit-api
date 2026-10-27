@@ -11,7 +11,8 @@ Successful typed results supply blocks and query identities. Directives cannot e
 success or determine the leading position. Tool-call structure selects answers without request
 keywords. A lookup is a prerequisite when all its typed entity IDs first appear in that result
 and supply arguments to later tool rounds. Calls in the same round cannot consume each other's
-results. Other successful reads render in recorded operation order, including independent reads
+results. The model selects requested subjects through its tool calls and arguments;
+the server never filters reads by words in the person's message. Successful reads render in recorded operation order, including independent reads
 alongside a pending preview or write outcome. Rankings use the complete count result and retain
 their produced position. Only equivalent query families, kinds and canonical scopes deduplicate;
 different entity IDs, date windows and metrics remain distinct, including history scopes.
@@ -36,27 +37,27 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
 | Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
 
-Supported data blocks may have one short framing sentence from the first model round before
-them. The sentence has no digits or result claims and never repeats the block. The server
-drops unsafe framing and keeps at most one sentence of at most 180 characters. Later model
-rounds cannot replace it. Choice questions stay in their blocks; pending previews retain
+Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
 from the typed result. Builder failure never becomes an empty success. Successful typed reads
-survive narrative outage. Empty lists carry an existing screen action in `relatedSurfaces`
-when applicable. Unknown directives are stripped. Model text and follow-ups retain grounding.
+survive narrative outage. Complete empty habit, goal and record lists use a short localized state without a heading.
+They carry an existing screen action in `relatedSurfaces` when applicable. Habit queries use
+`today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
+Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
 
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
-It is true only when the first round fully answers the request and false for prerequisite
-lookups or any remaining read or write. This signal travels in the structured tool call, so
-completion does not depend on assistant text accompanying a tool call. The server removes
-the argument before execution. The server skips continuation only when every call declares completion,
-every declared call ran, every tool is read-only, every result succeeded and has a typed block,
-and no clarification, write or pending operation remains. Invalid ranking projections cannot
-complete the round. A prerequisite lookup or a request needing another read or write declares
-false and keeps the tool loop. A failed terminal read or a missing projection requests
-continuation. A successful `query_habits` read with a nonempty `search`,
+It is true only when the current round fully answers the request and false for prerequisite
+lookups or any remaining read or write. Independent reads belong in one round. This signal
+travels in the structured tool call, so completion does not depend on assistant text accompanying
+a tool call. The server removes the argument before execution and can finish declared-complete
+read plans in later rounds as well. The server skips continuation only when every call declares
+completion, every declared call ran, every tool is read-only, every result succeeded and has
+a typed projection, and no clarification, write or pending operation remains. Invalid ranking
+projections cannot complete the round. A prerequisite lookup or a request needing another read
+or write declares false and keeps the tool loop. A failed terminal read or a missing projection
+requests continuation. A successful `query_habits` read with a nonempty `search`,
 `include_metrics: true`, complete metadata and zero total rows follows the same completion
 rules. When declared complete, it yields the localized missing-habit and unavailable-streak
 text without numeric results. A prerequisite lookup keeps the tool loop even when empty,
@@ -66,12 +67,30 @@ fallbacks. Its question and options are the model's structured output, preserved
 message-based rewriting. Habit clarification and streak selection live in the prompt and
 tool contract.
 
+The full registered tool set remains available regardless of message wording or language.
+Composition never renames calls, invokes an uncalled tool, or substitutes fixed advice.
+Prompt instructions direct provider/connection/sync reads to `get_calendar_overview`, habit
+month reads to `get_habit_month`, focused metrics to `get_habit_metrics`, profile/settings
+to `get_profile`, and plan-feature help to `describe_feature`. Coaching uses the model's
+short answer unless a record change is explicitly requested. These are model instructions,
+not server routing rules. A mistaken tool selection remains visible as its actual typed
+result or negotiated readable fallback; it cannot fabricate the expected family. A dependent
+metrics lookup requires the model's subsequent metrics call. Names, permissions, dates and
+calculations remain owned by the existing producers and every write retains approval.
+
 Skipped habit reads retain their dated skip facts, including active skip receipts for
 recurring habits. They exclude skipped entries from completed and remaining totals.
 The existing habit-list wire statuses cannot express a skip, so these reads use localized
 text produced from the typed skip facts and stored titles. Stored titles remain verbatim.
-Legacy clients without parts keep their existing readable path; unsupported
-block kinds use typed readable fallbacks. The parts and family kill flags still apply.
+Legacy clients without parts keep their readable path; unsupported kinds use typed fallbacks.
+The parts and family kill flags still apply. No contract field changes type or optionality.
+The API regression fixtures replay #26's executed tool arguments at the model-service port;
+they do not claim raw provider output or correct erroneous calls by rewriting them. Tests
+verify unchanged tool availability, faithful dispatch, typed dependency selection, incomplete
+plan continuation, declared-complete empty termination and later-round terminal reads.
+The partial-list fixture has 51 habits, so limit 100 truthfully produces complete data and
+limit 50 produces partial data with a cursor. #1822 owns the disconnected-calendar stale
+expectation. #26 owns the live bilingual rerun before activation.
 
 `pendingOperations`, `actions` and `operations` remain compatible. #1620 renders the existing
 preview/outcome before read parts and reports each operation once. Preview, edit, reject,

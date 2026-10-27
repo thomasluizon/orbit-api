@@ -74,8 +74,6 @@ public partial class ProcessUserChatCommandHandler
             .ToList();
         var hasOutcome = results.PendingOperations.Count > 0 || results.ActionResults.Count > 0;
         var built = BuildCompositionParts(candidates, request, context, results, language);
-        foreach (var read in candidates.Where(read => read.Read.TotalCount == 0))
-            results.AddRelatedSurface(SurfaceForRead(read));
         var parts = built.Parts;
         var missingProjection = !hasOutcome && results.OperationResults.Any(operation =>
             operation.Status == AgentOperationStatus.Succeeded && ReadBlockFactory.Supports(operation.OperationId)
@@ -83,23 +81,17 @@ public partial class ProcessUserChatCommandHandler
         var status = CompositionStatus(results, hasOutcome, missingProjection, truncated, language);
         if (status is not null)
             parts.Add(new ChatTextPart(ShortText(status, 1)));
-        else if (!hasOutcome && results.AskBlock is null && parts.Count > 0 && parts.All(part => part is ChatBlockPart)
-            && FramingSentence(results.FirstRoundText, context, results) is { } sentence)
-            parts.Insert(0, new ChatTextPart(sentence));
         else if (parts.Count == 0 && !hasOutcome)
             parts.Add(new ChatTextPart(ShortText(parsed.VisibleText, 3,
                 Mentions(request.Message, "steps|passos|step by step|passo a passo"))));
 
-        if (candidates is [{ Block: HabitMonthCard month }] && !hasOutcome
-            && parts is [ChatBlockPart { Kind: "habitMonth" }])
-            parts.Insert(0, new ChatTextPart(HabitMonthCardBuilder.Introduction(month)));
         CaptureComposition(request, context, results, candidates, built, missingProjection, hasOutcome);
         var cards = new ResponseCards(JoinPartText(parts), Parts: parts)
         {
             ServerComposedText = candidates.Count > 0 || status is not null || hasOutcome || results.AskBlock is not null
             || results.LastSuccessfulOperation("get_habit_ranking") is not null
         };
-        return status is null && !hasOutcome ? WithDaySummaryIntro(cards, language, context.UserToday, results) : cards;
+        return cards;
     }
 
     private async Task<(ResponseCards Cards, IReadOnlyList<string>? FollowUps, TurnFactSet Facts)> ComposeRegularReplyCoreAsync(
@@ -123,8 +115,11 @@ public partial class ProcessUserChatCommandHandler
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
         if (!composition)
             cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
-        cards = ComposePeriodAnalytics(cards, request, context, executionResults);
-        cards = ComposeUnavailableReads(cards, request, context, executionResults);
+        if (!composition)
+        {
+            cards = ComposePeriodAnalytics(cards, request, context, executionResults);
+            cards = ComposeUnavailableReads(cards, request, context, executionResults);
+        }
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition && !executionResults.IsPreviewDiscussion ? request with { StreamSink = null } : request,
             composition || hasPreview ? groundingTurn with { Enforce = true } : groundingTurn);
@@ -251,7 +246,13 @@ public partial class ProcessUserChatCommandHandler
                     built.Duplicates++;
                     continue;
                 }
-                if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
+                if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
+                    && EmptyCompositionText(read, language) is { } empty)
+                {
+                    results.AddRelatedSurface(SurfaceForRead(read));
+                    parts.Add(new ChatTextPart(empty));
+                }
+                else if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
                     parts.Add(new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block));
                 else
                 {
@@ -375,8 +376,23 @@ public partial class ProcessUserChatCommandHandler
         return text.Length == 0 ? null : text;
     }
 
+    private static string? EmptyCompositionText(QueryReadBlock read, string? language)
+    {
+        if (read.Read.TotalCount != 0 || read.Read.Completeness != "complete") return null;
+        var key = read.Block switch
+        {
+            HabitListCard { Items.Count: 0 } => "habitsEmpty",
+            GoalListCard { Items.Count: 0 } => "goalsEmpty",
+            RecordListCard { Items.Count: 0 } => "recordsEmpty",
+            _ => null
+        };
+        return key is null ? null : ErrorCopy.Resolve("chat.read." + key, LocaleHelper.IsPortuguese(language));
+    }
+
     private static string ShortText(string? text, int maxLines, bool steps = false) => string.Join("\n",
-        (text ?? string.Empty).Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0)
+        Regex.Split(text ?? string.Empty, @"(?<=[.!?;])\s+(?=(?:I can help|I can also|Posso ajudar|Também posso)\b)",
+                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))[0]
+            .Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0)
             .Where(line => !line.StartsWith('#'))
             .Select(line => steps ? line : Regex.Replace(line, @"^(?:[-*•]|\d+[.)])\s*", string.Empty,
                 RegexOptions.None, TimeSpan.FromSeconds(1)))

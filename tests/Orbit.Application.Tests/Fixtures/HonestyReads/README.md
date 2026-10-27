@@ -27,4 +27,3 @@ tool selection nor response composition depends on matching the person's message
 
 Stored option labels and habit titles stay verbatim. Locale rules apply to generated
 questions and status messages.
-

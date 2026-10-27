@@ -15,7 +15,7 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
-    [InlineData("query_habits", "habitList", "habits", "habits")]
+    [InlineData("query_habits", "habitList", "habits", "today")]
     [InlineData("query_goals", "goalList", "goals", "goals")]
     [InlineData("get_habit_metrics", "metrics", "metrics", null)]
     [InlineData("get_period_analytics", "periodTotal", "total", "progress")]

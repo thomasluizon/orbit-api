@@ -38,7 +38,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static string? SurfaceForRead(QueryReadBlock read) => read.Block switch
     {
-        HabitListCard => "habits",
+        HabitListCard => "today",
         GoalListCard => "goals",
         DaySummaryCard card => card.SurfaceId,
         MetricsCard card => card.SurfaceId,

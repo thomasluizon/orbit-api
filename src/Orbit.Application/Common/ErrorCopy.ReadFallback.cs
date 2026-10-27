@@ -4,6 +4,9 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] ReadFallback =>
     [
+        ("chat.read.habitsEmpty", "No habits match this request.", "Nenhum hábito encontrado para esta busca."),
+        ("chat.read.goalsEmpty", "No goals match this request.", "Nenhuma meta encontrada para esta busca."),
+        ("chat.read.recordsEmpty", "No records match this request.", "Nenhum registro encontrado para esta busca."),
         ("chat.read.positiveLogRecords", "Completions", "Conclusões"),
         ("chat.read.completedHabits", "Habits completed", "Hábitos concluídos"),
         ("chat.read.distinctLoggedDates", "Days with logs", "Dias com registros"),

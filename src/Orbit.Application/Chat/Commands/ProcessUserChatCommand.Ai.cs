@@ -56,7 +56,8 @@ public partial class ProcessUserChatCommandHandler
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
-        var toolNames = ai.ToolRegistry.GetAll().Select(tool => tool.Name).ToArray();
+        var availableTools = ai.ToolRegistry.GetAll();
+        var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
         var askEnabled = request.AuthMethod == AgentAuthMethod.Jwt
             && request.ClientContext?.SupportsParts == true
@@ -89,7 +90,7 @@ public partial class ProcessUserChatCommandHandler
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
-        var toolDeclarations = ai.ToolRegistry.GetAll()
+        var toolDeclarations = availableTools
             .OrderBy(tool => tool.Name, StringComparer.Ordinal)
             .Select(tool => (object)new
             {
@@ -163,7 +164,7 @@ public partial class ProcessUserChatCommandHandler
             + "For an unsupported subtype, answer from the queried facts in text.");
         if (UsesComposition(request, context))
             prompt = string.Join(Environment.NewLine, prompt,
-                "The server composes the answer blocks from successful typed reads, preceded by at most one short framing sentence from the first round. Call only the reads needed for the request. Additional blocks require explicitly requested distinct subjects. Put clarification in ask and every write in its existing approval preview. Do not repeat block facts in prose.",
+                "The server composes the leading answer blocks from successful typed reads without framing prose. Call only the reads needed for the request. Additional blocks require explicitly requested distinct subjects. Put clarification in ask and every write in its existing approval preview. Do not repeat block facts in prose.",
                 TerminalReadDirective.Instruction);
         else if (client?.SupportsParts == true)
             prompt = string.Join(Environment.NewLine, prompt,

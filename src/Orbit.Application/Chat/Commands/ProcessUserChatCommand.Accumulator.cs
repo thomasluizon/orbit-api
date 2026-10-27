@@ -19,7 +19,6 @@ public partial class ProcessUserChatCommandHandler
         private readonly SemaphoreSlim _toolStepGate = new(1, 1);
 
         public ChatTurnState? Recording { get; init; }
-        public string? FirstRoundText { get; init; }
         public IReadOnlyList<Orbit.Domain.Entities.Habit> Habits { get; set; } = [];
         public IReadOnlyList<Orbit.Domain.Entities.Habit> AllHabits { get; set; } = [];
         public bool HasMutationContext { get; set; }

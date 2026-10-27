@@ -1,0 +1,20 @@
+{
+  "caseId": "composition-offline-en",
+  "repeat": 1,
+  "reason": "Missing typed data block.",
+  "answer": "Habit calendar: 10/01/2026 to 10/27/2026\nLogs: positive = completion, zero = skipped; for bad habits, positive = slip.\nWater: 10/21/2026, 10/23/2026, 10/24/2026, 10/25/2026, 10/26/2026, 10/27/2026\n  10/26/2026: 1\n  10/25/2026: 1\n  10/24/2026: 1\n  10/23/2026: 1\n  10/21/2026: 1\nWalk: 10/22/2026, 10/25/2026, 10/27/2026\n  10/25/2026: 1\n  10/22/2026: 1",
+  "toolCalls": [
+    {
+      "name": "get_habit_month",
+      "arguments": {
+        "relative_period": "this_month",
+        "period_count": null,
+        "date_from": null,
+        "date_to": null,
+        "language": "en",
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

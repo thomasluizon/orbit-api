@@ -114,9 +114,17 @@ public partial class ProcessUserChatCommandHandlerTests
         bad.GetProperty("completed").GetInt32().Should().Be(0);
         bad.GetProperty("missed").GetInt32().Should().Be(0);
         bad.GetProperty("slips").GetInt32().Should().Be(10);
-        response.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text
-            .Should().Be(HabitMonthCardBuilder.Introduction(month));
-        response.AiMessage.Should().NotMatchRegex("[0-9]").And.NotContain("unavailable");
+        if (composition)
+        {
+            response.Parts!.OfType<ChatTextPart>().Should().BeEmpty();
+            response.AiMessage.Should().BeNullOrEmpty();
+        }
+        else
+        {
+            response.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text
+                .Should().Be(HabitMonthCardBuilder.Introduction(month));
+            response.AiMessage.Should().NotMatchRegex("[0-9]").And.NotContain("unavailable");
+        }
         response.Calendar.Should().BeNull();
         month.Read!.QueryFamily.Should().Be("get_habit_month");
         await _mediator.DidNotReceive().Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>());
