@@ -385,9 +385,9 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
-                            Key = "ProAiCallsPerDay",
+                            Key = "ProAiCallsPerWeek",
                             Description = "Weekly AI call safety budget for Pro users",
-                            Value = "450"
+                            Value = "2250"
                         },
                         new
                         {
@@ -397,9 +397,9 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
-                            Key = "ProAiMicroDollarsPerDay",
+                            Key = "ProAiMicroDollarsPerWeek",
                             Description = "Weekly AI safety budget for Pro users in USD micro-dollars",
-                            Value = "120000"
+                            Value = "1750000"
                         },
                         new
                         {

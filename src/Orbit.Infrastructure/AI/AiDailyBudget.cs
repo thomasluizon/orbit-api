@@ -33,10 +33,10 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var localDate = await dates.GetUserTodayAsync(userId, cancellationToken);
         var pro = user.HasProAccess;
         var period = AiAllowancePeriod.For(localDate, pro, user.WeekStartDay);
-        var callLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerDay : AppConfigKeys.FreeAiCallsPerDay,
-            pro ? AppConfigKeys.DefaultProAiCallsPerDay : AppConfigKeys.DefaultFreeAiCallsPerDay, cancellationToken);
-        var spendLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiMicroDollarsPerDay : AppConfigKeys.FreeAiMicroDollarsPerDay,
-            pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay, cancellationToken);
+        var callLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerWeek : AppConfigKeys.FreeAiCallsPerDay,
+            pro ? AppConfigKeys.DefaultProAiCallsPerWeek : AppConfigKeys.DefaultFreeAiCallsPerDay, cancellationToken);
+        var spendLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiMicroDollarsPerWeek : AppConfigKeys.FreeAiMicroDollarsPerDay,
+            pro ? AppConfigKeys.DefaultProAiMicroDollarsPerWeek : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay, cancellationToken);
         return await work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireAdvisoryLockAsync($"ai-budget:{userId}:{period.Start:yyyy-MM-dd}", token);

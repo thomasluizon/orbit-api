@@ -37,19 +37,25 @@ namespace Orbit.Infrastructure.Migrations
                 keyColumn: "Key",
                 keyValue: "ProAiMessagesPerDay");
 
-            migrationBuilder.UpdateData(
+            migrationBuilder.DeleteData(
                 table: "AppConfigs",
                 keyColumn: "Key",
-                keyValue: "ProAiCallsPerDay",
-                column: "Description",
-                value: "Weekly AI call safety budget for Pro users");
+                keyValue: "ProAiCallsPerDay");
 
-            migrationBuilder.UpdateData(
+            migrationBuilder.DeleteData(
                 table: "AppConfigs",
                 keyColumn: "Key",
-                keyValue: "ProAiMicroDollarsPerDay",
-                column: "Description",
-                value: "Weekly AI safety budget for Pro users in USD micro-dollars");
+                keyValue: "ProAiMicroDollarsPerDay");
+
+            migrationBuilder.InsertData(
+                table: "AppConfigs",
+                columns: new[] { "Key", "Description", "Value" },
+                values: new object[] { "ProAiCallsPerWeek", "Weekly AI call safety budget for Pro users", "2250" });
+
+            migrationBuilder.InsertData(
+                table: "AppConfigs",
+                columns: new[] { "Key", "Description", "Value" },
+                values: new object[] { "ProAiMicroDollarsPerWeek", "Weekly AI safety budget for Pro users in USD micro-dollars", "1750000" });
 
             migrationBuilder.InsertData(
                 table: "AppConfigs",
@@ -78,19 +84,25 @@ namespace Orbit.Infrastructure.Migrations
                 name: "AiMessagesWeekStart",
                 table: "Users");
 
-            migrationBuilder.UpdateData(
+            migrationBuilder.DeleteData(
                 table: "AppConfigs",
                 keyColumn: "Key",
-                keyValue: "ProAiCallsPerDay",
-                column: "Description",
-                value: "Daily AI call safety budget for Pro users");
+                keyValue: "ProAiCallsPerWeek");
 
-            migrationBuilder.UpdateData(
+            migrationBuilder.DeleteData(
                 table: "AppConfigs",
                 keyColumn: "Key",
-                keyValue: "ProAiMicroDollarsPerDay",
-                column: "Description",
-                value: "Daily AI safety budget for Pro users in USD micro-dollars");
+                keyValue: "ProAiMicroDollarsPerWeek");
+
+            migrationBuilder.InsertData(
+                table: "AppConfigs",
+                columns: new[] { "Key", "Description", "Value" },
+                values: new object[] { "ProAiCallsPerDay", "Daily AI call safety budget for Pro users", "450" });
+
+            migrationBuilder.InsertData(
+                table: "AppConfigs",
+                columns: new[] { "Key", "Description", "Value" },
+                values: new object[] { "ProAiMicroDollarsPerDay", "Daily AI safety budget for Pro users in USD micro-dollars", "120000" });
         }
     }
 }
