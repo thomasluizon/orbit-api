@@ -4513,6 +4513,11 @@
         "name": "revise_pending_changes",
         "parameters": [
           {
+            "name": "answer_question",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "items",
             "type": "array",
             "items": {

@@ -179,6 +179,7 @@ public partial class ProcessUserChatCommandHandler
             ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
+        executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
         var hadToolFailure = outcomesByCallId.Values.Any(outcome => outcome.OperationResult?.Status == AgentOperationStatus.Failed);
 
         if (correction is not null)
@@ -604,7 +605,8 @@ public partial class ProcessUserChatCommandHandler
     private static void RegisterPreviewDiscussion(AiToolCall call, AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
     {
         if (call.Name == "revise_pending_changes" && response.PendingOperation is not null
-            && Orbit.Application.Chat.Tools.Implementations.RevisePendingChangesTool.IsInspection(call.Args))
+            && (Orbit.Application.Chat.Tools.Implementations.RevisePendingChangesTool.IsInspection(call.Args)
+                || JsonArgumentParser.GetOptionalBool(call.Args, "answer_question") == true))
             results.IsPreviewDiscussion = true;
     }
 

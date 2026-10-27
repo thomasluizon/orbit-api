@@ -1,0 +1,146 @@
+{
+  "create_message": "Create a habit called Read 20 pages, every day at 21:00",
+  "revision_message": "Make it 22:00 instead. Also, do you think 20 pages a night is too much for a beginner?",
+  "answer": "Start with a manageable amount and adjust as reading becomes comfortable.",
+  "responses": [
+    {
+      "id": "resp_0302431f4e6f87d7016adf572c199c87d1b4633ec6d54fe07d",
+      "object": "response",
+      "created_at": 1793021740,
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output": [
+        {
+          "id": "fc_0302431f4e6f87d7016adf572f9f9087d1a8102fdc8f59516e",
+          "type": "function_call",
+          "status": "completed",
+          "arguments": "{\"title\":\"Read 20 pages\",\"frequency_unit\":\"Day\",\"frequency_quantity\":1,\"due_time\":\"21:00\",\"emoji\":\"📖\"}",
+          "call_id": "call_create_habit",
+          "name": "create_habit"
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 100,
+        "total_tokens": 200
+      },
+      "parallel_tool_calls": true,
+      "reasoning": {
+        "context": "all_turns",
+        "effort": "low",
+        "mode": "standard",
+        "summary": null
+      }
+    },
+    {
+      "id": "resp_0302431f4e6f87d7016adf572c199c87d1b4633ec6d54fe07d",
+      "object": "response",
+      "created_at": 1793021740,
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output": [
+        {
+          "id": "msg_replay",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "Review the preview.",
+              "annotations": []
+            }
+          ]
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 100,
+        "total_tokens": 200
+      },
+      "parallel_tool_calls": true,
+      "reasoning": {
+        "context": "all_turns",
+        "effort": "low",
+        "mode": "standard",
+        "summary": null
+      }
+    },
+    {
+      "id": "resp_0302431f4e6f87d7016adf572c199c87d1b4633ec6d54fe07d",
+      "object": "response",
+      "created_at": 1793021740,
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output": [
+        {
+          "id": "fc_0302431f4e6f87d7016adf572f9f9087d1a8102fdc8f59516e",
+          "type": "function_call",
+          "status": "completed",
+          "arguments": "{\"pending_operation_id\":\"{{pending_id}}\",\"items\":[{\"item_id\":\"{{item_id}}\",\"edits_json\":\"{\\\"due_time\\\":\\\"22:00\\\"}\"}],\"answer_question\":true}",
+          "call_id": "call_revise_pending_changes",
+          "name": "revise_pending_changes"
+        },
+        {
+          "id": "msg_replay",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "Start with a manageable amount and adjust as reading becomes comfortable.",
+              "annotations": []
+            }
+          ]
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 100,
+        "total_tokens": 200
+      },
+      "parallel_tool_calls": true,
+      "reasoning": {
+        "context": "all_turns",
+        "effort": "low",
+        "mode": "standard",
+        "summary": null
+      }
+    },
+    {
+      "id": "resp_0302431f4e6f87d7016adf572c199c87d1b4633ec6d54fe07d",
+      "object": "response",
+      "created_at": 1793021740,
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output": [
+        {
+          "id": "msg_replay",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "Review the preview.",
+              "annotations": []
+            }
+          ]
+        }
+      ],
+      "usage": {
+        "input_tokens": 100,
+        "output_tokens": 100,
+        "total_tokens": 200
+      },
+      "parallel_tool_calls": true,
+      "reasoning": {
+        "context": "all_turns",
+        "effort": "low",
+        "mode": "standard",
+        "summary": null
+      }
+    }
+  ]
+}

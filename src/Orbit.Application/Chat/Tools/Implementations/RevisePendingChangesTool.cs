@@ -9,13 +9,14 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
 {
     public string Name => "revise_pending_changes";
     public bool IsReadOnly => true;
-    public string Description => "Correct an existing pending preview with only the requested field edits. Keep every unchanged field and item, including when adding an optional field. Only explicitly removed item IDs are removed. For an opinion or question about a preview, pass empty items and omit remove_item_ids to keep it beside your one-sentence answer without figures. This never applies account changes.";
+    public string Description => "Correct an existing pending preview with only the requested field edits. Keep every unchanged field and item, including when adding an optional field. Only explicitly removed item IDs are removed. Set answer_question to true when the person also asks an opinion, clarification or other question, and answer in one short sentence without figures alongside this call. For a question without edits, pass empty items and omit remove_item_ids. For edits without a question, set answer_question to false and emit no prose. This never applies account changes.";
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
             pending_operation_id = new { type = JsonSchemaTypes.String },
+            answer_question = new { type = JsonSchemaTypes.Boolean, description = "True when this turn needs an answer beside the preview, including when also revising fields; false for a revision alone." },
             items = new
             {
                 type = JsonSchemaTypes.Array,
