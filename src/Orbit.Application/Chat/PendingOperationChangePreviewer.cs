@@ -117,8 +117,6 @@ public sealed partial class PendingOperationChangePreviewer(
             return await PreviewSingleHabitAsync(userId, arguments, cancellationToken);
 
         var isRevised = arguments.TryGetProperty("revised_items", out var revisedItems);
-        if (isRevised && revisedItems.ValueKind != JsonValueKind.Array)
-            return null;
         var revisedChanges = new Dictionary<Guid, BulkHabitChanges>();
         var (filter, filterError) = ResolveFilter(operationId, arguments,
             isRevised, revisedItems, revisedChanges);
@@ -132,6 +130,8 @@ public sealed partial class PendingOperationChangePreviewer(
             return null;
 
         var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter, cancellationToken);
+        if (HasMissingRevisedHabits(operationId, isRevised, revisedChanges.Count, habits.Count))
+            return null;
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         if (IsDatedRevision(operationId, isRevised))
             return PreviewDatedItems(operationId, arguments, habits);
@@ -186,6 +186,9 @@ public sealed partial class PendingOperationChangePreviewer(
             }
             : result;
     }
+
+    private static bool HasMissingRevisedHabits(string operationId, bool isRevised, int expectedCount, int actualCount) =>
+        isRevised && operationId is ("bulk_update_habits" or "bulk_reschedule_habits") && expectedCount != actualCount;
 
     private async Task<PendingOperationChangePreview?> PreviewLogDatesAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken ct)
@@ -552,7 +555,7 @@ public sealed partial class PendingOperationChangePreviewer(
                 continue;
             var value = AgentArgumentPreview.FormatValue(property.Value);
             fields.Add(new PendingOperationChange(habit.Id, habit.Title,
-                property.Name, value, value, "text", property.Value.Clone(),
+                property.Name, value, value, property.Name == DueDate ? "date" : "text", property.Value.Clone(),
                 IsEditableUpdateField(property.Name, habit, effective, changes)));
         }
     }
@@ -579,6 +582,8 @@ public sealed partial class PendingOperationChangePreviewer(
     {
         if (isRevised)
         {
+            if (revisedItems.ValueKind != JsonValueKind.Array)
+                return (null, "invalid_revised_items");
             if (operationId is "bulk_log_habits" or "bulk_skip_habits")
             {
                 var (items, error) = BulkHabitToolArguments.ParseRevisedDatedItems(arguments);

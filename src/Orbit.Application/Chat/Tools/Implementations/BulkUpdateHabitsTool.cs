@@ -112,7 +112,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
     }
 
     internal static async Task<ToolResult> ExecuteRevisedAsync(IMediator mediator,
-        JsonElement items, Guid userId, string verb, CancellationToken ct, bool checkOnly = false)
+        JsonElement items, Guid userId, string verb, CancellationToken ct, bool checkOnly = false, bool requireAll = false)
     {
         if (items.ValueKind != JsonValueKind.Array || items.GetArrayLength() == 0)
             return new ToolResult(false, Error: "revised_items must be a non-empty array.");
@@ -147,9 +147,11 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
             }
             var result = await mediator.Send(command, ct);
             if (result.IsFailure)
-                return applied == 0 ? ToolResult.FromFailure(result)
+                return requireAll || applied == 0 ? ToolResult.FromFailure(result)
                     : BuildResult(new BulkHabitMutationResult(applied, parsed.Count,
                         parsed.Count - applied, true), verb);
+            if (requireAll && (result.Value.Partial || result.Value.AppliedCount != 1 || result.Value.TotalMatched != 1))
+                return new ToolResult(false, Error: "The complete plan could not be applied.");
             applied += result.Value.AppliedCount;
         }
         if (checkOnly)

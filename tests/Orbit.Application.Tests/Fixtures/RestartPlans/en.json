@@ -1,0 +1,20 @@
+{
+  "message": "I've let things pile up. Help me ease back into my routine today and move the rest.",
+  "read": {
+    "name": "query_habits",
+    "id": "restart_read",
+    "args": { "date": "today", "is_completed": false, "include_overdue": true, "orbit_read_complete": false }
+  },
+  "plan": {
+    "name": "bulk_reschedule_habits",
+    "id": "restart_plan",
+    "args": {
+      "revised_items": [
+        { "habit_id": "__keep__", "updates": { "due_date": "2026-04-03" } },
+        { "habit_id": "__move__", "updates": { "due_date": "2026-04-04" } },
+        { "habit_id": "__later__", "updates": { "due_date": "2026-04-05" } }
+      ],
+      "orbit_write_complete": true
+    }
+  }
+}

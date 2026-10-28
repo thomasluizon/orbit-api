@@ -5,12 +5,16 @@ using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) => true;
+
     public string Name => "bulk_reschedule_habits";
 
     public string Description =>
-        "Reschedule the complete matching habit set in one call.";
+        "Propose rescheduling in one editable approval preview. Use filter and due_date for a shared date, "
+        + "or revised_items for individual dates, omitting filter and due_date. "
+        + RestartPlanInstructions.English;
 
     public object GetParameterSchema() => new
     {
@@ -18,9 +22,30 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
         properties = new
         {
             filter = BulkHabitToolArguments.FilterSchema(),
-            due_date = new { type = JsonSchemaTypes.String, description = "New due date in YYYY-MM-DD format." }
+            due_date = new { type = JsonSchemaTypes.String, description = "New due date in YYYY-MM-DD format." },
+            revised_items = new
+            {
+                type = JsonSchemaTypes.Array,
+                description = "Complete plan with one entry per habit, including habits kept today. Overrides the shared filter and date.",
+                minItems = 1,
+                items = new
+                {
+                    type = JsonSchemaTypes.Object,
+                    properties = new
+                    {
+                        habit_id = new { type = JsonSchemaTypes.String },
+                        updates = new
+                        {
+                            type = JsonSchemaTypes.Object,
+                            properties = new { due_date = new { type = JsonSchemaTypes.String, description = "Proposed date in YYYY-MM-DD format." } },
+                            required = new[] { "due_date" }
+                        }
+                    },
+                    required = new[] { "habit_id", "updates" }
+                }
+            }
         },
-        required = new[] { "filter", "due_date" }
+        required = Array.Empty<string>()
     };
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
@@ -36,7 +61,7 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
     {
         if (args.TryGetProperty("revised_items", out var revisedItems))
             return await BulkUpdateHabitsTool.ExecuteRevisedAsync(mediator,
-                revisedItems, userId, "Rescheduled", ct, checkOnly);
+                revisedItems, userId, "Rescheduled", ct, checkOnly, requireAll: true);
 
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)

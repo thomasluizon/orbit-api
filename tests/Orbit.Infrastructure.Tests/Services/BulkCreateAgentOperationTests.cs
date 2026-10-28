@@ -42,6 +42,7 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
     private AgentAuditEntry? _lastAudit;
     private readonly RecordingLogger _logger = new();
     private readonly AfterWriteFailureBehavior _afterWriteFailure = new();
+    private readonly RescheduleFailureBehavior _rescheduleFailure = new();
 
     public BulkCreateAgentOperationTests()
     {
@@ -77,7 +78,9 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
             })
             .AddSingleton<IValidator<BulkCreateHabitsCommand>, BulkCreateHabitsCommandValidator>()
             .AddSingleton<IValidator<BulkSkipHabitsCommand>, BulkSkipHabitsCommandValidator>()
+            .AddSingleton<IValidator<BulkUpdateHabitsCommand>, BulkUpdateHabitsCommandValidator>()
             .AddSingleton<IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>>(_afterWriteFailure)
+            .AddSingleton<IPipelineBehavior<BulkUpdateHabitsCommand, Result<BulkHabitMutationResult>>>(_rescheduleFailure)
             .AddSingleton<IGenericRepository<Habit>>(new GenericRepository<Habit>(context))
             .AddSingleton<IGenericRepository<HabitLog>>(new GenericRepository<HabitLog>(context))
             .AddSingleton<IGenericRepository<SentReminder>>(new GenericRepository<SentReminder>(context))
@@ -100,7 +103,8 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
         var skip = new BulkSkipHabitsTool(_provider.GetRequiredService<IMediator>(),
             _provider.GetRequiredService<IGenericRepository<Habit>>(), dates,
             new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), work));
-        _registry = new AiToolRegistry([tool, skip]);
+        var reschedule = new BulkRescheduleHabitsTool(_provider.GetRequiredService<IMediator>());
+        _registry = new AiToolRegistry([tool, skip, reschedule]);
         var catalog = new AgentCatalogService(_registry.GetAll());
         var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, settings, new FeatureFlagService(context, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
         _audit.RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>())

@@ -1851,12 +1851,12 @@
           {
             "name": "due_date",
             "type": "string",
-            "required": true
+            "required": false
           },
           {
             "name": "filter",
             "type": "object",
-            "required": true
+            "required": false
           },
           {
             "name": "filter.all",
@@ -1912,6 +1912,29 @@
             "name": "filter.tag",
             "type": "string",
             "required": false
+          },
+          {
+            "name": "revised_items",
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "required": false
+          },
+          {
+            "name": "revised_items[].habit_id",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "revised_items[].updates",
+            "type": "object",
+            "required": true
+          },
+          {
+            "name": "revised_items[].updates.due_date",
+            "type": "string",
+            "required": true
           }
         ]
       },
