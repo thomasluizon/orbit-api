@@ -1,0 +1,20 @@
+{
+  "message": "Me enrolei com os hábitos. Me ajuda a retomar com menos coisas hoje e deixar o restante para depois?",
+  "read": {
+    "name": "query_habits",
+    "id": "restart_read",
+    "args": { "date": "today", "is_completed": false, "include_overdue": true, "orbit_read_complete": false }
+  },
+  "plan": {
+    "name": "bulk_reschedule_habits",
+    "id": "restart_plan",
+    "args": {
+      "revised_items": [
+        { "habit_id": "__keep__", "updates": { "due_date": "2026-04-03" } },
+        { "habit_id": "__move__", "updates": { "due_date": "2026-04-04" } },
+        { "habit_id": "__later__", "updates": { "due_date": "2026-04-05" } }
+      ],
+      "orbit_write_complete": true
+    }
+  }
+}

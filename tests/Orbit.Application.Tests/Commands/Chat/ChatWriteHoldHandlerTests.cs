@@ -97,6 +97,8 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             emojiTool,
             updateTool,
             bulkUpdateTool,
+            new BulkRescheduleHabitsTool(Orbit.Tests.Shared.HabitToolCommandMediator.Create(
+                _habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _unitOfWork, configureTransactions: false)),
             new SendSupportRequestTool(_mediator)
         ]);
         _previewer = new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService,
