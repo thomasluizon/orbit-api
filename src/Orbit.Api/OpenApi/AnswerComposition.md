@@ -224,6 +224,8 @@ and the stored schedule for reused items whose cadence is unchanged. Absence or
 null means unknown. This adds no value to an existing strict enum. Other preview
 operations may omit it. Revision and refresh recompute the type from the proposal;
 stored chat replay preserves it.
+Children retain the command's parent schedule inheritance unless explicitly one-time.
+Checklist placement omits the type because it adds a checklist item rather than a habit.
 
 The paired web and Android renderer groups the existing preview items by this field
 inside one preview, preserving item IDs and order within each group. Localized group
@@ -247,6 +249,8 @@ contract. Cover en and pt-BR dumps, including an existing habit, with three cons
 real-call successes and persisted readback after approval. The local scripted model
 replays in `tests/Orbit.Application.Tests/Fixtures/BrainDumps` are deterministic
 coverage and do not substitute for that real-call gate.
+The added model instructions and proposed consumer labels are reported in
+[BrainDumpCopy.md](BrainDumpCopy.md) in en and pt-BR for coordinator copy approval.
 
 ## Append-only follow-up context
 

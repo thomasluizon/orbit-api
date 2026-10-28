@@ -16,6 +16,39 @@ namespace Orbit.Infrastructure.Tests.Services;
 public sealed partial class BulkCreateAgentOperationTests
 {
     [Theory]
+    [InlineData(HabitSchedule.Recurring, false, "Habit")]
+    [InlineData(HabitSchedule.Flexible, false, "Habit")]
+    [InlineData(HabitSchedule.General, false, "General")]
+    [InlineData(HabitSchedule.Recurring, true, "Task")]
+    public async Task BrainDump_ChildGroupingMatchesTheScheduleSavedByTheCommand(HabitSchedule schedule, bool oneTime, string type)
+    {
+        var today = new DateOnly(2026, 3, 20);
+        var parent = Habit.Create(new HabitCreateParams(schedule, _userId, "Parent",
+            schedule == HabitSchedule.General ? null : FrequencyUnit.Day,
+            schedule == HabitSchedule.General ? null : 1, today)).Value;
+        _factory.Context.Habits.Add(parent);
+        await _factory.Context.SaveChangesAsync();
+        var child = new Dictionary<string, object> { ["title"] = "Child" };
+        if (oneTime) child["frequency_unit"] = "OneTime";
+        var arguments = JsonSerializer.SerializeToElement(new { parent_habit_id = parent.Id, habits = new[] { child } });
+        var request = await ConfirmAsync(arguments);
+        var preview = await _previewer.PreviewAsync(_userId, request.OperationId, arguments);
+        preview.Value!.Items.Should().ContainSingle().Which.HabitType.Should().Be(type);
+
+        var result = await _executor.ExecuteAsync(request);
+
+        result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, _lastAudit?.Error);
+        using var saved = _factory.CreateContext();
+        var added = saved.Habits.Single(habit => habit.ParentHabitId == parent.Id);
+        var reader = new GetHabitByIdQueryHandler(new GenericRepository<Habit>(saved),
+            new GenericRepository<HabitLog>(saved), _provider.GetRequiredService<IUserDateService>());
+        var readback = await reader.Handle(new(_userId, added.Id), default);
+        readback.IsSuccess.Should().BeTrue(readback.Error);
+        readback.Value.Schedule.Should().Be(type == "General" ? HabitSchedule.General
+            : oneTime ? HabitSchedule.OneTime : HabitSchedule.Recurring);
+    }
+
+    [Theory]
     [InlineData("en", "approve")]
     [InlineData("pt-BR", "approve")]
     [InlineData("en", "edit")]
