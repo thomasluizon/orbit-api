@@ -1,0 +1,17 @@
+{
+  "message": "Everything is piling up. I need to call the dentist tomorrow, stretch every morning, and move my Read habit to nine tonight. Can you organize this for me?",
+  "existingTitle": "Read",
+  "toolCalls": [
+    {
+      "name": "bulk_create_habits",
+      "id": "brain-dump",
+      "args": {
+        "habits": [
+          { "title": "Call the dentist", "frequency_unit": "OneTime", "due_date": "__tomorrow__", "emoji": "🦷" },
+          { "title": "Stretch", "frequency_unit": "Day", "frequency_quantity": 1, "due_date": "__today__", "emoji": "🧘" },
+          { "title": "Read", "habit_id": "__existing__", "due_time": "21:00" }
+        ]
+      }
+    }
+  ]
+}

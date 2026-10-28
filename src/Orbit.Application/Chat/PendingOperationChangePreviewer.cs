@@ -689,11 +689,32 @@ public sealed partial class PendingOperationChangePreviewer(
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null,
                 FieldOptions: parentOptions is null && reuseOptions is null ? null
                     : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray(),
-                EntityEmoji: entityEmoji));
+                EntityEmoji: entityEmoji, HabitType: CreationHabitType(arguments, habit, command.Habits[index], existing, parents)));
         }
         return BuildPreview(BulkCreateHabits, items.SelectMany(item => item.Fields)
             .Where(field => field.Field == ParentHabitId && field.EntityId != Guid.Empty)
             .DistinctBy(field => field.EntityId).ToList(), items);
+    }
+
+    private static string? CreationHabitType(JsonElement arguments, JsonElement source, BulkHabitItem item,
+        Habit? existing, IReadOnlyList<Habit> known)
+    {
+        var placement = JsonArgumentParser.GetOptionalString(source, HabitPlacementRecommendation.Argument);
+        if (placement == HabitPlacement.ChecklistItem) return null;
+        Habit? parent = null;
+        var parentValue = CreationParentValue(arguments, source);
+        if (existing is null && placement != HabitPlacement.NewParent && parentValue.ValueKind == JsonValueKind.String)
+        {
+            if (!Guid.TryParse(parentValue.GetString(), out var id)
+                || (parent = known.FirstOrDefault(habit => habit.Id == id)) is null) return null;
+        }
+        var general = parent is not null ? parent.Schedule == HabitSchedule.General
+            : JsonArgumentParser.GetOptionalBool(source, IsGeneralField)
+                ?? (existing?.Schedule == HabitSchedule.General || item.IsGeneral);
+        var frequency = source.TryGetProperty("frequency_unit", out _)
+            ? item.FrequencyUnit : existing?.FrequencyUnit ?? item.FrequencyUnit
+                ?? (item.InheritParentFrequency ? parent?.FrequencyUnit : null);
+        return general ? "General" : frequency.HasValue ? "Habit" : "Task";
     }
 
     private static List<PendingOperationValidationError> CreationValidationErrors(Guid userId, BulkHabitItem item,

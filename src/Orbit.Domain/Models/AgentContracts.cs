@@ -159,7 +159,9 @@ public record PendingOperationItem(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     PendingOperationPlacement? Placement = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? EntityEmoji = null);
+    string? EntityEmoji = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? HabitType = null);
 
 public record PendingOperationPlacement(
     string Selected,

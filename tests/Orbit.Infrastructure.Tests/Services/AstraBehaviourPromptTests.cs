@@ -9,6 +9,22 @@ public class AstraBehaviourPromptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void BrainDump_UsesExistingCommandsAndOneApprovalForEveryItem(bool composition)
+    {
+        var prompt = Build(composition);
+
+        prompt.Should().Contain(Orbit.Application.Chat.HabitModelInstructions.BrainDump);
+        prompt.Should().Contain("one combined approval preview with bulk_create_habits")
+            .And.Contain("Keep every actionable item")
+            .And.Contain("habit_id on reused items")
+            .And.Contain("Reuse suggest_habits")
+            .And.Contain("nothing is saved before approval")
+            .And.Contain("at most one short sentence without figures");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void QuestionBlock_GroupsOnlyNecessaryMissingInputAfterReadingAccount(bool composition)
     {
         var prompt = Build(composition);

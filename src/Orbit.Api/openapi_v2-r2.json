@@ -23729,6 +23729,12 @@
               "null",
               "string"
             ]
+          },
+          "habitType": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

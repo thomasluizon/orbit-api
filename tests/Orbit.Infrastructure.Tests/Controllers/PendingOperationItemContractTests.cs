@@ -84,6 +84,10 @@ public sealed class PendingOperationItemContractTests
         var properties = schema.GetProperty("properties");
         properties.GetProperty("entityEmoji").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
+        properties.GetProperty("habitType").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
+        properties.GetProperty("habitType").TryGetProperty("enum", out _).Should().BeFalse();
+        schema.GetProperty("required").EnumerateArray().Should().NotContain(field => field.GetString() == "habitType");
         var change = schemas.GetProperty("PendingOperationChange");
         change.GetProperty("required").EnumerateArray().Select(field => field.GetString())
             .Should().BeEquivalentTo("entityId", "entityName", "field", "oldValue", "newValue", "valueType");
@@ -93,7 +97,7 @@ public sealed class PendingOperationItemContractTests
         changeProperties.GetProperty("entityEmoji").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement", "entityEmoji");
+            "itemId", "entityId", "entityName", "fields", "stateFingerprint", "removesData", "validationErrors", "fieldOptions", "placement", "entityEmoji", "habitType");
         properties.GetProperty("placement").GetProperty("oneOf").EnumerateArray()
             .Any(value => value.TryGetProperty("$ref", out var reference)
                 && reference.GetString() == "#/components/schemas/PendingOperationPlacement").Should().BeTrue();
