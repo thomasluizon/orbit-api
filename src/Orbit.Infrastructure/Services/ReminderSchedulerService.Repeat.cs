@@ -8,6 +8,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -92,7 +93,20 @@ public partial class ReminderSchedulerService
         var notification = Notification.Create(user.Id, habit.Title, body, NotificationUrls.Home, habit.Id);
         if (!await TryRecordReminderAsync(habit, reminder, notification, db, ct))
             return false;
-        pending.Add(new PendingReminderPush(user.Id, habit.Title, body, habit.Id));
+        using var scope = scopeFactory.CreateScope();
+        var tokens = scope.ServiceProvider.GetRequiredService<IReminderActionTokenService>();
+        var reminderAtUtc = DateTime.SpecifyKind(actionReminder.ReminderAtUtc!.Value, DateTimeKind.Utc);
+        var expiresAtUtc = DateTime.SpecifyKind(actionReminder.ExpiresAtUtc.Value, DateTimeKind.Utc);
+        var token = tokens.Sign(new ReminderActionClaims(user.Id, habit.Id, actionReminder.Id, reminderAtUtc, expiresAtUtc));
+        var data = new Dictionary<string, string>
+        {
+            ["habitId"] = habit.Id.ToString(),
+            ["reminderAtUtc"] = reminderAtUtc.ToString("O", CultureInfo.InvariantCulture),
+            ["doneExpiresAtUtc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture),
+            ["doneToken"] = token,
+            ["doneLabel"] = LocaleHelper.IsPortuguese(user.Language) ? "Concluído" : "Done"
+        };
+        pending.Add(new PendingReminderPush(user.Id, habit.Title, body, habit.Id, data));
         return true;
     }
 }

@@ -955,6 +955,7 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)
+            .AddSingleton(Substitute.For<IReminderActionTokenService>())
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new ReminderSchedulerService(

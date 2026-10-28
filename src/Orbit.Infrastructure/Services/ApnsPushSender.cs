@@ -30,7 +30,7 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
         _time = time;
     }
 
-    public async Task<ApnsDeliveryOutcome> SendAsync(string deviceToken, string title, string body, string? url, CancellationToken cancellationToken, string? topic = null)
+    public async Task<ApnsDeliveryOutcome> SendAsync(string deviceToken, string title, string body, string? url, CancellationToken cancellationToken, string? topic = null, IReadOnlyDictionary<string, string>? data = null)
     {
         if (!_settings.IsConfigured || (topic is not null && topic != _settings.DesktopTopic))
             return ApnsDeliveryOutcome.Retained;
@@ -47,7 +47,7 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
             {
                 Version = HttpVersion.Version20,
                 VersionPolicy = HttpVersionPolicy.RequestVersionExact,
-                Content = JsonContent.Create(new { aps = new { alert = new { title, body }, sound = "default" }, body = new { url } })
+                Content = JsonContent.Create(CreatePayload(title, body, url, data))
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("bearer", GetProviderToken());
             request.Headers.Add("apns-topic", deliveryTopic);
@@ -75,6 +75,16 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
         {
             _concurrency.Release();
         }
+    }
+
+    internal static object CreatePayload(string title, string body, string? url, IReadOnlyDictionary<string, string>? data)
+    {
+        var custom = new Dictionary<string, string?>();
+        if (data is not null)
+            foreach (var (key, value) in data)
+                custom[key] = value;
+        custom["url"] = url;
+        return new { aps = new { alert = new { title, body }, sound = "default" }, body = custom };
     }
 
     private string GetProviderToken()

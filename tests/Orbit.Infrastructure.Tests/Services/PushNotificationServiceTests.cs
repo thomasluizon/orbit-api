@@ -21,7 +21,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class PushNotificationServiceTests : IDisposable
+public sealed partial class PushNotificationServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly OrbitDbContext _dbContext;

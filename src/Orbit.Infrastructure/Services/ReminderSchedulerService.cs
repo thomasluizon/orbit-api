@@ -409,8 +409,10 @@ public partial class ReminderSchedulerService(
         {
             try
             {
-                await pushService.SendToUserAsync(
-                    push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
+                if (push.Data is { } data)
+                    await pushService.SendReminderToUserAsync(push.UserId, push.Title, push.Body, data, NotificationUrls.Home, ct);
+                else
+                    await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -425,7 +427,8 @@ public partial class ReminderSchedulerService(
             entry.State = EntityState.Detached;
     }
 
-    private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId);
+    private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId,
+        IReadOnlyDictionary<string, string>? Data = null);
 
     private sealed record ReminderProbe
     {

@@ -37,7 +37,15 @@ public partial class PushNotificationService(
         string title,
         string body,
         string? url = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await SendCoreAsync(userId, title, body, url, cancellationToken, null);
+
+    public async Task SendReminderToUserAsync(Guid userId, string title, string body,
+        IReadOnlyDictionary<string, string> data, string? url = null, CancellationToken cancellationToken = default) =>
+        await SendCoreAsync(userId, title, body, url, cancellationToken, data);
+
+    private async Task<bool> SendCoreAsync(Guid userId, string title, string body, string? url,
+        CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? data)
     {
         var subscriptions = await dbContext.PushSubscriptions
             .AsNoTracking()
@@ -56,11 +64,11 @@ public partial class PushNotificationService(
         var delivered = false;
 
         if (fcmSubs.Count > 0)
-            delivered |= await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
+            delivered |= await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken, data);
 
         foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Apns))
         {
-            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken, sub.ApnsTopic);
+            var outcome = await apnsSender.SendAsync(sub.Endpoint, safeTitle, safeBody, url, cancellationToken, sub.ApnsTopic, data);
             if (outcome == ApnsDeliveryOutcome.Stale)
                 staleSubscriptions.Add(sub);
             delivered |= outcome == ApnsDeliveryOutcome.Delivered;
@@ -68,14 +76,14 @@ public partial class PushNotificationService(
 
         foreach (var sub in subscriptions.Where(s => s.Transport == PushTransport.Wns))
         {
-            var outcome = await wnsSender.SendAsync(sub.Endpoint, CreateWebPushPayload(safeTitle, safeBody, url), cancellationToken);
+            var outcome = await wnsSender.SendAsync(sub.Endpoint, CreateWebPushPayload(safeTitle, safeBody, url, data), cancellationToken);
             if (outcome == WnsDeliveryOutcome.Stale)
                 staleSubscriptions.Add(sub);
             delivered |= outcome == WnsDeliveryOutcome.Delivered;
         }
 
         if (webPushSubs.Count > 0)
-            delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
+            delivered |= await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken, data);
 
         foreach (var stale in staleSubscriptions)
         {
@@ -93,7 +101,7 @@ public partial class PushNotificationService(
         List<Domain.Entities.PushSubscription> subs,
         string title, string body, string? url,
         List<Domain.Entities.PushSubscription> staleSubscriptions,
-        CancellationToken ct)
+        CancellationToken ct, IReadOnlyDictionary<string, string>? data)
     {
         if (FirebaseMessaging.DefaultInstance is null)
         {
@@ -108,7 +116,7 @@ public partial class PushNotificationService(
         {
             var chunk = subs.Skip(offset).Take(FcmBatchSize).ToList();
             var messages = chunk
-                .Select(s => CreateFcmMessage(s.Endpoint, title, body, url))
+                .Select(s => CreateFcmMessage(s.Endpoint, title, body, url, data))
                 .ToList();
 
             BatchResponse response;
@@ -121,7 +129,7 @@ public partial class PushNotificationService(
                 if (logger.IsEnabled(LogLevel.Warning))
                     LogFcmPushFailed(logger, ex, "batch");
                 foreach (var sub in chunk)
-                    delivered |= await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct);
+                    delivered |= await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct, data);
                 continue;
             }
 
@@ -167,12 +175,12 @@ public partial class PushNotificationService(
         Domain.Entities.PushSubscription sub,
         string title, string body, string? url,
         List<Domain.Entities.PushSubscription> staleSubscriptions,
-        CancellationToken ct)
+        CancellationToken ct, IReadOnlyDictionary<string, string>? data)
     {
         var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
         try
         {
-            var message = CreateFcmMessage(sub.Endpoint, title, body, url);
+            var message = CreateFcmMessage(sub.Endpoint, title, body, url, data);
             await FirebaseMessaging.DefaultInstance!.SendAsync(message, ct);
             if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmPushSent(logger, tokenPreview);
@@ -197,7 +205,7 @@ public partial class PushNotificationService(
         List<Domain.Entities.PushSubscription> subs,
         string title, string body, string? url,
         List<Domain.Entities.PushSubscription> staleSubscriptions,
-        CancellationToken ct)
+        CancellationToken ct, IReadOnlyDictionary<string, string>? data)
     {
         var client = new PushServiceClient(httpClient);
         client.DefaultAuthentication = new VapidAuthentication(
@@ -206,7 +214,7 @@ public partial class PushNotificationService(
             Subject = _settings.Subject
         };
 
-        var payload = CreateWebPushPayload(title, body, url);
+        var payload = CreateWebPushPayload(title, body, url, data);
         var message = new PushMessage(payload) { TimeToLive = 3600 };
 
         var delivered = false;
@@ -322,9 +330,9 @@ public partial class PushNotificationService(
             or HttpStatusCode.ServiceUnavailable
             or HttpStatusCode.GatewayTimeout;
 
-    internal static Message CreateFcmMessage(string token, string title, string body, string? url)
+    internal static Message CreateFcmMessage(string token, string title, string body, string? url, IReadOnlyDictionary<string, string>? metadata = null)
     {
-        var data = new Dictionary<string, string>();
+        var data = metadata is null ? new Dictionary<string, string>() : new Dictionary<string, string>(metadata);
         if (url is not null)
             data["url"] = url;
 
@@ -336,13 +344,16 @@ public partial class PushNotificationService(
         };
     }
 
-    internal static string CreateWebPushPayload(string title, string body, string? url)
+    internal static string CreateWebPushPayload(string title, string body, string? url, IReadOnlyDictionary<string, string>? data = null)
     {
         var payload = new Dictionary<string, string>
         {
             ["title"] = title,
             ["body"] = body
         };
+        if (data is not null)
+            foreach (var (key, value) in data)
+                payload[key] = value;
         if (url is not null)
             payload["url"] = url;
 
