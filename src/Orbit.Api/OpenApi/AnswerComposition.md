@@ -112,6 +112,15 @@ Revisions preserve unnamed fields and items. Suggestion refinements retain the m
 validated cadence and explicit days; the server does not infer a replacement schedule from
 instruction keywords.
 
+The model receives account-local today, yesterday and tomorrow on each turn. Earlier
+previews do not define the current date. Explicit event dates remain explicit, and
+preparation offsets use the event date. Pending preview context uses snake_case field
+names, including item_id, entity_id and entity_name, and identifies the operation.
+Revision instructions distinguish discarded item IDs from retained items and occurrence
+skips from removal of a proposed change. These are model instructions, not message routing
+or server inference of the person's intended target. The live bilingual gate verifies
+the model's selection; local replays verify prompt inputs and typed preview composition.
+
 Skip previews include a noneditable action row, localized as "Skip" or
 "Pular", alongside the user's local occurrence date. Eligible skip operations
 can share one atomic approval with other account changes. Skips with active streak-goal
