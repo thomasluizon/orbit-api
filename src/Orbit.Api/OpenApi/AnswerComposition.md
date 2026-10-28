@@ -42,6 +42,10 @@ their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
 from the typed result. Builder failure never becomes an empty success. Successful typed reads
 survive narrative outage. Complete empty habit, goal and record lists use a short localized state without a heading.
+With composition disabled, successful typed reads also survive an empty continuation or
+grounding removing the entire narrative. Supported clients receive the produced block;
+other clients receive its localized readable text. Recovery resets streamed text, preserves
+the read operation and consumes no additional model call or message allowance.
 They carry an existing screen action in `relatedSurfaces` when applicable. Habit queries use
 `today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
 Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
