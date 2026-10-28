@@ -110,7 +110,7 @@ public class ApplyOnboardingCommandHandler(
             && firstLog.HabitIndex >= 0
             && firstLog.HabitIndex < createdHabits.Count)
         {
-            var logResult = createdHabits[firstLog.HabitIndex].Log(firstLog.Date);
+            var logResult = createdHabits[firstLog.HabitIndex].Log(firstLog.Date, loggedOnLocalDate: today);
             if (logResult.IsFailure)
                 return logResult.PropagateError<ApplyOnboardingResponse>();
             loggedFirstHabit = true;

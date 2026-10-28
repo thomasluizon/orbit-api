@@ -40,6 +40,7 @@ public sealed class ReminderDoneTests : IDisposable
         (await handler.Handle(new(token), default)).IsFailure.Should().BeTrue();
         var log = await _factory.Context.HabitLogs.SingleAsync();
         log.TakenAtUtc.Should().Be(_clock.GetUtcNow().UtcDateTime);
+        log.LoggedOnLocalDate.Should().Be(await _dates.GetUserTodayAsync(habit.UserId));
         log.Value.Should().Be(1);
         log.ReminderAtUtc.Should().Be(_clock.GetUtcNow().UtcDateTime.AddMinutes(-30));
         await _mediator.Received(1).Send(Arg.Is<LogHabitCommand>(c => c.HabitId == habit.Id && !c.ToggleExisting), Arg.Any<CancellationToken>());

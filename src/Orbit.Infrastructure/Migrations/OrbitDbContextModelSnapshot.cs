@@ -1242,6 +1242,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsSlip")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("LoggedOnLocalDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Note")
                         .HasColumnType("text");
 

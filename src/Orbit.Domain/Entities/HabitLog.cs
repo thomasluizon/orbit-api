@@ -12,6 +12,7 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
     public string? Note { get; private set; }
     public DateTime? ReminderAtUtc { get; private set; }
     public DateTime? TakenAtUtc { get; private set; }
+    public DateOnly? LoggedOnLocalDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; private set; }
@@ -35,7 +36,8 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
         int completionOrdinal,
         DateTime createdAtUtc,
         DateTime? takenAtUtc = null,
-        DateTime? reminderAtUtc = null)
+        DateTime? reminderAtUtc = null,
+        DateOnly? loggedOnLocalDate = null)
     {
         if (id == Guid.Empty || habitId == Guid.Empty)
             throw new ArgumentException("Schedule log ids must be set.");
@@ -50,12 +52,13 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
             CreatedAtUtc = createdAtUtc,
             TakenAtUtc = takenAtUtc,
             ReminderAtUtc = reminderAtUtc,
+            LoggedOnLocalDate = loggedOnLocalDate,
             UpdatedAtUtc = createdAtUtc
         };
     }
 
     internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null,
-        bool isSlip = false, int completionOrdinal = 0)
+        bool isSlip = false, int completionOrdinal = 0, DateOnly? loggedOnLocalDate = null)
     {
         var createdAtUtc = DateTime.UtcNow;
         return new HabitLog
@@ -68,6 +71,7 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
             Note = note?.Trim(),
             CreatedAtUtc = createdAtUtc,
             TakenAtUtc = createdAtUtc,
+            LoggedOnLocalDate = loggedOnLocalDate,
             UpdatedAtUtc = createdAtUtc
         };
     }

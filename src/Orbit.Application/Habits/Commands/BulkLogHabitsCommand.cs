@@ -175,7 +175,7 @@ public partial class BulkLogHabitsCommandHandler(
         var logResult = habit.Log(
             targetDate,
             advanceDueDate: shouldAdvanceDueDate,
-            weekStartDay: weekStartDay);
+            weekStartDay: weekStartDay, loggedOnLocalDate: today);
         if (logResult.IsFailure)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: logResult.Error, ErrorCode: logResult.ErrorCode);

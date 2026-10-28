@@ -95,6 +95,40 @@ public partial class ReminderSchedulerServiceTests
     }
 
     [Fact]
+    public async Task Repeat_TimeZoneChangeDoesNotReclassifyAnActualDoseAsABackfill()
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, startAtUtc) = await SeedRepeat();
+        var user = await db.Users.SingleAsync();
+        var doseAtUtc = UtcToday.ToDateTime(new(1, 0), DateTimeKind.Utc);
+        var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, doseAtUtc, doseAtUtc,
+            loggedOnLocalDate: UtcToday);
+        db.HabitLogs.Add(log);
+        await db.SaveChangesAsync();
+        user.SetTimeZone("America/Sao_Paulo");
+        await db.SaveChangesAsync();
+        var clock = new MutableTimeProvider(new(doseAtUtc.AddHours(8)));
+        await CreateService(db, Substitute.For<IPushNotificationService>(), clock).CheckAndSendReminders(default);
+        (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(doseAtUtc.AddHours(8));
+    }
+
+    [Fact]
+    public async Task Repeat_TimeZoneChangeDoesNotTurnABackfillIntoTheClockAnchor()
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, startAtUtc) = await SeedRepeat();
+        var user = await db.Users.SingleAsync();
+        var createdAtUtc = UtcToday.ToDateTime(new(1, 0), DateTimeKind.Utc);
+        db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday.AddDays(-1), 1, 0,
+            createdAtUtc, createdAtUtc, loggedOnLocalDate: UtcToday));
+        user.SetTimeZone("America/Sao_Paulo");
+        await db.SaveChangesAsync();
+        await CreateService(db, Substitute.For<IPushNotificationService>(), new MutableTimeProvider(new(startAtUtc.AddHours(8))))
+            .CheckAndSendReminders(default);
+        (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(startAtUtc.AddHours(8));
+    }
+
+    [Fact]
     public async Task Repeat_ActiveWindowCanCrossMidnight()
     {
         var db = CreateSqliteDbContext();

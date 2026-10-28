@@ -24736,6 +24736,79 @@
           }
         },
         {
+          "name": "LoggedOnLocalDate",
+          "type": "DateOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Note",
           "type": "string?",
           "surfaces": {

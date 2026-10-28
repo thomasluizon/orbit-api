@@ -327,7 +327,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DateOnly date,
         string? note = null,
         bool advanceDueDate = true,
-        int weekStartDay = 1)
+        int weekStartDay = 1,
+        DateOnly? loggedOnLocalDate = null)
     {
         var validation = CheckLog(date, weekStartDay);
         if (validation.IsFailure)
@@ -341,7 +342,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
                 .Max() + 1
             : 0;
         var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit,
-            completionOrdinal: completionOrdinal);
+            completionOrdinal: completionOrdinal, loggedOnLocalDate: loggedOnLocalDate);
         _logs.Add(log);
 
         if (Schedule == HabitSchedule.OneTime)

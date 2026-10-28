@@ -27,13 +27,15 @@ public sealed class HabitSchedulePageLoader(OrbitDbContext context) : IHabitSche
                 log.CompletionOrdinal,
                 log.CreatedAtUtc,
                 log.TakenAtUtc,
-                log.ReminderAtUtc
+                log.ReminderAtUtc,
+                log.LoggedOnLocalDate
             })
             .ToListAsync(cancellationToken);
 
         var logsByHabit = snapshots
             .Select(log => Orbit.Domain.Entities.HabitLog.FromScheduleRead(
-                log.Id, log.HabitId, log.Date, log.Value, log.CompletionOrdinal, log.CreatedAtUtc, log.TakenAtUtc, log.ReminderAtUtc))
+                log.Id, log.HabitId, log.Date, log.Value, log.CompletionOrdinal, log.CreatedAtUtc, log.TakenAtUtc, log.ReminderAtUtc,
+                log.LoggedOnLocalDate))
             .ToLookup(log => log.HabitId);
         foreach (var habit in habits)
             habit.LoadScheduleLogsForRead(logsByHabit[habit.Id]);

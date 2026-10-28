@@ -321,7 +321,7 @@ public partial class LogHabitCommandHandler(
             var logResult = habit.Log(
                 targetDate,
                 advanceDueDate: shouldAdvanceDueDate,
-                weekStartDay: weekStartDay);
+                weekStartDay: weekStartDay, loggedOnLocalDate: today);
             if (logResult.IsFailure)
                 return logResult.PropagateError<PersistedLog>();
             var logEntity = logResult.Value;

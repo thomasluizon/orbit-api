@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261028145431_AddRepeatReminders")]
+    [Migration("20261028153554_AddRepeatReminders")]
     partial class AddRepeatReminders
     {
         /// <inheritdoc />
@@ -1244,6 +1244,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<bool>("IsSlip")
                         .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("LoggedOnLocalDate")
+                        .HasColumnType("date");
 
                     b.Property<string>("Note")
                         .HasColumnType("text");

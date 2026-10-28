@@ -451,7 +451,8 @@ public partial class ReminderSchedulerService(
         List<RepeatDose> RepeatDoses,
         List<SentReminder> RepeatSent);
 
-    private sealed record RepeatDose(Guid HabitId, DateOnly Date, DateTime TakenAtUtc, DateTime CreatedAtUtc);
+    private sealed record RepeatDose(Guid HabitId, DateOnly Date, DateTime TakenAtUtc, DateTime CreatedAtUtc,
+        DateOnly? LoggedOnLocalDate);
 
     private static bool HasEnded(Habit habit, DateOnly today) =>
         habit.IsDeleted || habit.IsCompleted || habit.EndDate is { } end && today > end;

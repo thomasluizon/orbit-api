@@ -25,7 +25,7 @@ public partial class ReminderSchedulerService
         var repeatIds = repeatHabits.Select(h => h.Id).ToList();
         var repeatDoses = await dbContext.HabitLogs.AsNoTracking()
             .Where(l => repeatIds.Contains(l.HabitId) && l.Value > 0)
-            .Select(l => new RepeatDose(l.HabitId, l.Date, l.TakenAtUtc ?? l.CreatedAtUtc, l.CreatedAtUtc))
+            .Select(l => new RepeatDose(l.HabitId, l.Date, l.TakenAtUtc ?? l.CreatedAtUtc, l.CreatedAtUtc, l.LoggedOnLocalDate))
             .ToListAsync(ct);
         var repeatSent = await dbContext.SentReminders.AsNoTracking()
             .Where(r => repeatIds.Contains(r.HabitId) && r.ReminderAtUtc >= nowUtc.AddDays(-3))
@@ -49,8 +49,8 @@ public partial class ReminderSchedulerService
             var doses = snapshot.RepeatDoses.Where(d => d.HabitId == habit.Id).ToList();
             if (habit.Schedule == HabitSchedule.Recurring && doses.Any(d => d.Date == today))
                 continue;
-            var anchorAtUtc = doses.Where(d => d.Date == DateOnly.FromDateTime(
-                    TimeZoneInfo.ConvertTimeFromUtc(d.CreatedAtUtc, zone)))
+            var anchorAtUtc = doses.Where(d => d.Date == (d.LoggedOnLocalDate ?? DateOnly.FromDateTime(
+                    TimeZoneInfo.ConvertTimeFromUtc(d.CreatedAtUtc, zone))))
                 .Select(d => (DateTime?)d.TakenAtUtc).Max() ?? options.StartAtUtc!.Value;
             anchorAtUtc = DateTime.SpecifyKind(anchorAtUtc, DateTimeKind.Utc);
             if (anchorAtUtc > nowAtUtc)

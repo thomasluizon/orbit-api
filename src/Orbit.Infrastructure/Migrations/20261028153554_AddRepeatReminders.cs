@@ -69,6 +69,12 @@ namespace Orbit.Infrastructure.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
+            migrationBuilder.AddColumn<DateOnly>(
+                name: "LoggedOnLocalDate",
+                table: "HabitLogs",
+                type: "date",
+                nullable: true);
+
             migrationBuilder.AddColumn<DateTime>(
                 name: "ReminderAtUtc",
                 table: "HabitLogs",
@@ -143,6 +149,10 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.DropColumn(
                 name: "RepeatStartAtUtc",
                 table: "Habits");
+
+            migrationBuilder.DropColumn(
+                name: "LoggedOnLocalDate",
+                table: "HabitLogs");
 
             migrationBuilder.DropColumn(
                 name: "ReminderAtUtc",
