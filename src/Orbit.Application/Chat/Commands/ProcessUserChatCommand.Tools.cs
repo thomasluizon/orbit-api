@@ -471,13 +471,13 @@ public partial class ProcessUserChatCommandHandler
                 if (selection.RequiresAnswer)
                     executionResults.PendingSelection ??= selection;
                 if (selection.Reference is not null)
-                    executionResults.AmbiguousReadCandidates ??= selection;
+                    executionResults.AmbiguousReadCandidates.Add(selection);
             }
         }
 
         foreach (var call in writeCalls)
         {
-            if ((executionResults.PendingSelection ?? executionResults.AmbiguousReadCandidates) is { } unanswered)
+            if (SelectionForWrite(call, executionResults) is { } unanswered)
             {
                 executionResults.PendingSelection = unanswered;
                 outcomesByCallId[call.Id] = SelectionRequiredOutcome(call);

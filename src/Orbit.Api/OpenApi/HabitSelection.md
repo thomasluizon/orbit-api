@@ -13,7 +13,8 @@ the write after selection, without treating the selection as approval.
 The read producer keeps typed selection candidates on its server-side card. A searched
 lookup with multiple matches also keeps candidates when the model declares a list read.
 The latter can finish as a normal list, but a subsequent write cannot select one of those
-IDs without the person's answer. Read results run before writes from the same model round.
+IDs without the person's answer. Writes to unrelated records still reach their existing
+execution path. Read results run before writes from the same model round.
 The write guard consumes only these typed facts. It rejects the call before operation
 dispatch or preview creation and reports the missing selection back to the model.
 

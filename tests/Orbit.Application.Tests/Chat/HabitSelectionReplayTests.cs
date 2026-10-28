@@ -125,16 +125,19 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
-    [Fact]
-    public async Task SelectionReplay_ExplicitRecordCanReachWriteExecutor()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SelectionReplay_ExplicitRecordCanReachWriteExecutor(bool withUnrelatedRead)
     {
         SetupUserAndPayGate();
-        var habit = CreateHabit("Caminhada");
-        SetupSelectionHabits(habit, CreateHabit("Caminhada"));
+        var habit = CreateHabit("Water");
+        SetupSelectionHabits(habit, CreateHabit("Caminhada"), CreateHabit("Caminhada"));
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var write = ReadTool("log_habit", new ToolResult(true));
         write.IsReadOnly.Returns(false);
-        var handler = CreateHandler(write);
-        UseProductionReadExecutor(write);
+        var handler = CreateHandler(query, write);
+        UseProductionReadExecutor(query, write);
         var call = GateSevenReplay("ambiguity-pt-r3").ToolCalls![1];
         var args = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
         args["habit_id"] = habit.Id.ToString();
@@ -144,6 +147,17 @@ public partial class ProcessUserChatCommandHandlerTests
             ToolCalls = [call with { Args = JsonSerializer.SerializeToElement(args) }]
         });
         ContinueWithReadDirective("Done.");
+        if (withUnrelatedRead)
+        {
+            var read = GateSevenReplay("ambiguity-pt-r3").ToolCalls![0];
+            var readArgs = JsonNode.Parse(read.Args.GetRawText())!.AsObject();
+            readArgs["for_selection"] = false;
+            SetupAiResponse(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls = [read with { Args = JsonSerializer.SerializeToElement(readArgs) }, call with { Args = JsonSerializer.SerializeToElement(args) }]
+            });
+        }
 
         var result = await handler.Handle(new(UserId, "Use this habit: " + habit.Id), default);
 

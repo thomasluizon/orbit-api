@@ -17,6 +17,15 @@ public partial class ProcessUserChatCommandHandler
             "Selection is unanswered. Call ask with the returned candidates and prepare no write until the person answers."),
         null, null, null, null);
 
+    private static HabitSelectionCandidates? SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results)
+    {
+        if (results.PendingSelection is { } pending)
+            return pending;
+        var ids = ArgumentEntityIds(call.Args).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return results.AmbiguousReadCandidates.FirstOrDefault(selection =>
+            selection.Candidates.Any(candidate => ids.Contains(candidate.Id)));
+    }
+
     private static ResponseCards SelectionQuestion(HabitSelectionCandidates selection, string? language, bool parts)
     {
         var text = LocaleHelper.IsPortuguese(language)
