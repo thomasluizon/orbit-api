@@ -29,7 +29,10 @@ public class BulkCreateHabitsTool(
     public string Name => ToolArgumentNames.BulkCreateHabits;
 
     public string Description =>
-        HabitModelInstructions.WriteIntent + " Create multiple habits with inline sub-habits.";
+        HabitModelInstructions.WriteIntent + " Create multiple habits with inline sub-habits. "
+        + "Organize an unstructured message into one combined approval preview of tasks and habits. "
+        + "Include every proposed item in habits; reuse an existing activity with habit_id and only its requested changes. "
+        + "The preview groups items by habitType. Nothing is saved before approval.";
 
     public object GetParameterSchema() => new
     {

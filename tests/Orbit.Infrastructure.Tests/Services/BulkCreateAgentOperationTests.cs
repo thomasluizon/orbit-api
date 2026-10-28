@@ -80,6 +80,12 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
             .AddSingleton<IPipelineBehavior<BulkCreateHabitsCommand, Result<BulkCreateResult>>>(_afterWriteFailure)
             .AddSingleton<IGenericRepository<Habit>>(new GenericRepository<Habit>(context))
             .AddSingleton<IGenericRepository<HabitLog>>(new GenericRepository<HabitLog>(context))
+            .AddSingleton<IGenericRepository<SentReminder>>(new GenericRepository<SentReminder>(context))
+            .AddSingleton<IGenericRepository<Goal>>(new GenericRepository<Goal>(context))
+            .AddSingleton<IGenericRepository<Tag>>(new GenericRepository<Tag>(context))
+            .AddSingleton(Substitute.For<Orbit.Application.Goals.Services.IGoalCompletionService>())
+            .AddSingleton(Substitute.For<IGamificationService>())
+            .AddSingleton<CreateHabitRepositories>()
             .AddSingleton(new BulkCreateHabitsRepositories(
                 new GenericRepository<Habit>(context),
                 new GenericRepository<GoogleCalendarSyncSuggestion>(context),

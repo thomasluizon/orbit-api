@@ -4,6 +4,25 @@ This directory holds the chat agent's tool layer. Each tool is a small adapter t
 exposes one capability to the AI through a JSON-schema'd contract and delegates to the
 existing application logic (usually a MediatR command/query).
 
+## Brain dump composition
+
+`bulk_create_habits` accepts the full set of tasks, new habits and reused activities
+from an unstructured message in its existing `habits` array. A reused activity carries
+`habit_id` and only requested changes. If additional habit ideas are requested,
+`suggest_habits` provides editable drafts; map `existingHabitId` to `habit_id` when
+preparing the combined preview and retain explicit tasks. Every write uses the
+existing command, validation, domain guards and pending approval gateway.
+
+Preview items append optional nullable string `habitType` (`Task`, `Habit`, `General`).
+It is derived from structured schedule fields, retaining a reused item's stored cadence
+when omitted. The paired UI groups items inside one preview without creating heading
+records. Unknown or absent values retain ordinary item rendering. Approval, edit,
+reject, refresh and stored replay keep their existing operation contracts. Nothing
+is saved before approval. Replies have at most one short sentence without figures,
+then the combined preview. No message keywords select tools or rewrite model output.
+The producer and paired web/Android handoff are documented in
+[AnswerComposition.md](../../../Orbit.Api/OpenApi/AnswerComposition.md#brain-dump-approval).
+
 ## The `IAiTool` contract
 
 A tool implements `IAiTool` (`IAiTool.cs`):

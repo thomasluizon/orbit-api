@@ -229,6 +229,7 @@ public sealed partial class PendingOperationChangePreviewerTests
         }));
         preview!.Items.Should().HaveCount(3).And.OnlyContain(item => item.Fields.Any(field => field.Field == "parent_habit_id"
             && field.NewValue == "Academia" && field.IsEditable));
+        preview.Items.Should().OnlyContain(item => item.HabitType == "Habit");
         preview.Items.Should().OnlyContain(item => item.FieldOptions == null);
         preview.Changes.Should().ContainSingle().Which.Should().Match<Orbit.Domain.Models.PendingOperationChange>(
             field => field.Field == "parent_habit_id" && field.NewValue == "Academia");
@@ -640,7 +641,8 @@ public sealed partial class PendingOperationChangePreviewerTests
         preview.Changes.Should().BeEmpty();
         preview.ChangeTargetCount.Should().Be(1);
         item.Fields.Select(field => field.Field).Should().Equal("title", "frequency_quantity", "frequency_unit", "parent_habit_id");
-        var legacyItemJson = JsonSerializer.SerializeToElement(item);
+        item.HabitType.Should().Be("Habit");
+        var legacyItemJson = JsonSerializer.SerializeToElement(item with { HabitType = null });
         legacyItemJson.EnumerateObject().Select(property => property.Name).Should().Equal(
             "ItemId", "EntityId", "EntityName", "Fields", "StateFingerprint", "RemovesData");
         preview.PreviewFingerprint.Should().Be(AgentOperationFingerprint.Compute(

@@ -30,6 +30,7 @@
     <None Update="Fixtures/GateSix/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/HonestyReads/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/RestartPlans/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/BrainDumps/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
