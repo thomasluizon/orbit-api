@@ -50,6 +50,11 @@ They carry an existing screen action in `relatedSurfaces` when applicable. Habit
 `today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
 Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
+Habit metrics retain their period log counts and lifetime totals. The optional completion
+series is emitted only when its scheduled-completion total represents the period's log count.
+Backdated logs can predate known schedule history; those figures remain available without
+an incompatible chart. The server never invents a schedule or changes a lifetime total to
+make the chart agree.
 
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
 It is true only when the current round fully answers the request and false for prerequisite
