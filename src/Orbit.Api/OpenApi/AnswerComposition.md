@@ -68,7 +68,10 @@ text without numeric results. A prerequisite lookup keeps the tool loop even whe
 so the model can request creation details or prepare the remaining change.
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
-message-based rewriting. Habit clarification and streak selection live in the prompt and
+message-based rewriting. Ask schemas declare only the client's supported forms. A model-emitted
+single-choice question can use the existing choice surface when question blocks are unsupported;
+its supplied question, option labels and free-text permission remain intact and pass the choice
+validator and domain guard. No write is prepared before the answer. Habit clarification and streak selection live in the prompt and
 tool contract.
 
 The full registered tool set remains available regardless of message wording or language.
@@ -137,10 +140,14 @@ must preserve readable legacy answers. Stream reset and replacement text agree w
 response and recorded history. A pending preview keeps contextual follow-ups suppressed.
 
 Daily Astra allowance exhaustion retains HTTP 403 with `errorCode: PAY_GATE` and the same
-code on SSE errors. Its localized reason states the allowance limit; free accounts also
-receive the existing Pro upgrade sentence. Account language selects the initial copy,
+code on SSE errors. Its localized reason states the allowance limit without an upgrade offer.
+Account language selects the initial copy,
 and HTTP/SSE localization uses internal copy arguments to preserve the quota reason.
 Those arguments are excluded from the wire response. Other Pro gates retain their copy.
+
+Injection refusals include the brief offer of normal habit help required by the security rule.
+Other refusals and plan navigation stay within the requested scope. Composition preserves the
+model's concise answer rather than deleting a help sentence with a text pattern.
 
 ## Append-only follow-up context
 

@@ -185,7 +185,7 @@ public static partial class ErrorCopy
     [
         (ErrorCodes.PayGate, "This is a Pro feature.", "Este é um recurso Pro."),
         ("chat.allowance.pro", "You've reached your weekly AI message limit ({0}).", "Você atingiu seu limite semanal de mensagens de IA ({0})."),
-        ("chat.allowance.free", "You've reached your daily AI message limit ({0}). Upgrade to Pro for {1} messages per week.", "Você atingiu seu limite diário de mensagens de IA ({0}). Assine o Pro para ter {1} mensagens por semana."),
+        ("chat.allowance.free", "You've reached your daily AI message limit ({0}).", "Você atingiu seu limite diário de mensagens de IA ({0})."),
         (ErrorCodes.SubscriptionNotFound, "We could not find a subscription on this account.", "Não encontramos nenhuma assinatura nesta conta."),
         (ErrorCodes.NoActiveSubscription, "This account has no active subscription.", "Esta conta não tem assinatura ativa."),
         (ErrorCodes.InvalidBillingInterval, "Choose the monthly or the yearly plan.", "Escolha o plano mensal ou o anual."),

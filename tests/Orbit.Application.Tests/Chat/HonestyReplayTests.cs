@@ -15,6 +15,40 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task HonestyReplay_UnsupportedSingleQuestionUsesSupportedChoice(int repeat)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        SetupAiResponse(HonestyReplay("unsupported-question-r" + repeat));
+
+        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+        choice.Question.Should().Be("Which habit would you like to change, and what would you like to change?");
+        choice.AllowFreeText.Should().BeTrue();
+        choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(sent =>
+            AskDeclaresOnlyChoice(sent)), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    private static bool AskDeclaresOnlyChoice(AiToolRequest sent)
+    {
+        var declaration = sent.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
+            .Single(value => value.GetProperty("name").GetString() == "ask");
+        return declaration.GetProperty("parameters").GetProperty("properties").GetProperty("form").GetProperty("enum")
+            .EnumerateArray().Select(value => value.GetString()).SequenceEqual(["choice"]);
+    }
+
     private static AiResponse HonestyReplay(string name)
     {
         using var capture = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,

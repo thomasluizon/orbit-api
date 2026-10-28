@@ -122,10 +122,13 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
     }
 
-    private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context) =>
-        tool.IsReadOnly
-            ? UsesComposition(request, context) ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema()) : tool.GetParameterSchema()
-            : TerminalWriteDirective.WithCompletionArgument(tool.GetParameterSchema());
+    private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context)
+    {
+        var schema = tool.Name == "ask" ? AskBlockNegotiation.Schema(tool.GetParameterSchema(), request.ClientContext) : tool.GetParameterSchema();
+        return tool.IsReadOnly
+            ? UsesComposition(request, context) ? TerminalReadDirective.WithCompletionArgument(schema) : schema
+            : TerminalWriteDirective.WithCompletionArgument(schema);
+    }
 
     private static string AppendCardPromptInstructions(
         string prompt, ProcessUserChatCommand request, ChatContext context,
