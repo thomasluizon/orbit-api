@@ -10,7 +10,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults,
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
-        if ((StartingStepAnswer(executionResults, request, context) ?? SuggestionAnswer(executionResults)) is { } suggestions)
+        if ((StartingStepAnswer(executionResults, request, context) ?? SuggestionAnswer(executionResults, request, context)) is { } suggestions)
         {
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
             return (suggestions, null, TurnFactSet.FromToolResults(executionResults.ToolResults));
@@ -19,14 +19,17 @@ public partial class ProcessUserChatCommandHandler
             aiResponse, groundingTurn, cancellationToken);
     }
 
-    private static ResponseCards? SuggestionAnswer(ToolExecutionAccumulator results)
+    private static ResponseCards? SuggestionAnswer(ToolExecutionAccumulator results,
+        ProcessUserChatCommand request, ChatContext context)
     {
         if (results.PendingOperations.Count > 0 || results.ActionResults.Count > 0) return null;
         var card = results.OperationResults.LastOrDefault(operation => operation.Status == AgentOperationStatus.Succeeded
             && operation.Payload is HabitSuggestionsCard)?.Payload as HabitSuggestionsCard;
         if (card is null) return null;
-        var intro = HabitSuggestionsPresentation.Introduction(card.Language);
-        return new(intro, Parts: [new ChatTextPart(intro), new ChatBlockPart("habitSuggestions", card)])
+        var response = ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
+            Parts: [new ChatBlockPart("habitSuggestions", card)]), request.ClientContext,
+            context.EnabledFeatureFlags, context.Language, context.User?.TimeZone);
+        return new(response.AiMessage, Parts: response.Parts)
         { ServerComposedText = true };
     }
 }

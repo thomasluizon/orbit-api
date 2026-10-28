@@ -1,0 +1,16 @@
+{
+  "caseId": "composition-suggestions-duplicate-pt-BR",
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"Aqui estão sugestões para sua rotina.\"},{\"type\":\"block\",\"kind\":\"habitSuggestions\",\"block\":{\"drafts\":[{\"id\":\"[redacted]\",\"emoji\":\"💧\",\"title\":\"Beber água\",\"type\":\"Habit\",\"frequencyUnit\":\"Day\",\"frequencyQuantity\":1,\"days\":[\"Monday\",\"Tuesday\",\"Wednesday\",\"Thursday\",\"Friday\",\"Saturday\",\"Sunday\"],\"dueTime\":\"10:00:00\",\"dueEndTime\":\"10:02:00\",\"reminderMinutesBefore\":null,\"checklistItems\":[],\"reason\":\"Um breve momento pela manhã ajuda a manter a hidratação ao longo do dia.\",\"existingHabitId\":\"[redacted]\",\"dueDate\":\"28 de outubro de 2026\"},{\"id\":\"[redacted]\",\"emoji\":\"📖\",\"title\":\"Ler antes de dormir\",\"type\":\"Habit\",\"frequencyUnit\":\"Day\",\"frequencyQuantity\":1,\"days\":[\"Monday\",\"Tuesday\",\"Wednesday\",\"Thursday\",\"Friday\",\"Saturday\",\"Sunday\"],\"dueTime\":\"21:30:00\",\"dueEndTime\":\"21:50:00\",\"reminderMinutesBefore\":null,\"checklistItems\":[],\"reason\":\"Uma leitura curta antes de dormir pode ajudar a criar uma rotina noturna tranquila.\",\"dueDate\":\"28 de outubro de 2026\"}]}}]}",
+  "toolCalls": [
+    {
+      "name": "suggest_habits",
+      "arguments": {
+        "instruction": "Sugira dois hábitos: Beber água e ler antes de dormir. Se eu já tiver algum deles, sugira um ajuste nele em vez de criar outro.",
+        "language": "pt-BR",
+        "count": 2,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

@@ -28,3 +28,15 @@ attempts request limit 50. Complete is truthful when all 51 rows are returned.
 The rendered answer shows three rows because the consumer preview samples them.
 The API regression verifies both limits against the production query and factory.
 No stale data is relabeled: #1822 owns the disconnected-calendar stale fixture.
+
+The two `composition-suggestions-duplicate` captures come from gate 7 on API
+`2b44af74`, under `eval-gate7/evals/astra/reports/attempts/` in the coordinator's
+read-only scratchpad. The case ID, rendered answer and executed tool calls are
+copied unchanged. All three repeats in each language use the same tool plan;
+the fixtures retain the first. `G7SuggestionCompositionTests` replays that plan at
+the internal model-service port through the production suggestion tool, query,
+service and operation executor. The generator port returns deterministic typed
+drafts; the test does not claim to verify model-generated schedules. The rendered
+answer proves the former server-added introduction and is never replayed as model
+prose. Tests cover synchronous and streamed turns, recording and replay, both flag
+states, and supported, legacy, missing-kind and parts-disabled clients.
