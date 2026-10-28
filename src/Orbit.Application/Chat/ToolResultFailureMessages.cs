@@ -111,7 +111,6 @@ internal static class ToolResultFailureMessages
             "Each position requires a valid habit_id GUID and an integer position." => ("invalidHabitPosition", new()),
             "Each position requires a valid goal_id GUID and an integer position." => ("invalidGoalPosition", new()),
             "Bulk habit operation failed before any changes were applied." => ("bulkOperationFailed", new()),
-            "This request was started by an earlier server version. Nothing more was changed. Check the habits and repeat the request." => ("bulkReplayExpired", new()),
             "name, email, subject, and message are required." => ("supportFieldsRequired", new()),
             _ => ("failed", new())
         };

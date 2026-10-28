@@ -47,8 +47,6 @@ public sealed class BulkHabitReplayPlanner(
             var habits = await BulkHabitSelection.LoadAsync(habitRepository, userId, filter!, token);
             return new BulkHabitReplayPlan(date, habits.Select(habit => habit.Id).ToArray());
         }, cancellationToken);
-        if (plan is null)
-            return new ToolResult(false, Error: "This request was started by an earlier server version. Nothing more was changed. Check the habits and repeat the request.");
         if (plan.HabitIds.Count == 0)
             return new ToolResult(false, Error: noMatchError);
 
@@ -60,7 +58,7 @@ public sealed class BulkHabitReplayPlanner(
             cancellationToken);
     }
 
-    public async Task<BulkHabitReplayPlan?> GetOrCreateAsync(
+    public async Task<BulkHabitReplayPlan> GetOrCreateAsync(
         Guid userId,
         string commandType,
         Func<CancellationToken, Task<BulkHabitReplayPlan>> createPlan,
@@ -76,10 +74,6 @@ public sealed class BulkHabitReplayPlanner(
             userId, idempotencyKey, planType, planOrdinal, cancellationToken);
         if (stored is not null)
             return Deserialize(stored);
-
-        if (await idempotencyStore.FindResponseBodyAsync(
-                userId, idempotencyKey, commandType, 0, cancellationToken) is not null)
-            return null;
 
         var plan = await createPlan(cancellationToken);
         try
