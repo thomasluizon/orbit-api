@@ -13,6 +13,9 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
+using Orbit.Application.Proactive.Queries;
+using Orbit.Application.Proactive.Services;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
@@ -22,6 +25,154 @@ namespace Orbit.Infrastructure.Tests.Services;
 public sealed class ProactiveEngineServiceTests
 {
     private static readonly DateOnly Today = new(2030, 10, 14);
+
+    [Theory]
+    [InlineData(19, ProactiveTrigger.EveningCheckin, 3)]
+    [InlineData(8, ProactiveTrigger.MorningPlan, 5)]
+    public async Task NestedRoutines_CountScheduledLeavesIncludingChecklist(int hour, ProactiveTrigger trigger, int expected)
+    {
+        using var h = new Harness(hour);
+        var leaves = h.SeedNestedRoutine();
+        await h.Run();
+
+        var item = await h.Db.ProactiveItems.SingleAsync(i => i.Trigger == trigger);
+        var facts = JsonSerializer.Deserialize<ProactiveFacts>(item.FactsJson)!;
+        facts.HabitCount.Should().Be(expected);
+        facts.HabitTitles.Should().BeEquivalentTo(hour == 19 ? leaves.Select(x => x.Title)
+            : leaves.Select(x => x.Title).Concat(["Breakfast", "Wash"]));
+        var expectedText = AiProactiveCheckinMessageService.Template(facts, "en").Text;
+        item.Text.Should().Be(expectedText);
+        await h.Push.Received(hour == 19 ? 1 : 0).SendToUserAsync(h.User.Id, "Astra", expectedText, "/chat", Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("en", false)]
+    [InlineData("pt-BR", false)]
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    public async Task Current_RefreshesLeafCountAfterEachLogWithoutAnotherPush(string language, bool nested)
+    {
+        using var h = new Harness(19);
+        h.User.SetLanguage(language);
+        var leaves = nested ? h.SeedNestedRoutine() : Enumerable.Range(1, 3).Select(i =>
+            Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, h.User.Id, $"Habit {i}",
+                FrequencyUnit.Day, 1, Today)).Value).ToList();
+        if (!nested) h.Db.Habits.AddRange(leaves);
+        await h.Run();
+        var handler = new GetCurrentProactiveQueryHandler(h.Engine, Substitute.For<IAgentOperationExecutor>(), h.Flags);
+        var initial = (await handler.Handle(new(h.User.Id), default)).Value!;
+        initial.Facts!.HabitCount.Should().Be(3);
+        await h.Engine.RecordOutcomeAsync(h.User.Id, initial.Id, false, default);
+        var opened = (await h.Db.ProactiveItems.SingleAsync()).OpenedAtUtc;
+
+        for (var i = 0; i < leaves.Count; i++)
+        {
+            var habit = await h.Db.Habits.SingleAsync(x => x.Id == leaves[i].Id);
+            var log = habit.Log(Today);
+            log.IsSuccess.Should().BeTrue();
+            h.Db.HabitLogs.Add(log.Value);
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+            var current = (await handler.Handle(new(h.User.Id), default)).Value;
+            if (i == leaves.Count - 1) current.Should().BeNull();
+            else
+            {
+                current.Should().NotBeNull();
+                current!.Id.Should().Be(initial.Id);
+                current.Facts!.HabitCount.Should().Be(2 - i);
+                current.Text.Should().Be(AiProactiveCheckinMessageService.Template(current.Facts, language).Text);
+                current.Facts.HabitTitles.Should().BeEquivalentTo(leaves.Skip(i + 1).Select(x => x.Title));
+                current.ShownAtUtc.Should().Be(initial.ShownAtUtc);
+                current.PushedAtUtc.Should().Be(initial.PushedAtUtc);
+                var stored = await h.Db.ProactiveItems.AsNoTracking().SingleAsync();
+                stored.FactsJson.Should().Be(JsonSerializer.Serialize(initial.Facts));
+                h.Db.ChangeTracker.HasChanges().Should().BeFalse();
+            }
+            await h.Run();
+        }
+        var ended = await h.Db.ProactiveItems.SingleAsync();
+        ended.EndReason.Should().Be(ProactiveEndReason.ConditionResolved);
+        ended.ActedAtUtc.Should().NotBeNull();
+        ended.OpenedAtUtc.Should().Be(opened);
+        h.Db.Notifications.Should().ContainSingle();
+        await h.Push.Received(1).SendToUserAsync(h.User.Id, "Astra", Arg.Any<string>(), "/chat", Arg.Any<CancellationToken>());
+        h.Analytics.Received(1).CaptureUserEvent(h.User.Id, "astra_proactive_item_ended", Arg.Any<string>(),
+            Arg.Is<IReadOnlyDictionary<string, object>?>(p => p != null && (string)p["outcome"] == "acted"));
+    }
+
+    [Fact]
+    public async Task WeeklyReview_CountsHistoricalLeavesInsteadOfRoutineRollups()
+    {
+        using var h = new Harness(8);
+        h.User.SetWeekStartDay(1);
+        h.SeedNestedRoutine();
+        foreach (var habit in h.Db.ChangeTracker.Entries<Habit>().Select(x => x.Entity).ToList())
+        {
+            if (habit.Schedule != HabitSchedule.Recurring) continue;
+            habit.Log(Today.AddDays(-1), advanceDueDate: false).IsSuccess.Should().BeTrue();
+        }
+        await h.Run();
+
+        var item = await h.Db.ProactiveItems.SingleAsync(i => i.Trigger == ProactiveTrigger.WeeklyReview);
+        var facts = JsonSerializer.Deserialize<ProactiveFacts>(item.FactsJson)!;
+        facts.TotalScheduled.Should().Be(35);
+        facts.TotalCompletions.Should().Be(5);
+        facts.BadHabitSlips.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("future")]
+    [InlineData("deleted")]
+    [InlineData("completed")]
+    [InlineData("bad")]
+    [InlineData("general")]
+    public async Task ParentWithoutEligibleChildrenDueToday_CountsAsItself(string childKind)
+    {
+        using var h = new Harness(19);
+        var parent = HabitFor(h.User.Id);
+        var schedule = childKind switch
+        {
+            "completed" => HabitSchedule.OneTime,
+            "general" => HabitSchedule.General,
+            _ => HabitSchedule.Recurring
+        };
+        var child = Habit.Create(new HabitCreateParams(schedule, h.User.Id, "Child",
+            schedule == HabitSchedule.Recurring ? FrequencyUnit.Day : null,
+            schedule == HabitSchedule.Recurring ? 1 : null,
+            childKind == "future" ? Today.AddDays(1) : Today,
+            ParentHabitId: parent.Id, IsBadHabit: childKind == "bad")).Value;
+        if (childKind == "deleted") child.SoftDelete(h.Clock.Now);
+        if (childKind == "completed") child.Log(Today).IsSuccess.Should().BeTrue();
+        h.Db.Habits.AddRange(parent, child);
+        await h.Run();
+
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        var facts = JsonSerializer.Deserialize<ProactiveFacts>(item!.FactsJson)!;
+        facts.HabitCount.Should().Be(1);
+        facts.HabitTitles.Should().Equal(parent.Title);
+    }
+
+    [Fact]
+    public async Task MorningPlan_LoggedChildrenKeepParentsOutAfterTheirDueDatesAdvance()
+    {
+        using var h = new Harness(8);
+        var leaves = h.SeedNestedRoutine();
+        await h.Run();
+        foreach (var leaf in leaves)
+        {
+            var habit = await h.Db.Habits.SingleAsync(x => x.Id == leaf.Id);
+            var logged = habit.Log(Today);
+            logged.IsSuccess.Should().BeTrue();
+            h.Db.HabitLogs.Add(logged.Value);
+        }
+        await h.Db.SaveChangesAsync();
+        h.Db.ChangeTracker.Clear();
+
+        var item = await h.Engine.GetCurrentAsync(h.User.Id, default);
+        var facts = JsonSerializer.Deserialize<ProactiveFacts>(item!.FactsJson)!;
+        facts.HabitCount.Should().Be(5);
+        facts.HabitTitles.Should().BeEquivalentTo(leaves.Select(x => x.Title).Concat(["Breakfast", "Wash"]));
+    }
 
     [Theory]
     [InlineData(false, false)]
@@ -293,7 +444,7 @@ public sealed class ProactiveEngineServiceTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task WeeklyReview_IncludesWeeksWithOnlyBadOrChildHabits(bool badHabit)
+    public async Task WeeklyReview_CountsChildHabitsButExcludesBadHabits(bool badHabit)
     {
         using var h = new Harness(8);
         h.User.SetWeekStartDay(1);
@@ -309,7 +460,7 @@ public sealed class ProactiveEngineServiceTests
             CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
         h.Db.Habits.Add(habit);
         await h.Run();
-        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.WeeklyReview).Should().BeTrue();
+        h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.WeeklyReview).Should().Be(!badHabit);
         h.Db.ProactiveItems.Any(i => i.Trigger == ProactiveTrigger.MorningPlan).Should().Be(!badHabit);
     }
 
@@ -794,6 +945,36 @@ public sealed class ProactiveEngineServiceTests
             await Db.SaveChangesAsync();
             Db.ChangeTracker.Clear();
             await Engine.EvaluateAsync(default);
+        }
+
+        public List<Habit> SeedNestedRoutine()
+        {
+            Habit Add(string title, Guid? parent = null, bool logged = false,
+                HabitSchedule schedule = HabitSchedule.Recurring, bool bad = false, bool checklist = false)
+            {
+                var habit = Habit.Create(new HabitCreateParams(schedule, User.Id, title,
+                    schedule == HabitSchedule.Recurring ? FrequencyUnit.Day : null,
+                    schedule == HabitSchedule.Recurring ? 1 : null, Today.AddDays(-20),
+                    ParentHabitId: parent, IsBadHabit: bad,
+                    ChecklistItems: checklist ? Enumerable.Range(1, 5).Select(i => new ChecklistItem($"Pill {i}", false)).ToList() : null,
+                    CreatedAtUtc: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc))).Value;
+                if (logged) habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
+                Db.Habits.Add(habit);
+                return habit;
+            }
+            var meals = Add("Meals");
+            var dinner = Add("Dinner", meals.Id);
+            Add("Breakfast", meals.Id, logged: true);
+            var postLunch = Add("Post Lunch");
+            var creatine = Add("Creatine", postLunch.Id);
+            var beforeBed = Add("Before Bed");
+            var selfCare = Add("Self care", beforeBed.Id);
+            var pills = Add("Pills", selfCare.Id, checklist: true);
+            Add("Wash", selfCare.Id, logged: true);
+            Add("Smoke", bad: true);
+            Add("Ideas", schedule: HabitSchedule.General);
+            Add("Finished task", logged: true, schedule: HabitSchedule.OneTime);
+            return [dinner, creatine, pills];
         }
 
         public Goal SeedGoal()

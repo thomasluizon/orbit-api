@@ -45,12 +45,12 @@ public sealed class AiRequestCostEstimator(IMemoryCache cache, IOptions<AiSettin
                 foreach (var item in field.Value.EnumerateArray())
                 {
                     tokens = checked(tokens + 64 + (first && item.ValueKind == JsonValueKind.Object && item.TryGetProperty("role", out var role) && role.GetString() == "system"
-                        ? CountPrefix(item, model) : BoundVariableInput(item)));
+                        ? CountPrefix(item, model) : CountVariableInput(item, model)));
                     first = false;
                 }
             }
             else
-                tokens = checked(tokens + Encoding.UTF8.GetByteCount(field.Value.GetRawText()));
+                tokens = checked(tokens + CountText(field.Value.GetRawText(), model));
         }
         return tokens;
     }
@@ -62,30 +62,35 @@ public sealed class AiRequestCostEstimator(IMemoryCache cache, IOptions<AiSettin
         return cache.GetOrCreate($"ai-reservation:{model}:{digest}", entry =>
         {
             entry.SetSize(1).SetAbsoluteExpiration(TimeSpan.FromHours(1));
-            var knownEncoding = model.StartsWith("gpt-6", StringComparison.Ordinal)
-                || model.StartsWith("gpt-5", StringComparison.Ordinal)
-                || model.StartsWith("gpt-4.1", StringComparison.Ordinal);
-            var count = knownEncoding ? Tokenizer.Value.CountTokens(json) : Encoding.UTF8.GetByteCount(json);
+            var count = CountText(json, model);
             return checked((long)decimal.Ceiling(count * 1.25m) + 256);
         });
     }
 
     /// <summary>
-    /// Byte-level BPE cannot exceed one token per UTF-8 byte. Images use the accepted patch
+    /// Images use the accepted patch
     /// ceiling and the largest documented multiplier, rounded up with framing room:
     /// https://developers.openai.com/api/docs/guides/images-vision
     /// </summary>
-    private static long BoundVariableInput(JsonElement input)
+    private static long CountVariableInput(JsonElement input, string model)
     {
         if (input.ValueKind == JsonValueKind.Object)
         {
             if (input.TryGetProperty("type", out var type) && type.GetString() == "input_image")
                 return 75_000;
-            return input.EnumerateObject().Sum(field => checked(Encoding.UTF8.GetByteCount(field.Name) + 8 + BoundVariableInput(field.Value)));
+            return input.EnumerateObject().Sum(field => checked(CountText(field.Name, model) + 8 + CountVariableInput(field.Value, model)));
         }
         if (input.ValueKind == JsonValueKind.Array)
-            return input.EnumerateArray().Sum(item => checked(8 + BoundVariableInput(item)));
-        return Encoding.UTF8.GetByteCount(input.GetRawText());
+            return input.EnumerateArray().Sum(item => checked(8 + CountVariableInput(item, model)));
+        return CountText(input.GetRawText(), model);
+    }
+
+    private static long CountText(string text, string model)
+    {
+        var knownEncoding = model.StartsWith("gpt-6", StringComparison.Ordinal)
+            || model.StartsWith("gpt-5", StringComparison.Ordinal)
+            || model.StartsWith("gpt-4.1", StringComparison.Ordinal);
+        return knownEncoding ? Tokenizer.Value.CountTokens(text) : Encoding.UTF8.GetByteCount(text);
     }
 
     internal static AiModelPrice GetPrice(AiSettings settings, string model)
