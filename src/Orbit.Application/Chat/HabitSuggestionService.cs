@@ -91,16 +91,19 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             if (draft is null) return Invalid("A complete draft is required.");
             var candidate = request.Original is { } original
                 ? draft with { Id = original.Id, ExistingHabitId = original.ExistingHabitId } : draft;
-            var matches = request.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(candidate.Title ?? string.Empty)).ToArray();
-            if (matches.Length > 1) return Invalid("Choose an unambiguous existing habit.");
-            if (matches is [var match])
+            if (candidate.ExistingHabitId is { } existing)
             {
-                if (candidate.ExistingHabitId is { } target && target != match.Id)
-                    return Invalid("Keep the existing target rather than duplicating another habit.");
-                candidate = candidate with { ExistingHabitId = match.Id };
+                var target = request.Habits.SingleOrDefault(habit => habit.Id == existing);
+                if (target is null) return Invalid("The existing habit must be active and owned by the person.");
+                candidate = candidate with { Title = target.Title };
             }
-            if (candidate.ExistingHabitId is { } existing && !request.Habits.Any(habit => habit.Id == existing))
-                return Invalid("The existing habit must be active and owned by the person.");
+            else
+            {
+                var matches = request.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(candidate.Title ?? string.Empty)).ToArray();
+                if (matches.Length > 1) return Invalid("Choose an unambiguous existing habit.");
+                if (matches is [var match])
+                    candidate = candidate with { ExistingHabitId = match.Id, Title = match.Title };
+            }
             if (output.Any(other => SameSuggestion(other, candidate)))
                 return Invalid("Each draft must propose a distinct habit.");
             var entity = candidate.ToHabit(request.UserId);
