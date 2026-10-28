@@ -29,7 +29,8 @@ public partial class HabitsController
         string? Emoji = null,
         int? IntervalWeeks = null,
         IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
-        DateOnly? StartDate = null);
+        DateOnly? StartDate = null,
+        RepeatReminderOptions? RepeatReminder = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -57,11 +58,13 @@ public partial class HabitsController
         DateOnly? StartDate = null,
         IReadOnlyList<Guid>? TagIds = null,
         Guid? ParentId = null,
-        bool? ClearParent = null);
+        bool? ClearParent = null,
+        RepeatReminderOptions? RepeatReminder = null,
+        bool ClearRepeatReminder = false);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
-    public record LogHabitRequest(DateOnly? Date = null);
+    public record LogHabitRequest(DateOnly? Date = null, DateTime? TakenAtUtc = null);
 
     public record SkipHabitRequest(DateOnly? Date = null, Guid? SkipId = null);
 
@@ -91,7 +94,8 @@ public partial class HabitsController
         string? Emoji = null,
         IReadOnlyList<string>? Tags = null,
         int? IntervalWeeks = null,
-        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+        RepeatReminderOptions? RepeatReminder = null);
 
     public record BulkMoveHabitParentRequest(IReadOnlyList<Guid> HabitIds, Guid? ParentId);
 
@@ -143,7 +147,8 @@ public partial class HabitsController
         DateOnly? EndDate = null,
         bool IsFlexible = false,
         string? Emoji = null,
-        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+        IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+        RepeatReminderOptions? RepeatReminder = null);
 
     public record LinkGoalsRequest(List<Guid> GoalIds);
 

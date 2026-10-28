@@ -83,6 +83,7 @@ public class GetHabitFullDetailQueryHandler(
                 : null,
             SlipAlertEnabled: habit.ParentHabitId.HasValue ? habit.SlipAlertEnabled : null,
             RelativeReminders: habit.RelativeReminders,
+            RepeatReminder: habit.RepeatReminder,
             Schedule: habit.Schedule,
             StartDate: habit.StartDate,
             ScheduledStartDate: habit.ScheduledStartDate,
@@ -102,7 +103,7 @@ public class GetHabitFullDetailQueryHandler(
         var logs = allRootLogs
             .Where(l => l.Date >= cutoff)
             .OrderByDescending(l => l.Date)
-            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
+            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc))
             .ToList();
 
         return Result.Success(new HabitFullDetailResponse(detail, metrics, logs));

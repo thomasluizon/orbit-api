@@ -30,7 +30,8 @@ public record LogHabitCommand(
     Guid UserId,
     Guid HabitId,
     DateOnly? Date = null,
-    bool ToggleExisting = true) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
+    bool ToggleExisting = true,
+    DateTime? TakenAtUtc = null) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit logging to reduce constructor parameter count (S107).
@@ -78,7 +79,7 @@ public partial class LogHabitCommandHandler(
             return dateWindowValidation.PropagateError<LogHabitResponse>();
 
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
-        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible && !habit.IsBadHabit)
+        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && !habit.IsBadHabit)
         {
             if (!request.ToggleExisting)
                 return Result.Failure<LogHabitResponse>(DomainErrors.AlreadyLoggedForDate);
@@ -127,7 +128,7 @@ public partial class LogHabitCommandHandler(
         var window = ValidateDateWindow(habit, target, today);
         if (window.IsFailure)
             return window;
-        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible && !habit.IsBadHabit)
+        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && !habit.IsBadHabit)
             return request.ToggleExisting ? Result.Success() : Result.Failure(DomainErrors.AlreadyLoggedForDate);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit], today.AddDays(-AppConstants.MaxRangeDays), ct);
@@ -323,6 +324,9 @@ public partial class LogHabitCommandHandler(
             if (logResult.IsFailure)
                 return logResult.PropagateError<PersistedLog>();
             var logEntity = logResult.Value;
+            var doseResult = logEntity.CorrectTakenAtUtc(request.TakenAtUtc ?? logEntity.CreatedAtUtc, DateTime.UtcNow);
+            if (doseResult.IsFailure)
+                return doseResult.PropagateError<PersistedLog>();
 
             await repos.HabitLogRepository.AddAsync(logEntity, cancellationToken);
 

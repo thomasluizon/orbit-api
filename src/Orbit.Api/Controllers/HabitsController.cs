@@ -212,7 +212,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
                 IsFlexible: request.IsFlexible,
-                RelativeReminders: request.RelativeReminders),
+                RelativeReminders: request.RelativeReminders,
+                RepeatReminder: request.RepeatReminder),
             TagIds: request.TagIds,
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
@@ -272,7 +273,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new LogHabitCommand(
             HttpContext.GetUserId(),
             id,
-            request?.Date);
+            request?.Date, TakenAtUtc: request?.TakenAtUtc);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -337,7 +338,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
                 IsFlexible: request.IsFlexible,
-                RelativeReminders: request.RelativeReminders),
+                RelativeReminders: request.RelativeReminders,
+                ClearRepeatReminder: request.ClearRepeatReminder,
+                RepeatReminder: request.RepeatReminder),
             GoalIds: request.GoalIds,
             Emoji: request.Emoji,
             IntervalWeeks: request.IntervalWeeks,
@@ -620,7 +623,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
                 IsFlexible: request.IsFlexible,
-                RelativeReminders: request.RelativeReminders),
+                RelativeReminders: request.RelativeReminders,
+                RepeatReminder: request.RepeatReminder),
             TagIds: request.TagIds,
             Emoji: request.Emoji);
 
@@ -671,7 +675,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             GoogleEventId: request.GoogleEventId,
             Tags: request.Tags,
             IntervalWeeks: request.IntervalWeeks,
-            RelativeReminders: request.RelativeReminders);
+            RelativeReminders: request.RelativeReminders,
+            RepeatReminder: request.RepeatReminder);
     }
 }
 

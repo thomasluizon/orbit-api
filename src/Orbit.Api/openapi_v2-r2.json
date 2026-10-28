@@ -10785,6 +10785,106 @@
         }
       }
     },
+    "/api/Habits/{id}/logs/{logId}/dose": {
+      "patch": {
+        "tags": [
+          "Habits"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "logId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectDoseRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectDoseRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectDoseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/marketing/unsubscribe": {
       "post": {
         "tags": [
@@ -18404,6 +18504,16 @@
             "items": {
               "$ref": "#/components/schemas/RelativeReminderTimeInput"
             }
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
           }
         }
       },
@@ -19477,6 +19587,18 @@
           }
         }
       },
+      "CorrectDoseRequest": {
+        "required": [
+          "takenAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "takenAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CreateApiKeyRequest": {
         "required": [
           "name"
@@ -19755,6 +19877,16 @@
               "string"
             ],
             "format": "date"
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
           }
         }
       },
@@ -19901,6 +20033,16 @@
             "items": {
               "$ref": "#/components/schemas/RelativeReminderTimeInput"
             }
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
           }
         }
       },
@@ -21033,6 +21175,16 @@
               "null",
               "string"
             ]
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
           }
         }
       },
@@ -21282,6 +21434,16 @@
               "null",
               "string"
             ]
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
           }
         }
       },
@@ -21482,6 +21644,13 @@
           },
           "createdAtUtc": {
             "type": "string",
+            "format": "date-time"
+          },
+          "takenAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "date-time"
           }
         }
@@ -22217,6 +22386,16 @@
               "null",
               "string"
             ]
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
           }
         }
       },
@@ -22492,6 +22671,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
             ]
           }
         }
@@ -22929,6 +23118,13 @@
               "string"
             ],
             "format": "date"
+          },
+          "takenAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -26233,6 +26429,46 @@
         "type": "object",
         "additionalProperties": false
       },
+      "RepeatReminderOptions": {
+        "required": [
+          "intervalMinutes"
+        ],
+        "type": "object",
+        "properties": {
+          "intervalMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "activeStart": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "activeEnd": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "startAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "isValid": {
+            "type": "boolean"
+          }
+        }
+      },
       "ReportEventBody": {
         "required": [
           "eventKey"
@@ -28417,6 +28653,20 @@
               "null",
               "boolean"
             ]
+          },
+          "repeatReminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RepeatReminderOptions"
+              }
+            ]
+          },
+          "clearRepeatReminder": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

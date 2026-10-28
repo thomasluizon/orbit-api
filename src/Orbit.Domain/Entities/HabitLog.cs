@@ -10,6 +10,7 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
     public int CompletionOrdinal { get; private set; }
     public bool IsSlip { get; private set; }
     public string? Note { get; private set; }
+    public DateTime? TakenAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; private set; }
@@ -62,6 +63,18 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow
         };
+    }
+
+    public static bool IsValidTakenAtUtc(DateTime takenAtUtc, DateTime nowAtUtc) =>
+        takenAtUtc.Kind == DateTimeKind.Utc && nowAtUtc.Kind == DateTimeKind.Utc && takenAtUtc <= nowAtUtc;
+
+    public Result CorrectTakenAtUtc(DateTime takenAtUtc, DateTime nowAtUtc)
+    {
+        if (!IsValidTakenAtUtc(takenAtUtc, nowAtUtc))
+            return Result.Failure(DomainErrors.InvalidTakenAtUtc);
+        TakenAtUtc = takenAtUtc;
+        UpdatedAtUtc = nowAtUtc;
+        return Result.Success();
     }
 
     public void SoftDelete()

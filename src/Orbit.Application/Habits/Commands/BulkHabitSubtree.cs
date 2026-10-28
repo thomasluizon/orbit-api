@@ -100,6 +100,7 @@ internal static class BulkHabitSubtree
             ReminderTimes: item.ReminderTimes,
             ScheduledReminders: item.ScheduledReminders,
             RelativeReminders: item.RelativeReminders,
+            RepeatReminder: item.RepeatReminder,
             EndDate: item.EndDate,
             ChecklistItems: item.ChecklistItems,
             ParentHabitId: parent?.Id,

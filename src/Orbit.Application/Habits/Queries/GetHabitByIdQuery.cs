@@ -45,7 +45,8 @@ public record HabitChildResponse(
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
     bool? SlipAlertEnabled = null,
     Guid? ParentHabitId = null,
-    string? ParentTitle = null);
+    string? ParentTitle = null,
+    RepeatReminderOptions? RepeatReminder = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -85,7 +86,8 @@ public record HabitDetailResponse(
     int? OriginalDayOfMonth = null,
     Guid? ParentId = null,
     Guid? ParentHabitId = null,
-    string? ParentTitle = null);
+    string? ParentTitle = null,
+    RepeatReminderOptions? RepeatReminder = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -161,6 +163,7 @@ public class GetHabitByIdQueryHandler(
             LinkedGoals: habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
             SlipAlertEnabled: habit.SlipAlertEnabled,
             RelativeReminders: habit.RelativeReminders,
+            RepeatReminder: habit.RepeatReminder,
             Schedule: habit.Schedule,
             StartDate: habit.StartDate,
             Tags: habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
@@ -255,6 +258,7 @@ internal static class HabitDetailChildMapper
         ReminderTimes: child.ReminderTimes,
         ScheduledReminders: child.GetScheduledRemindersForLegacyClients(),
         RelativeReminders: child.RelativeReminders,
+            RepeatReminder: child.RepeatReminder,
         SlipAlertEnabled: child.SlipAlertEnabled,
         ParentHabitId: child.ParentHabitId,
         ParentTitle: parentTitle);
