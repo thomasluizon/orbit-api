@@ -7,54 +7,90 @@ namespace Orbit.Domain.Tests.Entities;
 public class UserWeeklyAiMessagesTests
 {
     [Theory]
-    [InlineData(1, 0, "2026-08-03")]
-    [InlineData(0, 1, "2026-08-02")]
-    public void WeekStartPreferenceChange_PreservesCountUntilAnchoredBoundary(int originalStart, int newStart, string start)
+    [InlineData(1, 0, "2026-08-03", "2026-08-16")]
+    [InlineData(0, 1, "2026-08-02", "2026-08-10")]
+    public void WeekStartPreferenceChange_PreservesCountUntilAlignedBoundary(int originalStart, int newStart, string start, string end)
     {
         var user = User.Create("Pro", "pro@example.com").Value;
         user.GrantLifetimePro();
         user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
         var weekStart = DateOnly.Parse(start);
+        var periodEnd = DateOnly.Parse(end);
         user.IncrementAiMessageCount(weekStart);
         user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
 
-        for (var day = 1; day < 7; day++)
+        for (var day = 1; day < periodEnd.DayNumber - weekStart.DayNumber; day++)
         {
-            user.GetAiMessagesUsedForQuota(weekStart.AddDays(day)).Should().Be(day);
-            user.IncrementAiMessageCount(weekStart.AddDays(day));
+            var today = weekStart.AddDays(day);
+            var period = AiAllowancePeriod.ActiveFor(today, true, newStart, user.AiMessagesWeekStart);
+            period.Start.Should().Be(weekStart);
+            period.End.Should().Be(periodEnd);
+            period.Name.Should().Be("week");
+            user.GetAiMessagesUsedForQuota(today).Should().Be(day);
+            user.IncrementAiMessageCount(today);
             user.AiMessagesWeekStart.Should().Be(weekStart);
         }
 
-        user.GetAiMessagesUsedForQuota(weekStart.AddDays(7)).Should().Be(0);
-        user.IncrementAiMessageCount(weekStart.AddDays(7));
-        var nextPeriod = AiAllowancePeriod.For(weekStart.AddDays(7), true, newStart);
-        user.AiMessagesWeekStart.Should().Be(nextPeriod.Start);
-        user.GetAiMessagesUsedForQuota(weekStart.AddDays(7)).Should().Be(1);
-        user.GetAiMessagesUsedForQuota(nextPeriod.End).Should().Be(0);
+        user.GetAiMessagesUsedForQuota(periodEnd).Should().Be(0);
+        user.IncrementAiMessageCount(periodEnd);
+        user.AiMessagesWeekStart.Should().Be(periodEnd);
+        user.GetAiMessagesUsedForQuota(periodEnd).Should().Be(1);
+        user.GetAiMessagesUsedForQuota(periodEnd.AddDays(7)).Should().Be(0);
     }
 
     [Theory]
-    [InlineData(1, 0, "2026-08-03")]
-    [InlineData(0, 1, "2026-08-02")]
-    public void WeekStartPreferenceChange_RefundReleasesReservationWithinStoredWeek(int originalStart, int newStart, string start)
+    [InlineData(1, 0, "2026-08-03", "2026-08-16")]
+    [InlineData(0, 1, "2026-08-02", "2026-08-10")]
+    public void WeekStartPreferenceChange_RefundReleasesReservationWithinStoredWeek(int originalStart, int newStart, string start, string end)
     {
         var user = User.Create("Pro", "pro@example.com").Value;
         user.GrantLifetimePro();
         user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
         var weekStart = DateOnly.Parse(start);
+        var periodEnd = DateOnly.Parse(end);
         user.IncrementAiMessageCount(weekStart);
-        user.IncrementAiMessageCount(weekStart.AddDays(6));
         user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+        user.IncrementAiMessageCount(weekStart.AddDays(7));
 
-        user.RefundAiMessage(weekStart.AddDays(6));
+        user.RefundAiMessage(weekStart.AddDays(7));
         user.AiMessagesUsedThisWeek.Should().Be(1);
         user.AiMessagesUsedToday.Should().Be(0);
         user.RefundAiMessage(weekStart);
         user.AiMessagesUsedThisWeek.Should().Be(0);
 
-        user.IncrementAiMessageCount(weekStart.AddDays(7));
+        user.IncrementAiMessageCount(periodEnd);
         user.RefundAiMessage(weekStart);
+        user.RefundAiMessage(periodEnd.AddDays(-1));
         user.AiMessagesUsedThisWeek.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(0, "2026-08-02")]
+    [InlineData(1, "2026-08-03")]
+    public void UnchangedWeekStartPreference_ActivePeriodsLastExactlySevenDays(int weekStartDay, string start)
+    {
+        var weekStart = DateOnly.Parse(start);
+        for (var day = 0; day < 21; day++)
+        {
+            var period = AiAllowancePeriod.ActiveFor(weekStart.AddDays(day), true, weekStartDay, weekStart);
+
+            period.Start.Should().Be(weekStart.AddDays(day / 7 * 7));
+            period.End.Should().Be(period.Start.AddDays(7));
+            period.Name.Should().Be("week");
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Free_ActivePeriodRemainsOneDayWithStoredWeek(int weekStartDay)
+    {
+        var today = new DateOnly(2026, 8, 9);
+        var period = AiAllowancePeriod.ActiveFor(today, false, weekStartDay, today.AddDays(-7));
+
+        period.Start.Should().Be(today);
+        period.End.Should().Be(today.AddDays(1));
+        period.Name.Should().Be("day");
     }
 
     [Theory]

@@ -7,24 +7,26 @@ namespace Orbit.Application.Tests.Common;
 public class AiAllowanceResetTests
 {
     [Theory]
-    [InlineData(1, 0, "2026-08-03", "America/Sao_Paulo", "2026-08-10T03:00:00Z", "2026-08-16T03:00:00Z")]
-    [InlineData(0, 1, "2026-08-02", "Pacific/Auckland", "2026-08-08T12:00:00Z", "2026-08-09T12:00:00Z")]
-    public void WeekStartPreferenceChange_ResetStaysAtAnchoredBoundary(int originalStart, int newStart, string start,
-        string zone, string reset, string nextReset)
+    [InlineData(1, 0, "2026-08-03", "2026-08-16", "America/Sao_Paulo", "2026-08-16T03:00:00Z", "2026-08-23T03:00:00Z")]
+    [InlineData(0, 1, "2026-08-02", "2026-08-10", "Pacific/Auckland", "2026-08-09T12:00:00Z", "2026-08-16T12:00:00Z")]
+    public void WeekStartPreferenceChange_ResetStaysAtAlignedBoundary(int originalStart, int newStart, string start,
+        string end, string zone, string reset, string nextReset)
     {
         var user = User.Create("Pro", "pro@example.com").Value;
         user.GrantLifetimePro();
         user.SetTimeZone(zone).IsSuccess.Should().BeTrue();
         user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
         var weekStart = DateOnly.Parse(start);
+        var periodEnd = DateOnly.Parse(end);
         user.IncrementAiMessageCount(weekStart);
+        user.IncrementAiMessageCount(weekStart.AddDays(3));
         user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
 
-        for (var day = 0; day < 7; day++)
+        for (var day = 3; day < periodEnd.DayNumber - weekStart.DayNumber; day++)
             AiAllowanceReset.GetResetsAtUtc(user, weekStart.AddDays(day))
                 .Should().Be(DateTimeOffset.Parse(reset).UtcDateTime);
 
-        AiAllowanceReset.GetResetsAtUtc(user, weekStart.AddDays(7))
+        AiAllowanceReset.GetResetsAtUtc(user, periodEnd)
             .Should().Be(DateTimeOffset.Parse(nextReset).UtcDateTime);
     }
 
