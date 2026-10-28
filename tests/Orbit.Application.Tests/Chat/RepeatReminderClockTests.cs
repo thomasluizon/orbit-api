@@ -29,4 +29,13 @@ public sealed class RepeatReminderClockTests
         RepeatReminderClock.Next(doseAtUtc, new RepeatReminderOptions(15, new(1, 30), new(1, 45)), zone)
             .Should().Be(new DateTime(2027, 11, 7, 6, 30, 0, DateTimeKind.Utc));
     }
+
+    [Fact]
+    public void SpringForward_MovesAnInvalidWindowStartToTheFirstValidInstant()
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        var anchorAtUtc = new DateTime(2027, 3, 14, 5, 15, 0, DateTimeKind.Utc);
+        RepeatReminderClock.Next(anchorAtUtc, new RepeatReminderOptions(60, new(2, 30), new(4, 0)), zone)
+            .Should().Be(new DateTime(2027, 3, 14, 7, 0, 0, DateTimeKind.Utc));
+    }
 }

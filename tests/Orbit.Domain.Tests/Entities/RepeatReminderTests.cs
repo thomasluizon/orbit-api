@@ -101,6 +101,39 @@ public class RepeatReminderTests
             .IsFailure.Should().BeTrue();
     }
 
+    [Fact]
+    public void FlexiblePerDay_AllowsAnyDailyTargetWithoutDerivingItFromTheReminder()
+    {
+        var habit = Habit.Create(Parameters(new(30)) with { Schedule = HabitSchedule.Flexible, FrequencyQuantity = 3 }).Value;
+        habit.FrequencyQuantity.Should().Be(3);
+        for (var count = 0; count < 4; count++)
+            habit.Log(new(2027, 9, 26)).IsSuccess.Should().BeTrue();
+        habit.FrequencyQuantity.Should().Be(3);
+    }
+
+    [Fact]
+    public void Update_RejectsAWeekdayGateUntilRepeatIsExplicitlyCleared()
+    {
+        var habit = Habit.Create(Parameters(new(30))).Value;
+        var update = new HabitUpdateParams(habit.Schedule, habit.Title, null, FrequencyUnit.Day, 1,
+            [DayOfWeek.Monday], false, habit.NextDueDate);
+        habit.Update(update).IsFailure.Should().BeTrue();
+        habit.Update(update with { ClearRepeatReminder = true, ScheduledReminders = [new(ScheduledReminderWhen.SameDay, new(8, 0))] })
+            .IsSuccess.Should().BeTrue();
+        habit.RepeatReminder.Should().BeNull();
+        habit.ScheduledReminders.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void DefaultStartAndDoseInstants_AreSetWhenSaved()
+    {
+        var beforeAtUtc = DateTime.UtcNow;
+        var habit = Habit.Create(Parameters(new(30))).Value;
+        var log = habit.Log(new(2027, 9, 26)).Value;
+        habit.RepeatStartAtUtc.Should().BeOnOrAfter(beforeAtUtc).And.BeOnOrBefore(DateTime.UtcNow);
+        log.TakenAtUtc.Should().Be(log.CreatedAtUtc);
+    }
+
     private static HabitCreateParams Parameters(RepeatReminderOptions repeat) => new(
         HabitSchedule.Recurring, Guid.NewGuid(), "Drink water", FrequencyUnit.Day, 1,
         new(2027, 9, 26), ReminderEnabled: true, RepeatReminder: repeat);

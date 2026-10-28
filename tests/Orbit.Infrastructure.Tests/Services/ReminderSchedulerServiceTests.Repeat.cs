@@ -255,6 +255,91 @@ public partial class ReminderSchedulerServiceTests
         (await db.SentReminders.CountAsync()).Should().Be(1);
     }
 
+    [Theory]
+    [InlineData("relative")]
+    [InlineData("same-day")]
+    [InlineData("day-before")]
+    [InlineData("repeat")]
+    public async Task EndDate_AllReminderKindsSendOnTheLastDayAndStopAtLocalMidnight(string kind)
+    {
+        var db = CreateSqliteDbContext();
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetTimeZone("America/Sao_Paulo");
+        var lastDayAtUtc = UtcToday.AddDays(kind == "day-before" ? 0 : 1).ToDateTime(new(2, 50), DateTimeKind.Utc);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Drink water", FrequencyUnit.Day, 1,
+            UtcToday.AddDays(-1), ReminderEnabled: true, EndDate: UtcToday,
+            DueTime: kind == "relative" ? new(23, 50) : null,
+            ReminderTimes: kind == "relative" ? [0] : null,
+            RelativeReminders: kind == "relative" ? [new(-20)] : null,
+            ScheduledReminders: kind is "same-day" or "day-before"
+                ? [new(kind == "same-day" ? ScheduledReminderWhen.SameDay : ScheduledReminderWhen.DayBefore, new(23, 50)),
+                   new(kind == "same-day" ? ScheduledReminderWhen.SameDay : ScheduledReminderWhen.DayBefore, new(0, 10))] : null,
+            RepeatReminder: kind == "repeat" ? new(480, StartAtUtc: lastDayAtUtc.AddHours(-8)) : null)).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var clock = new MutableTimeProvider(new(lastDayAtUtc));
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        await service.CheckAndSendReminders(default);
+        var lastDayCount = await db.SentReminders.CountAsync();
+        lastDayCount.Should().BeGreaterThan(0);
+        clock.SetUtcNow(new(UtcToday.AddDays(1).ToDateTime(new(3, 10), DateTimeKind.Utc)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(lastDayCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Repeat_CompletedOrDeletedHabitStopsEvenWithACachedSnapshot(bool deleted)
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, startAtUtc) = await SeedRepeat();
+        var clock = new MutableTimeProvider(new(startAtUtc.AddHours(8)));
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        await service.CheckAndSendReminders(default);
+        if (deleted)
+            habit.SoftDelete();
+        else
+        {
+            habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, habit.Description, habit.FrequencyUnit,
+                habit.FrequencyQuantity, [], false, habit.NextDueDate, EndDate: UtcToday));
+            habit.AdvanceDueDate(UtcToday);
+            habit.IsCompleted.Should().BeTrue();
+        }
+        await db.SaveChangesAsync();
+        clock.SetUtcNow(new(startAtUtc.AddHours(8).AddMinutes(15)));
+        await service.CheckAndSendReminders(default);
+        clock.SetUtcNow(new(startAtUtc.AddHours(16)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("en", false, "Next at 4:00 AM", "Done")]
+    [InlineData("en", true, "Next at 04:00", "Done")]
+    [InlineData("pt-BR", true, "Próximo às 04:00", "Concluído")]
+    public async Task Repeat_PayloadUsesTheUsersLanguageClockAndSignedReminderInstant(string language, bool clock24,
+        string body, string doneLabel)
+    {
+        var db = CreateSqliteDbContext();
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetLanguage(language);
+        user.SetClockFormat(clock24);
+        var reminderAtUtc = UtcToday.ToDateTime(new(20, 0), DateTimeKind.Utc);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, user.Id, "Drink water", null, null,
+            UtcToday, ReminderEnabled: true, RepeatReminder: new(480, StartAtUtc: reminderAtUtc.AddHours(-8)))).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var push = Substitute.For<IPushNotificationService>();
+        await CreateService(db, push, new MutableTimeProvider(new(reminderAtUtc))).CheckAndSendReminders(default);
+        await push.Received(1).SendReminderToUserAsync(user.Id, habit.Title, body,
+            Arg.Is<IReadOnlyDictionary<string, string>>(data => data["habitId"] == habit.Id.ToString()
+                && data["reminderAtUtc"] == reminderAtUtc.ToString("O") && data["doneLabel"] == doneLabel
+                && !string.IsNullOrEmpty(data["doneToken"])), "/", Arg.Any<CancellationToken>());
+    }
+
     private async Task<(Habit Habit, DateTime Start)> SeedRepeat(RepeatReminderOptions? options = null,
         HabitSchedule schedule = HabitSchedule.Flexible)
     {

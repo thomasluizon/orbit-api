@@ -955,7 +955,13 @@ public partial class ReminderSchedulerServiceTests : IDisposable
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)
-            .AddSingleton(Substitute.For<IReminderActionTokenService>())
+            .AddSingleton<IReminderActionTokenService>(new ReminderActionTokenService(
+                Microsoft.Extensions.Options.Options.Create(new Orbit.Infrastructure.Configuration.JwtSettings
+                {
+                    SecretKey = new string('s', 48),
+                    Issuer = "orbit",
+                    Audience = "orbit"
+                })))
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new ReminderSchedulerService(
