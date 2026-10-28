@@ -20,11 +20,15 @@ public sealed partial class AiProactiveCheckinMessageService(
         + "Offer one concrete next step or a supported observation, never just recap a count or offer generic encouragement. "
         + "Never invent numbers, habits or goals. Never mention subscriptions, plans, prices or upgrades. "
         + "Stay calm and unpushy, without blame. In Brazilian Portuguese, Astra is feminine; use native, warm você phrasing. "
-        + "Return JSON with text (the plain sentence), habitTitles and goalTitles (arrays of every habit and goal title mentioned). "
-        + "Declare every title reference, including titles that are ordinary words; copy each title exactly from the facts. "
+        + "Return JSON with text (the sentence using title placeholders), habitTitles and goalTitles (arrays of every title referenced). "
+        + "In text, refer to habits only as {{habit:N}}, with N the zero-based index in HabitTitles, and to the supplied goal only as {{goal}}. "
+        + "Never write a literal habit or goal title in text, even an ordinary word; the server substitutes the titles. Never name anything else. "
+        + "In habitTitles and goalTitles, copy the literal titles of the referenced placeholders exactly from the facts. "
+        + "Capitalize only the first word, the English pronoun I, Astra, Orbit, or the language's weekday and month names. "
         + "Use empty arrays when no titles are mentioned. Use no Markdown.";
 
-    public async Task<ProactiveMessage> GenerateAsync(ProactiveFacts facts, string language, CancellationToken cancellationToken)
+    public async Task<ProactiveMessage> GenerateAsync(ProactiveFacts facts, string language,
+        IReadOnlyCollection<string> accountTitles, CancellationToken cancellationToken)
     {
         var fallback = Template(facts, language);
         try
@@ -32,9 +36,8 @@ public sealed partial class AiProactiveCheckinMessageService(
             var line = await aiClient.CompleteJsonAsync<ProactiveLine>(SystemPrompt,
                 BuildPrompt(facts, language), temperature: ProactiveRules.Temperature,
                 purpose: "proactive_item", cancellationToken: cancellationToken);
-            if (line?.Text is not null)
-                line = line with { Text = AiPlainText.Normalize(line.Text, facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty)) };
-            return IsGrounded(line, facts) ? fallback with { Text = line!.Text!.Trim() } : fallback;
+            var text = GroundedText(line, facts, language, accountTitles);
+            return text is not null ? fallback with { Text = text } : fallback;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -50,6 +53,8 @@ public sealed partial class AiProactiveCheckinMessageService(
         Facts: {JsonSerializer.Serialize(facts)}
         Trigger context: {TriggerContext(facts)}
         Rules:
+        - In text, use title placeholders from the system prompt, never literal titles; indexes refer to the supplied HabitTitles order. Do not name anything else
+        - The 140-character limit applies AFTER the server substitutes the literal titles
         - Name the supplied open habits, at most three, then the count of the rest; if space is tight, name fewer and count the rest. Never invent a title when none is supplied
         - Use real progress only when supplied; an open count does not reveal how many habits were completed or the day's total. An app-wide streak is not a habit streak
         - Match the broad time window, never an exact instant. A pending habit today is not a miss
@@ -74,43 +79,75 @@ public sealed partial class AiProactiveCheckinMessageService(
         _ => throw new ArgumentOutOfRangeException(nameof(facts))
     };
 
-    internal static bool IsGrounded(ProactiveLine? line, ProactiveFacts facts)
+    private static string? GroundedText(ProactiveLine? line, ProactiveFacts facts, string language,
+        IReadOnlyCollection<string> accountTitles)
     {
         var text = line?.Text;
-        if (string.IsNullOrWhiteSpace(text)) return false;
-        text = text.Trim();
-        if (text.Length > ProactiveRules.MaxTextLength || text.Any(char.IsControl)
-            || line!.HabitTitles is null || line.GoalTitles is null) return false;
-        if (line.HabitTitles.Any(title => !facts.HabitTitles.Contains(title, StringComparer.Ordinal)
-                || !text.Contains(title, StringComparison.Ordinal))
-            || line.GoalTitles.Any(title => title != facts.GoalTitle || string.IsNullOrWhiteSpace(title)
-                || !text.Contains(title, StringComparison.Ordinal))) return false;
-        if (line.HabitTitles.Distinct(StringComparer.Ordinal).Count() > 3) return false;
+        if (string.IsNullOrWhiteSpace(text) || text.Any(char.IsControl)
+            || line!.HabitTitles is null || line.GoalTitles is null) return null;
+        text = AiPlainText.Normalize(text);
+        var referencedHabits = new HashSet<string>(StringComparer.Ordinal);
+        var referencedGoals = new HashSet<string>(StringComparer.Ordinal);
+        var rendered = SubstituteTitles(text, facts, referencedHabits, referencedGoals);
+        var prose = TitlePlaceholders().Replace(text, "habit");
+        if (rendered is null || prose.IndexOfAny(['{', '}']) >= 0
+            || rendered.Length > ProactiveRules.MaxTextLength || rendered.Any(char.IsControl)
+            || referencedHabits.Count > 3 || !referencedHabits.SetEquals(line.HabitTitles)
+            || !referencedGoals.SetEquals(line.GoalTitles)) return null;
 
-        var names = facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty)
-            .Where(title => !string.IsNullOrWhiteSpace(title)).Distinct(StringComparer.Ordinal)
-            .OrderByDescending(title => title.Length).ToArray();
-        var undeclaredTitle = false;
-        if (names.Length > 0)
-        {
-            var pattern = @"(?<![\p{L}\p{N}])(?:" + string.Join('|', names.Select(Regex.Escape)) + @")(?![\p{L}\p{N}])";
-            text = Regex.Replace(text, pattern, match =>
-            {
-                if (!line.HabitTitles.Contains(match.Value, StringComparer.Ordinal)
-                    && !line.GoalTitles.Contains(match.Value, StringComparer.Ordinal)) undeclaredTitle = true;
-                return "habit";
-            }, RegexOptions.None, TimeSpan.FromSeconds(1));
-        }
-        if (undeclaredTitle) return false;
-        if (SalesWords().IsMatch(text)) return false;
-        if (SentenceEnds().Matches(text).Count != 1 || !".?".Contains(text[^1])) return false;
+        var rawProse = TitlePlaceholders().Replace(text, " ");
+        if (facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty).Any(title => ContainsTitle(rawProse, title))) return null;
+        var substitutedTitles = referencedHabits.Concat(referencedGoals).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (accountTitles.Any(title => !substitutedTitles.Contains(title) && ContainsTitle(rendered, title))) return null;
+        if (!HasOnlyAllowedNames(prose, language) || SalesWords().IsMatch(prose)) return null;
+        if (SentenceEnds().Matches(prose).Count != 1 || !".?".Contains(prose[^1])) return null;
         var numbers = new[] { facts.HabitCount, facts.CurrentStreak, facts.TimedEventCount,
             facts.TimedMinutes, facts.TotalCompletions, facts.TotalScheduled, facts.BadHabitSlips }
             .Where(n => n.HasValue).Select(n => n!.Value.ToString(CultureInfo.InvariantCulture)).ToHashSet();
-        if (line.HabitTitles.Length > 0)
+        if (referencedHabits.Count > 0)
             numbers.Add(Math.Max(0, (facts.HabitCount ?? facts.HabitTitles.Count)
-                - line.HabitTitles.Distinct(StringComparer.Ordinal).Count()).ToString(CultureInfo.InvariantCulture));
-        return Numbers().Matches(text).All(n => numbers.Contains(n.Value));
+                - referencedHabits.Count).ToString(CultureInfo.InvariantCulture));
+        return Numbers().Matches(prose).All(n => numbers.Contains(n.Value)) ? rendered : null;
+    }
+
+    private static string? SubstituteTitles(string text, ProactiveFacts facts,
+        ISet<string> referencedHabits, ISet<string> referencedGoals)
+    {
+        var invalidPlaceholder = false;
+        var rendered = TitlePlaceholders().Replace(text, match =>
+        {
+            if (match.Groups["goal"].Success && !string.IsNullOrWhiteSpace(facts.GoalTitle))
+            {
+                referencedGoals.Add(facts.GoalTitle);
+                return facts.GoalTitle;
+            }
+            if (match.Groups["index"].Success
+                && int.TryParse(match.Groups["index"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                && index < facts.HabitTitles.Count && !string.IsNullOrWhiteSpace(facts.HabitTitles[index]))
+            {
+                referencedHabits.Add(facts.HabitTitles[index]);
+                return facts.HabitTitles[index];
+            }
+            invalidPlaceholder = true;
+            return string.Empty;
+        });
+        return invalidPlaceholder ? null : rendered;
+    }
+
+    private static bool ContainsTitle(string text, string title) => !string.IsNullOrWhiteSpace(title)
+        && Regex.IsMatch(text, @"(?<!\p{L})" + Regex.Escape(title) + @"(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    private static bool HasOnlyAllowedNames(string text, string language)
+    {
+        var pt = LocaleHelper.IsPortuguese(language);
+        var format = CultureInfo.GetCultureInfo(pt ? "pt-BR" : "en").DateTimeFormat;
+        var calendarWords = format.DayNames.Concat(format.AbbreviatedDayNames)
+            .Concat(format.MonthNames).Concat(format.AbbreviatedMonthNames)
+            .Concat(format.MonthGenitiveNames).Concat(format.AbbreviatedMonthGenitiveNames)
+            .SelectMany(name => Words().Matches(name).Select(match => match.Value)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Words().Matches(text).Skip(1).All(word => !char.IsUpper(word.Value[0])
+            || word.Value is "Astra" or "Orbit" || (!pt && word.Value == "I") || calendarWords.Contains(word.Value));
     }
 
     private static bool HasRealMiss(ProactiveFacts facts) => facts.HadScheduledHabitsYesterday == true
@@ -233,6 +270,10 @@ public sealed partial class AiProactiveCheckinMessageService(
     private static partial Regex Numbers();
     [GeneratedRegex(@"[.!?](?:\s|$)")]
     private static partial Regex SentenceEnds();
+    [GeneratedRegex(@"\{\{(?:habit:(?<index>0|[1-9]\d*)|(?<goal>goal))\}\}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex TitlePlaceholders();
+    [GeneratedRegex(@"\p{L}[\p{L}\p{M}]*", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex Words();
     [LoggerMessage(Level = LogLevel.Warning, Message = "Proactive text generation failed; using grounded template")]
     private static partial void GenerationFailed(ILogger logger, Exception exception);
 }
