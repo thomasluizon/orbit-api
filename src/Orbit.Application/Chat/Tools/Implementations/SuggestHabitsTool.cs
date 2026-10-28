@@ -10,7 +10,7 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
     public string Name => "suggest_habits";
     public bool IsReadOnly => true;
     public string Description => "Suggest personal, editable habit drafts from current habits, goals and free schedule time. "
-        + "Use for suggest, ideas, what habits should I, recommend, sugira, sugestões, ideias, quais hábitos, recomende. "
+        + "Use when the person asks for habit ideas or editable habit drafts. Coaching about starting an activity uses short text instead. "
         + "Return habitSuggestions instead of a plain list. Pass the person's request and its language. "
         + "This never creates habits. The person edits a draft and requests its approval preview before saving.";
 
