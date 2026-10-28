@@ -32,7 +32,8 @@ internal record CalendarMapContext(
 public class GetCalendarMonthQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetCalendarMonthQuery, Result<CalendarMonthResponse>>
+    IUnitOfWork unitOfWork,
+    IRepeatReminderReader repeatReminderReader) : IRequestHandler<GetCalendarMonthQuery, Result<CalendarMonthResponse>>
 {
     public async Task<Result<CalendarMonthResponse>> Handle(GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
@@ -55,7 +56,9 @@ public class GetCalendarMonthQueryHandler(
             .ToList();
 
         var ctx = new CalendarMapContext(lookup, weekStartDay, request.DateFrom, request.DateTo, request.DateFrom, today);
-        var habitItems = BuildScheduleItems(topLevel, request.DateFrom, request.DateTo, lookup, ctx);
+        var habitItems = await RepeatReminderResponseEnricher.EnrichAsync(
+            BuildScheduleItems(topLevel, request.DateFrom, request.DateTo, lookup, ctx),
+            request.UserId, repeatReminderReader, cancellationToken);
         var logsDict = BuildLogsDict(allHabits, request.DateFrom, request.DateTo);
 
         return Result.Success(new CalendarMonthResponse(habitItems, logsDict));
@@ -285,6 +288,7 @@ public class GetCalendarMonthQueryHandler(
             Emoji: child.Emoji,
             IntervalWeeks: child.IntervalWeeks,
             CreatedAtUtc: child.CreatedAtUtc,
+            RepeatReminder: child.RepeatReminder,
             Schedule: child.Schedule,
             StartDate: child.StartDate,
             ParentHabitId: child.ParentHabitId,

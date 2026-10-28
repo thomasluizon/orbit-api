@@ -24,7 +24,8 @@ public class GetHabitFullDetailQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
-    IUserDateService userDateService) : IRequestHandler<GetHabitFullDetailQuery, Result<HabitFullDetailResponse>>
+    IUserDateService userDateService,
+    IRepeatReminderReader repeatReminderReader) : IRequestHandler<GetHabitFullDetailQuery, Result<HabitFullDetailResponse>>
 {
     private const int DefaultLookbackDays = 365;
 
@@ -106,6 +107,7 @@ public class GetHabitFullDetailQueryHandler(
             .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc))
             .ToList();
 
+        detail = await RepeatReminderResponseEnricher.EnrichAsync(detail, request.UserId, repeatReminderReader, cancellationToken);
         return Result.Success(new HabitFullDetailResponse(detail, metrics, logs));
     }
 }

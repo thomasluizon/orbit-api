@@ -4,8 +4,12 @@ namespace Orbit.Application.Habits.Services;
 
 public static class RepeatReminderClock
 {
-    public static DateTime Next(DateTime anchorAtUtc, RepeatReminderOptions options, TimeZoneInfo zone) =>
-        MoveIntoWindow(anchorAtUtc.AddMinutes(options.IntervalMinutes), options, zone);
+    public static DateTime? Next(DateTime anchorAtUtc, RepeatReminderOptions options, TimeZoneInfo zone)
+    {
+        var intervalTicks = (long)options.IntervalMinutes * TimeSpan.TicksPerMinute;
+        return intervalTicks <= 0 || anchorAtUtc.Ticks > DateTime.MaxValue.Ticks - intervalTicks
+            ? null : MoveIntoWindow(anchorAtUtc.AddTicks(intervalTicks), options, zone);
+    }
 
     public static DateTime LatestDue(DateTime firstAtUtc, DateTime nowAtUtc, RepeatReminderOptions options, TimeZoneInfo zone)
     {
@@ -39,8 +43,7 @@ public static class RepeatReminderClock
                 }
                 phases[phase] = candidate;
             }
-            var next = Next(candidate, options, zone);
-            if (next > nowAtUtc)
+            if (Next(candidate, options, zone) is not { } next || next > nowAtUtc)
                 break;
             candidate = next;
         }
@@ -88,7 +91,7 @@ public static class RepeatReminderClock
         return new DateTime(year, transition.Month, day > days ? day - 7 : day);
     }
 
-    public static DateTime MoveIntoWindow(DateTime instantAtUtc, RepeatReminderOptions options, TimeZoneInfo zone)
+    public static DateTime? MoveIntoWindow(DateTime instantAtUtc, RepeatReminderOptions options, TimeZoneInfo zone)
     {
         if (options.ActiveStart is not { } start || options.ActiveEnd is not { } end)
             return instantAtUtc;
@@ -99,26 +102,41 @@ public static class RepeatReminderClock
             return instantAtUtc;
         var date = DateOnly.FromDateTime(local);
         if (start < end && time >= end)
+        {
+            if (date == DateOnly.MaxValue)
+                return null;
             date = date.AddDays(1);
+        }
         var localStart = date.ToDateTime(start);
         var candidateAtUtc = LocalInstant(localStart, zone);
         if (candidateAtUtc >= instantAtUtc)
             return candidateAtUtc;
         if (zone.IsAmbiguousTime(localStart))
         {
-            var laterAtUtc = DateTime.SpecifyKind(localStart - zone.GetAmbiguousTimeOffsets(localStart).Min(), DateTimeKind.Utc);
+            var laterAtUtc = WithOffset(localStart, zone.GetAmbiguousTimeOffsets(localStart).Min());
             if (laterAtUtc >= instantAtUtc)
                 return laterAtUtc;
         }
-        return LocalInstant(date.AddDays(1).ToDateTime(start), zone);
+        return date == DateOnly.MaxValue ? null : LocalInstant(date.AddDays(1).ToDateTime(start), zone);
     }
 
-    private static DateTime LocalInstant(DateTime local, TimeZoneInfo zone)
+    internal static DateTime? LocalInstant(DateTime local, TimeZoneInfo zone)
     {
         while (zone.IsInvalidTime(local))
+        {
+            if (local.Ticks > DateTime.MaxValue.Ticks - TimeSpan.TicksPerMinute)
+                return null;
             local = local.AddMinutes(1);
+        }
         if (zone.IsAmbiguousTime(local))
-            return DateTime.SpecifyKind(local - zone.GetAmbiguousTimeOffsets(local).Max(), DateTimeKind.Utc);
-        return TimeZoneInfo.ConvertTimeToUtc(local, zone);
+            return WithOffset(local, zone.GetAmbiguousTimeOffsets(local).Max());
+        return WithOffset(local, zone.GetUtcOffset(local));
+    }
+
+    private static DateTime? WithOffset(DateTime local, TimeSpan offset)
+    {
+        var ticks = local.Ticks - offset.Ticks;
+        return ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks
+            ? null : new DateTime(ticks, DateTimeKind.Utc);
     }
 }

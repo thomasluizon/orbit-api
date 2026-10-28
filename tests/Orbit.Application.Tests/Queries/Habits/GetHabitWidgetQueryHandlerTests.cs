@@ -137,7 +137,7 @@ public class GetHabitWidgetQueryHandlerTests
             scheduleLogReader,
             Substitute.For<IHabitSchedulePageLoader>(),
             _userDateService,
-            _unitOfWork);
+            _unitOfWork, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         var scheduleResult = await scheduleHandler.Handle(
             new GetHabitScheduleQuery(UserId, Today, Today, IncludeOverdue: true),

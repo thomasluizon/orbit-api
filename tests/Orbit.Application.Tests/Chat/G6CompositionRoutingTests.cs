@@ -1,3 +1,4 @@
+using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -311,7 +312,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private GetHabitMonthTool G6HabitMonthTool()
     {
-        var calendar = new GetCalendarMonthQueryHandler(_habitRepo, _userDateService, _unitOfWork);
+        var calendar = new GetCalendarMonthQueryHandler(_habitRepo, _userDateService, _unitOfWork, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         _mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => calendar.Handle(call.Arg<GetCalendarMonthQuery>(), call.Arg<CancellationToken>()));
         var month = new GetHabitMonthQueryHandler(_mediator, _userDateService);

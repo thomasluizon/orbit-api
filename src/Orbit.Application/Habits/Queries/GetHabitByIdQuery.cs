@@ -46,7 +46,8 @@ public record HabitChildResponse(
     bool? SlipAlertEnabled = null,
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
-    RepeatReminderOptions? RepeatReminder = null);
+    RepeatReminderOptions? RepeatReminder = null,
+    DateTime? NextReminderAtUtc = null);
 
 public record HabitDetailResponse(
     Guid Id,
@@ -87,14 +88,16 @@ public record HabitDetailResponse(
     Guid? ParentId = null,
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
-    RepeatReminderOptions? RepeatReminder = null);
+    RepeatReminderOptions? RepeatReminder = null,
+    DateTime? NextReminderAtUtc = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
 public class GetHabitByIdQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
-    IUserDateService userDateService) : IRequestHandler<GetHabitByIdQuery, Result<HabitDetailResponse>>
+    IUserDateService userDateService,
+    IRepeatReminderReader repeatReminderReader) : IRequestHandler<GetHabitByIdQuery, Result<HabitDetailResponse>>
 {
     public async Task<Result<HabitDetailResponse>> Handle(GetHabitByIdQuery request, CancellationToken cancellationToken)
     {
@@ -136,7 +139,7 @@ public class GetHabitByIdQueryHandler(
             ? (await habitRepository.FindAsync(h => h.Id == parentId && h.UserId == request.UserId, cancellationToken)).FirstOrDefault()?.Title
             : null;
 
-        return Result.Success(new HabitDetailResponse(
+        var detail = new HabitDetailResponse(
             habit.Id,
             habit.Title,
             habit.Description,
@@ -171,7 +174,9 @@ public class GetHabitByIdQueryHandler(
             OriginalDayOfMonth: habit.OriginalDayOfMonth,
             ParentId: habit.ParentHabitId,
             ParentHabitId: habit.ParentHabitId,
-            ParentTitle: parentTitle));
+            ParentTitle: parentTitle);
+        return Result.Success(await RepeatReminderResponseEnricher.EnrichAsync(
+            detail, request.UserId, repeatReminderReader, cancellationToken));
     }
 }
 

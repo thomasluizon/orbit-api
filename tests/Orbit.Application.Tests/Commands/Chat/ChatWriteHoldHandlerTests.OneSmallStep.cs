@@ -1,3 +1,4 @@
+using Orbit.Domain.Interfaces;
 using System.Text.Json;
 using System.Linq.Expressions;
 using FluentAssertions;
@@ -94,7 +95,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         _dbContext.ChangeTracker.Clear();
         var saved = await _dbContext.Habits.AsNoTracking().SingleAsync();
-        var query = new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_dbContext), _userDateService);
+        var query = new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_dbContext), _userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         var readback = await query.Handle(new(_userId, saved.Id), default);
         readback.IsSuccess.Should().BeTrue(readback.Error);
         readback.Value.Title.Should().Be(smaller);
@@ -222,7 +223,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
         approved.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         _dbContext.ChangeTracker.Clear();
-        var read = await new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_dbContext), _userDateService)
+        var read = await new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_dbContext), _userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new(_userId, parent.Id), default);
         read.Value.ChecklistItems.Select(item => item.Text).Should().Equal("Existing item", step);
         read.Value.ChecklistItems[0].IsChecked.Should().BeTrue();

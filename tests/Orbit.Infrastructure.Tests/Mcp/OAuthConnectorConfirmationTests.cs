@@ -113,7 +113,7 @@ public class OAuthConnectorConfirmationTests : IDisposable
         mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<DeleteHabitCommand>(), call.Arg<CancellationToken>()));
         mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var readHandler = new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_db), dates);
+        var readHandler = new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_db), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => readHandler.Handle(call.Arg<GetHabitByIdQuery>(), call.Arg<CancellationToken>()));
         var tool = new DeleteHabitTool(mediator, repository);

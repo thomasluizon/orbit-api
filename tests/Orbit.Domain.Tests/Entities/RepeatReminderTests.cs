@@ -9,6 +9,23 @@ public class RepeatReminderTests
 {
     [Theory]
     [InlineData(15)]
+    [InlineData(1380)]
+    public void StartMustLeaveRoomForTheInterval(int minutes)
+    {
+        var lastStartAtUtc = DateTime.SpecifyKind(DateTime.MaxValue.AddMinutes(-minutes), DateTimeKind.Utc);
+        var valid = new RepeatReminderOptions(minutes, StartAtUtc: lastStartAtUtc);
+        valid.IsValid().Should().BeTrue();
+        Habit.Create(Parameters(valid)).IsSuccess.Should().BeTrue();
+        var invalid = valid with { StartAtUtc = lastStartAtUtc.AddTicks(1) };
+        invalid.IsValid().Should().BeFalse();
+        Habit.Create(Parameters(invalid)).IsFailure.Should().BeTrue();
+        var habit = Habit.Create(Parameters(new(minutes))).Value;
+        habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, null, FrequencyUnit.Day, 1,
+            [], false, habit.NextDueDate, RepeatReminder: invalid)).IsFailure.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(15)]
     [InlineData(20)]
     [InlineData(30)]
     [InlineData(45)]

@@ -139,6 +139,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IHabitRankingReader, HabitRankingReader>();
         builder.Services.AddScoped<IHabitSummaryLogReader, HabitSummaryLogReader>();
         builder.Services.AddScoped<IHabitSchedulePageLoader, HabitSchedulePageLoader>();
+        builder.Services.AddScoped<IRepeatReminderReader, RepeatReminderReader>();
         builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>
             new Orbit.Application.Goals.Commands.GoalRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),

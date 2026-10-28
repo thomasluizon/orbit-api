@@ -160,9 +160,9 @@ public class HabitTagUpdateRelationalTests
         mutation.Database.CurrentTransaction.Should().BeNull();
         var expectedParentId = outcome == "success" ? finalParentId : before.Habit.ParentHabitId;
         var ordinary = await new GetHabitByIdQueryHandler(new GenericRepository<Habit>(readback),
-            new GenericRepository<HabitLog>(readback), dates).Handle(new(user.Id, habit.Id), default);
+            new GenericRepository<HabitLog>(readback), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>()).Handle(new(user.Id, habit.Id), default);
         var full = await new GetHabitFullDetailQueryHandler(new GenericRepository<Habit>(readback),
-            new GenericRepository<HabitLog>(readback), new GenericRepository<User>(readback), dates)
+            new GenericRepository<HabitLog>(readback), new GenericRepository<User>(readback), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new(user.Id, habit.Id), default);
         ordinary.IsSuccess.Should().BeTrue();
         full.IsSuccess.Should().BeTrue();

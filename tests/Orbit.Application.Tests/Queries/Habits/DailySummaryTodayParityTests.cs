@@ -67,7 +67,7 @@ public class DailySummaryTodayParityTests
         dates.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(day);
         dates.GetUserWeekStartDayAsync(userId, Arg.Any<CancellationToken>()).Returns(1);
         var schedule = new GetHabitScheduleQueryHandler(repo, reader, Substitute.For<IHabitSchedulePageLoader>(),
-            dates, Substitute.For<IUnitOfWork>());
+            dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         var hoje = await schedule.Handle(new(userId, day, day, IncludeOverdue: true, PageSize: AppConstants.MaxPageSize), default);
         var hojeItems = hoje.Value.Items.ToList();
         for (var page = 2; page <= hoje.Value.TotalPages; page++)

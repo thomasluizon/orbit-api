@@ -80,20 +80,20 @@ public class HabitScheduleContractTests
         dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);
         var habits = new GenericRepository<Habit>(context);
         var logs = new GenericRepository<HabitLog>(context);
-        var detail = await new GetHabitByIdQueryHandler(habits, logs, dates)
+        var detail = await new GetHabitByIdQueryHandler(habits, logs, dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new GetHabitByIdQuery(user.Id, parent.Id), CancellationToken.None);
         detail.IsSuccess.Should().BeTrue();
         AssertContract(detail.Value, type, expectedStart);
         AssertContract(detail.Value.Children.Should().ContainSingle().Subject, type, expectedStart);
 
-        var full = await new GetHabitFullDetailQueryHandler(habits, logs, new GenericRepository<User>(context), dates)
+        var full = await new GetHabitFullDetailQueryHandler(habits, logs, new GenericRepository<User>(context), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new GetHabitFullDetailQuery(user.Id, parent.Id), CancellationToken.None);
         full.IsSuccess.Should().BeTrue();
         AssertContract(full.Value.Habit, type, expectedStart);
 
         var schedule = await new GetHabitScheduleQueryHandler(habits,
                 new HabitScheduleLogReader(context), new HabitSchedulePageLoader(context), dates,
-                Substitute.For<IUnitOfWork>())
+                Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new GetHabitScheduleQuery(user.Id, Start, Start.AddDays(10),
                 IsGeneral: type == HabitSchedule.General ? true : null), CancellationToken.None);
         schedule.IsSuccess.Should().BeTrue();
@@ -103,7 +103,7 @@ public class HabitScheduleContractTests
 
         if (type != HabitSchedule.General)
         {
-            var calendar = await new GetCalendarMonthQueryHandler(habits, dates, Substitute.For<IUnitOfWork>())
+            var calendar = await new GetCalendarMonthQueryHandler(habits, dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>())
                 .Handle(new GetCalendarMonthQuery(user.Id, Start, Start.AddDays(10)), CancellationToken.None);
             calendar.IsSuccess.Should().BeTrue();
             var calendarItem = calendar.Value.Habits.Should().ContainSingle().Subject;

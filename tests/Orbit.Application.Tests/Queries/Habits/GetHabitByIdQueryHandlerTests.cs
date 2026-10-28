@@ -27,7 +27,7 @@ public class GetHabitByIdQueryHandlerTests
 
     public GetHabitByIdQueryHandlerTests()
     {
-        _handler = new GetHabitByIdQueryHandler(_habitRepo, _habitLogRepo, _userDateService);
+        _handler = new GetHabitByIdQueryHandler(_habitRepo, _habitLogRepo, _userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _habitLogRepo.FindAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
@@ -196,7 +196,7 @@ public class GetHabitByIdQueryHandlerTests
         var handler = new GetHabitByIdQueryHandler(
             new GenericRepository<Habit>(context),
             new GenericRepository<HabitLog>(context),
-            userDateService);
+            userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         var attackerId = Guid.NewGuid();
         var ownerResult = await handler.Handle(new GetHabitByIdQuery(UserId, habitId), CancellationToken.None);

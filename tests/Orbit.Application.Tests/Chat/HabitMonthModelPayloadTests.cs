@@ -62,7 +62,7 @@ public sealed class HabitMonthModelPayloadTests
         repository.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(habits.AsReadOnly());
-        var calendar = (await new GetCalendarMonthQueryHandler(repository, dates, Substitute.For<IUnitOfWork>())
+        var calendar = (await new GetCalendarMonthQueryHandler(repository, dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new(user, from, to), default)).Value;
         var card = new HabitMonthCard(from, to, to, 1, calendar);
 
@@ -135,7 +135,7 @@ public sealed class HabitMonthModelPayloadTests
         repository.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit }.AsReadOnly());
-        var calendar = (await new GetCalendarMonthQueryHandler(repository, dates, Substitute.For<IUnitOfWork>())
+        var calendar = (await new GetCalendarMonthQueryHandler(repository, dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new(user, from, to), default)).Value;
 
         var payload = HabitMonthModelPayload.From(new(from, to, today, 1, calendar));

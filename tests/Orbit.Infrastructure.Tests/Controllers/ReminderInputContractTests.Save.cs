@@ -176,7 +176,7 @@ public partial class ReminderInputContractTests
                 saved.RelativeReminders.Should().Equal(RelativeReminderTime.FromScheduled(expected), new RelativeReminderTime(15));
             else
                 saved.ScheduledReminders.Should().Equal(expected);
-            var result = await new GetHabitByIdQueryHandler(_habits, _logs, _dates)
+            var result = await new GetHabitByIdQueryHandler(_habits, _logs, _dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
                 .Handle(new(_userId, saved.Id), CancellationToken.None);
             result.IsSuccess.Should().BeTrue();
             result.Value.ScheduledReminders.Should().Equal(expected);

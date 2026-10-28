@@ -88,14 +88,14 @@ public class GetHabitRecurrenceOriginTests
             var users = Substitute.For<IGenericRepository<User>>();
             users.GetByIdAsync(habit.UserId, Arg.Any<CancellationToken>())
                 .Returns(User.Create("Alex", "alex@example.com").Value);
-            var result = await new GetHabitFullDetailQueryHandler(habits, logs, users, dates)
+            var result = await new GetHabitFullDetailQueryHandler(habits, logs, users, dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
                 .Handle(new GetHabitFullDetailQuery(habit.UserId, habit.Id), CancellationToken.None);
             result.IsSuccess.Should().BeTrue();
             detail = result.Value.Habit;
         }
         else
         {
-            var result = await new GetHabitByIdQueryHandler(habits, logs, dates)
+            var result = await new GetHabitByIdQueryHandler(habits, logs, dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
                 .Handle(new GetHabitByIdQuery(habit.UserId, habit.Id), CancellationToken.None);
             result.IsSuccess.Should().BeTrue();
             detail = result.Value;

@@ -58,7 +58,8 @@ public record HabitScheduleItem(
     DateOnly? StartDate = null,
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
-    RepeatReminderOptions? RepeatReminder = null);
+    RepeatReminderOptions? RepeatReminder = null,
+    DateTime? NextReminderAtUtc = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -102,7 +103,8 @@ public record HabitScheduleChildItem(
     bool? SlipAlertEnabled = null,
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
-    RepeatReminderOptions? RepeatReminder = null);
+    RepeatReminderOptions? RepeatReminder = null,
+    DateTime? NextReminderAtUtc = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -159,14 +161,19 @@ public class GetHabitScheduleQueryHandler(
     IHabitScheduleLogReader scheduleLogReader,
     IHabitSchedulePageLoader pageLoader,
     IUserDateService userDateService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetHabitScheduleQuery, Result<PaginatedResponse<HabitScheduleItem>>>
+    IUnitOfWork unitOfWork,
+    IRepeatReminderReader repeatReminderReader) : IRequestHandler<GetHabitScheduleQuery, Result<PaginatedResponse<HabitScheduleItem>>>
 {
     public async Task<Result<PaginatedResponse<HabitScheduleItem>>> Handle(GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
-        if (request.IsGeneral == true)
-            return await HandleGeneralHabits(request, cancellationToken);
-
-        return await HandleScheduledHabits(request, cancellationToken);
+        var result = request.IsGeneral == true
+            ? await HandleGeneralHabits(request, cancellationToken)
+            : await HandleScheduledHabits(request, cancellationToken);
+        if (result.IsFailure)
+            return result;
+        var items = await RepeatReminderResponseEnricher.EnrichAsync(
+            result.Value.Items, request.UserId, repeatReminderReader, cancellationToken);
+        return Result.Success(result.Value with { Items = items });
     }
 
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> HandleGeneralHabits(

@@ -1,5 +1,9 @@
 # Selecting an OpenAPI artifact
 
+The append-only authoritative `nextReminderAtUtc` field for habit schedule and
+detail reads is documented in [NextRepeatReminder.md](NextRepeatReminder.md).
+Deploy this producer to staging before the paired consumer updates its pin.
+
 The restricted staging eval pending-operation fixture and independent readback for
 thomasluizon/orbit-tickets#1845 are documented in
 [EvalPendingOperations.md](EvalPendingOperations.md). Deploy the API and obtain

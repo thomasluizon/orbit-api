@@ -30,7 +30,7 @@ public class GetHabitScheduleQueryHandlerTests
             _scheduleLogReader,
             _pageLoader,
             _userDateService,
-            _unitOfWork);
+            _unitOfWork, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(),

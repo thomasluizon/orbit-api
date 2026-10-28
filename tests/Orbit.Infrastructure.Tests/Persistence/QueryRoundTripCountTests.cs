@@ -281,7 +281,7 @@ public class QueryRoundTripCountTests
             new GenericRepository<Habit>(factory.Context),
             new GenericRepository<HabitLog>(factory.Context),
             new GenericRepository<User>(factory.Context),
-            userDateService);
+            userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         counter.Reset();
         var result = await handler.Handle(
