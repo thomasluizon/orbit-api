@@ -22,7 +22,7 @@ namespace Orbit.Infrastructure.Migrations
                 keyColumn: "Key",
                 keyValue: "FreeAiMicroDollarsPerDay",
                 column: "Value",
-                value: "1000000");
+                value: "150000");
 
             migrationBuilder.UpdateData(
                 table: "AppConfigs",
@@ -36,7 +36,7 @@ namespace Orbit.Infrastructure.Migrations
                 keyColumn: "Key",
                 keyValue: "ProAiMicroDollarsPerWeek",
                 column: "Value",
-                value: "50000000");
+                value: "6000000");
         }
 
         /// <inheritdoc />

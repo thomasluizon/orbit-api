@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261028013042_FitAiSafetyBudgetsToAllowances")]
+    [Migration("20261028020340_FitAiSafetyBudgetsToAllowances")]
     partial class FitAiSafetyBudgetsToAllowances
     {
         /// <inheritdoc />
@@ -393,13 +393,13 @@ namespace Orbit.Infrastructure.Migrations
                         {
                             Key = "FreeAiMicroDollarsPerDay",
                             Description = "Daily AI safety budget for Free users in USD micro-dollars",
-                            Value = "1000000"
+                            Value = "150000"
                         },
                         new
                         {
                             Key = "ProAiMicroDollarsPerWeek",
                             Description = "Weekly AI safety budget for Pro users in USD micro-dollars",
-                            Value = "50000000"
+                            Value = "6000000"
                         },
                         new
                         {

@@ -198,7 +198,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
     public async Task TypicalFreeWrites_FitUnderSpendCeiling()
     {
         const int messages = 5;
-        AppConfigKeys.DefaultFreeAiMicroDollarsPerDay.Should().Be(1_000_000);
+        AppConfigKeys.DefaultFreeAiMicroDollarsPerDay.Should().Be(150_000);
         using var fixture = new BudgetFixture();
         for (var call = 0; call < messages * 2; call++)
             await fixture.Client.CompleteTextAsync("system", "a typical write");
