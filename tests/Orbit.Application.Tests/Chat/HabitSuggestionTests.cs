@@ -71,6 +71,7 @@ public partial class HabitSuggestionTests
         var result = await Service(existing).GenerateAsync(_userId, "ideas", "pt-BR", 1, null, default);
         result.IsSuccess.Should().BeTrue();
         result.Value.Drafts[0].ExistingHabitId.Should().Be(existing.Id);
+        result.Value.Drafts[0].Title.Should().Be(existing.Title);
     }
 
     [Fact]

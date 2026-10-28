@@ -29,7 +29,7 @@ public class BulkCreateHabitsTool(
     public string Name => ToolArgumentNames.BulkCreateHabits;
 
     public string Description =>
-        "Create multiple habits with inline sub-habits.";
+        HabitModelInstructions.WriteIntent + " Create multiple habits with inline sub-habits.";
 
     public object GetParameterSchema() => new
     {

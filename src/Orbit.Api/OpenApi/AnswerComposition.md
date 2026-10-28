@@ -100,6 +100,18 @@ result or negotiated readable fallback; it cannot fabricate the expected family.
 metrics lookup requires the model's subsequent metrics call. Names, permissions, dates and
 calculations remain owned by the existing producers and every write retains approval.
 
+Advice about starting an activity stays short text even when it mentions a date or possible
+checklist. The model prepares writes only for requested record changes and reuses an existing
+activity for an adjustment. Editable suggestions with a resolved `existingHabitId` use that
+habit's stored title, including in their approval arguments; the model's proposed title cannot
+rename it. A title match without an ID receives the same stored identity and title.
+
+Temporary preparation commitments preserve the requested action and negation in their titles.
+Preparation continuing until an event uses daily recurrence with `due_date` at its start and
+inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. An activity
+ending at a collection uses `due_end_time` for that deadline. These are model instructions;
+composition and execution preserve the structured arguments rather than rewriting message text.
+
 Skipped habit reads retain their dated skip facts, including active skip receipts for
 recurring habits. They exclude skipped entries from completed and remaining totals.
 `HabitListCardItem` appends optional nullable boolean `isSkippedOnDate`. A dated query
