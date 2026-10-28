@@ -85,6 +85,8 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         var bulkUpdateTool = new BulkUpdateHabitsTool(_mediator);
         var revisionServices = Substitute.For<IServiceProvider>();
         _toolRegistry = new AiToolRegistry([
+            new SuggestBreakdownTool(),
+            new UpdateChecklistTool(_mediator, _habitRepo),
             new RevisePendingChangesTool(revisionServices),
             new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader),
             _createHabitTool,

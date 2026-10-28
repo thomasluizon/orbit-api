@@ -4746,6 +4746,20 @@
         "name": "suggest_breakdown",
         "parameters": [
           {
+            "name": "language",
+            "type": "string",
+            "required": false,
+            "values": [
+              "en",
+              "pt-BR"
+            ]
+          },
+          {
+            "name": "one_small_step",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "suggested_sub_habits",
             "type": "array",
             "items": {

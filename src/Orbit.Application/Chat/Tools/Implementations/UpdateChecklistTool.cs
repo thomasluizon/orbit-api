@@ -14,7 +14,7 @@ public class UpdateChecklistTool(
     public string Name => "update_checklist";
 
     public string Description =>
-        "Replace a habit checklist with the full desired list.";
+        "Replace a habit checklist with the full desired list. When adding an item, include every existing item in the full list you send.";
 
     public object GetParameterSchema() => new
     {

@@ -353,3 +353,87 @@ build failure and duplicate suppression. `astra_composition_follow_ups` includes
 Neither captures prompt/completion text or arguments. Model-call telemetry and spending limits
 remain unchanged. The policy preserves data-backed answers, approval for every write and
 single reporting without changing server-owned model selection or quotas.
+
+## One small starting step
+
+Tracks thomasluizon/orbit-tickets#1857. `suggest_breakdown` appends optional
+`one_small_step` (boolean, default false) and `language` (`en` or `pt-BR`).
+When `one_small_step` is true, `title` is the activity and
+`suggested_sub_habits` contains exactly one object whose `title` is the concrete
+starting step. Both texts must be nonempty, single-line and at most 200 characters.
+The model chooses the tool and the smaller action through its structured arguments;
+message patterns never select or rewrite tools. Omission preserves the existing
+breakdown suggestion contract and action result.
+
+Successful one-step results end a round containing only those results, without
+another model call. The response has no framing prose and one typed part:
+
+```json
+{
+  "type": "block",
+  "kind": "oneSmallStep",
+  "block": {
+    "suggestion": { "goal": "Study", "step": "Open the book", "language": "en" },
+    "actions": [
+      { "id": "smaller", "label": "Smaller", "message": "Give me an even smaller starting step for \"Study\". The previous step was \"Open the book\"." },
+      { "id": "saveTask", "label": "Save as task", "message": "Save \"Open the book\" as a task." },
+      { "id": "saveChecklistItem", "label": "Save as checklist item", "message": "Add \"Open the book\" to a habit's checklist." }
+    ]
+  }
+}
+```
+
+Clients advertise `supportsParts: true` and include `oneSmallStep` in `partKinds`.
+The kind is a string extension, without adding a value to any strict enum.
+The parts kill flag still applies. Fresh replies and stored-answer replay negotiate
+the kind against the client capabilities. Unsupported clients receive readable text
+containing only the step, without action requests or an unsupported block. Both
+ordinary and block-first composition support the contract. SSE final and synchronous
+responses agree. No new endpoint, account mutation or minimum client version applies.
+
+Actions submit their complete `message` as a fresh chat request with the current
+conversation history. They are requests, never confirmation tokens or executable
+commands. The smaller request contains the original activity and preceding step,
+so the model can return an easier action even with incomplete history. Titles in
+action messages are JSON-quoted as untrusted data.
+The save request uses the existing `create_habit` tool for a one-time task or
+`update_checklist` for an owned habit. A checklist target must be resolved first,
+asking which habit when unclear, and the replacement list preserves existing items.
+The existing pending-operation preview supports approval, editing and rejection;
+no suggestion or action click alone writes a record. All ordinary ownership,
+validation, policy and preview checks still run. Internal risk labels are absent
+from the step block.
+
+Deploy the API before the paired web and Android clients advertise this kind.
+The coordinator files that consumer ticket and its en and pt-BR real-call
+`evals/astra` cases in orbit-ui-mobile. Required live evidence is three consecutive
+passes per case and saved-step readback. Local structured-output replay is not
+real-call pass^3 evidence.
+
+### Copy for coordinator approval
+
+`goal` and `step` are model-authored in the person's language. The fixed UI copy
+and action templates are below; `{goal}` and `{step}` stand for JSON-quoted text.
+
+| Purpose | en | pt-BR |
+| --- | --- | --- |
+| Smaller label | Smaller | Menor ainda |
+| Task label | Save as task | Salvar como tarefa |
+| Checklist label | Save as checklist item | Salvar no checklist |
+| Smaller request | Give me an even smaller starting step for {goal}. The previous step was {step}. | Quero um passo ainda menor para {goal}. O passo anterior foi {step}. |
+| Task request | Save {step} as a task. | Quero salvar {step} como tarefa. |
+| Checklist request | Add {step} to a habit's checklist. | Quero adicionar {step} ao checklist de um hábito. |
+
+The model-facing instructions are English at runtime, matching the existing
+prompt convention. Their pt-BR versions below are for copy review.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| GlobalRulesSection | STARTING AN ACTIVITY: When the person cannot get started, use suggest_breakdown with one_small_step=true and language en or pt-BR. Return exactly one concrete, immediately doable action in suggested_sub_habits, not a plan. If they ask for something smaller, reduce the previous step's effort while keeping the same activity. The server supplies the oneSmallStep block and smaller/save actions; emit no prose. Do not call ask or propose a write unless they explicitly request saving. Save as a task through create_habit, or resolve the owned habit and use update_checklist with all existing items plus the new step. Every save uses the existing approval preview. | COMEÇAR UMA ATIVIDADE: Quando a pessoa não conseguir começar, use suggest_breakdown com one_small_step=true e language en ou pt-BR. Retorne exatamente uma ação concreta que ela possa realizar agora em suggested_sub_habits, sem montar um plano. Se ela pedir algo menor, reduza o esforço do passo anterior e mantenha a mesma atividade. O servidor fornece o bloco oneSmallStep e as ações de diminuir e salvar; não acrescente texto. Não chame ask nem proponha alterações sem um pedido explícito para salvar. Para salvar como tarefa, use create_habit. Para uma checklist, identifique o hábito da pessoa e use update_checklist com todos os itens existentes e o novo passo. Todo salvamento passa pela prévia de aprovação existente. |
+| SuggestBreakdownTool.Description | Suggest sub-habits without creating them. When the person is stuck starting an activity, set one_small_step=true, language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, preserving existing checklist items and resolving the owned habit first. Both require the existing approval preview. | Sugira sub-hábitos sem criá-los. Quando a pessoa travar ao começar uma atividade, defina one_small_step=true, language como en ou pt-BR conforme a mensagem, title como a atividade e suggested_sub_habits com exatamente uma ação concreta para começar. Se ela pedir um passo menor, retorne uma ação mais fácil, que exija menos esforço que a anterior, mantendo a mesma atividade. O servidor retorna oneSmallStep com ações para diminuir e salvar. Não acrescente texto nem listas. Sugestões não salvam nada. Somente um pedido explícito para salvar usa create_habit para uma tarefa ou update_checklist, preservando os itens existentes e identificando primeiro o hábito da pessoa. Ambos exigem a prévia de aprovação existente. |
+| SuggestHabitsTool.Description change | Help starting an activity uses suggest_breakdown with one_small_step=true instead. | A ajuda para começar uma atividade usa suggest_breakdown com one_small_step=true. |
+| one_small_step schema description | Return exactly one starting step, or a smaller refinement, as a oneSmallStep block. Default false. | Retorne exatamente um passo para começar, ou uma versão menor, em um bloco oneSmallStep. O padrão é false. |
+| language schema description | Required with one_small_step=true; the person's message language. | Obrigatório com one_small_step=true; idioma da mensagem da pessoa. |
+| Argument error | one_small_step must be a boolean. | one_small_step deve ser um booleano. |
+| Argument error | Return exactly one nonempty starting action and goal, each at most 200 characters on one line, with language en or pt-BR. | Retorne exatamente uma ação inicial e uma atividade, ambas preenchidas, cada uma em uma única linha com até 200 caracteres, com language en ou pt-BR. |
+| Domain guard | A starting step requires a goal, a single short action and a supported language. | Um passo inicial exige uma atividade, uma única ação curta e um idioma aceito. |

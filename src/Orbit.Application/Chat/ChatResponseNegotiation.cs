@@ -90,6 +90,7 @@ internal static class ChatResponseNegotiation
         && (kind switch
         {
             "choice" or "pickList" or "question" => !flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled),
+            "oneSmallStep" => true,
             "habitRanking" => !flags.Contains(FeatureFlagKeys.AstraPeriodBlocksDisabled),
             _ => ProcessUserChatCommandHandler.ReadKindEnabled(kind, client, flags)
         });
@@ -107,6 +108,7 @@ internal static class ChatResponseNegotiation
             "calendar" => typeof(CalendarCard),
             "habitMonth" => typeof(HabitMonthCard),
             "habitSuggestions" => typeof(HabitSuggestionsCard),
+            "oneSmallStep" => typeof(OneSmallStepCard),
             "recordList" => typeof(RecordListCard),
             "accountRows" => typeof(AccountRowsCard),
             "periodInsight" => typeof(PeriodInsightCard),
@@ -134,6 +136,7 @@ internal static class ChatResponseNegotiation
         {
             HabitRankingCard card => HabitRankingCardBuilder.Readable(card.Ranking, language),
             HabitSuggestionsCard card => HabitSuggestionsPresentation.Readable(card),
+            OneSmallStepCard card => OneSmallStepCard.Readable(card),
             AstraChoiceBlock block => block.Question,
             AstraPickListBlock block => block.Title,
             AstraQuestionBlock block => string.Join("\n\n", new[] { block.Title, block.Intro }

@@ -52,4 +52,13 @@ public class SuggestBreakdownToolTests
         var schema = _tool.GetParameterSchema();
         schema.Should().NotBeNull();
     }
+    [Fact]
+    public async Task ExecuteAsync_OneSmallStep_RejectsSeveralSteps()
+    {
+        var args = JsonDocument.Parse("""{"title":"Study","one_small_step":true,"language":"en","suggested_sub_habits":[{"title":"Open the book"},{"title":"Read a page"}]}""").RootElement;
+
+        var result = await _tool.ExecuteAsync(args, UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+    }
 }

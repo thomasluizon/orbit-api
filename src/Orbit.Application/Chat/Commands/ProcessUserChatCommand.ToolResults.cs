@@ -30,6 +30,9 @@ public partial class ProcessUserChatCommandHandler
                 Error: result.Error).WithToolResultMessage(call, result.Payload);
         }
 
+        if (result.Payload is StartingStep)
+            return null;
+
         if (call.Name == "suggest_breakdown")
         {
             return new ActionResult(

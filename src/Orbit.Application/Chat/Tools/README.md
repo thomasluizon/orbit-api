@@ -342,3 +342,19 @@ recaps or shares, or write habit logs. Missing referral codes and links stay emp
 The paired renderer work belongs to thomasluizon/orbit-tickets#1619. Deploy these
 append-only producer contracts before that consumer advertises the new kinds.
 #1617 owns composition policy and #26 owns bilingual pipeline composition checks.
+
+## One small starting step
+
+`suggest_breakdown` supports optional `one_small_step: true` and `language: en|pt-BR`.
+It validates exactly one `suggested_sub_habits` entry and returns a guarded
+`StartingStep` payload. Omitted or false mode preserves ordinary breakdowns.
+Prompt and tool descriptions route starting help and smaller refinements through
+this tool in both languages, independently of message patterns.
+The server composes the negotiated `oneSmallStep` block without a continuation.
+Its smaller and save actions submit ordinary chat requests. Save requests reuse
+`create_habit` or `update_checklist`, with the existing approval preview and owned
+checklist target resolution. Suggestions write nothing.
+
+The exact wire contract, capability negotiation, bilingual copy inventory and
+paired-consumer eval requirements are in
+[AnswerComposition.md](../../../Orbit.Api/OpenApi/AnswerComposition.md#one-small-starting-step).
