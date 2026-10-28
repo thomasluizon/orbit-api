@@ -243,16 +243,51 @@ public class AiSummaryServiceTests
     }
 
     [Fact]
-    public void BuildSummaryPrompt_EstablishesCloseFriendPersonaAndLeadWithDone()
+    public void BuildSummaryPrompt_LeadsWithOneInsightInsteadOfARecap()
     {
         var habits = new List<Habit> { CreateHabit("Walk") };
         var result = InvokeBuildSummaryPrompt(habits, Today, "en");
 
         result.Should().Contain("Rules:");
-        result.Should().Contain("LEAD with a specific");
-        result.Should().Contain("ALREADY completed today");
+        result.Should().Contain("EXACTLY ONE sentence");
+        result.Should().Contain("Lead with the insight");
+        result.Should().Contain("Name the specific habit");
+        result.Should().Contain("A recap of completed activities is not an insight");
+        result.Should().NotContain("LEAD with a specific, genuine acknowledgment");
+        result.Should().NotContain("TWO short sentences");
         result.Should().Contain("friend who actually knows you");
         result.Should().Contain("Do NOT use markdown");
+    }
+
+    [Theory]
+    [InlineData("en", "English")]
+    [InlineData("pt-BR", "Brazilian Portuguese")]
+    public async Task GenerateSummaryAsync_RequestsOneNamedInsightWithTruthRules(string locale, string languageName)
+    {
+        var read = CreateHabit("Read");
+        string? body = null;
+        const string sentence = "Read is still open this evening; choose it as your next step.";
+        var service = BuildSummaryService(JsonSerializer.Serialize(new { summary = sentence }), request => body = request);
+
+        var result = await service.GenerateSummaryAsync([read],
+            new DailySummaryContext(Today, Today, Today, locale, new TimeOnly(19, 0), 38, 0,
+                new Dictionary<Guid, DateOnly>()));
+
+        result.Value.Summary.Should().Be(sentence);
+        using var document = JsonDocument.Parse(body!);
+        var request = document.RootElement;
+        var prompt = request.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!;
+        prompt.Should().Contain("EXACTLY ONE sentence").And.Contain("Lead with the insight");
+        prompt.Should().Contain("Name the specific habit").And.Contain("Read (pending)");
+        prompt.Should().Contain("A recap of completed activities is not an insight");
+        prompt.Should().Contain("Never invent numbers");
+        prompt.Should().Contain("Never praise consistency when skipped or missed is nonzero");
+        prompt.Should().Contain("Never attribute the app-wide streak to a single habit");
+        prompt.Should().Contain("never congratulate it").And.Contain("Never praise a skip or nudge it again");
+        prompt.Should().Contain(languageName);
+        request.GetProperty("model").GetString().Should().Be("gpt-6-luna");
+        request.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        request.TryGetProperty("temperature", out _).Should().BeFalse();
     }
 
     [Fact]

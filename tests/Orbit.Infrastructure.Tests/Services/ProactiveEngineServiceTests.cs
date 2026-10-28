@@ -26,6 +26,47 @@ public sealed class ProactiveEngineServiceTests
 {
     private static readonly DateOnly Today = new(2030, 10, 14);
 
+    [Fact]
+    public async Task MessageVocabulary_IncludesInactiveTitlesOnlyFromTheAccount()
+    {
+        using var h = new Harness(19);
+        var open = HabitFor(h.User.Id);
+        var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, h.User.Id, "Finished", null, null, Today)).Value;
+        completed.Log(Today).IsSuccess.Should().BeTrue();
+        completed.IsCompleted.Should().BeTrue();
+        var deleted = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, h.User.Id, "Archived habit",
+            FrequencyUnit.Day, 1, Today.AddDays(-20))).Value;
+        deleted.SoftDelete();
+        var general = Habit.Create(new HabitCreateParams(HabitSchedule.General, h.User.Id, "Ideas", null, null, Today)).Value;
+        h.Db.Habits.AddRange(open, completed, deleted, general);
+        var active = h.SeedGoal();
+        var completedGoal = Goal.Create(new Goal.CreateGoalParams(h.User.Id, "Completed goal", 1, "step", Deadline: Today.AddDays(-1))).Value;
+        completedGoal.MarkCompleted().IsSuccess.Should().BeTrue();
+        var abandonedGoal = Goal.Create(new Goal.CreateGoalParams(h.User.Id, "Abandoned goal", 1, "step", Deadline: Today.AddDays(-1))).Value;
+        abandonedGoal.MarkAbandoned().IsSuccess.Should().BeTrue();
+        var deletedGoal = Goal.Create(new Goal.CreateGoalParams(h.User.Id, "Archived goal", 1, "step", Deadline: Today.AddDays(-1))).Value;
+        deletedGoal.SoftDelete();
+        h.Db.Goals.AddRange(completedGoal, abandonedGoal, deletedGoal);
+        var other = User.Create("Other", "other@example.com").Value;
+        other.GrantLifetimePro();
+        other.SetTimeZone("UTC");
+        h.Db.Users.Add(other);
+        h.Db.Habits.Add(HabitFor(other.Id));
+        h.Db.Goals.Add(Goal.Create(new Goal.CreateGoalParams(other.Id, "Other goal", 1, "step")).Value);
+
+        await h.Run();
+
+        string[] expected = ["Read", "Finished", "Archived habit", "Ideas", "Learn", "Completed goal", "Abandoned goal", "Archived goal"];
+        await h.Messages.Received().GenerateAsync(Arg.Any<ProactiveFacts>(), "en",
+            Arg.Is<IReadOnlyCollection<string>>(titles => titles.Count == expected.Length && expected.All(titles.Contains)),
+            Arg.Any<CancellationToken>());
+        var facts = JsonSerializer.Deserialize<ProactiveFacts>((await h.Db.ProactiveItems.SingleAsync(i =>
+            i.UserId == h.User.Id && i.Trigger == ProactiveTrigger.EveningCheckin)).FactsJson)!;
+        facts.HabitTitles.Should().Equal(open.Title);
+        h.Db.ProactiveItems.Where(i => i.UserId == h.User.Id && i.Trigger == ProactiveTrigger.GoalBehind)
+            .Select(i => i.GoalId).Should().Equal(active.Id);
+    }
+
     [Theory]
     [InlineData(19, ProactiveTrigger.EveningCheckin, 3)]
     [InlineData(8, ProactiveTrigger.MorningPlan, 5)]
@@ -915,6 +956,7 @@ public sealed class ProactiveEngineServiceTests
         public ICalendarEventFetcher Calendar { get; } = Substitute.For<ICalendarEventFetcher>();
         public IPushNotificationService Push { get; } = Substitute.For<IPushNotificationService>();
         public IProductAnalytics Analytics { get; } = Substitute.For<IProductAnalytics>();
+        public IProactiveCheckinMessageService Messages { get; } = Substitute.For<IProactiveCheckinMessageService>();
         public ProactiveEngineService Engine { get; }
         public FeatureFlagService Flags { get; }
 
@@ -926,8 +968,7 @@ public sealed class ProactiveEngineServiceTests
             User.SetTimeZone("UTC");
             User.SetWeekStartDay(0);
             Db.Users.Add(User);
-            var messages = Substitute.For<IProactiveCheckinMessageService>();
-            messages.GenerateAsync(Arg.Any<ProactiveFacts>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            Messages.GenerateAsync(Arg.Any<ProactiveFacts>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
                 .Returns(call => AiProactiveCheckinMessageService.Template(call.Arg<ProactiveFacts>(), call.Arg<string>()));
             var tokens = Substitute.For<IGoogleTokenService>();
             tokens.GetValidAccessTokenAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns("access");
@@ -935,7 +976,7 @@ public sealed class ProactiveEngineServiceTests
             var dates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
                 new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())), Clock);
             Flags = new(Db, _flagCache, Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
-            Engine = new(Db, Clock, messages, Push, Calendar, tokens, Analytics, dates, Flags,
+            Engine = new(Db, Clock, Messages, Push, Calendar, tokens, Analytics, dates, Flags,
                 NullLogger<ProactiveEngineService>.Instance);
         }
 

@@ -43,7 +43,7 @@ public class ProactiveEngineConcurrencyTests
                 return new Dictionary<Guid, IReadOnlyList<string>> { [user.Id] = [FeatureFlagKeys.CalendarIntegration] };
             });
         var messages = Substitute.For<IProactiveCheckinMessageService>();
-        messages.GenerateAsync(Arg.Any<ProactiveFacts>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        messages.GenerateAsync(Arg.Any<ProactiveFacts>(), Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>())
             .Returns(new ProactiveMessage("Plan your day.", "Plan", "Help me plan."));
         var tokens = Substitute.For<IGoogleTokenService>();
         tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(call =>

@@ -65,8 +65,8 @@ public sealed partial class ProactiveEngineService(
         var logs = await db.HabitLogs.AsNoTracking().Where(l => habitIds.Contains(l.HabitId)).ToListAsync(ct);
         var logsByHabit = logs.ToLookup(l => l.HabitId);
         foreach (var habit in habits) habit.LoadScheduleLogsForRead(logsByHabit[habit.Id]);
-        var goals = await db.Goals.AsNoTracking().Include(g => g.Habits)
-            .Where(g => ids.Contains(g.UserId) && g.Status == GoalStatus.Active).ToListAsync(ct);
+        var goals = await db.Goals.IgnoreQueryFilters().AsNoTracking().Include(g => g.Habits)
+            .Where(g => ids.Contains(g.UserId)).ToListAsync(ct);
         var byId = habits.ToDictionary(h => h.Id);
         foreach (var goal in goals)
         {
@@ -119,6 +119,9 @@ public sealed partial class ProactiveEngineService(
         int localHour, List<ProactiveFacts> facts, List<ProactiveItem> items, CancellationToken ct)
     {
         var pushedToday = items.Any(i => i.LocalDate == today && i.PushedAtUtc.HasValue);
+        var accountTitles = batch.Habits.Where(h => h.UserId == user.Id).Select(h => h.Title)
+            .Concat(batch.Goals.Where(g => g.UserId == user.Id).Select(g => g.Title))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         foreach (var fact in facts.OrderBy(f => f.Trigger))
         {
             if (!ProactiveRules.InWindow(fact.Trigger, localHour)
@@ -128,7 +131,7 @@ public sealed partial class ProactiveEngineService(
                 && i.GoalId == fact.GoalId && i.LocalDate > today.AddDays(-ProactiveRules.GoalCooldownDays))) continue;
 
             using var aiUser = Orbit.Infrastructure.AI.AiCallContext.Begin(user.Id);
-            var message = await messages.GenerateAsync(fact, user.Language ?? "en", ct);
+            var message = await messages.GenerateAsync(fact, user.Language ?? "en", accountTitles, ct);
             var shouldPush = !pushedToday && ProactiveRules.MayPush(fact.Trigger)
                 && user.ProactiveAstraEnabled && !ProactiveRules.IsQuiet(localHour);
             var item = NewItem(user, today, nowUtc, fact, message);
@@ -216,20 +219,26 @@ public sealed partial class ProactiveEngineService(
         if (CalendarAllowed(batch, user) && calendarDay?.TimedEventCount is { } count
             && (count >= ProactiveRules.BusyEventMinimum || calendarDay.TimedMinutes >= ProactiveRules.BusyMinutesMinimum))
             result.Add(new(ProactiveTrigger.BusyCalendarDay, [], TimedEventCount: count, TimedMinutes: calendarDay.TimedMinutes));
-        foreach (var goal in batch.Goals.Where(g => g.UserId == user.Id).OrderBy(g => g.Deadline).ThenBy(g => g.Id))
-        {
-            GoalProgressSyncService.ApplyReadValue(goal, today, user.WeekStartDay);
-            if (goal.CurrentValue >= goal.TargetValue) continue;
-            var metrics = GoalMetricsCalculator.Calculate(goal, today, user.WeekStartDay);
-            if (metrics.TrackingStatus is "behind" or "at_risk")
-                result.Add(new(ProactiveTrigger.GoalBehind, [], GoalId: goal.Id, GoalTitle: goal.Title,
-                    TrackingStatus: metrics.TrackingStatus));
-        }
+        result.AddRange(GoalFacts(batch, user, today));
         var review = WeeklyFacts(allHabits, user, today, timeZone);
         if (review is not null) result.Add(review);
         if (due.Count > 0)
             result.Add(new(ProactiveTrigger.MorningPlan, due.Select(h => h.Title).ToList(), due.Count));
         return result;
+    }
+
+    private static IEnumerable<ProactiveFacts> GoalFacts(Batch batch, User user, DateOnly today)
+    {
+        foreach (var goal in batch.Goals.Where(g => g.UserId == user.Id && !g.IsDeleted && g.Status == GoalStatus.Active)
+            .OrderBy(g => g.Deadline).ThenBy(g => g.Id))
+        {
+            GoalProgressSyncService.ApplyReadValue(goal, today, user.WeekStartDay);
+            if (goal.CurrentValue >= goal.TargetValue) continue;
+            var metrics = GoalMetricsCalculator.Calculate(goal, today, user.WeekStartDay);
+            if (metrics.TrackingStatus is "behind" or "at_risk")
+                yield return new(ProactiveTrigger.GoalBehind, [], GoalId: goal.Id, GoalTitle: goal.Title,
+                    TrackingStatus: metrics.TrackingStatus);
+        }
     }
 
     private static List<Habit> ScheduledForAction(List<Habit> habits, DateOnly today, int weekStartDay) =>
