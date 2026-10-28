@@ -17,7 +17,8 @@ allowed account and `ASPNETCORE_ENVIRONMENT=Staging`. API keys and OAuth credent
 cannot use them. Production and Development reject them even with an allowlist.
 The account always comes from the session, with no request account selector.
 Unauthenticated requests receive 401; callers outside the fixture boundary receive
-403. Responses cannot be cached. The fixture is not a chat or MCP capability.
+403. Responses cannot be cached. The fixture has REST cross-references in the
+pending-operation capability catalog but is not exposed as a chat or MCP tool.
 
 ## Contract
 

@@ -13,6 +13,7 @@ using Orbit.Application.Behaviors;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Validators;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -55,6 +56,8 @@ public class StagingEvalPendingOperationsTests
         var owner = Guid.NewGuid();
         var foreign = Guid.NewGuid();
         var catalog = new AgentCatalogService();
+        var operationIds = catalog.GetCapabilities().SelectMany(item => item.ChatToolNames ?? [])
+            .Concat(catalog.GetOperations().Select(item => item.Id)).Distinct(StringComparer.Ordinal).ToArray();
         var capability = catalog.GetCapabilityByChatTool("delete_habit")!;
         var approved = Create(owner, "delete_habit", capability);
         database.Context.PendingAgentOperations.Add(approved);
@@ -67,8 +70,8 @@ public class StagingEvalPendingOperationsTests
 
         for (var attempt = 0; attempt < 2; attempt++)
         {
-            var states = catalog.GetOperations().Select(operation => Create(owner, operation.Id, capability)).ToList();
-            states.Add(Create(owner, AccountChangeSet.OperationName, capability));
+            var states = operationIds.Select(operationId => Create(owner, operationId,
+                catalog.GetCapabilityByChatTool(operationId) ?? capability)).ToList();
             var expired = Create(owner, "expired_preview", capability, expired: true);
             states.Add(expired);
             var legacy = Create(owner, "legacy_preview", capability);
@@ -76,6 +79,15 @@ public class StagingEvalPendingOperationsTests
             database.Context.PendingAgentOperations.AddRange(states);
             database.Context.Entry(legacy).Property(item => item.ArgumentSchemaVersion).CurrentValue = 0;
             database.Context.SaveChanges();
+            var member = states.First(item => item.OperationId == "delete_habit");
+            var execution = new PendingAgentOperationStore(database.Context, Options.Create(new AgentPlatformSettings()))
+                .GetExecution(owner, member.Id)! with
+            { PreviewFingerprint = "member-preview" };
+            var changeSet = Create(owner, AccountChangeSet.OperationName, capability,
+                argumentsJson: AccountChangeSet.BuildArguments([execution]).GetRawText());
+            database.Context.PendingAgentOperations.Add(changeSet);
+            database.Context.SaveChanges();
+            states.Add(changeSet);
             database.Context.ConversationTurns.Should().BeEmpty();
             var expected = states.Count + (attempt == 0 ? 1 : 0);
 
@@ -120,15 +132,16 @@ public class StagingEvalPendingOperationsTests
         return JsonSerializer.SerializeToElement(response.Value, options);
     }
 
-    private static PendingAgentOperationState Create(Guid owner, string operationId, AgentCapability capability, bool expired = false)
+    private static PendingAgentOperationState Create(Guid owner, string operationId, AgentCapability capability,
+        bool expired = false, string argumentsJson = "{}")
         => PendingAgentOperationState.Create(new()
         {
             UserId = owner,
             Capability = capability,
             OperationId = operationId,
-            ArgumentsJson = "{}",
+            ArgumentsJson = argumentsJson,
             Summary = "Preview from an earlier eval",
-            OperationFingerprint = Guid.NewGuid().ToString(),
+            OperationFingerprint = AgentOperationFingerprint.Compute(operationId, argumentsJson),
             Surface = AgentExecutionSurface.Chat,
             ExpiresAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(expired ? -10 : 10)
         });
