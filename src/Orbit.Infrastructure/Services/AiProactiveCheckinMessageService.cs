@@ -47,6 +47,9 @@ public sealed partial class AiProactiveCheckinMessageService(
         }
     }
 
+    private static readonly CultureInfo PortugueseCulture = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo EnglishCulture = CultureInfo.GetCultureInfo("en-US");
+
     internal sealed record ProactiveLine(string? Text, string[]? HabitTitles, string[]? GoalTitles);
 
     internal static string BuildSystemPrompt(string language) => $"You are Astra. {LanguageInstruction(language)} "
@@ -235,7 +238,8 @@ public sealed partial class AiProactiveCheckinMessageService(
                     : "Mostre meus hábitos desta manhã e me ajude a escolher por onde começar."),
             (ProactiveTrigger.RestartAfterMiss, false) => new(
                 text,
-                "Pick a habit", HasRealMiss(facts) ? "Show my habits for today and help me choose a small step to start again."
+                HasRealMiss(facts) ? "Get back to a habit" : "Pick a habit",
+                HasRealMiss(facts) ? "Show my habits for today and help me choose a small step to start again."
                     : "Show my habits for this morning and help me choose where to start."),
             (ProactiveTrigger.EveningCheckin, true) => new(
                 text,
@@ -251,16 +255,16 @@ public sealed partial class AiProactiveCheckinMessageService(
                 "Shape my day", "Look at my calendar and habits for today and help me choose a step that fits."),
             (ProactiveTrigger.GoalBehind, true) => new(
                 text,
-                "Ver próximo passo", $"Veja a meta de id {facts.GoalId} e me ajude a escolher o próximo passo com base no progresso atual."),
+                "Ver próximo passo", $"Veja {(string.IsNullOrWhiteSpace(facts.GoalTitle) ? "minha meta" : $"minha meta \"{facts.GoalTitle}\"")} e me ajude a escolher o próximo passo com base no progresso atual."),
             (ProactiveTrigger.GoalBehind, false) => new(
                 text,
-                "See next step", $"Look at goal id {facts.GoalId} and help me choose the next step based on its current progress."),
+                "See next step", $"Look at {(string.IsNullOrWhiteSpace(facts.GoalTitle) ? "my goal" : $"my goal \"{facts.GoalTitle}\"")} and help me choose the next step based on its current progress."),
             (ProactiveTrigger.WeeklyReview, true) => new(
                 text,
-                "Rever minha semana", $"Mostre minha retrospectiva semanal de {facts.PeriodFrom:yyyy-MM-dd} a {facts.PeriodTo:yyyy-MM-dd}."),
+                "Rever minha semana", string.Create(PortugueseCulture, $"Mostre minha retrospectiva da semana de {facts.PeriodFrom:d 'de' MMMM} a {facts.PeriodTo:d 'de' MMMM}.")),
             (ProactiveTrigger.WeeklyReview, false) => new(
                 text,
-                "Review my week", $"Show my weekly retrospective from {facts.PeriodFrom:yyyy-MM-dd} to {facts.PeriodTo:yyyy-MM-dd}."),
+                "Review my week", string.Create(EnglishCulture, $"Show my weekly retrospective from {facts.PeriodFrom:MMMM d} to {facts.PeriodTo:MMMM d}.")),
             (ProactiveTrigger.MorningPlan, true) => new(
                 text,
                 "Ver meu dia", "Mostre meus hábitos previstos para hoje e me ajude a escolher por onde começar."),
@@ -274,7 +278,7 @@ public sealed partial class AiProactiveCheckinMessageService(
     private static string FitTemplateText(ProactiveFacts facts, bool pt)
     {
         var titles = facts.HabitTitles.Where(title => !string.IsNullOrWhiteSpace(title) && !title.Any(char.IsControl)).Take(3).ToList();
-        var goal = facts.GoalTitle?.Any(char.IsControl) == true ? null : facts.GoalTitle;
+        var goal = string.IsNullOrWhiteSpace(facts.GoalTitle) || facts.GoalTitle.Any(char.IsControl) ? null : facts.GoalTitle;
         while (true)
         {
             var text = TemplateText(facts, pt, FormatHabits(facts, titles, pt), goal);
@@ -306,27 +310,25 @@ public sealed partial class AiProactiveCheckinMessageService(
         return (facts.Trigger, pt) switch
         {
             (ProactiveTrigger.RestartAfterMiss, true) => HasRealMiss(facts)
-                ? $"Nesta manhã, comece pelo que cabe: {habits}; sem tentar compensar ontem."
-                : $"Nesta manhã, escolha por onde começar: {habits}.",
+                ? $"Hoje de manhã, comece pelo que cabe: {habits}; sem precisar compensar ontem."
+                : $"Hoje de manhã, escolha por onde começar: {habits}.",
             (ProactiveTrigger.RestartAfterMiss, false) => HasRealMiss(facts)
                 ? $"This morning, choose a starting point: {habits}; no need to make up for yesterday."
                 : $"This morning, choose a starting point: {habits}.",
-            (ProactiveTrigger.EveningCheckin, true) => facts.TotalCompletions.HasValue
-                ? string.Create(CultureInfo.InvariantCulture, $"Com {facts.TotalCompletions} conclusões hoje, escolha o que cabe nesta noite: {habits}.")
-                : $"Para esta noite, escolha o que cabe: {habits}.",
-            (ProactiveTrigger.EveningCheckin, false) => facts.TotalCompletions.HasValue
-                ? string.Create(CultureInfo.InvariantCulture, $"With {facts.TotalCompletions} completed today, choose what fits tonight: {habits}.")
+            (ProactiveTrigger.EveningCheckin, true) => facts.TotalCompletions is > 0
+                ? string.Create(CultureInfo.InvariantCulture, $"Você já concluiu {facts.TotalCompletions} {(facts.TotalCompletions == 1 ? "hábito" : "hábitos")} hoje; para a noite, escolha o que cabe: {habits}.")
+                : $"Hoje à noite, escolha o que cabe: {habits}.",
+            (ProactiveTrigger.EveningCheckin, false) => facts.TotalCompletions is > 0
+                ? string.Create(CultureInfo.InvariantCulture, $"With {facts.TotalCompletions} {(facts.TotalCompletions == 1 ? "habit" : "habits")} done today, choose what fits tonight: {habits}.")
                 : $"Choose what fits tonight: {habits}.",
             (ProactiveTrigger.BusyCalendarDay, true) => string.Create(CultureInfo.InvariantCulture,
-                $"Com {facts.TimedEventCount} eventos hoje, escolha um intervalo antes de encaixar um hábito."),
+                $"Com {facts.TimedEventCount} {(facts.TimedEventCount == 1 ? "evento" : "eventos")} hoje, escolha um intervalo antes de encaixar um hábito."),
             (ProactiveTrigger.BusyCalendarDay, false) => string.Create(CultureInfo.InvariantCulture,
-                $"With {facts.TimedEventCount} events today, choose a gap before fitting in a habit."),
+                $"With {facts.TimedEventCount} {(facts.TimedEventCount == 1 ? "event" : "events")} today, choose a gap before fitting in a habit."),
             (ProactiveTrigger.GoalBehind, true) => $"Para {goal ?? "sua meta"}, escolha um próximo passo menor que caiba no seu dia.",
             (ProactiveTrigger.GoalBehind, false) => $"For {goal ?? "your goal"}, choose a smaller next step that fits your day.",
-            (ProactiveTrigger.WeeklyReview, true) => string.Create(CultureInfo.InvariantCulture,
-                $"Semana passada: {facts.TotalCompletions} conclusões e {facts.BadHabitSlips ?? 0} deslizes; escolha o que manter ou ajustar."),
-            (ProactiveTrigger.WeeklyReview, false) => string.Create(CultureInfo.InvariantCulture,
-                $"Last week: {facts.TotalCompletions} completions and {facts.BadHabitSlips ?? 0} slips; choose what to keep or adjust."),
+            (ProactiveTrigger.WeeklyReview, true) => "Olhe a semana passada e escolha o que manter ou ajustar.",
+            (ProactiveTrigger.WeeklyReview, false) => "Look back at last week and choose what to keep or adjust.",
             (ProactiveTrigger.MorningPlan, true) => $"Para começar a manhã, escolha o que cabe: {habits}.",
             (ProactiveTrigger.MorningPlan, false) => $"This morning, choose your starting point: {habits}.",
             _ => throw new ArgumentOutOfRangeException(nameof(facts))

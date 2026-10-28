@@ -567,4 +567,59 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
             };
         }
     }
+
+    [Theory]
+    [InlineData("en", 1, "With 1 habit done today, choose what fits tonight: Read.")]
+    [InlineData("en", 0, "Choose what fits tonight: Read.")]
+    [InlineData("pt-BR", 1, "Você já concluiu 1 hábito hoje; para a noite, escolha o que cabe: Read.")]
+    [InlineData("pt-BR", 0, "Hoje à noite, escolha o que cabe: Read.")]
+    public void EveningTemplate_NamesOneCompletionInTheSingularAndOmitsZero(string locale, int completions, string expected)
+    {
+        var facts = new ProactiveFacts(ProactiveTrigger.EveningCheckin, ["Read"], HabitCount: 1, TotalCompletions: completions);
+
+        AiProactiveCheckinMessageService.Template(facts, locale).Text.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", 1, "With 1 event today, choose a gap before fitting in a habit.")]
+    [InlineData("pt-BR", 1, "Com 1 evento hoje, escolha um intervalo antes de encaixar um hábito.")]
+    [InlineData("pt-BR", 3, "Com 3 eventos hoje, escolha um intervalo antes de encaixar um hábito.")]
+    public void BusyDayTemplate_AgreesWithTheEventCount(string locale, int events, string expected)
+    {
+        var facts = new ProactiveFacts(ProactiveTrigger.BusyCalendarDay, [], TimedEventCount: events, TimedMinutes: 60);
+
+        AiProactiveCheckinMessageService.Template(facts, locale).Text.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", "Learn", "For Learn, choose a smaller next step that fits your day.", "Look at my goal \"Learn\" and help me choose the next step based on its current progress.")]
+    [InlineData("en", " ", "For your goal, choose a smaller next step that fits your day.", "Look at my goal and help me choose the next step based on its current progress.")]
+    [InlineData("pt-BR", null, "Para sua meta, escolha um próximo passo menor que caiba no seu dia.", "Veja minha meta e me ajude a escolher o próximo passo com base no progresso atual.")]
+    public void GoalTemplate_NamesTheGoalAndNeverItsId(string locale, string? title, string expectedText, string expectedPrompt)
+    {
+        var goalId = Guid.NewGuid();
+        var facts = new ProactiveFacts(ProactiveTrigger.GoalBehind, [], GoalId: goalId, GoalTitle: title, TrackingStatus: "behind");
+
+        var message = AiProactiveCheckinMessageService.Template(facts, locale);
+
+        message.Text.Should().Be(expectedText);
+        message.ActionPrompt.Should().Be(expectedPrompt).And.NotContain(goalId.ToString());
+    }
+
+    [Theory]
+    [InlineData("en", "Look back at last week and choose what to keep or adjust.", "Show my weekly retrospective from October 7 to October 13.")]
+    [InlineData("pt-BR", "Olhe a semana passada e escolha o que manter ou ajustar.", "Mostre minha retrospectiva da semana de 7 de outubro a 13 de outubro.")]
+    public void WeeklyTemplate_ShowsNoTallyAndReadableDates(string locale, string expectedText, string expectedPrompt)
+    {
+        var message = AiProactiveCheckinMessageService.Template(Facts(ProactiveTrigger.WeeklyReview), locale);
+
+        message.Text.Should().Be(expectedText);
+        message.ActionPrompt.Should().Be(expectedPrompt);
+    }
+
+    [Theory]
+    [InlineData("en", "Get back to a habit")]
+    [InlineData("pt-BR", "Retomar um hábito")]
+    public void RestartTemplate_LabelsARealMissAsGettingBack(string locale, string expectedLabel) =>
+        AiProactiveCheckinMessageService.Template(Facts(ProactiveTrigger.RestartAfterMiss), locale).ActionLabel.Should().Be(expectedLabel);
 }
