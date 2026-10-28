@@ -86,7 +86,7 @@ internal static class ChatResponseNegotiation
 
     private static bool Supported(string kind, object? value, AgentClientContext? client, IReadOnlyList<string> flags) =>
         value is not null && client?.PartKinds?.Contains(kind, StringComparer.Ordinal) == true
-        && ProcessUserChatCommandHandler.ReadSubtypeEnabled(value, client)
+        && ProcessUserChatCommandHandler.ReadSubtypeEnabled(value, client, flags.Contains(FeatureFlagKeys.AstraBlockFirst))
         && (kind switch
         {
             "choice" or "pickList" or "question" => !flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled),

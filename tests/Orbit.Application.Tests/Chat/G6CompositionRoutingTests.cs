@@ -270,7 +270,8 @@ public partial class ProcessUserChatCommandHandlerTests
             PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<HabitListCard>().Which.Items.Should().BeEmpty();
         result.Value.RelatedSurfaces.Should().Contain("today");
         await AssertNoCompositionContinuation();
     }

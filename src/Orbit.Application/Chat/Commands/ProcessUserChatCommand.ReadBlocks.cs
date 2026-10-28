@@ -169,19 +169,21 @@ public partial class ProcessUserChatCommandHandler
         }, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     }
 
-    internal static bool ReadSubtypeEnabled(object block, AgentClientContext? client) => block switch
+    internal static bool ReadSubtypeEnabled(object block, AgentClientContext? client, bool blockFirst = false) => block switch
     {
         PeriodTotalCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
         PeriodComparisonCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
         HabitListCard { SkippedIds.Count: > 0 } => false,
-        HabitListCard card when card.Read is { } read && HabitReadMessages.IsMissingMetricsLookup(new("habitList", card, read)) => false,
+        HabitListCard card when (!blockFirst || client?.SupportsParts != true) && card.Read is { } read
+            && HabitReadMessages.IsMissingMetricsLookup(new("habitList", card, read)) => false,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
         RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
         _ => true
     };
 
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
-        ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client);
+        ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client,
+            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst));
 
     internal static string ReadFallback(object block, string? language, string? timeZone = null) =>
         new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone).Format(block);
