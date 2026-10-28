@@ -1,0 +1,26 @@
+{
+  "caseId": "edge-skipped-pt",
+  "repeat": 3,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "relative_period": "today",
+        "search": "Caminhada",
+        "date": "today",
+        "include_overdue": false,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

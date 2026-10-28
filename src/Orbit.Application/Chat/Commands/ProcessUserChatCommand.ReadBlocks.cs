@@ -173,7 +173,8 @@ public partial class ProcessUserChatCommandHandler
     {
         PeriodTotalCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
         PeriodComparisonCard { Metric: "completedHabits" } => client?.SupportsCompletedHabitsMetric == true,
-        HabitListCard { SkippedIds.Count: > 0 } => false,
+        HabitListCard card when client?.SupportsSkippedHabitRows != true
+            && card.Items.Any(item => HabitReadMessages.IsSkipped(card, item)) => false,
         HabitListCard card when (!blockFirst || client?.SupportsParts != true) && card.Read is { } read
             && HabitReadMessages.IsMissingMetricsLookup(new("habitList", card, read)) => false,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,

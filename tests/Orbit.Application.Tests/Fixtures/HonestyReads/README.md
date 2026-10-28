@@ -51,3 +51,15 @@ exercise the real ask tool, validator, domain guard and handler composition,
 assert a stored typed selection and verify that only argument checks run, with
 no preview, write or model continuation. Question-form introductions remain
 covered by their existing round-trip test.
+
+The `g6rerun-` captures retain `caseId`, `repeat` and `toolCalls` from the Gate 6
+rerun on staging API `cd9f6401`, harness `ad302ad51`. Re-derive them by retaining
+those fields from the corresponding `g6rerun-reports/attempts` JSON file, removing
+the `g6rerun-` filename prefix. None contains `revise_pending_changes`. The skipped
+habit r2 and r3 are independent reads, so the harness's pending-preview isolation
+limitation does not affect them. The current r1 used history instead; the tool
+descriptions direct daily state questions to `query_habits` without rewriting calls.
+The missing-habit capture is already a declared-complete read. The two partial-list
+captures preserve limits 100 and 50; replay verifies truthful complete and partial
+metadata against the actual 51-habit producer. The three-row visible preview does
+not establish that the source query was paged.

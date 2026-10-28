@@ -11,6 +11,7 @@ using Orbit.Application.Chat;
 using Orbit.Application.Chat.Queries;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -43,6 +44,49 @@ public sealed class ReadBlockScopeTests
         _dates.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"));
         _flags.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
         _blocks = new(_dates, _tokens, _users);
+    }
+
+    [Fact]
+    public async Task G6Rerun_SkippedScheduleRefreshRetainsItsDateAfterLocalMidnight()
+    {
+        _users.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(User.Create("Reader", "reader@example.test").Value);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Caminhada", FrequencyUnit.Day, 1, _day)).Value;
+        habit.SkipFlexible(_day).IsSuccess.Should().BeTrue();
+        var habits = Substitute.For<IGenericRepository<Habit>>();
+        habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(new[] { habit });
+        var logs = Substitute.For<IHabitScheduleLogReader>();
+        logs.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { new HabitScheduleLogDay(habit.Id, _day, 0, 1, true) });
+        var tool = new QueryHabitsTool(habits, _users, _dates, logs);
+        var executor = Executor(tool);
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{\"date\":\"today\",\"is_completed\":null}"),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+        var original = initial.Operation.ReadBlock!;
+        var row = JsonSerializer.SerializeToElement(((HabitListCard)original.Block).Items.Single(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        row.TryGetProperty("isSkippedOnDate", out var skipped).Should().BeTrue();
+        skipped.GetBoolean().Should().BeTrue();
+        _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_day.AddDays(1));
+        var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true,
+            SupportsSkippedHabitRows: true);
+
+        (await refresh.Handle(new(_userId, original.Read.RefreshToken, client), default)).ErrorCode.Should().Be(ErrorMessages.NoPermission.Code);
+        foreach (var supportsSkipped in new bool?[] { null, false })
+            (await refresh.Handle(new(_userId, original.Read.RefreshToken,
+                client with { SupportsDatedHabitListCard = true, SupportsSkippedHabitRows = supportsSkipped }), default))
+                .ErrorCode.Should().Be(ErrorMessages.NoPermission.Code);
+        var refreshed = await refresh.Handle(new(_userId, original.Read.RefreshToken,
+            client with { SupportsDatedHabitListCard = true }), default);
+
+        refreshed.IsSuccess.Should().BeTrue();
+        refreshed.Value.Read.QueryId.Should().Be(original.Read.QueryId);
+        var card = refreshed.Value.Block.Should().BeOfType<HabitListCard>().Subject;
+        card.Scope.Should().Be("date");
+        card.Date.Should().Be(_day);
+        var stored = JsonSerializer.SerializeToElement(card.Items.Single(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        stored.GetProperty("isSkippedOnDate").GetBoolean().Should().BeTrue();
+        card.Items.Single().Status.Should().Be("none");
     }
 
     [Theory]

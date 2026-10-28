@@ -289,7 +289,10 @@ public partial class ProcessUserChatCommandHandlerTests
         var tool = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
-        SetupAiResponse(ToolResponse(tool.Name, "page", JsonSerializer.Serialize(new { limit, orbit_read_complete = true })));
+        SetupAiResponse(HonestyReplay(limit == 100 ? "g6rerun-composition-partial-en-r1" : "g6rerun-composition-partial-en-r3"));
+
+        var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema()).GetProperty("properties").GetProperty("limit");
+        schema.GetProperty("description").GetString().Should().Contain("Use 50 unless").And.Contain("all habits");
 
         var result = await handler.Handle(new(UserId, "Show all my habits, including whether the list is incomplete.",
             ClientContext: new(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
@@ -300,6 +303,9 @@ public partial class ProcessUserChatCommandHandlerTests
         card.Read!.Completeness.Should().Be(completeness);
         card.Read.TotalCount.Should().Be(51);
         (card.Read.NextCursor is not null).Should().Be(limit == 50);
+        card.Read.Scope.GetProperty("limit").GetInt32().Should().Be(limit);
+        card.Read.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        AssertStoredComposition(result.Value);
         await AssertNoCompositionContinuation();
     }
 

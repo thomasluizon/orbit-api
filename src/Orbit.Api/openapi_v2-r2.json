@@ -16953,6 +16953,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsSkippedHabitRows": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -21440,6 +21446,12 @@
             "items": {
               "$ref": "#/components/schemas/HabitTagItem"
             }
+          },
+          "isSkippedOnDate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

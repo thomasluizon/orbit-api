@@ -71,6 +71,24 @@ The scope is `date` for a historical or future schedule, `today` for the resolve
 current day, and `all` for an undated query. An undated query retains its filters;
 `all` does not mean the payload contains every habit.
 
+Habit rows append optional nullable boolean `isSkippedOnDate`. Dated queries emit
+true for a skipped occurrence and false otherwise; undated queries omit it. The
+enclosing `date` remains authoritative after refresh and replay. The existing `status`
+enum is unchanged: skipped rows keep `none`. A day's completion or skip question uses
+`query_habits` with `date` and null `is_completed`, rather than inferring skip state
+from completion logs. A habit list containing a skipped row additionally requires
+`clientContext.supportsSkippedHabitRows: true`. Clients declare it only when they
+render `isSkippedOnDate` against the enclosing date. Omission, null or false keeps
+the localized typed skip text, including on stored replay. Dated query rows keep
+emitting `isSkippedOnDate` regardless of the requesting client's capabilities.
+
+The normal page size is 50, including an all-habits request; the model supplies another
+size only when requested. A 51-row result with limit 50 is partial and has a signed
+next cursor; limit 100 returns complete data. Consumer preview truncation cannot
+change source completeness. A complete, empty filtered read retains its `search`
+in exact query metadata and adds one short localized scope explanation after its
+empty block. It names the typed search term without deriving anything from the message.
+
 The chat builder carries the successful typed result into its block. Each read tool
 call gets its own query identity. A continuation result's `readDirective`, for example
 `[[orbit:read:call_1]]`, refers only to that call. An unqualified legacy directive
@@ -242,7 +260,8 @@ the original query's result, rather than an invented full-data claim.
 ```
 
 Success returns `{ kind, block, read }`. For existing kinds, send their existing
-card capability boolean as well. Dated habit lists also require
+card capability boolean as well. Habit lists containing skipped rows also require
+`supportsSkippedHabitRows: true`. Dated habit lists additionally require
 `supportsDatedHabitListCard: true`; habit history also requires
 `supportsHabitHistoryCard: true`. Every refresh rechecks these capabilities, including
 when a formerly current-day query becomes historical after local midnight. Set `page: true` only with `nextCursor`. Refresh

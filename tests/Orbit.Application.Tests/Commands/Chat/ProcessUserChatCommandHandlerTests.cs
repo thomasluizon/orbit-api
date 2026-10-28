@@ -3334,8 +3334,10 @@ public partial class ProcessUserChatCommandHandlerTests
         var expected = new List<string> { "dynamic prompt", HabitModelInstructions.TitleLanguage("en"), TerminalWriteDirective.Instruction, "dynamic supplement",
             HabitPlacementContext.Build([], "Show goals calendar notifications and my week"), RelativeReadPeriod.Instruction };
         var subtypeInstruction = "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
+            + "Habit lists with skipped rows require supportsSkippedHabitRows. "
             + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
             + "Dated habit lists supported: False. Habit history supported: False. "
+            + "Skipped habit rows supported: False. "
             + "For an unsupported subtype, answer from the queried facts in text.";
         if (supportsParts && !disabled)
         {

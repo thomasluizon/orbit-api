@@ -301,7 +301,8 @@ public record AgentClientContext(
     bool? SupportsFollowUpContext = null,
     bool? SupportsMessageAllowance = null,
     bool? SupportsPendingOperationPlacement = null,
-    bool? SupportsCompletedHabitsMetric = null);
+    bool? SupportsCompletedHabitsMetric = null,
+    bool? SupportsSkippedHabitRows = null);
 
 public record AgentContextSnapshot(
     string Plan,

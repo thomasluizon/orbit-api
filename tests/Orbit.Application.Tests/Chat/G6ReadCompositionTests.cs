@@ -73,7 +73,9 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("grounding-missing-pt-r1", true)]
     public async Task G6_CapturedSuccessfulHabitReadsKeepTheirTypedState(string capture, bool empty)
     {
-        SetupUserAndPayGate();
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(empty ? "pt-BR" : "en");
+        SetupUserAndPayGate(user);
         EnableComposition();
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
@@ -89,26 +91,59 @@ public partial class ProcessUserChatCommandHandlerTests
             StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue();
-        var card = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
-            .Which.Block.Should().BeOfType<HabitListCard>().Subject;
+        var card = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which
+            .Block.Should().BeOfType<HabitListCard>().Subject;
         card.Items.Should().HaveCount(empty ? 0 : 1);
         card.Read!.Completeness.Should().Be("complete");
         card.Read.TotalCount.Should().Be(empty ? 0 : 1);
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.AiMessage.Should().Be(empty ? "Nenhum hábito encontrado para “piano”." : null);
         if (empty) result.Value.RelatedSurfaces.Should().Contain("today");
         events.Should().NotContain(item => item.Type == "delta");
         await AssertNoCompositionContinuation();
         AssertStoredComposition(result.Value);
     }
 
-    private void AssertStoredComposition(ChatResponse response)
+    [Theory]
+    [InlineData("en", "No habit matches “violão azul”.")]
+    [InlineData("pt-BR", "Nenhum hábito encontrado para “violão azul”.")]
+    public async Task G6Rerun_EmptySearchContextComesOnlyFromTypedQuery(string language, string expected)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        EnableComposition();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<Habit>());
+        var tool = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        SetupAiResponse(ToolResponse(tool.Name, "search", "{\"search\":\"violão azul\",\"include_metrics\":false,\"orbit_read_complete\":true}"));
+        var events = new List<ChatStreamEvent>();
+
+        var result = await handler.Handle(new(UserId, "Continue.", ClientContext: new(SupportsParts: true,
+            PartKinds: ["habitList"], SupportsHabitListCard: true),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Parts!.First().Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<HabitListCard>()
+            .Which.Read!.Scope.GetProperty("search").GetString().Should().Be("violão azul");
+        result.Value.Parts.Should().HaveCount(2);
+        result.Value.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text.Should().Be(expected);
+        result.Value.AiMessage.Should().Be(expected);
+        result.Value.RelatedSurfaces.Should().Contain("today");
+        events.Should().NotContain(item => item.Type == "delta");
+        await AssertNoCompositionContinuation();
+        AssertStoredComposition(result.Value);
+    }
+
+    private void AssertStoredComposition(ChatResponse response, AgentClientContext? client = null, string? language = null)
     {
         var json = JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions);
         _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == json));
         var stored = JsonSerializer.Deserialize<ChatResponse>(json, ChatStreamEvent.SerializerOptions)!;
-        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "recordList"],
+        client ??= new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "recordList"],
             SupportsHabitListCard: true, SupportsRecordListCard: true, SupportsHabitListDoneStatus: true);
-        var replay = ChatResponseNegotiation.ForClient(stored, client, ["astra_block_first"]);
+        var replay = ChatResponseNegotiation.ForClient(stored, client, ["astra_block_first"], language);
         ChatStreamEvent.Final(replay).ToJson().Should().Be(ChatStreamEvent.Final(response).ToJson());
     }
 }
