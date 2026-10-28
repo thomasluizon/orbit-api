@@ -26,10 +26,11 @@ using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
-public class AiDailyBudgetTests
+public partial class AiDailyBudgetTests(ITestOutputHelper output)
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
 
@@ -135,7 +136,7 @@ public class AiDailyBudgetTests
             if (guard == "legacy")
             {
                 spent.Settle(0);
-                fixture.Database.Context.Entry(spent).Property<long>("ChargedTokens").CurrentValue = 200_000;
+                fixture.Database.Context.Entry(spent).Property<long>("ChargedTokens").CurrentValue = AppConfigKeys.DefaultProAiMicroDollarsPerWeek / 10;
             }
             fixture.Database.Context.AiBudgetCalls.Add(spent);
             await fixture.Database.Context.SaveChangesAsync();
@@ -197,7 +198,7 @@ public class AiDailyBudgetTests
     public async Task TypicalFreeWrites_FitUnderSpendCeiling()
     {
         const int messages = 5;
-        AppConfigKeys.DefaultFreeAiMicroDollarsPerDay.Should().Be(20_000);
+        AppConfigKeys.DefaultFreeAiMicroDollarsPerDay.Should().Be(1_000_000);
         using var fixture = new BudgetFixture();
         for (var call = 0; call < messages * 2; call++)
             await fixture.Client.CompleteTextAsync("system", "a typical write");
@@ -208,38 +209,6 @@ public class AiDailyBudgetTests
         read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().BeLessThan(20_000);
         read.AiUsageDaily.Single().TotalTokens.Should().Be(messages * 2 * 20_100);
         fixture.Handler.Completions.Should().Be(messages * 2);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    public async Task ProCompoundWrites_FitWeeklyBudgetFor250Messages(int weekStartDay)
-    {
-        using var fixture = new BudgetFixture(pro: true);
-        fixture.User.SetWeekStartDay(weekStartDay).IsSuccess.Should().BeTrue();
-        await fixture.Database.Context.SaveChangesAsync();
-        var weekStart = new DateOnly(2026, 1, weekStartDay == 0 ? 4 : 5);
-        for (var message = 0; message < 250; message++)
-        {
-            var localDate = weekStart.AddDays(message * 7 / 250);
-            fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(localDate);
-            for (var call = 0; call < 9; call++)
-            {
-                var reservation = await fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
-                await fixture.Budget.SettleAsync(reservation, call == 8 ? 703 : 702, default);
-            }
-        }
-
-        using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Count().Should().Be(2250);
-        read.AiBudgetCalls.Select(call => call.LocalDate).Distinct().Count().Should().Be(7);
-        read.AiBudgetCalls.Should().OnlyContain(call => call.IsSettled);
-        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(250 * 6319);
-
-        var nextCall = () => fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
-        await nextCall.Should().ThrowAsync<AiBudgetExceededException>();
-        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(7));
-        (await nextCall()).Should().NotBeEmpty();
     }
 
     [Theory]
@@ -260,7 +229,7 @@ public class AiDailyBudgetTests
         fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>())
             .Returns(_ => localDates.GetUserTodayAsync(fixture.User.TimeZone, fixture.User.Id));
         var localDate = await fixture.Dates.GetUserTodayAsync(fixture.User.Id);
-        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, localDate, 1_750_000));
+        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, localDate, AppConfigKeys.DefaultProAiMicroDollarsPerWeek));
         await fixture.Database.Context.SaveChangesAsync();
 
         var nextCall = () => fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
@@ -355,7 +324,7 @@ public class AiDailyBudgetTests
     public async Task ExhaustedUser_IsRefusedBeforeModel_WhileOtherUserProceeds(bool callsExhausted)
     {
         using var fixture = new BudgetFixture();
-        var row = AiBudgetCall.Reserve(fixture.User.Id, Today, callsExhausted ? 1 : 20_000);
+        var row = AiBudgetCall.Reserve(fixture.User.Id, Today, callsExhausted ? 1 : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay);
         fixture.Database.Context.AiBudgetCalls.Add(row);
         await fixture.Database.Context.SaveChangesAsync();
         if (callsExhausted)
@@ -446,6 +415,7 @@ public class AiDailyBudgetTests
     public async Task RepeatedDisconnectedStreams_HitDailyCeiling()
     {
         using var fixture = new BudgetFixture();
+        fixture.Config.GetAsync(AppConfigKeys.FreeAiMicroDollarsPerDay, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(20_000L);
         fixture.Handler.OmitTerminalEvent = true;
         var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
         var deltas = 0;
@@ -510,6 +480,7 @@ public class AiDailyBudgetTests
     public async Task DollarConfig_CanRaiseTheCeiling_AndPricesTheRequestedModel()
     {
         using var fixture = new BudgetFixture(model: "gpt-6.1-sol");
+        fixture.Config.GetAsync(AppConfigKeys.FreeAiMicroDollarsPerDay, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(20_000L);
         var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
         await blocked.Should().ThrowAsync<AiBudgetExceededException>();
         fixture.Handler.Completions.Should().Be(0);
@@ -525,6 +496,7 @@ public class AiDailyBudgetTests
     public async Task LegacyTokenRows_StillCountDuringRollingDeployments()
     {
         using var fixture = new BudgetFixture();
+        fixture.Config.GetAsync(AppConfigKeys.FreeAiMicroDollarsPerDay, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(20_000L);
         var legacy = AiBudgetCall.Reserve(fixture.User.Id, Today, 1);
         legacy.Settle(0);
         fixture.Database.Context.AiBudgetCalls.Add(legacy);
@@ -602,6 +574,7 @@ public class AiDailyBudgetTests
         internal BudgetedAiCompletionClient Client { get; }
         internal IAiDailyBudget Budget { get; }
         internal IAiUsageRecorder Recorder { get; }
+        internal IAiRequestCostEstimator Estimator { get; }
         internal List<JsonElement> EstimatedRequests { get; } = [];
         private readonly ServiceProvider _provider;
         private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _estimateCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
@@ -656,9 +629,9 @@ public class AiDailyBudgetTests
                     + request.RootElement.GetProperty("max_output_tokens").GetInt32() * price.OutputPerMillionUsd));
             });
             Budget = new AiDailyBudget(_provider.GetRequiredService<IServiceScopeFactory>());
+            Estimator = useLocalEstimator ? new AiRequestCostEstimator(_estimateCache, options) : estimates;
             Client = new BudgetedAiCompletionClient(raw, Budget,
-                Http, NullLogger<BudgetedAiCompletionClient>.Instance, useLocalEstimator
-                    ? new AiRequestCostEstimator(_estimateCache, options) : estimates);
+                Http, NullLogger<BudgetedAiCompletionClient>.Instance, Estimator);
         }
 
         internal void SetUser(Guid userId) => Http.HttpContext!.User = new ClaimsPrincipal(new ClaimsIdentity(

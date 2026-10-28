@@ -378,25 +378,25 @@ namespace Orbit.Infrastructure.Migrations
                         {
                             Key = "FreeAiCallsPerDay",
                             Description = "Daily AI call safety budget for Free users",
-                            Value = "45"
+                            Value = "110"
                         },
                         new
                         {
                             Key = "ProAiCallsPerWeek",
                             Description = "Weekly AI call safety budget for Pro users",
-                            Value = "2250"
+                            Value = "5500"
                         },
                         new
                         {
                             Key = "FreeAiMicroDollarsPerDay",
                             Description = "Daily AI safety budget for Free users in USD micro-dollars",
-                            Value = "20000"
+                            Value = "1000000"
                         },
                         new
                         {
                             Key = "ProAiMicroDollarsPerWeek",
                             Description = "Weekly AI safety budget for Pro users in USD micro-dollars",
-                            Value = "1750000"
+                            Value = "50000000"
                         },
                         new
                         {
