@@ -2,6 +2,8 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -195,6 +197,41 @@ public sealed class ReminderDoneTests : IDisposable
         response.Value.Single().ReminderAtUtc.Should().Be(_clock.Now.UtcDateTime.AddMinutes(-30));
         (await correction.Handle(new(Guid.NewGuid(), habit.Id, completed.Value.LogId, correctedAtUtc.AddMinutes(-1)), default))
             .IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task NextReminder_DoneAndDoseCorrectionMoveTheAuthoritativeReadback()
+    {
+        var (done, habit, token) = await Seed(HabitSchedule.General);
+        var db = _factory.Context;
+        var nowAtUtc = _clock.Now.UtcDateTime;
+        habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, habit.Description, habit.FrequencyUnit,
+            habit.FrequencyQuantity, [], false, habit.NextDueDate,
+            RepeatReminder: new(480, StartAtUtc: nowAtUtc.AddMinutes(-30).AddHours(-8)))).IsSuccess.Should().BeTrue();
+        await db.SaveChangesAsync();
+        var reader = new RepeatReminderReader(db, _dates, _clock);
+        var detail = new Orbit.Application.Habits.Queries.GetHabitByIdQueryHandler(new GenericRepository<Habit>(db),
+            new GenericRepository<HabitLog>(db), _dates, reader);
+        async Task<DateTime?> ReadNext() => (await detail.Handle(new(habit.UserId, habit.Id), default)).Value.NextReminderAtUtc;
+        (await ReadNext()).Should().Be(nowAtUtc);
+
+        var completed = await done.Handle(new(token), default);
+        completed.IsSuccess.Should().BeTrue();
+        (await ReadNext()).Should().Be(nowAtUtc.AddHours(8));
+        var correction = new CorrectHabitDoseCommandHandler(new GenericRepository<Habit>(db),
+            new UnitOfWork(db, new DatabaseConnectionSettings()), _dates, _cache);
+        (await correction.Handle(new(habit.UserId, habit.Id, completed.Value.LogId, nowAtUtc.AddMinutes(-10)), default))
+            .IsSuccess.Should().BeTrue();
+        (await ReadNext()).Should().Be(nowAtUtc.AddHours(8).AddMinutes(-10));
+        _clock.Now = new DateTimeOffset(nowAtUtc.AddHours(8).AddMinutes(-10));
+        using var services = new ServiceCollection().AddSingleton(db)
+            .AddSingleton(Substitute.For<IPushNotificationService>())
+            .AddSingleton<IReminderActionTokenService>(_tokens).BuildServiceProvider();
+        var scheduler = new ReminderSchedulerService(services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), _clock);
+        await scheduler.CheckAndSendReminders(default);
+        (await db.SentReminders.OrderByDescending(r => r.ReminderAtUtc).FirstAsync()).ReminderAtUtc
+            .Should().Be(_clock.Now.UtcDateTime);
     }
 
     [Theory]
