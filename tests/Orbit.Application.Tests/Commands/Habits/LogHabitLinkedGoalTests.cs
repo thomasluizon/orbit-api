@@ -40,7 +40,7 @@ public class LogHabitLinkedGoalTests
     public LogHabitLinkedGoalTests()
     {
         _unitOfWork.PassThroughTransactions<Result<LogHabitCommandHandler.PersistedLog>>();
-        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _userRepo);
+        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _userRepo, Substitute.For<IGenericRepository<SentReminder>>());
         var services = new LogHabitServices(
             _userDateService,
             _userStreakService,

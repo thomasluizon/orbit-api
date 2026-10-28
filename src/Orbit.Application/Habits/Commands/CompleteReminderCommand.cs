@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -11,6 +12,7 @@ public sealed record CompleteReminderCommand(string Token, Guid? RequestingUserI
 
 public sealed class CompleteReminderCommandHandler(
     IReminderActionTokenService tokens, IGenericRepository<Habit> habits, IGenericRepository<SentReminder> reminders,
+    IGenericRepository<HabitLog> logs,
     IUnitOfWork unitOfWork, IUserDateService dates, IMediator mediator, TimeProvider time)
     : IRequestHandler<CompleteReminderCommand, Result<LogHabitResponse>>
 {
@@ -40,13 +42,16 @@ public sealed class CompleteReminderCommandHandler(
             && r.ExpiresAtUtc == claims.ExpiresAtUtc && r.ParentReminderId == null, cancellationToken: ct);
         if (reminder is null || reminder.ConsumedAtUtc is not null)
             return Result.Failure<LogHabitResponse>(InvalidAction);
-        var result = await mediator.Send(new LogHabitCommand(claims.UserId, claims.HabitId,
+        var zone = await dates.GetUserTimeZoneAsync(claims.UserId, ct);
+        var anchors = await RepeatReminderDoseLoader.LoadLatestAsync(logs,
+            new Dictionary<Guid, TimeZoneInfo> { [habit.Id] = zone }, ct);
+        if (anchors.TryGetValue(habit.Id, out var doseAtUtc) && doseAtUtc >= claims.ReminderAtUtc)
+        {
+            reminder.TryConsume(nowAtUtc);
+            await unitOfWork.SaveChangesAsync(ct);
+            return Result.Failure<LogHabitResponse>(InvalidAction);
+        }
+        return await mediator.Send(new LogHabitCommand(claims.UserId, claims.HabitId,
             ToggleExisting: false, TakenAtUtc: nowAtUtc, ReminderAtUtc: claims.ReminderAtUtc), ct);
-        if (result.IsFailure)
-            return result;
-        if (!reminder.TryConsume(nowAtUtc))
-            throw new InvalidOperationException("The locked reminder action could not be consumed.");
-        await unitOfWork.SaveChangesAsync(ct);
-        return result;
     }
 }

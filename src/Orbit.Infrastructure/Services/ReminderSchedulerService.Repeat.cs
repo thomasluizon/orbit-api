@@ -29,26 +29,7 @@ public partial class ReminderSchedulerService
         var repeatIds = repeatHabits.Select(h => h.Id).ToList();
         var zones = repeatHabits.Where(h => users.ContainsKey(h.UserId)).ToDictionary(h => h.Id,
             h => TimeZoneHelper.FindTimeZone(users[h.UserId].TimeZone, logger, h.UserId));
-        var pendingIds = zones.Keys.ToList();
-        var excludedIds = new List<Guid>();
-        var anchors = new Dictionary<Guid, DateTime>();
-        while (pendingIds.Count > 0)
-        {
-            var candidates = await LatestRepeatDoseCandidates(dbContext, pendingIds, excludedIds).ToListAsync(ct);
-            pendingIds = [];
-            foreach (var dose in candidates)
-            {
-                var loggedDate = dose.LoggedOnLocalDate ?? DateOnly.FromDateTime(
-                    TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(dose.CreatedAtUtc, DateTimeKind.Utc), zones[dose.HabitId]));
-                if (dose.Date == loggedDate)
-                    anchors[dose.HabitId] = dose.TakenAtUtc ?? dose.CreatedAtUtc;
-                else
-                {
-                    excludedIds.Add(dose.Id);
-                    pendingIds.Add(dose.HabitId);
-                }
-            }
-        }
+        var anchors = await RepeatReminderDoseLoader.LoadLatestAsync(new GenericRepository<HabitLog>(dbContext), zones, ct);
         var recurringIds = repeatHabits.Where(h => h.Schedule == HabitSchedule.Recurring).Select(h => h.Id).ToList();
         var maxLocalDate = minLocalDate.AddDays(2);
         var loggedDates = (await dbContext.HabitLogs.AsNoTracking()
@@ -61,13 +42,6 @@ public partial class ReminderSchedulerService
 
         return (anchors, loggedDates, repeatSent);
     }
-
-    internal static IQueryable<HabitLog> LatestRepeatDoseCandidates(OrbitDbContext dbContext, List<Guid> habitIds,
-        List<Guid> excludedIds) => dbContext.HabitLogs.AsNoTracking()
-        .Where(l => habitIds.Contains(l.HabitId) && l.Value > 0 && !excludedIds.Contains(l.Id)
-            && (l.LoggedOnLocalDate == null || l.Date == l.LoggedOnLocalDate))
-        .GroupBy(l => l.HabitId)
-        .Select(g => g.OrderByDescending(l => l.TakenAtUtc ?? l.CreatedAtUtc).ThenByDescending(l => l.Id).First());
 
     private async Task ProcessRepeatReminders(ReminderSnapshot snapshot, OrbitDbContext db,
         List<PendingReminderPush> pending, DateTime nowAtUtc, CancellationToken ct)

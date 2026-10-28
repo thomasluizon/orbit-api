@@ -46,6 +46,132 @@ public sealed class ReminderDoneTests : IDisposable
         await _mediator.Received(1).Send(Arg.Is<LogHabitCommand>(c => c.HabitId == habit.Id && !c.ToggleExisting), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
+    [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
+    public async Task AppDoseThenDone_RefusesLikeReplayAndKeepsOneLog(HabitSchedule schedule, bool withReminder)
+    {
+        var (handler, habit, token) = await Seed(schedule);
+        var reminder = await _factory.Context.SentReminders.SingleAsync();
+        var app = await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
+            TakenAtUtc: _clock.Now.UtcDateTime, ReminderAtUtc: withReminder ? reminder.ReminderAtUtc : null));
+        app.IsSuccess.Should().BeTrue();
+
+        var done = await handler.Handle(new(token), default);
+        var replay = await handler.Handle(new(token), default);
+
+        done.IsFailure.Should().BeTrue();
+        replay.IsFailure.Should().BeTrue();
+        done.ErrorCode.Should().Be(replay.ErrorCode).And.Be("INVALID_REMINDER_ACTION");
+        done.Error.Should().Be(replay.Error);
+        (await _factory.Context.HabitLogs.SingleAsync()).Id.Should().Be(app.Value.LogId);
+        _factory.Context.ChangeTracker.Clear();
+        (await _factory.Context.SentReminders.SingleAsync()).ConsumedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AppDoseWithReminder_RetiresOnlyTheMatchingParentBeforeDone()
+    {
+        var (_, habit, _) = await Seed();
+        var db = _factory.Context;
+        var reminder = await db.SentReminders.SingleAsync();
+        var otherHabit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, habit.UserId, "Other",
+            FrequencyUnit.Day, 1, habit.StartDate, ReminderEnabled: true, RepeatReminder: new(480))).Value;
+        db.Habits.Add(otherHabit);
+        var otherInstant = SentReminder.CreateRepeat(habit.Id, reminder.Date, reminder.ReminderAtUtc!.Value.AddMinutes(-1),
+            reminder.ExpiresAtUtc!.Value, reminder.DoseAnchorAtUtc!.Value);
+        var otherHabitReminder = SentReminder.CreateRepeat(otherHabit.Id, reminder.Date, reminder.ReminderAtUtc.Value,
+            reminder.ExpiresAtUtc.Value, reminder.DoseAnchorAtUtc.Value);
+        var followUp = SentReminder.CreateRepeat(habit.Id, reminder.Date, reminder.ReminderAtUtc.Value.AddMinutes(15),
+            reminder.ExpiresAtUtc.Value, reminder.DoseAnchorAtUtc.Value, reminder.Id);
+        db.SentReminders.AddRange(otherInstant, otherHabitReminder, followUp);
+        await db.SaveChangesAsync();
+
+        (await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
+            ReminderAtUtc: reminder.ReminderAtUtc))).IsSuccess.Should().BeTrue();
+
+        db.ChangeTracker.Clear();
+        var sent = await db.SentReminders.ToListAsync();
+        sent.Single(r => r.Id == reminder.Id).ConsumedAtUtc.Should().NotBeNull();
+        sent.Where(r => r.Id != reminder.Id).Should().OnlyContain(r => r.ConsumedAtUtc == null);
+    }
+
+    [Theory]
+    [InlineData(HabitSchedule.Flexible, false)]
+    [InlineData(HabitSchedule.Flexible, true)]
+    [InlineData(HabitSchedule.General, false)]
+    [InlineData(HabitSchedule.General, true)]
+    public async Task DoneThenAppDose_KeepsTheIntentionalExtraDose(HabitSchedule schedule, bool withReminder)
+    {
+        var (handler, habit, token) = await Seed(schedule);
+        var done = await handler.Handle(new(token), default);
+        done.IsSuccess.Should().BeTrue();
+        var reminder = await _factory.Context.SentReminders.SingleAsync();
+
+        var app = await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
+            ReminderAtUtc: withReminder ? reminder.ReminderAtUtc : null));
+
+        app.IsSuccess.Should().BeTrue();
+        app.Value.LogId.Should().NotBe(done.Value.LogId);
+        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(HabitSchedule.Flexible, -1)]
+    [InlineData(HabitSchedule.Flexible, 0)]
+    [InlineData(HabitSchedule.General, -1)]
+    [InlineData(HabitSchedule.General, 0)]
+    public async Task AppDoseAtReminderBoundary_OnlyEarlierDoseAllowsDone(HabitSchedule schedule, int minutesBefore)
+    {
+        var (handler, habit, token) = await Seed(schedule);
+        var reminder = await _factory.Context.SentReminders.SingleAsync();
+        (await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
+            TakenAtUtc: reminder.ReminderAtUtc!.Value.AddMinutes(minutesBefore)))).IsSuccess.Should().BeTrue();
+
+        var done = await handler.Handle(new(token), default);
+
+        done.IsSuccess.Should().Be(minutesBefore < 0);
+        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(minutesBefore < 0 ? 2 : 1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BackfilledAppDose_DoesNotRetireOutstandingReminder(bool legacy)
+    {
+        var (handler, habit, token) = await Seed();
+        if (legacy)
+        {
+            _factory.Context.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id,
+                habit.StartDate.AddDays(1), 1, 0, _clock.Now.UtcDateTime));
+            await _factory.Context.SaveChangesAsync();
+        }
+        else
+        {
+            (await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id,
+                Date: habit.StartDate.AddDays(1), ToggleExisting: false))).IsSuccess.Should().BeTrue();
+        }
+
+        (await handler.Handle(new(token), default)).IsSuccess.Should().BeTrue();
+        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task NewerAppLogWithEarlierDose_DoesNotHideTheLatestDose()
+    {
+        var (handler, habit, token) = await Seed();
+        var reminder = await _factory.Context.SentReminders.SingleAsync();
+        (await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
+            TakenAtUtc: _clock.Now.UtcDateTime))).IsSuccess.Should().BeTrue();
+        (await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
+            TakenAtUtc: reminder.ReminderAtUtc!.Value.AddMinutes(-1)))).IsSuccess.Should().BeTrue();
+
+        (await handler.Handle(new(token), default)).IsFailure.Should().BeTrue();
+        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(2);
+    }
+
     [Fact]
     public async Task CorrectDose_PreservesTheReminderInstantAndInvalidatesTheClockSnapshot()
     {
@@ -102,13 +228,16 @@ public sealed class ReminderDoneTests : IDisposable
         await _mediator.DidNotReceive().Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>());
     }
 
-    private async Task<(CompleteReminderCommandHandler Handler, Habit Habit, string Token)> Seed()
+    private async Task<(CompleteReminderCommandHandler Handler, Habit Habit, string Token)> Seed(
+        HabitSchedule schedule = HabitSchedule.Flexible)
     {
         var db = _factory.Context;
         var today = DateOnly.FromDateTime(_clock.GetUtcNow().UtcDateTime);
         var user = User.Create("Alex", "alex@test.com").Value;
-        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, user.Id, "Drink water", FrequencyUnit.Day, 1,
-            today, EndDate: today, ReminderEnabled: true, RepeatReminder: new(480))).Value;
+        var habit = Habit.Create(new HabitCreateParams(schedule, user.Id, "Drink water",
+            schedule == HabitSchedule.General ? null : FrequencyUnit.Day, schedule == HabitSchedule.General ? null : 1,
+            today.AddDays(-2), EndDate: schedule == HabitSchedule.General ? null : today,
+            ReminderEnabled: true, RepeatReminder: new(480))).Value;
         var reminderAtUtc = _clock.Now.UtcDateTime.AddMinutes(-30);
         var reminder = SentReminder.CreateRepeat(habit.Id, today, reminderAtUtc,
             reminderAtUtc.AddHours(8), reminderAtUtc.AddHours(-8));
@@ -117,18 +246,20 @@ public sealed class ReminderDoneTests : IDisposable
         db.SentReminders.Add(reminder);
         await db.SaveChangesAsync();
         _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(today);
+        _dates.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         var unit = new UnitOfWork(db, new DatabaseConnectionSettings());
         var streaks = Substitute.For<IUserStreakService>();
-        var goals = Substitute.For<IGoalCompletionService>();
-        goals.SyncDerivedGoalsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
-            Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<GoalCompletionUpdate>());
+        var gamification = Substitute.For<IGamificationService>();
+        var goals = new GoalCompletionService(new GenericRepository<Goal>(db), gamification, unit, _dates);
         var habits = new GenericRepository<Habit>(db);
-        var logHandler = new LogHabitCommandHandler(new(habits, new GenericRepository<HabitLog>(db), new GenericRepository<User>(db)),
-            new(_dates, streaks, Substitute.For<IGamificationService>(), goals, _mediator, Substitute.For<IPayGateService>()),
+        var logHandler = new LogHabitCommandHandler(new(habits, new GenericRepository<HabitLog>(db), new GenericRepository<User>(db),
+                new GenericRepository<SentReminder>(db)),
+            new(_dates, streaks, gamification, goals, _mediator, Substitute.For<IPayGateService>()),
             unit, _cache, NullLogger<LogHabitCommandHandler>.Instance);
         _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => logHandler.Handle(call.Arg<LogHabitCommand>(), call.Arg<CancellationToken>()));
-        var handler = new CompleteReminderCommandHandler(_tokens, habits, new GenericRepository<SentReminder>(db), unit, _dates, _mediator, _clock);
+        var handler = new CompleteReminderCommandHandler(_tokens, habits, new GenericRepository<SentReminder>(db),
+            new GenericRepository<HabitLog>(db), unit, _dates, _mediator, _clock);
         var token = _tokens.Sign(new(user.Id, habit.Id, reminder.Id, reminderAtUtc, reminderAtUtc.AddHours(8)));
         return (handler, habit, token);
     }

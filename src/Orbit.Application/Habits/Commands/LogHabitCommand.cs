@@ -40,7 +40,8 @@ public record LogHabitCommand(
 public record LogHabitRepositories(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<HabitLog> HabitLogRepository,
-    IGenericRepository<User> UserRepository);
+    IGenericRepository<User> UserRepository,
+    IGenericRepository<SentReminder> ReminderRepository);
 
 /// <summary>
 /// Groups supporting services for habit logging to reduce constructor parameter count (S107).
@@ -341,6 +342,13 @@ public partial class LogHabitCommandHandler(
 
             try
             {
+                if (request.ReminderAtUtc is { } outstandingAtUtc)
+                {
+                    var reminder = await repos.ReminderRepository.FindOneTrackedAsync(r => r.HabitId == habit.Id
+                        && r.ReminderAtUtc == outstandingAtUtc && r.ParentReminderId == null && r.ConsumedAtUtc == null,
+                        cancellationToken: cancellationToken);
+                    reminder?.TryConsume(logEntity.CreatedAtUtc);
+                }
                 var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
                     request.UserId,
                     goalIds,

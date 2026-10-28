@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -19,7 +20,9 @@ public partial class ReminderSchedulerServiceTests
         using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=unused;Database=translation_only").Options);
 
-        var sql = ReminderSchedulerService.LatestRepeatDoseCandidates(db, [Guid.NewGuid()], []).ToQueryString();
+        var habitId = Guid.NewGuid();
+        var sql = RepeatReminderDoseLoader.LatestCandidates(db.HabitLogs.AsNoTracking().Where(l => l.HabitId == habitId), [])
+            .ToQueryString();
 
         sql.Should().Contain("HabitLogs");
     }
