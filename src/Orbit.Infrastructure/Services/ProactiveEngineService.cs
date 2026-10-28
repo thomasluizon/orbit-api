@@ -91,7 +91,7 @@ public sealed partial class ProactiveEngineService(
     private DateTime LocalNow(User user, DateTime nowUtc) =>
         TimeZoneInfo.ConvertTimeFromUtc(nowUtc, TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id));
 
-    private async Task EvaluateUserAsync(Batch batch, User user, DateTime nowUtc, bool create, CancellationToken ct)
+    private async Task<List<ProactiveFacts>> EvaluateUserAsync(Batch batch, User user, DateTime nowUtc, bool create, CancellationToken ct)
     {
         var localNow = LocalNow(user, nowUtc);
         var today = batch.LocalDates[user.Id];
@@ -112,6 +112,7 @@ public sealed partial class ProactiveEngineService(
             }
         }
         if (create) await CreateItemsAsync(batch, user, nowUtc, today, localNow.Hour, facts, items, ct);
+        return facts;
     }
 
     private async Task CreateItemsAsync(Batch batch, User user, DateTime nowUtc, DateOnly today,
@@ -191,9 +192,12 @@ public sealed partial class ProactiveEngineService(
         var result = new List<ProactiveFacts>();
         var allHabits = batch.Habits.Where(h => h.UserId == user.Id && h.Schedule != HabitSchedule.General).ToList();
         var habits = allHabits.Where(h => !h.IsBadHabit && !h.IsDeleted && !h.IsCompleted).ToList();
-        var due = habits.Where(h => IsDueForAction(h, today, user.WeekStartDay)).ToList();
-        var open = habits.Where(h => (due.Contains(h) || HabitScheduleService.IsOverdueOnDate(h, today, user.WeekStartDay))
-            && !h.Logs.Any(l => l.Date == today && l.Value > 0)).ToList();
+        var scheduled = ScheduledForAction(habits, today, user.WeekStartDay);
+        var due = Leaves(scheduled);
+        var scheduledIds = scheduled.Select(h => h.Id).ToHashSet();
+        var actionable = habits.Where(h => scheduledIds.Contains(h.Id)
+            || HabitScheduleService.IsOverdueOnDate(h, today, user.WeekStartDay)).ToList();
+        var open = Leaves(actionable).Where(h => !h.Logs.Any(l => l.Date == today && l.Value > 0)).ToList();
         var yesterday = today.AddDays(-1);
         var timeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var hadScheduled = allHabits.Where(h => !h.IsBadHabit).Any(h => HabitScheduleService.GetHistoricalScheduledDates(
@@ -228,6 +232,16 @@ public sealed partial class ProactiveEngineService(
         return result;
     }
 
+    private static List<Habit> ScheduledForAction(List<Habit> habits, DateOnly today, int weekStartDay) =>
+        habits.Where(h => IsDueForAction(h, today, weekStartDay)
+            || h.Logs.Any(l => l.Date == today && l.Value > 0)).ToList();
+
+    private static List<Habit> Leaves(List<Habit> habits)
+    {
+        var parents = habits.Where(h => h.ParentHabitId.HasValue).Select(h => h.ParentHabitId!.Value).ToHashSet();
+        return habits.Where(h => !parents.Contains(h.Id)).ToList();
+    }
+
     private static bool IsDueForAction(Habit habit, DateOnly date, int weekStartDay) =>
         HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay)
         && (habit.Schedule != HabitSchedule.Flexible || HabitScheduleService.IsFlexibleHabitDueOnDate(habit, date, habit.Logs, weekStartDay));
@@ -237,10 +251,18 @@ public sealed partial class ProactiveEngineService(
         var yesterday = today.AddDays(-1);
         if ((int)today.DayOfWeek != user.WeekStartDay) return null;
         var from = today.AddDays(-ProactiveRules.WeekDays);
-        var scheduled = allHabits.Sum(h => HabitScheduleService.GetHistoricalScheduledDates(
-            h, from, yesterday, timeZone, user.WeekStartDay).Count);
-        var completions = allHabits.Where(h => !h.IsBadHabit).SelectMany(h => h.Logs)
-            .Count(l => l.Value > 0 && l.Date >= from && l.Date <= yesterday);
+        var scheduledByDate = allHabits.Where(h => !h.IsBadHabit)
+            .SelectMany(h => HabitScheduleService.GetHistoricalScheduledDates(h, from, yesterday, timeZone, user.WeekStartDay)
+                .Select(date => (Date: date, Habit: h)))
+            .ToLookup(x => x.Date, x => x.Habit);
+        var scheduled = 0;
+        var completions = 0;
+        for (var date = from; date <= yesterday; date = date.AddDays(1))
+        {
+            var leaves = Leaves(scheduledByDate[date].ToList());
+            scheduled += leaves.Count;
+            completions += leaves.Sum(h => h.Logs.Count(l => l.Date == date && l.Value > 0));
+        }
         var slips = allHabits.Where(h => h.IsBadHabit).SelectMany(h => h.Logs)
             .Count(l => l.Value > 0 && l.Date >= from && l.Date <= yesterday);
         if (scheduled > 0)
@@ -344,7 +366,7 @@ public sealed partial class ProactiveEngineService(
         var batch = await LoadAsync(userId, nowUtc, cancellationToken);
         var user = batch.Users.SingleOrDefault();
         if (user is null) return null;
-        await EvaluateUserAsync(batch, user, nowUtc, false, cancellationToken);
+        var facts = await EvaluateUserAsync(batch, user, nowUtc, false, cancellationToken);
         var today = batch.LocalDates[user.Id];
         var current = batch.Items.Where(i => i.UserId == userId && i.LocalDate == today && !i.EndedAtUtc.HasValue)
             .OrderBy(i => i.Trigger).ThenBy(i => i.CreatedAtUtc).FirstOrDefault();
@@ -352,6 +374,10 @@ public sealed partial class ProactiveEngineService(
         {
             current.Show(nowUtc);
             await SaveStateAsync(current, cancellationToken);
+            if (current.EndedAtUtc.HasValue) return null;
+            var fact = facts.Single(f => f.Trigger == current.Trigger && f.GoalId == current.GoalId);
+            if (current.FactsJson != JsonSerializer.Serialize(fact))
+                return current.WithCurrentContent(fact, AiProactiveCheckinMessageService.Template(fact, user.Language ?? "en"));
         }
         return current;
     }
