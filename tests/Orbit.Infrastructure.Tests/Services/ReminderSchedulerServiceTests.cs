@@ -16,7 +16,7 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class ReminderSchedulerServiceTests : IDisposable
+public partial class ReminderSchedulerServiceTests : IDisposable
 {
     private SqliteOrbitDbContextFactory? _factory;
 

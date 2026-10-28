@@ -605,7 +605,11 @@ public partial class User : Entity
         return Result.Success();
     }
 
-    public void SetClockFormat(bool uses24HourClock) => Uses24HourClockPreference = uses24HourClock;
+    public void SetClockFormat(bool uses24HourClock)
+    {
+        Uses24HourClockPreference = uses24HourClock;
+        ReminderPreferencesVersion++;
+    }
 
     public void SetReferralCode(string code) => ReferralCode = code;
 
