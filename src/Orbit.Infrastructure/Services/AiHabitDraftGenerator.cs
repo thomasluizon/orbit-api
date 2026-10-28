@@ -54,6 +54,7 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         Return exactly count drafts. Write titles, checklist items and reasons in the requested language.
         Read every existing habit and goal. Connect drafts to the person's goals and routines when relevant.
         Never duplicate an existing activity, including synonyms: offer an adjustment using existingHabitId instead.
+        When existingHabitId identifies a supplied habit, keep its stored title verbatim. Put the suggested adjustment in the other draft fields.
         Never change an existing habit just because it shares a theme. New activities have existingHabitId null.
         For every draft, choose a realistic duration and an unoccupied time using existing schedules and other drafts.
         Existing untimed habits do not reserve a clock interval; an existing timed habit without an end reserves its start minute.

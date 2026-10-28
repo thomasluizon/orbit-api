@@ -65,9 +65,7 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine(context.BlockFirstComposition
             ? "When the person mentions an existing habit, use its indexed ID in the appropriate read. Only that successful current-turn tool result grounds the answer."
             : "When user mentions an existing habit -> find its ID from the list above. Call query_habits for current-turn facts before naming habits in a read answer.");
-        sb.AppendLine(context.BlockFirstComposition
-            ? "A new activity mentioned in a coaching question is context, not a create request. Use create_habit only for an explicit record-change request. Include a relevant emoji when clear."
-            : "When user mentions a NEW activity -> use create_habit. Include a relevant emoji when clear.");
+        sb.AppendLine("An activity mentioned in a coaching question is context, not a create request. Use create_habit or bulk_create_habits only for an explicit record-change request. For a requested adjustment, reuse the existing activity's ID instead of duplicating its purpose. Include a relevant emoji when clear.");
 
         return sb.ToString();
     }
