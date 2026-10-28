@@ -11,7 +11,7 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Generate an AI habit summary for a date range, defaulting to today.";
+        "Read a habit summary for a date range, defaulting to today. Pass generate_narrative: true to include its saved narrative when available.";
 
     public object GetParameterSchema() => new
     {
@@ -20,7 +20,7 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
         {
             relative_period = RelativeReadPeriod.PeriodSchema(),
             period_count = RelativeReadPeriod.CountSchema(),
-            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Generate optional narrative. Exact refresh sets false." },
+            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Pass true when the person asks for a summary with its narrative. Returns the saved narrative when available, otherwise generates one. Omission defaults to true for multi-day ranges and false for a single day. False reads facts only, without the saved narrative; use false for exact refresh." },
             date_from = new { type = JsonSchemaTypes.String, description = "Start date (YYYY-MM-DD). Defaults to today." },
             date_to = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD). Defaults to date_from." },
             language = new { type = JsonSchemaTypes.String, description = "Language code for the summary text. Default: 'en'." }

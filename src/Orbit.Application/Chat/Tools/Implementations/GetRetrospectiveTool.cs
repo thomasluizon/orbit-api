@@ -11,7 +11,7 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Generate an AI retrospective, defaulting to week.";
+        "Read a retrospective with its narrative, defaulting to week. Returns the saved narrative when available.";
 
     public object GetParameterSchema() => new
     {
@@ -20,7 +20,7 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
         {
             relative_period = RelativeReadPeriod.PeriodSchema(),
             period_count = RelativeReadPeriod.CountSchema(),
-            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Generate optional narrative. Exact refresh sets false." },
+            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Omit or pass true for a review, retrospective or its narrative. Returns the saved narrative when available, otherwise generates one. Cached narratives are marked stale with refresh recovery because records may have changed. False reads facts only, without the saved narrative; use false for exact refresh." },
             period = new
             {
                 type = JsonSchemaTypes.String,
