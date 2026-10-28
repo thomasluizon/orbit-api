@@ -19,6 +19,7 @@ public sealed partial class AiProactiveCheckinMessageService(
         + "Write one useful insight sentence of at most 140 characters, using only the supplied facts. "
         + "Offer one concrete next step or a supported observation, never just recap a count or offer generic encouragement. "
         + "Never invent numbers, habits or goals. Never mention subscriptions, plans, prices or upgrades. "
+        + "Never mention data, logs, facts, or why this message was chosen in the sentence's own prose. "
         + "Stay calm and unpushy, without blame. "
         + "Return JSON with text (the sentence using title placeholders), habitTitles and goalTitles (arrays of every title referenced). "
         + "In text, refer to habits only as {{habit:N}}, with N the zero-based index in HabitTitles, and to the supplied goal only as {{goal}}. "
@@ -59,29 +60,48 @@ public sealed partial class AiProactiveCheckinMessageService(
     private static string LanguageInstruction(string language) =>
         $"Write ONLY in {(LocaleHelper.IsPortuguese(language) ? "Brazilian Portuguese" : "English")}.";
 
-    internal static string BuildPrompt(ProactiveFacts facts, string language) => $"""
-        {LanguageInstruction(language)}
-        Facts: {JsonSerializer.Serialize(facts)}
-        Trigger context: {TriggerContext(facts)}
-        Rules:
-        - In text, use title placeholders from the system prompt, never literal titles; indexes refer to the supplied HabitTitles order. Do not name anything else
-        - The 140-character limit applies AFTER the server substitutes the literal titles
-        - Name the supplied open habits, at most three, then the count of the rest; if space is tight, name fewer and count the rest. Never invent a title when none is supplied
-        - Use real progress only when supplied; an open count does not reveal how many habits were completed or the day's total. An app-wide streak is not a habit streak
-        - Match the broad time window, never an exact instant. A pending habit today is not a miss
-        - Use restart or make-up wording only when the facts confirm scheduled habits yesterday, no positive logs yesterday, and recent activity
-        - Keep one clear point, with the facts as its reason; never praise a slip, imply guilt, or sell anything
-        - Every numeric quantity must use digits from the supplied facts, or the remaining count after the named habits; never invent durations, percentages, or written-out quantities
-        {NotificationVoice.Rules}
-        Return only JSON with text, habitTitles and goalTitles.
-        {LanguageInstruction(language)}
-        """;
+    internal static string BuildPrompt(ProactiveFacts facts, string language)
+    {
+        var context = new
+        {
+            facts.HabitTitles,
+            facts.HabitCount,
+            facts.CurrentStreak,
+            facts.HasEstablishedStreak,
+            facts.GoalTitle,
+            facts.TrackingStatus,
+            facts.TimedEventCount,
+            facts.TimedMinutes,
+            facts.PeriodFrom,
+            facts.PeriodTo,
+            facts.TotalCompletions,
+            facts.TotalScheduled,
+            facts.BadHabitSlips
+        };
+        return $"""
+            {LanguageInstruction(language)}
+            Facts: {JsonSerializer.Serialize(context)}
+            Trigger context: {TriggerContext(facts)}
+            Rules:
+            - In text, use title placeholders from the system prompt, never literal titles; indexes refer to the supplied HabitTitles order. Do not name anything else
+            - The 140-character limit applies AFTER the server substitutes the literal titles
+            - Name the supplied open habits, at most three, then the count of the rest; if space is tight, name fewer and count the rest. Never invent a title when none is supplied
+            - Use real progress only when supplied; an open count does not reveal how many habits were completed or the day's total. An app-wide streak is not a habit streak
+            - Match the broad time window, never an exact instant. A pending habit today is not a miss
+            - Only suggest starting again when yesterday's scheduled habits were left undone and the person was active recently; the context permits it only then
+            - Keep one clear point about what fits the person's day; never praise a slip, imply guilt, or sell anything
+            - Every numeric quantity must use digits from the supplied facts, or the remaining count after the named habits; never invent durations, percentages, or written-out quantities
+            {NotificationVoice.Rules}
+            Return only JSON with text, habitTitles and goalTitles.
+            {LanguageInstruction(language)}
+            """;
+    }
 
     private static string TriggerContext(ProactiveFacts facts) => facts.Trigger switch
     {
         ProactiveTrigger.RestartAfterMiss => HasRealMiss(facts)
-            ? "Morning after a real missed day; choose a starting point without making up for yesterday."
-            : "Morning; no missed day is established, so offer a starting point without restart language.",
+            ? "Morning; offer a small first step for today, without explaining yesterday or asking the person to catch up. You may suggest starting again."
+            : "Morning; help choose where to start today, without suggesting a missed day or starting again.",
         ProactiveTrigger.EveningCheckin => "Evening; help choose what fits from the open habits, recognizing completed progress only if supplied.",
         ProactiveTrigger.BusyCalendarDay => "Morning with a busy calendar; choose a gap before fitting a habit into it, without inventing free time.",
         ProactiveTrigger.GoalBehind => "A goal is behind or at risk; name it and offer to make its next step manageable, without inventing a deadline or progress.",
@@ -110,16 +130,21 @@ public sealed partial class AiProactiveCheckinMessageService(
         if (facts.HabitTitles.Append(facts.GoalTitle ?? string.Empty).Any(title => ContainsTitle(rawProse, title))) return null;
         var substitutedTitles = referencedHabits.Concat(referencedGoals).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (accountTitles.Any(title => !substitutedTitles.Contains(title) && ContainsTitle(rendered, title))) return null;
-        if (!MatchesAccountLanguage(rawProse, language)
+        if (InternalDataWords().IsMatch(rawProse) || !MatchesAccountLanguage(rawProse, language)
             || !HasOnlyAllowedNames(prose, language) || SalesWords().IsMatch(prose)) return null;
         if (SentenceEnds().Matches(prose).Count != 1 || !".?".Contains(prose[^1])) return null;
+        return HasGroundedNumbers(prose, facts, referencedHabits.Count) ? rendered : null;
+    }
+
+    private static bool HasGroundedNumbers(string prose, ProactiveFacts facts, int namedHabitCount)
+    {
         var numbers = new[] { facts.HabitCount, facts.CurrentStreak, facts.TimedEventCount,
             facts.TimedMinutes, facts.TotalCompletions, facts.TotalScheduled, facts.BadHabitSlips }
             .Where(n => n.HasValue).Select(n => n!.Value.ToString(CultureInfo.InvariantCulture)).ToHashSet();
-        if (referencedHabits.Count > 0)
+        if (namedHabitCount > 0)
             numbers.Add(Math.Max(0, (facts.HabitCount ?? facts.HabitTitles.Count)
-                - referencedHabits.Count).ToString(CultureInfo.InvariantCulture));
-        return Numbers().Matches(prose).All(n => numbers.Contains(n.Value)) ? rendered : null;
+                - namedHabitCount).ToString(CultureInfo.InvariantCulture));
+        return Numbers().Matches(prose).All(n => numbers.Contains(n.Value));
     }
 
     private static string? SubstituteTitles(string text, ProactiveFacts facts,
@@ -310,6 +335,9 @@ public sealed partial class AiProactiveCheckinMessageService(
 
     [GeneratedRegex(@"\b(plan|plans|price|prices|upgrade|pro|premium|subscription|trial|free|plano|planos|preço|preços|assine|assinatura|grátis)\b|[$€£＄]", RegexOptions.IgnoreCase)]
     private static partial Regex SalesWords();
+    [GeneratedRegex(@"\b(logs?|logged|positive|make(?:[\s-]+)?up|facts?|data|registros?|registrad[oa]s?|positiv[oa]s?|dados|fatos?)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex InternalDataWords();
     [GeneratedRegex(@"[+-]?\d+(?:[.,]\d+)?")]
     private static partial Regex Numbers();
     [GeneratedRegex(@"[.!?](?:\s|$)")]

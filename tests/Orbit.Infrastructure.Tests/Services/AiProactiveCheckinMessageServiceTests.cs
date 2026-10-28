@@ -172,6 +172,91 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
     }
 
     [Theory]
+    [InlineData("en", "You can restart today with {{habit:0}}; yesterday had no positive logs, so no make-up is needed.")]
+    [InlineData("en", "Yesterday had no positive logs, so restart today with {{habit:0}}; the other 4 can wait.")]
+    [InlineData("pt-BR", "Como ontem ficou sem registros, hoje você pode recomeçar por {{habit:0}}.")]
+    public async Task InternalDataWordingReplay_UsesLocalizedTemplate(string locale, string text)
+    {
+        var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = ["Morning walk"], HabitCount = 5 };
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        result.Should().Be(AiProactiveCheckinMessageService.Template(facts, locale));
+    }
+
+    [Theory]
+    [InlineData("en", "log")]
+    [InlineData("en", "logs")]
+    [InlineData("en", "logged")]
+    [InlineData("en", "positive")]
+    [InlineData("en", "make-up")]
+    [InlineData("en", "facts")]
+    [InlineData("en", "data")]
+    [InlineData("pt-BR", "registro")]
+    [InlineData("pt-BR", "registros")]
+    [InlineData("pt-BR", "positivo")]
+    [InlineData("pt-BR", "dados")]
+    public async Task InternalDataWordInModelProse_UsesLocalizedTemplate(string locale, string word)
+    {
+        var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = ["Morning walk"], HabitCount = 5 };
+        var text = locale == "en"
+            ? "For today, start with {{habit:0}} (" + word + ")."
+            : "Para hoje, comece por {{habit:0}} (" + word + ").";
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        result.Should().Be(AiProactiveCheckinMessageService.Template(facts, locale));
+    }
+
+    [Theory]
+    [InlineData("en", "Log meals", "This morning, start with {{habit:0}}.")]
+    [InlineData("pt-BR", "Log meals", "Nesta manhã, comece por {{habit:0}}.")]
+    [InlineData("pt-BR", "Rever registros", "Nesta manhã, comece por {{habit:0}}.")]
+    public async Task InternalDataWordInHabitTitle_PreservesModelSentence(string locale, string title, string text)
+    {
+        var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = [title], HabitCount = 1 };
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        result.Text.Should().Be(text.Replace("{{habit:0}}", title, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("en", "Positive data", "For {{goal}}, choose a step that fits your day.")]
+    [InlineData("pt-BR", "Dados positivos", "Para {{goal}}, escolha um passo que caiba no seu dia.")]
+    public async Task InternalDataWordInGoalTitle_PreservesModelSentence(string locale, string title, string text)
+    {
+        var facts = Facts(ProactiveTrigger.GoalBehind) with { GoalTitle = title };
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, [title], default);
+
+        result.Text.Should().Be(text.Replace("{{goal}}", title, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task Request_ExpressesRestartAsNextStepWithoutInternalDiagnostics(string locale)
+    {
+        var facts = Facts(ProactiveTrigger.RestartAfterMiss) with { HabitTitles = ["Morning walk"], HabitCount = 5 };
+        string? body = null;
+
+        await Service(null, captureRequest: request => body = request).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        output.WriteLine(body);
+        using var document = JsonDocument.Parse(body!);
+        var messages = document.RootElement.GetProperty("input");
+        var system = messages[0].GetProperty("content")[0].GetProperty("text").GetString()!;
+        system.Should().Contain("Never mention data, logs, facts, or why this message was chosen");
+        var prompt = messages[1].GetProperty("content")[0].GetProperty("text").GetString()!;
+        prompt.Should().NotContain("HadPositiveLogsYesterday").And.NotContain("HadScheduledHabitsYesterday")
+            .And.NotContain("HadRecentActivity").And.NotContain("positive logs").And.NotContain("make-up")
+            .And.NotContain("making up for yesterday");
+        prompt.Should().Contain("Only suggest starting again when yesterday's scheduled habits were left undone and the person was active recently")
+            .And.Contain("Morning; offer a small first step for today, without explaining yesterday or asking the person to catch up");
+    }
+
+    [Theory]
     [InlineData("en", "English")]
     [InlineData("pt-BR", "Brazilian Portuguese")]
     public async Task Request_PrioritizesAccountLanguageOverFactAndInstructionLanguage(string locale, string languageName)
