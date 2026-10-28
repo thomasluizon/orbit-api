@@ -689,11 +689,20 @@ public sealed partial class PendingOperationChangePreviewer(
                 RemovesData: false, ValidationErrors: errors.Count > 0 ? errors : null,
                 FieldOptions: parentOptions is null && reuseOptions is null ? null
                     : new[] { parentOptions, reuseOptions }.OfType<PendingOperationFieldOptions>().ToArray(),
-                EntityEmoji: entityEmoji));
+                EntityEmoji: entityEmoji, HabitType: CreationHabitType(habit, command.Habits[index], existing)));
         }
         return BuildPreview(BulkCreateHabits, items.SelectMany(item => item.Fields)
             .Where(field => field.Field == ParentHabitId && field.EntityId != Guid.Empty)
             .DistinctBy(field => field.EntityId).ToList(), items);
+    }
+
+    private static string CreationHabitType(JsonElement source, BulkHabitItem item, Habit? existing)
+    {
+        var general = JsonArgumentParser.GetOptionalBool(source, IsGeneralField)
+            ?? (existing?.Schedule == HabitSchedule.General || item.IsGeneral);
+        var frequency = source.TryGetProperty("frequency_unit", out _)
+            ? item.FrequencyUnit : existing?.FrequencyUnit ?? item.FrequencyUnit;
+        return general ? "General" : frequency.HasValue ? "Habit" : "Task";
     }
 
     private static List<PendingOperationValidationError> CreationValidationErrors(Guid userId, BulkHabitItem item,

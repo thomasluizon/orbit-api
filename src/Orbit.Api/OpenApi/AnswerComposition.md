@@ -208,6 +208,46 @@ Injection refusals include the brief offer of normal habit help required by the 
 Other refusals and plan navigation stay within the requested scope. Composition preserves the
 model's concise answer rather than deleting a help sentence with a text pattern.
 
+## Brain dump approval
+
+Tracks thomasluizon/orbit-tickets#1856. An unstructured typed or transcribed message
+uses the existing `bulk_create_habits` command for one combined pending preview.
+The model resolves existing activities through account reads and supplies `habit_id`
+for reuse, preserving unnamed fields. `suggest_habits` supplies editable drafts when
+the person also requests ideas; their `existingHabitId` maps to `habit_id` in the
+combined proposal. No message pattern routes or triggers a tool.
+
+Bulk creation preview `items` append optional nullable string `habitType`: `Task`
+for one-time items, `Habit` for recurring or flexible items, and `General` for
+unscheduled general items. The server derives it from structured schedule fields
+and the stored schedule for reused items whose cadence is unchanged. Absence or
+null means unknown. This adds no value to an existing strict enum. Other preview
+operations may omit it. Revision and refresh recompute the type from the proposal;
+stored chat replay preserves it.
+
+The paired web and Android renderer groups the existing preview items by this field
+inside one preview, preserving item IDs and order within each group. Localized group
+labels are Tasks / Tarefas, Habits / Hábitos, and General / Geral. Unknown or absent
+types retain the existing ungrouped display. Group headings are presentation only;
+they never create parent habits or alter item placement. An `entityId` identifies a
+reused item; its existing field options and old/new values retain the adjustment
+controls. Render each pending operation once, using its existing approve, edit and
+reject actions. No new block kind, endpoint or capability flag is required. Existing
+clients ignore the additional field and keep the ordinary approval preview.
+
+The reply contains at most one short sentence without figures, then the preview.
+The existing server suppression omits redundant narrative and follow-ups. Nothing
+is saved until approval. Edits use the existing pending-operation revision route;
+reject cancels the whole pending operation. Existing FluentValidation validators
+and domain guards remain authoritative for every create and adjustment.
+
+Deploy the API before the paired consumer reads `habitType`. The coordinator files
+the paired UI ticket and real-call cases in `orbit-ui-mobile/evals/astra` from this
+contract. Cover en and pt-BR dumps, including an existing habit, with three consecutive
+real-call successes and persisted readback after approval. The local scripted model
+replays in `tests/Orbit.Application.Tests/Fixtures/BrainDumps` are deterministic
+coverage and do not substitute for that real-call gate.
+
 ## Append-only follow-up context
 
 `followUps` remains an optional string array. Parsing accepts zero, one or two questions,

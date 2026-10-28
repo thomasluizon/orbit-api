@@ -1,0 +1,17 @@
+{
+  "message": "Minha cabeça está cheia. Preciso ligar para o dentista amanhã, quero me alongar toda manhã e passar meu hábito Ler para as nove da noite. Organiza isso para mim?",
+  "existingTitle": "Ler",
+  "toolCalls": [
+    {
+      "name": "bulk_create_habits",
+      "id": "brain-dump",
+      "args": {
+        "habits": [
+          { "title": "Ligar para o dentista", "frequency_unit": "OneTime", "due_date": "__tomorrow__", "emoji": "🦷" },
+          { "title": "Alongar", "frequency_unit": "Day", "frequency_quantity": 1, "due_date": "__today__", "emoji": "🧘" },
+          { "title": "Ler", "habit_id": "__existing__", "due_time": "21:00" }
+        ]
+      }
+    }
+  ]
+}

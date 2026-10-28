@@ -12,7 +12,9 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
     public string Description => "Suggest personal, editable habit drafts from current habits, goals and free schedule time. "
         + "Use when the person asks for habit ideas or editable habit drafts. Coaching about starting an activity uses short text instead. "
         + "Return habitSuggestions instead of a plain list. Pass the person's request and its language. "
-        + "This never creates habits. The person edits a draft and requests its approval preview before saving.";
+        + "This never creates habits. The person edits a draft and requests its approval preview before saving. "
+        + "For an unstructured message that also requests habit ideas, keep its explicit tasks and put the chosen draft fields "
+        + "in one bulk_create_habits approval preview; map existingHabitId to habit_id to reuse the habit.";
 
     public object GetParameterSchema() => new
     {
