@@ -285,8 +285,8 @@ another model call. The response has no framing prose and one typed part:
     "suggestion": { "goal": "Study", "step": "Open the book", "language": "en" },
     "actions": [
       { "id": "smaller", "label": "Smaller", "message": "Give me an even smaller starting step for \"Study\". The previous step was \"Open the book\"." },
-      { "id": "saveTask", "label": "Save as task", "message": "Prepare a preview to save \"Open the book\" as a task." },
-      { "id": "saveChecklistItem", "label": "Save as checklist item", "message": "Add \"Open the book\" to a habit checklist. Ask which habit if unclear and preserve existing items. Prepare a preview." }
+      { "id": "saveTask", "label": "Save as task", "message": "Save \"Open the book\" as a task." },
+      { "id": "saveChecklistItem", "label": "Save as checklist item", "message": "Add \"Open the book\" to a habit's checklist." }
     ]
   }
 }
@@ -328,10 +328,10 @@ and action templates are below; `{goal}` and `{step}` stand for JSON-quoted text
 | --- | --- | --- |
 | Smaller label | Smaller | Menor ainda |
 | Task label | Save as task | Salvar como tarefa |
-| Checklist label | Save as checklist item | Salvar na checklist |
+| Checklist label | Save as checklist item | Salvar no checklist |
 | Smaller request | Give me an even smaller starting step for {goal}. The previous step was {step}. | Quero um passo ainda menor para {goal}. O passo anterior foi {step}. |
-| Task request | Prepare a preview to save {step} as a task. | Prepare uma prévia para salvar {step} como tarefa. |
-| Checklist request | Add {step} to a habit checklist. Ask which habit if unclear and preserve existing items. Prepare a preview. | Quero adicionar {step} à checklist de um hábito. Pergunte em qual hábito se não estiver claro e preserve os itens existentes. Prepare uma prévia. |
+| Task request | Save {step} as a task. | Quero salvar {step} como tarefa. |
+| Checklist request | Add {step} to a habit's checklist. | Quero adicionar {step} ao checklist de um hábito. |
 
 The model-facing instructions are English at runtime, matching the existing
 prompt convention. Their pt-BR versions below are for copy review.

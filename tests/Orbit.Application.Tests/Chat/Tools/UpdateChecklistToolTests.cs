@@ -28,6 +28,7 @@ public class UpdateChecklistToolTests
     public void Metadata_IsExposed()
     {
         _tool.Name.Should().Be("update_checklist");
+        _tool.Description.Should().Contain("When adding an item, include every existing item in the full list you send.");
         _tool.GetParameterSchema().Should().NotBeNull();
     }
 

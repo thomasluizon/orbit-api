@@ -35,6 +35,21 @@ public sealed partial class ChatWriteHoldHandlerTests
         var card = StartingStepCard(firstResponse);
         card.Suggestion.Step.Should().Be(first);
         card.Actions.Select(action => action.Id).Should().Equal("smaller", "saveTask", "saveChecklistItem");
+        var quotedGoal = JsonSerializer.Serialize(message);
+        var quotedFirst = JsonSerializer.Serialize(first);
+        card.Actions.Should().Equal(language == "pt-BR"
+            ? new OneSmallStepAction[]
+            {
+                new("smaller", "Menor ainda", $"Quero um passo ainda menor para {quotedGoal}. O passo anterior foi {quotedFirst}."),
+                new("saveTask", "Salvar como tarefa", $"Quero salvar {quotedFirst} como tarefa."),
+                new("saveChecklistItem", "Salvar no checklist", $"Quero adicionar {quotedFirst} ao checklist de um hábito.")
+            }
+            : new OneSmallStepAction[]
+            {
+                new("smaller", "Smaller", $"Give me an even smaller starting step for {quotedGoal}. The previous step was {quotedFirst}."),
+                new("saveTask", "Save as task", $"Save {quotedFirst} as a task."),
+                new("saveChecklistItem", "Save as checklist item", $"Add {quotedFirst} to a habit's checklist.")
+            });
         firstResponse.Actions.Should().BeEmpty();
         firstResponse.PendingOperations.Should().BeNullOrEmpty();
         firstResponse.AiMessage.Should().BeNullOrEmpty();
@@ -66,6 +81,9 @@ public sealed partial class ChatWriteHoldHandlerTests
         ScriptToolCall(JsonSerializer.Serialize(new { title = smaller, frequency_unit = "OneTime", due_date = Today.ToString("yyyy-MM-dd") }));
         var preview = await CreateHandler().Handle(new(_userId, refined.Actions[1].Message, ClientContext: client), default);
         preview.IsSuccess.Should().BeTrue(preview.Error);
+        await _aiIntentService.Received().SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => request.UserMessage == refined.Actions[1].Message),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         var pending = preview.Value.PendingOperations.Should().ContainSingle().Which;
         pending.Items.Should().ContainSingle().Which.EntityName.Should().Be(smaller);
         (await _dbContext.Habits.CountAsync()).Should().Be(0);
@@ -169,6 +187,9 @@ public sealed partial class ChatWriteHoldHandlerTests
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => _dbContext.SaveChangesAsync(call.Arg<CancellationToken>()));
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsPendingOperationChanges: true);
         var card = StartingStepCard(await ReplayStartingStep("Help me begin", "Study", step, language, client));
+        card.Actions[2].Message.Should().Be(language == "pt-BR"
+            ? $"Quero adicionar {JsonSerializer.Serialize(step)} ao checklist de um hábito."
+            : $"Add {JsonSerializer.Serialize(step)} to a habit's checklist.");
         ScriptToolCall(JsonSerializer.Serialize(new
         {
             habit_id = parent.Id,
@@ -179,10 +200,23 @@ public sealed partial class ChatWriteHoldHandlerTests
         }), "update_checklist");
         var preview = await CreateHandler().Handle(new(_userId, card.Actions[2].Message, ClientContext: client), default);
         preview.IsSuccess.Should().BeTrue(preview.Error);
+        await _aiIntentService.Received().SendWithToolsAsync(
+            Arg.Is<AiToolRequest>(request => request.UserMessage == card.Actions[2].Message),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         var pending = preview.Value.PendingOperations.Should().ContainSingle().Which;
         parent.ChecklistItems.Should().ContainSingle();
+        var checklistPreview = pending.Items.Should().ContainSingle().Which.Fields
+            .Should().ContainSingle(field => field.Field == "checklist_items").Which.ProposedValue!.Value;
+        checklistPreview.EnumerateArray().Select(item => item.GetProperty("text").GetString())
+            .Should().Equal("Existing item", step);
+        checklistPreview.EnumerateArray().Select(item => item.GetProperty("is_checked").GetBoolean())
+            .Should().Equal(true, false);
+        var beforeApproval = await _dbContext.Habits.AsNoTracking().SingleAsync();
+        beforeApproval.ChecklistItems.Should().ContainSingle().Which.Text.Should().Be("Existing item");
         var stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
-        stored.Arguments.GetProperty("checklist_items").GetArrayLength().Should().Be(2);
+        var proposedItems = stored.Arguments.GetProperty("checklist_items").EnumerateArray().ToArray();
+        proposedItems.Select(item => item.GetProperty("text").GetString()).Should().Equal("Existing item", step);
+        proposedItems.Select(item => item.GetProperty("is_checked").GetBoolean()).Should().Equal(true, false);
         var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
         var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
             stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
