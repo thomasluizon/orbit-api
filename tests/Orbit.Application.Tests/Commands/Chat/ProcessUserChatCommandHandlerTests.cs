@@ -360,7 +360,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var appConfig = Substitute.For<IAppConfigService>();
         appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
             .Returns(5);
-        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
+        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
             .Returns(50);
 
         return new PayGateService(_habitRepo, userRepository, appConfig, _userDateService, Substitute.For<IFeatureFlagService>());

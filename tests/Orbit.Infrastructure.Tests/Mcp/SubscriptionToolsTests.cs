@@ -52,6 +52,37 @@ public class SubscriptionToolsTests
             .Returns(response);
     }
 
+    [Theory]
+    [InlineData(1, 0, "2026-08-03", "2026-08-16")]
+    [InlineData(0, 1, "2026-08-02", "2026-08-10")]
+    public async Task WeekStartPreferenceChange_SubscriptionReadKeepsUsageAndReset(int originalStart, int newStart, string start, string end)
+    {
+        var user = User.Create("Pro", "pro@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        var weekStart = DateOnly.Parse(start);
+        var periodEnd = DateOnly.Parse(end);
+        for (var message = 0; message < 250; message++)
+            user.IncrementAiMessageCount(weekStart);
+        user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(_userId, Arg.Any<CancellationToken>()).Returns(250);
+        for (var day = 6; day < periodEnd.DayNumber - weekStart.DayNumber; day++)
+        {
+            _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(day));
+
+            var result = await _tools.GetSubscriptionStatus(_user);
+
+            result.Should().Contain("AI Messages (week): 250/250");
+            result.Should().Contain($"AI Messages reset: {periodEnd.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc):O}");
+        }
+
+        _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(periodEnd);
+        var nextPeriod = await _tools.GetSubscriptionStatus(_user);
+        nextPeriod.Should().Contain("AI Messages (week): 0/250");
+        nextPeriod.Should().Contain($"AI Messages reset: {periodEnd.AddDays(7).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc):O}");
+    }
+
     [Fact]
     public async Task GetSubscriptionStatus_UserNotFound_ReturnsError()
     {
@@ -70,12 +101,12 @@ public class SubscriptionToolsTests
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(5);
+            .Returns(250);
 
         var result = await _tools.GetSubscriptionStatus(_user);
 
         result.Should().Contain("Plan: Pro");
-        result.Should().Contain("Daily AI Messages: 0/5");
+        result.Should().Contain("AI Messages (week): 0/250");
     }
 
     [Fact]
@@ -99,15 +130,15 @@ public class SubscriptionToolsTests
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(50);
+            .Returns(250);
 
         var result = await _tools.GetSubscriptionStatus(_user);
 
-        result.Should().Contain("Daily AI Messages: 0/50");
+        result.Should().Contain("AI Messages (week): 0/250");
     }
 
     [Fact]
-    public async Task GetSubscriptionStatus_AfterLocalMidnight_ShowsZeroDailyUsage()
+    public async Task GetSubscriptionStatus_ProAfterLocalMidnight_PreservesWeeklyUsage()
     {
         var today = new DateOnly(2026, 8, 23);
         var user = User.Create("Alex", "alex@example.com").Value;
@@ -116,11 +147,12 @@ public class SubscriptionToolsTests
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(50);
+            .Returns(250);
 
         var result = await _tools.GetSubscriptionStatus(_user);
 
-        result.Should().Contain("Daily AI Messages: 0/50");
+        result.Should().Contain("AI Messages (week): 5/250");
+        result.Should().Contain("AI Messages reset: 2026-08-24T00:00:00.0000000Z");
     }
 
     [Fact]

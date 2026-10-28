@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,6 +17,7 @@ using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Application.Chat;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -30,6 +32,81 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiDailyBudgetTests
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
+
+    [Theory]
+    [InlineData(1, 0, "2026-08-03", "2026-08-16", true)]
+    [InlineData(1, 0, "2026-08-03", "2026-08-16", false)]
+    [InlineData(0, 1, "2026-08-02", "2026-08-10", true)]
+    [InlineData(0, 1, "2026-08-02", "2026-08-10", false)]
+    public async Task WeekStartPreferenceChange_SafetyBudgetRetainsEarlierCallsUntilAlignedBoundary(
+        int originalStart, int newStart, string start, string end, bool callsExhausted)
+    {
+        using var fixture = new BudgetFixture(pro: true);
+        var weekStart = DateOnly.Parse(start);
+        var periodEnd = DateOnly.Parse(end);
+        fixture.User.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        fixture.User.IncrementAiMessageCount(weekStart);
+        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, weekStart,
+            callsExhausted ? 1 : AppConfigKeys.DefaultProAiMicroDollarsPerWeek));
+        fixture.User.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+        await fixture.Database.Context.SaveChangesAsync();
+        if (callsExhausted)
+            fixture.Config.GetAsync(AppConfigKeys.ProAiCallsPerWeek,
+                Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+
+        var reserve = () => fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
+        for (var day = 6; day < periodEnd.DayNumber - weekStart.DayNumber; day++)
+        {
+            fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(day));
+            await reserve.Should().ThrowAsync<AiBudgetExceededException>();
+        }
+
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(periodEnd);
+        var reservation = await reserve();
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single(call => call.Id == reservation).LocalDate.Should().Be(periodEnd);
+        if (!callsExhausted)
+            await fixture.Budget.SettleAsync(reservation, AppConfigKeys.DefaultProAiMicroDollarsPerWeek, default);
+        await reserve.Should().ThrowAsync<AiBudgetExceededException>();
+
+        fixture.User.IncrementAiMessageCount(periodEnd);
+        await fixture.Database.Context.SaveChangesAsync();
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(periodEnd.AddDays(7));
+        (await reserve()).Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false, 0, true)]
+    [InlineData(false, 1, false)]
+    [InlineData(true, 0, true)]
+    [InlineData(true, 0, false)]
+    [InlineData(true, 1, true)]
+    [InlineData(true, 1, false)]
+    public async Task SafetyBudget_ProPersistsUntilWeekStartWhileFreeResetsDaily(bool pro, int weekStartDay, bool callsExhausted)
+    {
+        using var fixture = new BudgetFixture(pro);
+        fixture.User.SetWeekStartDay(weekStartDay).IsSuccess.Should().BeTrue();
+        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, Today,
+            callsExhausted ? 1 : pro ? AppConfigKeys.DefaultProAiMicroDollarsPerWeek : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay));
+        await fixture.Database.Context.SaveChangesAsync();
+        if (callsExhausted)
+            fixture.Config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerWeek : AppConfigKeys.FreeAiCallsPerDay,
+                Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+        fixture.Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today.AddDays(1));
+
+        if (pro)
+        {
+            var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
+            await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+            fixture.Handler.Completions.Should().Be(0);
+            fixture.Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                .Returns(new DateOnly(2026, 1, weekStartDay == 0 ? 4 : 5));
+        }
+
+        await fixture.Client.CompleteTextAsync("system", "write");
+
+        fixture.Handler.Completions.Should().Be(1);
+    }
 
     [Theory]
     [InlineData("Staging", true, "calls")]
@@ -49,16 +126,16 @@ public class AiDailyBudgetTests
     {
         using var fixture = new BudgetFixture(pro: true, evalExempt: flagged, environmentName: environmentName);
         if (guard == "calls")
-            fixture.Config.GetAsync(AppConfigKeys.ProAiCallsPerDay, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+            fixture.Config.GetAsync(AppConfigKeys.ProAiCallsPerWeek, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
         if (guard == "reservation")
-            fixture.Config.GetAsync(AppConfigKeys.ProAiMicroDollarsPerDay, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(1L);
+            fixture.Config.GetAsync(AppConfigKeys.ProAiMicroDollarsPerWeek, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(1L);
         if (guard != "reservation")
         {
-            var spent = AiBudgetCall.Reserve(fixture.User.Id, Today, guard == "calls" ? 1 : AppConfigKeys.DefaultProAiMicroDollarsPerDay);
+            var spent = AiBudgetCall.Reserve(fixture.User.Id, Today, guard == "calls" ? 1 : AppConfigKeys.DefaultProAiMicroDollarsPerWeek);
             if (guard == "legacy")
             {
                 spent.Settle(0);
-                fixture.Database.Context.Entry(spent).Property<long>("ChargedTokens").CurrentValue = 20_000;
+                fixture.Database.Context.Entry(spent).Property<long>("ChargedTokens").CurrentValue = 200_000;
             }
             fixture.Database.Context.AiBudgetCalls.Add(spent);
             await fixture.Database.Context.SaveChangesAsync();
@@ -116,23 +193,85 @@ public class AiDailyBudgetTests
         fixture.Handler.Completions.Should().Be(1);
     }
 
-    [Theory]
-    [InlineData(false, 5)]
-    [InlineData(true, 50)]
-    public async Task TypicalWrites_FitUnderDailySpendCeiling(bool pro, int messages)
+    [Fact]
+    public async Task TypicalFreeWrites_FitUnderSpendCeiling()
     {
-        (pro ? AppConfigKeys.DefaultProAiMicroDollarsPerDay : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay)
-            .Should().Be(pro ? 120_000 : 20_000);
-        using var fixture = new BudgetFixture(pro);
+        const int messages = 5;
+        AppConfigKeys.DefaultFreeAiMicroDollarsPerDay.Should().Be(20_000);
+        using var fixture = new BudgetFixture();
         for (var call = 0; call < messages * 2; call++)
             await fixture.Client.CompleteTextAsync("system", "a typical write");
 
         using var read = fixture.Database.CreateContext();
         read.AiBudgetCalls.Count().Should().Be(messages * 2);
         read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(2644 + (messages * 2 - 1) * 649);
-        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().BeLessThan(pro ? 120_000 : 20_000);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().BeLessThan(20_000);
         read.AiUsageDaily.Single().TotalTokens.Should().Be(messages * 2 * 20_100);
         fixture.Handler.Completions.Should().Be(messages * 2);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task ProCompoundWrites_FitWeeklyBudgetFor250Messages(int weekStartDay)
+    {
+        using var fixture = new BudgetFixture(pro: true);
+        fixture.User.SetWeekStartDay(weekStartDay).IsSuccess.Should().BeTrue();
+        await fixture.Database.Context.SaveChangesAsync();
+        var weekStart = new DateOnly(2026, 1, weekStartDay == 0 ? 4 : 5);
+        for (var message = 0; message < 250; message++)
+        {
+            var localDate = weekStart.AddDays(message * 7 / 250);
+            fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(localDate);
+            for (var call = 0; call < 9; call++)
+            {
+                var reservation = await fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
+                await fixture.Budget.SettleAsync(reservation, call == 8 ? 703 : 702, default);
+            }
+        }
+
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Count().Should().Be(2250);
+        read.AiBudgetCalls.Select(call => call.LocalDate).Distinct().Count().Should().Be(7);
+        read.AiBudgetCalls.Should().OnlyContain(call => call.IsSettled);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(250 * 6319);
+
+        var nextCall = () => fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
+        await nextCall.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(7));
+        (await nextCall()).Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(0, "America/Sao_Paulo", "2026-01-04T03:00:00Z")]
+    [InlineData(1, "Pacific/Auckland", "2026-01-04T11:00:00Z")]
+    [InlineData(1, "America/New_York", "2026-03-09T04:00:00Z")]
+    public async Task ProSpendCeiling_ResetsAtNextLocalWeekStart(int weekStartDay, string timeZone, string reset)
+    {
+        using var fixture = new BudgetFixture(pro: true);
+        fixture.User.SetWeekStartDay(weekStartDay).IsSuccess.Should().BeTrue();
+        fixture.User.SetTimeZone(timeZone).IsSuccess.Should().BeTrue();
+        var resetAtUtc = DateTimeOffset.Parse(reset);
+        var now = resetAtUtc.AddSeconds(-1);
+        var clock = Substitute.For<TimeProvider>();
+        clock.GetUtcNow().Returns(_ => now);
+        var localDates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
+            Substitute.For<IDistributedCache>(), clock);
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => localDates.GetUserTodayAsync(fixture.User.TimeZone, fixture.User.Id));
+        var localDate = await fixture.Dates.GetUserTodayAsync(fixture.User.Id);
+        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, localDate, 1_750_000));
+        await fixture.Database.Context.SaveChangesAsync();
+
+        var nextCall = () => fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
+        await nextCall.Should().ThrowAsync<AiBudgetExceededException>();
+
+        now = resetAtUtc;
+        var reservation = await nextCall();
+
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single(call => call.Id == reservation).LocalDate.Should().Be(localDate.AddDays(1));
+        (await nextCall()).Should().NotBeEmpty();
     }
 
     [Fact]
@@ -161,9 +300,10 @@ public class AiDailyBudgetTests
     }
 
     [Fact]
-    public async Task SixCallToolLoops_StopAtDollarCeilingBeforeNextCompletion()
+    public async Task SixCallToolLoops_StopAtConfiguredDollarCeilingBeforeNextCompletion()
     {
         using var fixture = new BudgetFixture(pro: true);
+        fixture.Config.GetAsync(AppConfigKeys.ProAiMicroDollarsPerWeek, Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(120_000L);
         fixture.Handler.FullToolLoops = true;
         var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
         var loops = 0;
@@ -456,9 +596,11 @@ public class AiDailyBudgetTests
         internal SqliteOrbitDbContextFactory Database { get; } = new();
         internal User User { get; }
         internal IAppConfigService Config { get; } = Substitute.For<IAppConfigService>();
+        internal IUserDateService Dates { get; } = Substitute.For<IUserDateService>();
         internal HttpContextAccessor Http { get; } = new() { HttpContext = new DefaultHttpContext() };
         internal ModelHandler Handler { get; }
         internal BudgetedAiCompletionClient Client { get; }
+        internal IAiDailyBudget Budget { get; }
         internal IAiUsageRecorder Recorder { get; }
         internal List<JsonElement> EstimatedRequests { get; } = [];
         private readonly ServiceProvider _provider;
@@ -476,7 +618,7 @@ public class AiDailyBudgetTests
             SetUser(User.Id);
             Config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));
             Config.GetAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<long>(1));
-            var dates = Substitute.For<IUserDateService>();
+            var dates = Dates;
             dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
             _provider = new ServiceCollection()
                 .AddScoped(_ => Database.CreateContext())
@@ -513,7 +655,8 @@ public class AiDailyBudgetTests
                 return checked((long)decimal.Ceiling(Handler.InputTokens * inputRate
                     + request.RootElement.GetProperty("max_output_tokens").GetInt32() * price.OutputPerMillionUsd));
             });
-            Client = new BudgetedAiCompletionClient(raw, new AiDailyBudget(_provider.GetRequiredService<IServiceScopeFactory>()),
+            Budget = new AiDailyBudget(_provider.GetRequiredService<IServiceScopeFactory>());
+            Client = new BudgetedAiCompletionClient(raw, Budget,
                 Http, NullLogger<BudgetedAiCompletionClient>.Instance, useLocalEstimator
                     ? new AiRequestCostEstimator(_estimateCache, options) : estimates);
         }

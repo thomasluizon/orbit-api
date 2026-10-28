@@ -419,7 +419,7 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>()).Returns(5);
-        config.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(50);
+        config.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>()).Returns(250);
         _userRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>()).Returns(_user);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())

@@ -62,13 +62,13 @@ public class AiUsageSummaryServiceGenerationTests
         var harness = new Harness();
         await harness.SeedUsersAsync(
             UserWithMessages(5, hasProAccess: false),
-            UserWithMessages(50, hasProAccess: true));
+            UserWithMessages(250, hasProAccess: true));
 
         await harness.Service.SummarizeYesterdayAsync(CancellationToken.None);
 
         harness.SingleSummaryLine().Should().Contain(
-            "free_cap_hits=1; pro_cap_hits=1; mean_messages_per_active_user=27.50; " +
-            "p95_messages_per_active_user=50");
+            "free_cap_hits=1; pro_cap_hits=1; mean_messages_per_active_user=127.50; " +
+            "p95_messages_per_active_user=250");
     }
 
     private static AiUsageDaily Row(string purpose, long calls, decimal costUsd) =>
@@ -103,7 +103,7 @@ public class AiUsageSummaryServiceGenerationTests
         {
             var appConfig = Substitute.For<IAppConfigService>();
             appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, 5, Arg.Any<CancellationToken>()).Returns(5);
-            appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, 50, Arg.Any<CancellationToken>()).Returns(50);
+            appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, 250, Arg.Any<CancellationToken>()).Returns(250);
             _provider = new ServiceCollection()
                 .AddDbContext<OrbitDbContext>(options => options.UseInMemoryDatabase(_databaseName))
                 .AddSingleton(appConfig)

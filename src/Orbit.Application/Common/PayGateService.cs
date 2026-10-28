@@ -34,7 +34,7 @@ public class PayGateService(
         CancellationToken ct = default)
     {
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, ct);
         var userToday = await userDateService.GetUserTodayAsync(userId, ct);
         var unmetered = (await featureFlags.GetEnabledKeysForUserAsync(userId, ct))
             .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
@@ -155,7 +155,7 @@ public class PayGateService(
         if (user is null) return AppConstants.DefaultFreeAiMessages;
 
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerWeek, AppConstants.DefaultProAiMessages, ct);
         return user.HasProAccess ? proLimit : freeLimit;
     }
 

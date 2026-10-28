@@ -40,6 +40,8 @@ public partial class User : Entity
     public bool IsLifetimePro { get; private set; } = false;
     public int AiMessagesUsedToday { get; private set; } = 0;
     public DateOnly? AiMessagesLocalDate { get; private set; }
+    public int AiMessagesUsedThisWeek { get; private set; }
+    public DateOnly? AiMessagesWeekStart { get; private set; }
     public SubscriptionInterval? SubscriptionInterval { get; private set; }
     public SubscriptionSource? SubscriptionSource { get; private set; }
     public SubscriptionLapseReason? SubscriptionLapseReason { get; private set; }
@@ -473,6 +475,13 @@ public partial class User : Entity
             AiMessagesLocalDate = userToday;
         }
         AiMessagesUsedToday++;
+        var weekStart = AiAllowancePeriod.ActiveFor(userToday, true, WeekStartDay, AiMessagesWeekStart).Start;
+        if (!AiMessagesWeekStart.HasValue || AiMessagesWeekStart.Value < weekStart)
+        {
+            AiMessagesUsedThisWeek = 0;
+            AiMessagesWeekStart = weekStart;
+        }
+        AiMessagesUsedThisWeek++;
     }
 
     public int GetAiMessagesUsedToday(DateOnly userToday) =>
@@ -482,10 +491,20 @@ public partial class User : Entity
     {
         if (AiMessagesLocalDate == reservedDate && AiMessagesUsedToday > 0)
             AiMessagesUsedToday--;
+        var period = AiAllowancePeriod.ActiveFor(reservedDate, true, WeekStartDay, AiMessagesWeekStart);
+        if (AiMessagesWeekStart == period.Start && reservedDate >= period.Start && reservedDate < period.End
+            && AiMessagesUsedThisWeek > 0)
+            AiMessagesUsedThisWeek--;
     }
 
-    public int GetAiMessagesUsedForQuota(DateOnly userToday) =>
-        AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
+    public int GetAiMessagesUsedForQuota(DateOnly userToday)
+    {
+        if (!HasProAccess)
+            return AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
+
+        var weekStart = AiAllowancePeriod.ActiveFor(userToday, true, WeekStartDay, AiMessagesWeekStart).Start;
+        return AiMessagesWeekStart >= weekStart ? AiMessagesUsedThisWeek : 0;
+    }
 
     public void SetGoogleTokens(string accessToken, string? refreshToken)
     {

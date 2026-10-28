@@ -89,7 +89,7 @@ export const rendered = {
   "mcp:get_notifications": { receiver: "n", fields: "Id Title IsRead CreatedAtUtc" },
   "mcp:get_api_keys": { receiver: "k", fields: "Id Name KeyPrefix Scopes IsReadOnly ExpiresAtUtc IsRevoked" },
   "mcp:get_profile": { receiver: "p", fields: "Name Email Plan TrialEndsAt TimeZone Language Level TotalXp WeekStartDay Uses24HourClockPreference AiMessagesUsedToday", names: { Uses24HourClockPreference: "Uses24HourClock", AiMessagesUsedToday: "AiMessagesUsed" } },
-  "mcp:get_subscription_status": { receiver: "u", fields: "Plan TrialEndsAt PlanExpiresAt SubscriptionInterval IsLifetimePro AiMessagesUsedToday", names: { Plan: "HasProAccess", AiMessagesUsedToday: "GetAiMessagesUsedToday" } },
+  "mcp:get_subscription_status": { receiver: "u", fields: "Plan TrialEndsAt PlanExpiresAt SubscriptionInterval IsLifetimePro AiMessagesUsedToday", names: { Plan: "HasProAccess", AiMessagesUsedToday: "GetAiMessagesUsedForQuota" } },
   "mcp:get_habit_logs": { receiver: "l", fields: "Id Date" },
   "mcp:get_all_habit_logs": { receiver: "log", fields: "Date" },
   "mcp:get_gamification_profile": { receiver: "p", fields: "TotalXp Level CurrentStreak LongestStreak LastActiveDate" },

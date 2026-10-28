@@ -17,7 +17,9 @@ public record SubscriptionStatusResponse(
     string? Source,
     string? LapseReason = null,
     DateTime? SubscriptionEndedAtUtc = null,
-    string? BillingProvider = null);
+    string? BillingProvider = null,
+    string? AiMessagesPeriod = null,
+    DateTime? AiMessagesResetsAt = null);
 
 public record PlayVerifyResponse(
     bool HasProAccess,

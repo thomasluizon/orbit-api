@@ -18,7 +18,7 @@ Orbit has a free plan and a Pro plan. The free plan is fully usable for daily ha
 ## Limits on the free plan
 
 - **Habits** have an abuse guard of **1000** live top-level habits on both the free and Pro plans. Sub-habits, completed habits, and soft-deleted habits don't count toward the guard.
-- **AI messages** are capped at **5** per day. Pro raises this to **50** per day.
+- **AI messages** are capped at **5** per day. Pro includes **250** per local calendar week, resetting at midnight on the person's chosen week start day in their time zone.
 
 ## What Pro unlocks
 
