@@ -10,7 +10,9 @@ In the existing admin feature flag screen, add evaluation accounts to `astra_blo
 The backing API is `POST /api/admin/feature-flags`; use `list` and `enable_for_accounts` with the exact key and account emails.
 Verify `GET /api/config` reports that account's flag enabled and a parts-capable chat response
 leads with the requested supported kind without framing prose. Check that complete empty habit
-lists offer Today and explicit provider reads retain calendar recovery. Complete typed read
+lists retain an empty `habitList` block with complete metadata and offer Today. Empty record
+lists retain `recordList`, and explicit provider reads retain calendar recovery. Verify that
+no text part contains a serialized composition envelope. Complete typed read
 plans, including rounds of complete empty lists, need no narrative model call only when every
 read declares `orbit_read_complete: true`. Incomplete plans continue to remaining reads or
 approval-gated write previews. Confirm legacy and missing-kind fallbacks separately. Tool selection belongs

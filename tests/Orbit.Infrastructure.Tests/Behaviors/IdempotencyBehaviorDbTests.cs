@@ -25,7 +25,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     private readonly SqliteConnection _connection;
     private readonly OrbitDbContext _dbContext;
     private readonly UnitOfWork _unitOfWork;
-    private readonly IdempotencyStore _store;
+    private readonly RecordingIdempotencyStore _store;
     private readonly Guid _userId = Guid.NewGuid();
 
     private int _handlerCalls;
@@ -48,7 +48,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         _dbContext.SaveChanges();
 
         _unitOfWork = new UnitOfWork(_dbContext, new DatabaseConnectionSettings());
-        _store = new IdempotencyStore(_dbContext);
+        _store = new RecordingIdempotencyStore(new IdempotencyStore(_dbContext));
     }
 
     public void Dispose()
@@ -278,6 +278,9 @@ public class IdempotencyBehaviorDbTests : IDisposable
         (await _dbContext.HabitLogs.AsNoTracking().Select(log => log.HabitId).Distinct().CountAsync()).Should().Be(250);
         (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0)).Should().Be(skip ? 250 : 0);
         (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(4);
+        var commandType = skip ? typeof(BulkSkipHabitsCommand).FullName! : typeof(BulkLogHabitsCommand).FullName!;
+        _store.ReadRequestTypes.Should().HaveCount(8)
+            .And.OnlyContain(requestType => requestType.StartsWith(commandType + ":", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -792,7 +795,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task Handle_LegacyChatBulkRequest_RefusesWithoutChangingHabits(bool skip, bool afterMidnight)
+    public async Task Handle_BareBulkRow_DoesNotPreventPlanning(bool skip, bool afterMidnight)
     {
         var firstDay = new DateOnly(2026, 9, 24);
         var currentDay = afterMidnight ? firstDay.AddDays(1) : firstDay;
@@ -830,15 +833,23 @@ public class IdempotencyBehaviorDbTests : IDisposable
 
         var result = await tool.ExecuteAsync(args, _userId, CancellationToken.None);
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("earlier server version");
-        result.Error.Should().Contain("Check the habits and repeat the request");
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("2 of 2");
         (await _dbContext.HabitLogs.AsNoTracking().CountAsync()).Should().Be(1);
-        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+        _store.ReadRequestTypes.Should().Equal(commandType + ":plan");
+        var planBody = await _dbContext.ProcessedRequests
+            .Where(request => request.RequestType == commandType + ":plan")
+            .Select(request => request.ResponseBody).SingleAsync();
+        var plan = JsonSerializer.Deserialize<BulkHabitReplayPlan>(planBody)!;
+        plan.Date.Should().Be(currentDay);
+        plan.HabitIds.Should().BeEquivalentTo(habits.Select(habit => habit.Id));
         if (skip)
-            await mediator.DidNotReceive().Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>());
+            await mediator.Received(1).Send(Arg.Is<BulkSkipHabitsCommand>(command =>
+                command.Items.Count == 2 && command.Items.All(item => item.Date == currentDay)), Arg.Any<CancellationToken>());
         else
-            await mediator.DidNotReceive().Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>());
+            await mediator.Received(1).Send(Arg.Is<BulkLogHabitsCommand>(command =>
+                command.Items.Count == 2 && command.Items.All(item => item.Date == currentDay)), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1005,7 +1016,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_BulkSkipLegacyRow_ReplaysWithoutAppendingAnotherSkipLog()
+    public async Task Handle_BulkSkipBareRow_ExecutesAndStoresChunkResponse()
     {
         var today = new DateOnly(2026, 9, 24);
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Flexible skip", FrequencyUnit.Week, 3,
@@ -1039,54 +1050,12 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var replay = await behavior.Handle(command, next, CancellationToken.None);
 
         replay.Value.Results.Should().BeEquivalentTo(first.Value.Results);
-        _handlerCalls.Should().Be(1);
+        _handlerCalls.Should().Be(2);
         (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.HabitId == habit.Id && log.Value == 0))
-            .Should().Be(1);
-        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(1);
-    }
-
-    [Fact]
-    public async Task Handle_BulkSkipLegacyRowForDifferentHabit_DoesNotReplayIt()
-    {
-        var today = new DateOnly(2026, 9, 24);
-        var habits = new[]
-        {
-            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "First flexible skip", FrequencyUnit.Week, 3,
-                DueDate: today)).Value,
-            Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Second flexible skip", FrequencyUnit.Week, 3,
-                DueDate: today)).Value
-        };
-        _dbContext.Habits.AddRange(habits);
-        await _dbContext.SaveChangesAsync();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var handler = new BulkSkipHabitsCommandHandler(
-            new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            CreateUserDateService(today), _unitOfWork, cache);
-        var context = new StubIdempotencyContext(true, _userId, "different-legacy-skip", trackOrdinals: true);
-        var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(
-            context, _store, _unitOfWork);
-        var firstCommand = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habits[0].Id, today)]);
-        (await behavior.Handle(firstCommand, ct => handler.Handle(firstCommand, ct), CancellationToken.None))
-            .IsSuccess.Should().BeTrue();
-        var currentRow = await _dbContext.ProcessedRequests.SingleAsync();
-        var legacyRow = ProcessedRequest.Create(_userId, "different-legacy-skip",
-            typeof(BulkSkipHabitsCommand).FullName!, 0);
-        legacyRow.SetResponseBody(currentRow.ResponseBody);
-        _dbContext.ProcessedRequests.Remove(currentRow);
-        _dbContext.ProcessedRequests.Add(legacyRow);
-        await _dbContext.SaveChangesAsync();
-        context.ResetOrdinals();
-
-        var secondCommand = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habits[1].Id, today)]);
-        var replay = await behavior.Handle(secondCommand, ct =>
-        {
-            _handlerCalls++;
-            return handler.Handle(secondCommand, ct);
-        }, CancellationToken.None);
-
-        replay.Value.Results.Should().ContainSingle(item => item.HabitId == habits[1].Id);
-        _handlerCalls.Should().Be(1);
-        (await _dbContext.HabitLogs.AsNoTracking().CountAsync(log => log.Value == 0)).Should().Be(2);
+            .Should().Be(2);
+        (await _dbContext.ProcessedRequests.CountAsync()).Should().Be(2);
+        _store.ReadRequestTypes.Should().HaveCount(2).And.OnlyContain(requestType =>
+            requestType.StartsWith(typeof(BulkSkipHabitsCommand).FullName + ":", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1223,6 +1192,21 @@ public class IdempotencyBehaviorDbTests : IDisposable
     private sealed class FakeUniqueViolationException : System.Data.Common.DbException
     {
         public override string SqlState => "23505";
+    }
+
+    private sealed class RecordingIdempotencyStore(IIdempotencyStore inner) : IIdempotencyStore
+    {
+        public List<string> ReadRequestTypes { get; } = [];
+
+        public Task<string?> FindResponseBodyAsync(Guid userId, string idempotencyKey, string requestType,
+            int requestOrdinal, CancellationToken cancellationToken)
+        {
+            ReadRequestTypes.Add(requestType);
+            return inner.FindResponseBodyAsync(userId, idempotencyKey, requestType, requestOrdinal, cancellationToken);
+        }
+
+        public IIdempotencyReservation Reserve(Guid userId, string idempotencyKey, string requestType, int requestOrdinal) =>
+            inner.Reserve(userId, idempotencyKey, requestType, requestOrdinal);
     }
 
     private sealed class StubIdempotencyContext(bool hasKey, Guid userId, string key, bool trackOrdinals = false) : IIdempotencyContext

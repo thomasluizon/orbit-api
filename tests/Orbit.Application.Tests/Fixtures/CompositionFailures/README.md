@@ -17,6 +17,12 @@ their actual typed results or negotiated readable fallbacks. Corrected structure
 separate tests; only a subsequent model call can request a dependent read. Fixtures do not
 authorize message keyword routing, fixed advice or hiding tools from the model.
 
+The empty, notification, API-key, missing-habit and single-read captures come from the
+rerun on API `82fc57f2`, harness `e09b7f13f`. Their tool arguments replay at the same internal
+port. Their `answer` is the harness-rendered visible answer, not captured model prose; tests
+never inject it as provider output. Model-authored envelope tests construct their own internal
+`AiResponse` text to exercise parsing, grounding, final parts, recording and replay.
+
 The partial fixture seeds 51 habits. Failed attempts request limit 100; passing
 attempts request limit 50. Complete is truthful when all 51 rows are returned.
 The rendered answer shows three rows because the consumer preview samples them.

@@ -23,11 +23,11 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
-                    properties = new { item_id = new { type = JsonSchemaTypes.String }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
+                    properties = new { item_id = new { type = JsonSchemaTypes.String, description = "Exact item_id from the pending preview for the entity being edited. It may differ from entity_id." }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
                     required = new[] { "item_id", "edits_json" }
                 }
             },
-            remove_item_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } }
+            remove_item_ids = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, description = "Exact item_ids to discard from this preview. Never list an item that should remain. Skipping a habit occurrence keeps its skip preview item; it does not remove it. Omit when no preview items should be discarded." }
         },
         required = new[] { "pending_operation_id", "items" }
     };

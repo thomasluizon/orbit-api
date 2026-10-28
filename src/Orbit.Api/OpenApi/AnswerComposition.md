@@ -41,12 +41,13 @@ Supported data answers start with the typed block and omit framing prose. Choice
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
 from the typed result. Builder failure never becomes an empty success. Successful typed reads
-survive narrative outage. Complete empty habit, goal and record lists use a short localized state without a heading.
-With composition disabled, successful typed reads also survive an empty continuation or
-grounding removing the entire narrative. Supported clients receive the produced block;
-other clients receive its localized readable text. Recovery resets streamed text, preserves
-the read operation and consumes no additional model call or message allowance.
-They carry an existing screen action in `relatedSurfaces` when applicable. Habit queries use
+survive narrative outage. Complete empty habit, goal and record lists retain their query-bound
+typed block with empty items, zero total and complete metadata. The consumer renders its compact
+localized empty state without a heading. They carry an existing screen action in `relatedSurfaces`
+when applicable. With composition disabled, successful typed reads also survive an empty
+continuation or grounding removing the entire narrative. Supported clients receive the produced
+block; other clients receive its localized readable text. Recovery resets streamed text, preserves
+the read operation and consumes no additional model call or message allowance. Habit queries use
 `today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
 Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
@@ -68,8 +69,10 @@ projections cannot complete the round. A prerequisite lookup or a request needin
 or write declares false and keeps the tool loop. A failed terminal read or a missing projection
 requests continuation. A successful `query_habits` read with a nonempty `search`,
 `include_metrics: true`, complete metadata and zero total rows follows the same completion
-rules. When declared complete, it yields the localized missing-habit and unavailable-streak
-text without numeric results. A prerequisite lookup keeps the tool loop even when empty,
+rules. When declared complete, it yields the query-bound empty habit block without inventing
+streak metrics. Missing-capability and legacy clients keep the localized missing-habit and
+unavailable-streak text. Refresh and stored replay apply the same composition capability policy.
+A prerequisite lookup keeps the tool loop even when empty,
 so the model can request creation details or prepare the remaining change.
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
@@ -120,6 +123,15 @@ model selects creation or `revise_pending_changes` and supplies the target previ
 Revisions preserve unnamed fields and items. Suggestion refinements retain the model's
 validated cadence and explicit days; the server does not infer a replacement schedule from
 instruction keywords.
+
+The model receives account-local today, yesterday and tomorrow on each turn. Earlier
+previews do not define the current date. Explicit event dates remain explicit, and
+preparation offsets use the event date. Pending preview context uses snake_case field
+names, including item_id, entity_id and entity_name, and identifies the operation.
+Revision instructions distinguish discarded item IDs from retained items and occurrence
+skips from removal of a proposed change. These are model instructions, not message routing
+or server inference of the person's intended target. The live bilingual gate verifies
+the model's selection; local replays verify prompt inputs and typed preview composition.
 
 Skip previews include a noneditable action row, localized as "Skip" or
 "Pular", alongside the user's local occurrence date. Eligible skip operations
@@ -189,6 +201,14 @@ Legacy assistant text remains available. History never proves execution or groun
 Replay renegotiates stored blocks against current client capabilities and family kill flags;
 unsupported kinds use typed readable fallbacks. FORMAT lives in the dynamic prompt so the
 shared static prefix remains request invariant.
+
+Model-authored JSON envelopes are narrative input, never a source of blocks, actions or screen
+links. Before directive parsing and grounding, the server extracts string text from `parts`
+or `aiMessage`, including JSON fences. It discards model-supplied blocks and actions. Invalid
+or truncated composition envelopes contribute no text; existing truncation or unavailable
+handling supplies the truthful status when no typed result can answer. Extracted text still
+passes the same short-line and grounding rules. Final responses and recordings contain the
+resulting parts rather than an envelope serialized into a text part.
 
 `AnswerCompositionTests` drives real assembly and the production read factory across read
 families, legacy/missing-kind negotiation, misplaced/omitted directives, duplicate prose,

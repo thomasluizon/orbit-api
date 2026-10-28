@@ -53,15 +53,24 @@ public partial class ProcessUserChatCommandHandlerTests
         var tool = CompositionTool(name, kind, empty: true);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
-        SetupAiResponse(ToolResponse(name, "empty", "{\"orbit_read_complete\":true}"));
+        SetupAiResponse(CapturedCompositionPlan(name switch
+        {
+            "query_habits" => "composition-empty-" + language + "-r1",
+            "get_notifications" => "composition-notifications-en-r1",
+            _ => "composition-api-keys-en-r1"
+        }));
 
         var result = await handler.Handle(new(UserId, "Show my " + (name == "query_habits" ? "habits" : "notifications"),
             ClientContext: new(SupportsParts: true, PartKinds: [kind], SupportsHabitListCard: true,
                 SupportsRecordListCard: true, Locale: language)), default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
-        result.Value.AiMessage.Should().NotBeNullOrWhiteSpace().And.NotContain("\n");
+        var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject;
+        block.Kind.Should().Be(kind);
+        var read = ReadBlockTelemetry.Describe(block.Block).Read!;
+        read.TotalCount.Should().Be(0);
+        read.Completeness.Should().Be("complete");
+        result.Value.AiMessage.Should().BeNullOrEmpty();
         result.Value.RelatedSurfaces.Should().Contain(surface);
         await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());

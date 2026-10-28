@@ -354,6 +354,11 @@ public class TodayDateSectionTests
         var result = new TodayDateSection().Build(ctx);
 
         result.Should().Contain("2026-06-15");
+        result.Should().Contain("Yesterday: 2026-06-14")
+            .And.Contain("Tomorrow: 2026-06-16")
+            .And.Contain("Account-local calendar dates")
+            .And.Contain("Preserve explicit calendar dates")
+            .And.Contain("Earlier messages and pending previews do not define today's date");
     }
 
     [Fact]
