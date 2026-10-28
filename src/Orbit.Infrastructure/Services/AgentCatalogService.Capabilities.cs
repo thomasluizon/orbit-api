@@ -82,7 +82,9 @@ public partial class AgentCatalogService
                     "AiController.MarkPendingOperationStepUp",
                     "AiController.VerifyPendingOperationStepUp",
                     "AiController.ExecutePendingOperation",
-                    "AiController.ResolveClarification"
+                    "AiController.ResolveClarification",
+                    "StagingEvalController.GetPendingOperations",
+                    "StagingEvalController.ClearPendingOperations"
                 ])
         ];
     }
