@@ -4,8 +4,10 @@ Tracks thomasluizon/orbit-tickets#1871. The paired Android client is
 thomasluizon/orbit-tickets#1860.
 
 Repeat reminders delivered through FCM use a data message with high Android
-priority and no OS-rendered notification block. The Android Expo service reads
-`title`, `message` (visible body), `categoryId` and `channelId` from that data.
+priority and no OS-rendered notification block. A push takes this form exactly
+when its data carries `doneToken`; every other push keeps the OS-rendered block.
+The Android Expo service reads `title`, `message` (visible body), `categoryId`
+and `channelId` from that data.
 The fixed category identifier is `orbit-repeat-reminder`, defined by
 `PushNotificationService.RepeatReminderCategoryId`. Clients register their Done
 action under that identifier. The channel is the client's existing `default`.

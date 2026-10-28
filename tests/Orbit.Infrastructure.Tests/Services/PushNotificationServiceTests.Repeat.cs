@@ -72,4 +72,20 @@ public sealed partial class PushNotificationServiceTests
         message.Android.Should().BeNull();
         message.Data.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("url", "/"));
     }
+
+    [Fact]
+    public void CreateFcmMessage_MetadataWithoutDoneToken_KeepsOsRenderedNotification()
+    {
+        var data = new Dictionary<string, string> { ["habitId"] = Guid.NewGuid().ToString(), ["tag"] = "orbit-habit" };
+
+        var message = PushNotificationService.CreateFcmMessage("token", "Água", "Próximo às 20:00", "/", data);
+
+        using (new AssertionScope())
+        {
+            message.Notification.Title.Should().Be("Água");
+            message.Android.Notification.Tag.Should().Be("orbit-habit");
+            message.Data.Should().NotContainKey("categoryId");
+            message.Data.Should().NotContainKey("message");
+        }
+    }
 }
