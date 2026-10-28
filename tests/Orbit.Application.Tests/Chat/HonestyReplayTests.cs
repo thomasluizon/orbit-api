@@ -37,16 +37,6 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
-        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(sent =>
-            AskDeclaresOnlyChoice(sent)), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
-    }
-
-    private static bool AskDeclaresOnlyChoice(AiToolRequest sent)
-    {
-        var declaration = sent.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
-            .Single(value => value.GetProperty("name").GetString() == "ask");
-        return declaration.GetProperty("parameters").GetProperty("properties").GetProperty("form").GetProperty("enum")
-            .EnumerateArray().Select(value => value.GetString()).SequenceEqual(["choice"]);
     }
 
     private static AiResponse HonestyReplay(string name)

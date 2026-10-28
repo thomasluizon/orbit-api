@@ -5,16 +5,6 @@ namespace Orbit.Application.Chat;
 
 internal static class AskBlockNegotiation
 {
-    public static object Schema(object schema, AgentClientContext? client)
-    {
-        var forms = client?.SupportsParts == true ? client.PartKinds?.Where(kind =>
-            kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList or AstraBlockKinds.Question).ToArray() : null;
-        if (forms is not { Length: > 0 }) return schema;
-        var node = JsonSerializer.SerializeToNode(schema)!.AsObject();
-        node["properties"]!["form"]!["enum"] = JsonSerializer.SerializeToNode(forms);
-        return node;
-    }
-
     public static JsonElement Arguments(JsonElement args, AgentClientContext client)
     {
         if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("form", out var form)

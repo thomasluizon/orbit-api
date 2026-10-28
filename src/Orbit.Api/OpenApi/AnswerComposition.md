@@ -73,7 +73,8 @@ text without numeric results. A prerequisite lookup keeps the tool loop even whe
 so the model can request creation details or prepare the remaining change.
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
-message-based rewriting. Ask schemas declare only the client's supported forms. A model-emitted
+message-based rewriting. Ask instructions name the client's supported forms while the shared
+tool schemas remain stable across clients. A model-emitted
 single-choice question can use the existing choice surface when question blocks are unsupported;
 its supplied question, option labels and free-text permission remain intact and pass the choice
 validator and domain guard. No write is prepared before the answer. Habit clarification and streak selection live in the prompt and
