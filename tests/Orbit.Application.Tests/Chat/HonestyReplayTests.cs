@@ -137,7 +137,7 @@ public partial class ProcessUserChatCommandHandlerTests
             result.Value.Parts!.First().Should().BeOfType<ChatBlockPart>()
                 .Which.Block.Should().BeOfType<HabitListCard>().Which.Items.Should().BeEmpty();
             result.Value.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text.Should().Be(language == "en"
-                ? "No habit matches “piano”." : "Nenhum hábito corresponde a “piano”.");
+                ? "No habit matches “piano”." : "Nenhum hábito encontrado para “piano”.");
             result.Value.RelatedSurfaces.Should().Contain("today");
         }
         else

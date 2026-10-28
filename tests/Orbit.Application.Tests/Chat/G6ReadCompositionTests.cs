@@ -96,7 +96,7 @@ public partial class ProcessUserChatCommandHandlerTests
         card.Items.Should().HaveCount(empty ? 0 : 1);
         card.Read!.Completeness.Should().Be("complete");
         card.Read.TotalCount.Should().Be(empty ? 0 : 1);
-        result.Value.AiMessage.Should().Be(empty ? "Nenhum hábito corresponde a “piano”." : null);
+        result.Value.AiMessage.Should().Be(empty ? "Nenhum hábito encontrado para “piano”." : null);
         if (empty) result.Value.RelatedSurfaces.Should().Contain("today");
         events.Should().NotContain(item => item.Type == "delta");
         await AssertNoCompositionContinuation();
@@ -105,7 +105,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     [Theory]
     [InlineData("en", "No habit matches “violão azul”.")]
-    [InlineData("pt-BR", "Nenhum hábito corresponde a “violão azul”.")]
+    [InlineData("pt-BR", "Nenhum hábito encontrado para “violão azul”.")]
     public async Task G6Rerun_EmptySearchContextComesOnlyFromTypedQuery(string language, string expected)
     {
         var user = User.Create("Reader", "reader@example.test").Value;

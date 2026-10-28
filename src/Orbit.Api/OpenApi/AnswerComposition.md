@@ -121,7 +121,7 @@ Legacy clients without parts keep their readable path; unsupported kinds use typ
 The parts and family kill flags still apply. No contract field changes type or optionality.
 For a complete filtered habit read with zero total rows, the empty block retains
 `read.scope.search` and its existing screen action. One short contextual text part names
-that searched value: `No habit matches “piano”.` or `Nenhum hábito corresponde a “piano”.`
+that searched value: `No habit matches “piano”.` or `Nenhum hábito encontrado para “piano”.`
 This essential scope explanation comes only from typed query metadata, with no metrics
 fabrication or additional model call. Nonempty, partial, failed and unfiltered reads
 do not receive that explanation. Legacy unavailable-streak text remains supported.
