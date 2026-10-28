@@ -168,6 +168,133 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task SelectionReplay_CoalescedTagsKeepOnlyUnrelatedTargets(bool sameRound, bool candidateFirst)
+    {
+        SetupUserAndPayGate();
+        var water = CreateHabit("Water");
+        var candidates = new[] { CreateHabit("Caminhada"), CreateHabit("Caminhada") };
+        SetupSelectionHabits(water, candidates[0], candidates[1]);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var tags = new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork);
+        var handler = CreateHandler(query, tags);
+        var held = HoldSelectionReplayWrites(query, tags);
+        var writes = new[]
+        {
+            new AiToolCall(tags.Name, "water", JsonSerializer.SerializeToElement(new { habit_id = "Water", tag_names = new[] { "Health" } })),
+            new AiToolCall(tags.Name, "candidate", JsonSerializer.SerializeToElement(new { habit_id = candidates[0].Id, tag_names = new[] { "Health" } }))
+        };
+        ReplaySelectionWrites(sameRound, candidateFirst ? writes.Reverse().ToArray() : writes);
+
+        var result = await handler.Handle(new(UserId, "Apply the requested changes.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle().Which.OperationId.Should().Be(tags.Name);
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle()
+            .Which.EntityId.Should().Be(water.Id);
+        result.Value.PendingOperations!.SelectMany(operation => operation.Items!).Should()
+            .NotContain(item => candidates.Any(candidate => candidate.Id == item.EntityId));
+        await _aiIntentService.Received().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Any(outcome => outcome.Id == "candidate" && !outcome.Success)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SelectionReplay_BulkFilterBlocksCandidatesAndKeepsUnrelatedWrite(bool sameRound)
+    {
+        SetupUserAndPayGate();
+        var water = CreateHabit("Water");
+        var candidates = new[] { CreateHabit("Caminhada"), CreateHabit("Caminhada") };
+        SetupSelectionHabits(water, candidates[0], candidates[1]);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var update = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(query, update);
+        var held = HoldSelectionReplayWrites(query, update);
+        ReplaySelectionWrites(sameRound,
+            new AiToolCall(update.Name, "candidate", ParseArguments("""{"filter":{"search":"Caminhada"},"updates":{"description":"Updated"}}""")),
+            new AiToolCall(update.Name, "water", ParseArguments("""{"filter":{"search":"Water"},"updates":{"description":"Updated"}}""")));
+
+        var result = await handler.Handle(new(UserId, "Apply the requested changes.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle().Which.Arguments.GetProperty("filter").GetProperty("search").GetString().Should().Be("Water");
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle()
+            .Which.EntityId.Should().Be(water.Id);
+        await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
+            request.OperationId == update.Name && request.Arguments.GetProperty("filter").GetProperty("search").GetString() == "Caminhada"),
+            Arg.Any<CancellationToken>());
+    }
+
+    private List<AgentExecuteOperationRequest> HoldSelectionReplayWrites(QueryHabitsTool query, params IAiTool[] writes)
+    {
+        var blocks = UseProductionReadExecutor(query);
+        var held = HoldReplayWrites(writes);
+        var executor = Orbit.Application.Tests.Chat.ReadBlockScopeTests.CreateExecutor(query, blocks);
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == query.Name),
+                Arg.Any<CancellationToken>())
+            .Returns(call => executor.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), call.Arg<CancellationToken>()));
+        return held;
+    }
+
+    [Fact]
+    public async Task SelectionReplay_MultipleLookupsKeepEveryUnansweredCandidateSet()
+    {
+        SetupUserAndPayGate();
+        var water = CreateHabit("Water");
+        var candidate = CreateHabit("Caminhada");
+        SetupSelectionHabits(water, candidate, CreateHabit("Caminhada"));
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var tags = new AssignTagsTool(_habitRepo, _tagRepo, _unitOfWork);
+        var handler = CreateHandler(query, tags);
+        var held = HoldSelectionReplayWrites(query, tags);
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new(query.Name, "first-selection", ParseArguments("""{"search":"Water","for_selection":true}""")),
+                new(query.Name, "second-selection", ParseArguments("""{"for_selection":true}""")),
+                new(tags.Name, "candidate", JsonSerializer.SerializeToElement(new { habit_id = candidate.Id, tag_names = new[] { "Health" } }))
+            ]
+        });
+        ReplyToReplay("Which habit would you like to choose?");
+
+        var result = await handler.Handle(new(UserId, "Apply the requested changes.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true,
+                SupportsDatedHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().BeEmpty();
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
+            request.OperationId == tags.Name), Arg.Any<CancellationToken>());
+    }
+
+    private void ReplaySelectionWrites(bool sameRound, params AiToolCall[] writes)
+    {
+        var read = new AiToolCall("query_habits", "lookup",
+            ParseArguments("""{"search":"Caminhada","for_selection":false,"orbit_read_complete":false}"""));
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = sameRound ? [read, .. writes] : [read]
+        });
+        var final = Result.Success(new AiResponse { TextMessage = "Review the changes." });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(sameRound ? final : Result.Success(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = writes }), final);
+    }
+
+    [Theory]
     [InlineData(1, false, false)]
     [InlineData(2, false, false)]
     [InlineData(3, false, false)]

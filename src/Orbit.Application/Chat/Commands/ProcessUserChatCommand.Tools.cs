@@ -449,9 +449,6 @@ public partial class ProcessUserChatCommandHandler
         }
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
-        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
-        CoalesceTagCalls(resolvedWrites, executionResults);
-        PrepareHabitProposals(resolvedWrites, request, executionResults, language);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -470,14 +467,22 @@ public partial class ProcessUserChatCommandHandler
             {
                 if (selection.RequiresAnswer)
                     executionResults.PendingSelection ??= selection;
-                if (selection.Reference is not null)
+                if (selection.RequiresAnswer || selection.Reference is not null)
                     executionResults.AmbiguousReadCandidates.Add(selection);
             }
         }
 
+        RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
+        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
+        CoalesceTagCalls(resolvedWrites, executionResults);
+        PrepareHabitProposals(resolvedWrites, request, executionResults, language);
+
         foreach (var call in writeCalls)
         {
-            if (SelectionForWrite(call, executionResults) is { } unanswered)
+            if (outcomesByCallId.ContainsKey(call.Id))
+                continue;
+            var resolved = resolvedWrites[call.Id];
+            if (resolved is not null && SelectionForWrite(resolved, executionResults) is { } unanswered)
             {
                 executionResults.PendingSelection = unanswered;
                 outcomesByCallId[call.Id] = SelectionRequiredOutcome(call);
@@ -488,7 +493,6 @@ public partial class ProcessUserChatCommandHandler
                 outcomesByCallId[call.Id] = RepeatedSingleEntityToolOutcome(call, bulkTool);
                 continue;
             }
-            var resolved = resolvedWrites[call.Id];
             if (resolved is null || !executionResults.PreviewedCalls.Add(
                 Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText())))
             {

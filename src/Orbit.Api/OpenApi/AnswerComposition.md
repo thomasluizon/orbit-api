@@ -76,11 +76,14 @@ A prerequisite lookup keeps the tool loop even when empty,
 so the model can request creation details or prepare the remaining change.
 Habit lookups append the model argument `for_selection`. True declares a lookup for an
 unanswered choice or pick list, including a single candidate. These typed results keep
-the tool loop open for `ask` and block every write in that turn until the person answers.
+the tool loop open for `ask` and block writes to those candidates until the person answers.
 A searched lookup with multiple matches retains its candidate signal even when an ID
 appears in a later write call. Ordinary list reads explicitly declare false and retain
 their list projection. For clients advertising ask forms, a lookup without a declared
 purpose requires continuation before it can be treated as the completed answer.
+Write checks use resolved identifiers and the bulk operation's own filter selector.
+Candidate writes are rejected before coalescing so unrelated writes still run. The final
+effective calls are checked again before dispatch or preview creation.
 No request-text pattern selects this behavior. See [HabitSelection.md](HabitSelection.md)
 for the selection contract and the English and Brazilian Portuguese copy submitted for review.
 

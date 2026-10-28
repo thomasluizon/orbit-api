@@ -17,11 +17,17 @@ IDs without the person's answer. Writes to unrelated records still reach their e
 execution path. Read results run before writes from the same model round.
 The write guard consumes only these typed facts. It rejects the call before operation
 dispatch or preview creation and reports the missing selection back to the model.
+It checks resolved identifiers and bulk targets selected through the operation's existing
+filter parser and `BulkHabitSelection.Select`, including emoji inference restrictions.
+Candidate calls are rejected before coalescing tags, logs or creations, preserving
+unrelated calls regardless of their order. The final effective call is checked again
+after coalescing and proposal preparation.
 
 Selection results expose candidates and an instruction to call `ask`, without a read
 directive. The composition suppresses the candidate list while a selection is unanswered.
 If the model still fails to ask, the answer is one localized clarification question,
-without a write or a list. An issued ask block takes precedence over that fallback.
+without a write to those candidates or a candidate list. Unrelated previews remain available.
+An issued ask block takes precedence over that fallback.
 No message keyword triggers a tool, changes a tool name or supplies a replacement answer.
 Clients advertising ask forms require an explicit false `for_selection` to finish a
 declared-complete habit read without continuation. Older callers may omit the argument;

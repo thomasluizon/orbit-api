@@ -279,7 +279,7 @@ public sealed partial class BulkUpdateHabitEmojisTool(
             includeUpdatedCount: true);
     }
 
-    private static (BulkHabitFilter? Filter, string? Error) ParseInferenceFilter(JsonElement args)
+    internal static (BulkHabitFilter? Filter, string? Error) ParseInferenceFilter(JsonElement args)
     {
         if (args.TryGetProperty("replace_existing", out var replace)
             && replace.ValueKind is not (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null))
