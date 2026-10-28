@@ -16,7 +16,8 @@ public sealed class BulkLogHabitsTool(
     public string Name => "bulk_log_habits";
 
     public string Description =>
-        "Log the complete matching habit set, only as requested.";
+        "Log completion of the complete matching habit set, only when completion was requested. "
+        + "Skipping occurrences uses bulk_skip_habits instead.";
 
     public object GetParameterSchema()
     {

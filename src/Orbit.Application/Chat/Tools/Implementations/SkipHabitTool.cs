@@ -23,7 +23,9 @@ public class SkipHabitTool(IMediator mediator, IGenericRepository<Habit> habitRe
     public string Name => "skip_habit";
 
     public string Description =>
-        "Skip a due/overdue habit without completion: advance recurrence or postpone one-time tasks to tomorrow. Default: today. Returns skip_id for undo.";
+        "Skip one habit occurrence without logging completion or deleting the habit. Use for skip today or pula só hoje. "
+        + "A target lookup must be followed by this write. For several habits use bulk_skip_habits. "
+        + "Advance recurrence or postpone one-time tasks to tomorrow. Default: today. Returns skip_id for undo.";
 
     public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
         "ID of the habit to skip",

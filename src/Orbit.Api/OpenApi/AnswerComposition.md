@@ -107,10 +107,27 @@ habit's stored title, including in their approval arguments; the model's propose
 rename it. A title match without an ID receives the same stored identity and title.
 
 Temporary preparation commitments preserve the requested action and negation in their titles.
+An exact record title stays verbatim. For an activity described in prose, the model normalizes
+spelling, casing and proper names while keeping its action and negation. Supplied event dates,
+including past dates, anchor the preparation offsets and do not require another question.
 Preparation continuing until an event uses daily recurrence with `due_date` at its start and
 inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. An activity
 ending at a collection uses `due_end_time` for that deadline. These are model instructions;
 composition and execution preserve the structured arguments rather than rewriting message text.
+
+Write completion covers every requested action, target and occurrence. A target lookup is a
+prerequisite, not a mutation. A rename plus a skip uses both write tools; skipping several
+habits uses `bulk_skip_habits`. The server combines the model's held writes into one preview
+and preserves their action labels. It never infers missing writes from the person's wording
+or changes a log call into a skip call.
+
+Suggestion drafts contain requested values and the fields required by the existing draft
+contract. Unrequested weekdays and checklist items stay empty, and reminders stay null.
+Adjustments preserve the existing cadence and clock interval unless a change was requested.
+When a required cadence or clock interval is absent, the model proposes minimal valid values
+from account context. Those are editable proposals, not supplied facts. Start and end times
+remain required; no response field becomes optional. The bilingual model-copy review inventory
+is [CompoundRequestCopy.md](CompoundRequestCopy.md).
 
 Skipped habit reads retain their dated skip facts, including active skip receipts for
 recurring habits. They exclude skipped entries from completed and remaining totals.

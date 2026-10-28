@@ -17,7 +17,9 @@ public sealed class BulkSkipHabitsTool(
     public string Name => "bulk_skip_habits";
 
     public string Description =>
-        "Skip the complete matching habit set, only as requested.";
+        "Skip one occurrence of every requested habit in one approval preview. Use for skip or pular several habits. "
+        + "This does not log completion or delete habits. Resolve their IDs or filter, then call this write; a lookup alone does not skip. "
+        + "Keep unrelated requested edits in their matching tools in the same round.";
 
     public object GetParameterSchema() => BulkHabitToolArguments.ActionFilterSchema(
         "Habit IDs to skip instead of filter.",

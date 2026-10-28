@@ -20,6 +20,21 @@ public class AstraBehaviourPromptTests
             .And.Contain("Reuse suggest_habits")
             .And.Contain("nothing is saved before approval")
             .And.Contain("at most one short sentence without figures");
+        prompt.Should().Contain("Keep every supplied date and time, including past dates")
+            .And.Contain("normalize spelling and casing without changing the action or negation")
+            .And.Contain("Don't take multivitamins must not become Stop taking multivitamins")
+            .And.Contain("não ir pro muay thay becomes Não ir ao Muay Thai");
+    }
+
+    [Fact]
+    public void WriteCompletion_RequiresEveryActionTargetAndOccurrence()
+    {
+        Orbit.Application.Chat.TerminalWriteDirective.Instruction.Should()
+            .Contain("each requested action, target and occurrence")
+            .And.Contain("A lookup never fulfills a requested mutation")
+            .And.Contain("rename and skip require both update_habit and skip_habit")
+            .And.Contain("bulk_skip_habits")
+            .And.Contain("never log_habit or bulk_log_habits");
     }
 
     [Theory]

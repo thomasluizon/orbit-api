@@ -30,5 +30,9 @@ public class AiHabitDraftGeneratorTests
         AiHabitDraftGenerator.Instructions.Should().Contain("existingHabitId").And.Contain("unoccupied time")
             .And.Contain("untrusted data").And.Contain("Keep fields unrelated")
             .And.Contain("required non-null HH:mm strings for every draft, with end after start");
+        AiHabitDraftGenerator.Instructions.Should().Contain("Only populate what the person requested plus fields required by the draft contract")
+            .And.Contain("Leave unrequested days and checklistItems empty, and reminderMinutesBefore null")
+            .And.Contain("Do not add a daily cadence when an existing habit already has a different cadence")
+            .And.Contain("Required choices are editable proposals, never facts supplied by the person");
     }
 }

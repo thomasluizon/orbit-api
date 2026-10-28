@@ -56,7 +56,13 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         Never duplicate an existing activity, including synonyms: offer an adjustment using existingHabitId instead.
         When existingHabitId identifies a supplied habit, keep its stored title verbatim. Put the suggested adjustment in the other draft fields.
         Never change an existing habit just because it shares a theme. New activities have existingHabitId null.
-        For every draft, choose a realistic duration and an unoccupied time using existing schedules and other drafts.
+        Only populate what the person requested plus fields required by the draft contract.
+        Leave unrequested days and checklistItems empty, and reminderMinutesBefore null.
+        For an adjustment, preserve the existing cadence and clock interval unless the person requests changing them.
+        Do not add a daily cadence when an existing habit already has a different cadence.
+        Only when a required cadence or clock interval is missing, propose the minimum valid values using the supplied account context.
+        Required choices are editable proposals, never facts supplied by the person. Do not add optional schedule detail to justify them.
+        A required clock interval must use an unoccupied time using existing schedules and other drafts.
         Existing untimed habits do not reserve a clock interval; an existing timed habit without an end reserves its start minute.
         Keep the user's requested time and cadence. Start on or after today, within the coming year.
         Weekdays, Monday through Friday, dias de semana and dias úteis mean frequencyUnit Day, frequencyQuantity 1,
