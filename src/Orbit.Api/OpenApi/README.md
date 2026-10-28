@@ -1,5 +1,8 @@
 # Selecting an OpenAPI artifact
 
+The FCM data message and shared Android category for repeat reminder actions
+are documented in [RepeatReminderPush.md](RepeatReminderPush.md).
+
 The append-only authoritative `nextReminderAtUtc` field for habit schedule and
 detail reads is documented in [NextRepeatReminder.md](NextRepeatReminder.md).
 Deploy this producer to staging before the paired consumer updates its pin.
