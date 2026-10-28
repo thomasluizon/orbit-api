@@ -12,6 +12,85 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public partial class ReminderSchedulerServiceTests
 {
+    [Fact]
+    public async Task NextReminder_LegitimateFutureStartStillProjectsDelivery()
+    {
+        var startAtUtc = DefaultInstant.UtcDateTime.AddDays(10);
+        var (habit, _) = await SeedRepeat(new(15, StartAtUtc: startAtUtc));
+        (await ReadNextReminder(habit, new MutableTimeProvider(DefaultInstant)))
+            .Should().Be(startAtUtc.AddMinutes(15));
+    }
+
+    [Fact]
+    public async Task NextReminder_UnrepresentableExpiryReturnsNull()
+    {
+        var startAtUtc = new DateTime(9999, 12, 31, 23, 40, 0, DateTimeKind.Utc);
+        var (habit, _) = await SeedRepeat(new(15, StartAtUtc: startAtUtc));
+        (await ReadNextReminder(habit, new MutableTimeProvider(DefaultInstant))).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task NextReminder_OldFollowUpAgreesWithSchedulerSnapshot()
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, start) = await SeedRepeat();
+        var dueAtUtc = start.AddHours(8);
+        var parent = SentReminder.CreateRepeat(habit.Id, UtcToday, dueAtUtc, dueAtUtc.AddHours(8), start);
+        db.SentReminders.AddRange(parent, SentReminder.CreateRepeat(habit.Id, UtcToday,
+            dueAtUtc.AddMinutes(15), dueAtUtc.AddHours(8), start, parent.Id));
+        await db.SaveChangesAsync();
+        var clock = new MutableTimeProvider(new(dueAtUtc.AddDays(4)));
+        var readAtUtc = await ReadNextReminder(habit, clock);
+        readAtUtc.Should().Be(clock.GetUtcNow().UtcDateTime);
+        await CreateService(db, Substitute.For<IPushNotificationService>(), clock).CheckAndSendReminders(default);
+        var sent = await db.SentReminders.SingleAsync(r => r.ReminderAtUtc == readAtUtc);
+        sent.ParentReminderId.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NextReminder_UnrepresentablePersistedStartReturnsNull(bool activeWindow)
+    {
+        var (habit, _) = await SeedUnrepresentableRepeat(activeWindow);
+        (await ReadNextReminder(habit, new MutableTimeProvider(DefaultInstant))).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Repeat_UnrepresentablePersistedStartDoesNotLoseAnotherUsersPush(bool activeWindow)
+    {
+        var db = CreateSqliteDbContext();
+        await SeedUnrepresentableRepeat(activeWindow);
+        var user = User.Create("Healthy", "healthy@test.com").Value;
+        var healthy = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user.Id, "Workout",
+            FrequencyUnit.Day, 1, UtcToday, DueTime: new(0, 0), ReminderEnabled: true,
+            ReminderTimes: [0])).Value;
+        db.Users.Add(user);
+        db.Habits.Add(healthy);
+        await db.SaveChangesAsync();
+        var push = Substitute.For<IPushNotificationService>();
+        var scheduler = CreateService(db, push);
+
+        await scheduler.CheckAndSendReminders(default);
+        await scheduler.CheckAndSendReminders(default);
+
+        (await db.SentReminders.SingleAsync()).HabitId.Should().Be(healthy.Id);
+        await push.Received(1).SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    private async Task<(Habit Habit, DateTime Start)> SeedUnrepresentableRepeat(bool activeWindow)
+    {
+        var db = CreateSqliteDbContext();
+        var seeded = await SeedRepeat(activeWindow ? new(15, new(8, 0), new(20, 0)) : new(15));
+        db.Entry(seeded.Habit).Property(h => h.RepeatStartAtUtc).CurrentValue =
+            new DateTime(9999, 12, 31, activeWindow ? 20 : 23, 50, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        return seeded;
+    }
+
     [Theory]
     [InlineData(HabitSchedule.General)]
     [InlineData(HabitSchedule.Flexible)]

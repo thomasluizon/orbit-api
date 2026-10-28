@@ -12,6 +12,25 @@ namespace Orbit.Application.Tests.Validators;
 public sealed class RepeatReminderValidatorTests
 {
     [Theory]
+    [InlineData(15, false)]
+    [InlineData(15, true)]
+    [InlineData(1380, false)]
+    [InlineData(1380, true)]
+    public async Task CreateAndUpdate_ValidateRepresentableStart(int minutes, bool overflow)
+    {
+        var startAtUtc = DateTime.SpecifyKind(DateTime.MaxValue.AddMinutes(-minutes), DateTimeKind.Utc);
+        if (overflow)
+            startAtUtc = startAtUtc.AddTicks(1);
+        var create = new CreateHabitCommand(Guid.NewGuid(), "Drink water", null, FrequencyUnit.Day, 1,
+            Options: new(RepeatReminder: new(minutes, StartAtUtc: startAtUtc)));
+        var update = new UpdateHabitCommand(create.UserId, Guid.NewGuid(), create.Title, null, FrequencyUnit.Day, 1,
+            Options: new(RepeatReminder: create.Options!.RepeatReminder));
+        new CreateHabitCommandValidator().Validate(create).IsValid.Should().Be(!overflow);
+        (await new UpdateHabitCommandValidator(Substitute.For<IGenericRepository<Habit>>()).ValidateAsync(update))
+            .IsValid.Should().Be(!overflow);
+    }
+
+    [Theory]
     [InlineData(14, false)]
     [InlineData(15, true)]
     [InlineData(20, true)]

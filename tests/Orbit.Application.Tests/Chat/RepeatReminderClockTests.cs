@@ -6,6 +6,39 @@ namespace Orbit.Application.Tests.Chat;
 
 public sealed class RepeatReminderClockTests
 {
+    [Fact]
+    public void UnrepresentableNextOccurrence_ReturnsNull()
+    {
+        var anchorAtUtc = new DateTime(9999, 12, 31, 23, 50, 0, DateTimeKind.Utc);
+        ((DateTime?)RepeatReminderClock.Next(anchorAtUtc, new(15), TimeZoneInfo.Utc)).Should().BeNull();
+    }
+
+    [Fact]
+    public void UnrepresentableActiveWindow_ReturnsNull()
+    {
+        var instantAtUtc = new DateTime(9999, 12, 31, 20, 0, 0, DateTimeKind.Utc);
+        ((DateTime?)RepeatReminderClock.MoveIntoWindow(instantAtUtc, new(15, new(8, 0), new(20, 0)), TimeZoneInfo.Utc))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void UnrepresentableWindowUtcOffset_ReturnsNull()
+    {
+        var zone = TimeZoneInfo.CreateCustomTimeZone("West", TimeSpan.FromHours(-3), "West", "West");
+        var instantAtUtc = new DateTime(9999, 12, 31, 22, 0, 0, DateTimeKind.Utc);
+        RepeatReminderClock.MoveIntoWindow(instantAtUtc, new(15, new(23, 0), new(23, 30)), zone)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void LatestDue_LastRepresentableCandidateStopsWithoutOverflow()
+    {
+        var firstAtUtc = new DateTime(9999, 12, 31, 22, 0, 0, DateTimeKind.Utc);
+        var nowAtUtc = new DateTime(9999, 12, 31, 23, 50, 0, DateTimeKind.Utc);
+        RepeatReminderClock.LatestDue(firstAtUtc, nowAtUtc, new(15, new(22, 0), new(23, 59)), TimeZoneInfo.Utc)
+            .Should().Be(new DateTime(9999, 12, 31, 23, 45, 0, DateTimeKind.Utc));
+    }
+
     [Theory]
     [InlineData("UTC", 15, 8, 22, 2027, 1)]
     [InlineData("UTC", 420, 22, 6, 2027, 1)]
@@ -21,11 +54,11 @@ public sealed class RepeatReminderClockTests
         var zone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
         var anchorAtUtc = new DateTime(year, month, 1, 12, 30, 0, DateTimeKind.Utc);
         var options = new RepeatReminderOptions(minutes, new(startHour, 0), new(endHour, 59));
-        var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, zone);
+        var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, zone)!.Value;
         var nowAtUtc = anchorAtUtc.AddDays(90);
         var expectedAtUtc = firstAtUtc;
         while (RepeatReminderClock.Next(expectedAtUtc, options, zone) <= nowAtUtc)
-            expectedAtUtc = RepeatReminderClock.Next(expectedAtUtc, options, zone);
+            expectedAtUtc = RepeatReminderClock.Next(expectedAtUtc, options, zone)!.Value;
 
         RepeatReminderClock.LatestDue(firstAtUtc, nowAtUtc, options, zone).Should().Be(expectedAtUtc);
     }
@@ -48,11 +81,11 @@ public sealed class RepeatReminderClockTests
     {
         var anchorAtUtc = new DateTime(2027, 9, 1, 12, 30, 0, DateTimeKind.Utc);
         var options = new RepeatReminderOptions(1380, new(0, 0), new(23, 59));
-        var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, TimeZoneInfo.Utc);
+        var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, TimeZoneInfo.Utc)!.Value;
         var nowAtUtc = anchorAtUtc.AddDays(8);
         var expectedAtUtc = firstAtUtc;
         while (RepeatReminderClock.Next(expectedAtUtc, options, TimeZoneInfo.Utc) <= nowAtUtc)
-            expectedAtUtc = RepeatReminderClock.Next(expectedAtUtc, options, TimeZoneInfo.Utc);
+            expectedAtUtc = RepeatReminderClock.Next(expectedAtUtc, options, TimeZoneInfo.Utc)!.Value;
 
         RepeatReminderClock.LatestDue(firstAtUtc, nowAtUtc, options, TimeZoneInfo.Utc)
             .Should().Be(expectedAtUtc);

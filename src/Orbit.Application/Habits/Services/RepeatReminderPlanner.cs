@@ -16,22 +16,27 @@ public static class RepeatReminderPlanner
     public static RepeatReminderPlan? Next(Habit habit, DateTime nowAtUtc, TimeZoneInfo zone, int weekStartDay,
         DateTime? doseAtUtc, IReadOnlySet<DateOnly> loggedDates, IReadOnlyCollection<SentReminder> sentReminders)
     {
-        if (habit.IsCompleted || habit.IsDeleted || !habit.ReminderEnabled || habit.RepeatReminder is not { } options
+        if (EnabledOptions(habit) is not { } options
             || options.StartAtUtc is not { } startAtUtc)
             return null;
         var anchorAtUtc = DateTime.SpecifyKind(doseAtUtc ?? startAtUtc, DateTimeKind.Utc);
-        var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, zone);
+        if (RepeatReminderClock.Next(anchorAtUtc, options, zone) is not { } firstAtUtc)
+            return null;
         var candidateAtUtc = nowAtUtc > firstAtUtc ? nowAtUtc : firstAtUtc;
         while (true)
         {
-            candidateAtUtc = RepeatReminderClock.MoveIntoWindow(candidateAtUtc, options, zone);
+            if (RepeatReminderClock.MoveIntoWindow(candidateAtUtc, options, zone) is not { } windowAtUtc)
+                return null;
+            candidateAtUtc = windowAtUtc;
             var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(candidateAtUtc, zone));
             if (habit.EndDate is { } end && date > end)
                 return null;
             var start = habit.Schedule == HabitSchedule.General ? habit.StartDate : habit.NextDueDate;
             if (date < start)
             {
-                candidateAtUtc = RepeatReminderClock.LocalInstant(start.ToDateTime(TimeOnly.MinValue), zone);
+                if (RepeatReminderClock.LocalInstant(start.ToDateTime(TimeOnly.MinValue), zone) is not { } startAt)
+                    return null;
+                candidateAtUtc = startAt;
                 continue;
             }
             if (!CanSend(habit, date, weekStartDay)
@@ -39,14 +44,19 @@ public static class RepeatReminderPlanner
             {
                 if (date == DateOnly.MaxValue || habit.Schedule == HabitSchedule.OneTime)
                     return null;
-                candidateAtUtc = RepeatReminderClock.LocalInstant(date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone);
+                if (RepeatReminderClock.LocalInstant(date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone) is not { } tomorrowAtUtc)
+                    return null;
+                candidateAtUtc = tomorrowAtUtc;
                 continue;
             }
             var dueAtUtc = RepeatReminderClock.LatestDue(firstAtUtc, candidateAtUtc, options, zone);
             var sent = sentReminders.FirstOrDefault(r => r.HabitId == habit.Id && r.ReminderAtUtc == dueAtUtc);
-            var nextAtUtc = RepeatReminderClock.Next(dueAtUtc, options, zone);
+            if (RepeatReminderClock.Next(dueAtUtc, options, zone) is not { } nextAtUtc)
+                return null;
             if (sent is null)
                 return new(candidateAtUtc, dueAtUtc, nextAtUtc, anchorAtUtc, null);
+            if (dueAtUtc.Ticks > DateTime.MaxValue.Ticks - 15 * TimeSpan.TicksPerMinute)
+                return null;
             var followUpAtUtc = dueAtUtc.AddMinutes(15);
             if (CanFollowUp(sent, anchorAtUtc, followUpAtUtc, options, zone, sentReminders))
             {
@@ -59,6 +69,9 @@ public static class RepeatReminderPlanner
                 candidateAtUtc = nextAtUtc;
         }
     }
+
+    private static RepeatReminderOptions? EnabledOptions(Habit habit) =>
+        habit.IsCompleted || habit.IsDeleted || !habit.ReminderEnabled ? null : habit.RepeatReminder;
 
     private static bool CanFollowUp(SentReminder sent, DateTime anchorAtUtc, DateTime followUpAtUtc,
         RepeatReminderOptions options, TimeZoneInfo zone, IReadOnlyCollection<SentReminder> sentReminders) =>

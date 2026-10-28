@@ -30,9 +30,8 @@ public sealed class RepeatReminderReader(OrbitDbContext db, IUserDateService dat
             .Where(l => recurringIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= today)
             .Select(l => new { l.HabitId, l.Date }).Distinct().ToListAsync(cancellationToken))
             .ToLookup(l => l.HabitId, l => l.Date);
-        var sent = (await db.SentReminders.AsNoTracking()
-            .Where(r => habitIds.Contains(r.HabitId) && r.ReminderAtUtc >= nowAtUtc.AddDays(-3))
-            .ToListAsync(cancellationToken)).ToLookup(r => r.HabitId);
+        var sent = (await RepeatReminderSnapshotQueries.LoadSentAsync(db, habitIds, nowAtUtc, cancellationToken))
+            .ToLookup(r => r.HabitId);
         return habits.ToDictionary(h => h.Id, h => RepeatReminderPlanner.Next(h, nowAtUtc, zone, weekStartDay,
             anchors.TryGetValue(h.Id, out var anchorAtUtc) ? anchorAtUtc : null,
             loggedDates[h.Id].ToHashSet(), sent[h.Id].ToList())?.DispatchAtUtc);

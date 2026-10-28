@@ -36,9 +36,7 @@ public partial class ReminderSchedulerService
             .Where(l => recurringIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= minLocalDate && l.Date <= maxLocalDate)
             .Select(l => new { l.HabitId, l.Date }).Distinct()
             .ToListAsync(ct)).Select(l => (l.HabitId, l.Date)).ToHashSet();
-        var repeatSent = await dbContext.SentReminders.AsNoTracking()
-            .Where(r => repeatIds.Contains(r.HabitId) && r.ReminderAtUtc >= nowUtc.AddDays(-3))
-            .ToListAsync(ct);
+        var repeatSent = await RepeatReminderSnapshotQueries.LoadSentAsync(dbContext, repeatIds, nowUtc, ct);
 
         return (anchors, loggedDates, repeatSent);
     }
