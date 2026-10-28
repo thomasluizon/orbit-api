@@ -26,11 +26,7 @@ internal static class AskBlockNegotiation
             form = AstraBlockKinds.Choice,
             question = title.GetString(),
             allowFreeText = question.TryGetProperty("allowFreeText", out var free) && free.ValueKind == JsonValueKind.True,
-            options = options.EnumerateArray().Select(option => new
-            {
-                id = option.TryGetProperty("id", out var id) ? id : default,
-                label = option.TryGetProperty("label", out var label) ? label : default
-            })
+            options
         });
     }
 
