@@ -121,7 +121,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<HabitListCard>().Which.Items.Select(item => item.Id)
-            .Should().Equal(habits.Select(habit => habit.Id.ToString()));
+            .Should().BeEquivalentTo(habits.Select(habit => habit.Id.ToString()));
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 

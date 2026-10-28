@@ -34,12 +34,18 @@ candidate variant removes the second item. No live model success is inferred fro
 
 ## Copy for approval
 
+An invalid or unsupported ask form can recover through one model-emitted ask retry.
+Only the ask call is accepted on that continuation; a write or another tool cannot
+use the clarification retry. Another invalid ask falls back to the model's text.
+Client capability, feature-flag and credential restrictions still disable issuing blocks.
+
 The English column contains each added runtime string or added fragment. The Portuguese
 column is its review translation. Model instructions remain English at runtime; fallback
 questions select the account or client language through the existing locale resolver.
 
 | Location | English | pt-BR |
 | --- | --- | --- |
+| Ask validation retry | Retry ask once with valid arguments and a supported form: {forms}. choice requires question and options; pickList requires title, action and items; question requires questions. | Tente ask mais uma vez com argumentos válidos e um formato compatível: {forms}. choice exige question e options; pickList exige title, action e items; question exige questions. |
 | QueryHabitsTool description addition | For choosing records or resolving a write target, set for_selection=true and orbit_read_complete=false, then call ask. A selection lookup never finishes the answer or authorizes a write, even with one candidate. Multiple matches require the person's choice. | Para escolher registros ou identificar o alvo de uma alteração, use for_selection=true e orbit_read_complete=false e depois chame ask. Uma consulta para seleção nunca encerra a resposta nem autoriza alterações, mesmo com um único candidato. Se houver várias correspondências, a pessoa precisa escolher. |
 | for_selection argument | True for a choice or pick list, or to resolve an unclear write target. False only for a read answer. Selection requires ask before any write. | True para uma escolha ou lista de seleção, ou para identificar o alvo de uma alteração. False somente quando a consulta já responde ao pedido. A seleção exige ask antes de qualquer alteração. |
 | Selection result instruction | Ask the person to select from these candidates using a supported ask form. Do not choose an ID or prepare any write before the answer. | Peça à pessoa que escolha entre estes candidatos usando um formato de ask compatível. Não escolha um ID nem prepare alterações antes da resposta. |

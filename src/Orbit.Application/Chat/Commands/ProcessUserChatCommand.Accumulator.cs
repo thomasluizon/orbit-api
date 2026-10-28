@@ -45,6 +45,8 @@ public partial class ProcessUserChatCommandHandler
         public List<PendingAgentOperation> CommittedPendingOperations { get; } = [];
 
         public ChatBlockPart? AskBlock { get; set; }
+        public int AskAttempts { get; set; }
+        public bool CanRetryAsk { get; set; }
         public HabitSelectionCandidates? PendingSelection { get; set; }
         public HabitSelectionCandidates? AmbiguousReadCandidates { get; set; }
         public bool HasBudgetRecovery { get; set; }

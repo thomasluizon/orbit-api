@@ -86,7 +86,10 @@ for the selection contract and the English and Brazilian Portuguese copy submitt
 
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
-message-based rewriting. Ask instructions name the client's supported forms while the shared
+message-based rewriting. A rejected ask can retry once with a supported form and valid
+arguments. Only a lone model-emitted ask call can use that retry; it cannot dispatch a write
+or restart the general tool loop. An unavailable ask surface falls back to text.
+Ask instructions name the client's supported forms while the shared
 tool schemas remain stable across clients. A model-emitted
 single-choice question can use the existing choice surface when question blocks are unsupported;
 its supplied question, option labels and free-text permission remain intact and pass the choice

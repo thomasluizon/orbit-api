@@ -36,13 +36,16 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, CancellationToken ct)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
+        results.CanRetryAsk = false;
         ToolCallOutcome Failed(string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
-            error + " Ask in plain text instead."), null, null, null, null);
+            error + AskRecoveryInstruction(request, results)), null, null, null, null);
         var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
         if (request.AuthMethod != AgentAuthMethod.Jwt || flags.Contains(FeatureFlagKeys.AstraAskBlocksDisabled)
             || flags.Contains(FeatureFlagKeys.AstraPartsDisabled)
             || request.ClientContext?.SupportsParts != true || results.AskBlock is not null)
             return Failed("Interactive questions are unavailable.");
+        results.AskAttempts++;
+        results.CanRetryAsk = results.AskAttempts < 2 && request.ClientContext.PartKinds?.Any(IsAskKind) == true;
         call = call with { Args = AskBlockNegotiation.Arguments(call.Args, request.ClientContext) };
         if (call.Args.ValueKind != JsonValueKind.Object || !call.Args.TryGetProperty("form", out var form) || form.ValueKind != JsonValueKind.String
             || request.ClientContext.PartKinds?.Contains(form.GetString()!, StringComparer.Ordinal) != true)
@@ -76,4 +79,14 @@ public partial class ProcessUserChatCommandHandler
         return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, true, block.Id.ToString(), null, null),
             null, null, null, null);
     }
+
+    private static AiResponse LimitAskContinuation(AiResponse response, ToolExecutionAccumulator results) =>
+        results.CanRetryAsk && response.ToolCalls is [{ Name: "ask" }]
+            ? response : response with { ToolCalls = null };
+
+    private static string AskRecoveryInstruction(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
+        results.CanRetryAsk
+            ? " Retry ask once with valid arguments and a supported form: " + string.Join(", ", request.ClientContext?.PartKinds?.Where(IsAskKind) ?? [])
+                + ". choice requires question and options; pickList requires title, action and items; question requires questions."
+            : " Ask in plain text instead.";
 }

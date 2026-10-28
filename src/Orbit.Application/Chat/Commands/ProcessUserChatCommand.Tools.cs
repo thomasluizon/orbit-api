@@ -247,7 +247,7 @@ public partial class ProcessUserChatCommandHandler
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
-        return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value,
+        return new ToolRoundResult(askCall is not null ? LimitAskContinuation(continueResult.Value, executionResults) : continueResult.Value,
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
     }
