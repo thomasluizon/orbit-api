@@ -1,5 +1,7 @@
 using System.Text.Json;
+using FirebaseAdmin.Messaging;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -36,7 +38,20 @@ public sealed partial class PushNotificationServiceTests
         var payload = PushNotificationService.CreateWebPushPayload("Água", "Próximo às 20:00", "/", data);
         await wns.Received(1).SendAsync(Arg.Any<string>(), payload, Arg.Any<CancellationToken>());
         var fcm = PushNotificationService.CreateFcmMessage("token", "Água", "Próximo às 20:00", "/", data);
-        fcm.Android.Notification.Tag.Should().Be(data["tag"]);
+        using (new AssertionScope())
+        {
+            fcm.Notification.Should().BeNull();
+            fcm.Android.Priority.Should().Be(Priority.High);
+            fcm.Android.Notification.Should().BeNull();
+            fcm.Data["tag"].Should().Be(data["tag"]);
+            fcm.Data.Should().Contain("title", "Água");
+            fcm.Data.Should().Contain("message", "Próximo às 20:00");
+            fcm.Data.Should().Contain("categoryId", "orbit-repeat-reminder");
+            fcm.Data.Should().Contain("channelId", "default");
+            fcm.Data.Should().Contain("url", "/");
+            fcm.Data.Should().HaveCount(data.Count + 5);
+            data.Should().HaveCount(6);
+        }
         using var web = JsonDocument.Parse(payload);
         using var apple = JsonDocument.Parse(JsonSerializer.Serialize(ApnsPushSender.CreatePayload("Água", "Próximo às 20:00", "/", data)));
         foreach (var (key, value) in data)
@@ -44,6 +59,33 @@ public sealed partial class PushNotificationServiceTests
             fcm.Data[key].Should().Be(value);
             web.RootElement.GetProperty(key).GetString().Should().Be(value);
             apple.RootElement.GetProperty("body").GetProperty(key).GetString().Should().Be(value);
+        }
+    }
+
+    [Fact]
+    public void CreateFcmMessage_OrdinaryReminder_KeepsOsRenderedNotification()
+    {
+        var message = PushNotificationService.CreateFcmMessage("token", "Água", "Próximo às 20:00", "/");
+
+        message.Notification.Title.Should().Be("Água");
+        message.Notification.Body.Should().Be("Próximo às 20:00");
+        message.Android.Should().BeNull();
+        message.Data.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("url", "/"));
+    }
+
+    [Fact]
+    public void CreateFcmMessage_MetadataWithoutDoneToken_KeepsOsRenderedNotification()
+    {
+        var data = new Dictionary<string, string> { ["habitId"] = Guid.NewGuid().ToString(), ["tag"] = "orbit-habit" };
+
+        var message = PushNotificationService.CreateFcmMessage("token", "Água", "Próximo às 20:00", "/", data);
+
+        using (new AssertionScope())
+        {
+            message.Notification.Title.Should().Be("Água");
+            message.Android.Notification.Tag.Should().Be("orbit-habit");
+            message.Data.Should().NotContainKey("categoryId");
+            message.Data.Should().NotContainKey("message");
         }
     }
 }

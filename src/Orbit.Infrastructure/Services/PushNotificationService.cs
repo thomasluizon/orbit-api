@@ -23,6 +23,7 @@ public partial class PushNotificationService(
     IWnsPushSender wnsSender) : IPushNotificationService
 {
     private readonly VapidSettings _settings = vapidSettings.Value;
+    internal const string RepeatReminderCategoryId = "orbit-repeat-reminder";
 
     public async Task SendToUserAsync(
         Guid userId,
@@ -335,6 +336,21 @@ public partial class PushNotificationService(
         var data = metadata is null ? new Dictionary<string, string>() : new Dictionary<string, string>(metadata);
         if (url is not null)
             data["url"] = url;
+
+        if (data.ContainsKey("doneToken"))
+        {
+            data["title"] = title;
+            data["message"] = body;
+            data["categoryId"] = RepeatReminderCategoryId;
+            data["channelId"] = "default";
+
+            return new Message
+            {
+                Token = token,
+                Android = new AndroidConfig { Priority = Priority.High },
+                Data = data
+            };
+        }
 
         return new Message
         {
