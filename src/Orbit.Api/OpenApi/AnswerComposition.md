@@ -126,8 +126,7 @@ contract. Unrequested weekdays and checklist items stay empty, and reminders sta
 Adjustments preserve the existing cadence and clock interval unless a change was requested.
 When a required cadence or clock interval is absent, the model proposes minimal valid values
 from account context. Those are editable proposals, not supplied facts. Start and end times
-remain required; no response field becomes optional. The bilingual model-copy review inventory
-is [CompoundRequestCopy.md](CompoundRequestCopy.md).
+remain required; no response field becomes optional.
 
 Skipped habit reads retain their dated skip facts, including active skip receipts for
 recurring habits. They exclude skipped entries from completed and remaining totals.
