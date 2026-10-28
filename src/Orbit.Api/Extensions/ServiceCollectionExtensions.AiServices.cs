@@ -150,7 +150,8 @@ public static partial class ServiceCollectionExtensions
             new Orbit.Application.Habits.Commands.LogHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.SentReminder>>()));
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitServices>(sp =>
             new Orbit.Application.Habits.Commands.LogHabitServices(
                 sp.GetRequiredService<IUserDateService>(),

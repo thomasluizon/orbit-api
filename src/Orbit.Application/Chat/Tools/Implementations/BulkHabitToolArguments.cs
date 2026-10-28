@@ -128,7 +128,7 @@ internal static class BulkHabitToolArguments
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", IntervalWeeks,
             "days", DueDate, StartDate, EndDate, DueTime, DueEndTimeField, IsBadHabit, IsFlexible,
             IsGeneralField, SlipAlertEnabledField, RelativeRemindersField,
-            "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields"
+            "reminder_enabled", "reminder_times", "checklist_items", "scheduled_reminders", "clear_fields", RepeatReminderToolArguments.Field
         };
         if (allowHabitId) allowed.Add(HabitId);
         if (updates.EnumerateObject().Any(property => !allowed.Contains(property.Name)))
@@ -175,8 +175,8 @@ internal static class BulkHabitToolArguments
             IsBadHabit: JsonArgumentParser.GetOptionalBool(updates, IsBadHabit) ?? false,
             HasIsFlexible: updates.TryGetProperty(IsFlexible, out _),
             IsFlexible: JsonArgumentParser.GetOptionalBool(updates, IsFlexible) ?? false,
-            HasReminderEnabled: updates.TryGetProperty("reminder_enabled", out _),
-            ReminderEnabled: JsonArgumentParser.GetOptionalBool(updates, "reminder_enabled") ?? false,
+            HasReminderEnabled: updates.TryGetProperty("reminder_enabled", out _) || RepeatReminderToolArguments.Parse(updates) is not null,
+            ReminderEnabled: JsonArgumentParser.GetOptionalBool(updates, "reminder_enabled") ?? RepeatReminderToolArguments.Parse(updates) is not null,
             HasReminderTimes: updates.TryGetProperty("reminder_times", out _),
             ReminderTimes: updates.TryGetProperty("reminder_times", out _) ? JsonArgumentParser.ParseIntArray(updates, "reminder_times") ?? [] : null,
             HasChecklistItems: updates.TryGetProperty("checklist_items", out _),
@@ -192,7 +192,9 @@ internal static class BulkHabitToolArguments
             HasRelativeReminders: updates.TryGetProperty(RelativeRemindersField, out _),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(updates),
             HasStartDate: updates.TryGetProperty(StartDate, out _),
-            StartDate: JsonArgumentParser.ParseDateOnly(updates, StartDate));
+            StartDate: JsonArgumentParser.ParseDateOnly(updates, StartDate),
+            HasRepeatReminder: updates.TryGetProperty(RepeatReminderToolArguments.Field, out _),
+            RepeatReminder: RepeatReminderToolArguments.Parse(updates));
 
         return (changes, null);
     }
@@ -210,7 +212,8 @@ internal static class BulkHabitToolArguments
             ?? ParseNullableDate(fields, EndDate, allowNull: true).Error
             ?? ParseNullableTime(fields, DueTime).Error
             ?? ParseNullableTime(fields, DueEndTimeField).Error
-            ?? ParseFrequency(fields).Error;
+            ?? ParseFrequency(fields).Error
+            ?? RepeatReminderToolArguments.Validate(fields);
     }
 
     public static string? CheckCreateHabitFields(JsonElement fields)

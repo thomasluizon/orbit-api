@@ -307,7 +307,7 @@ public class GetCalendarMonthQueryHandlerTests
         descendantItem.IsLoggedInRange.Should().BeTrue();
         result.Value.Logs[parent.Id].Should().BeEmpty();
         result.Value.Logs.Should().ContainKey(descendant.Id).WhoseValue.Should().Equal(
-            expectedLogs.Select(log => new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc)));
+            expectedLogs.Select(log => new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc, log.TakenAtUtc, log.ReminderAtUtc)));
     }
 
     [Fact]
@@ -342,7 +342,7 @@ public class GetCalendarMonthQueryHandlerTests
             result.Value.Logs[habit.Id].Should().Equal(habit.Logs
                 .Where(log => log.Date >= MonthStart && log.Date <= MonthEnd)
                 .OrderByDescending(log => log.Date)
-                .Select(log => new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc)));
+                .Select(log => new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc, log.TakenAtUtc, log.ReminderAtUtc)));
             result.Value.Logs[habit.Id].Select(log => log.Date).Should().Equal(MonthEnd, Today, MonthStart);
             result.Value.Logs[habit.Id].Select(log => log.Value).Should().Equal(1m, 0m, 1m);
         }

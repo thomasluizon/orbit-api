@@ -17,7 +17,7 @@ internal static class HabitUpdateValidation
             IntervalWeeks: update.IntervalWeeks, StartDate: update.StartDate,
             Options: new UpdateHabitCommandOptions(update.Days, update.DueTime, update.DueEndTime,
                 update.ReminderEnabled, update.ReminderTimes, update.SlipAlertEnabled, update.ChecklistItems,
-                update.ScheduledReminders, update.EndDate, update.Schedule == HabitSchedule.Flexible, update.RelativeReminders));
+                update.ScheduledReminders, update.EndDate, update.Schedule == HabitSchedule.Flexible, update.RelativeReminders, update.RepeatReminder, update.ClearRepeatReminder));
 
     public static async Task<Result> ValidateAsync(Guid userId, Habit habit, HabitUpdateParams update,
         IGenericRepository<Habit> repository, CancellationToken ct, IReadOnlyList<Habit>? related = null)
@@ -119,7 +119,9 @@ internal static class HabitUpdateValidation
         ResetCompletion = changes.HasIsGeneral && changes.IsGeneral,
         SlipAlertEnabled = changes.HasSlipAlertEnabled ? changes.SlipAlertEnabled : null,
         RelativeReminders = changes.HasRelativeReminders ? changes.RelativeReminders ?? [] : null,
-        StartDate = changes.HasStartDate ? changes.StartDate : null
+        StartDate = changes.HasStartDate ? changes.StartDate : null,
+        RepeatReminder = changes.HasRepeatReminder ? changes.RepeatReminder : null,
+        ClearRepeatReminder = changes.HasRepeatReminder && changes.RepeatReminder is null
     };
 
 }

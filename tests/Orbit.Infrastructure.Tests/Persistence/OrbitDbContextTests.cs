@@ -130,7 +130,8 @@ public class OrbitDbContextTests
         using var context = CreateContext();
 
         var sentReminder = context.Model.FindEntityType(typeof(SentReminder))!;
-        var uniqueIndex = sentReminder.GetIndexes().Single(i => i.IsUnique);
+        var uniqueIndex = sentReminder.GetIndexes().Single(i => i.IsUnique
+            && i.Properties.Any(p => p.Name == nameof(SentReminder.Date)));
 
         uniqueIndex.Properties.Select(p => p.Name).Should().Equal(
             nameof(SentReminder.HabitId),
@@ -138,6 +139,12 @@ public class OrbitDbContextTests
             nameof(SentReminder.MinutesBefore),
             nameof(SentReminder.ReminderTimeUtc),
             nameof(SentReminder.When));
+        uniqueIndex.GetFilter().Should().Be("\"ReminderAtUtc\" IS NULL");
+        var repeatIndex = sentReminder.GetIndexes().Single(i => i.IsUnique
+            && i.Properties.Any(p => p.Name == nameof(SentReminder.ReminderAtUtc)));
+        repeatIndex.Properties.Select(p => p.Name).Should().Equal(nameof(SentReminder.HabitId), nameof(SentReminder.ReminderAtUtc));
+        repeatIndex.GetFilter().Should().Be("\"ReminderAtUtc\" IS NOT NULL");
+        sentReminder.FindProperty(nameof(SentReminder.ConsumedAtUtc))!.IsConcurrencyToken.Should().BeTrue();
     }
 
     [Fact]
@@ -350,6 +357,7 @@ public class OrbitDbContextTests
                 nameof(SentReminder.HabitId), nameof(SentReminder.Date), nameof(SentReminder.MinutesBefore),
                 nameof(SentReminder.ReminderTimeUtc), nameof(SentReminder.When),
             }),
+            (typeof(SentReminder), new[] { nameof(SentReminder.HabitId), nameof(SentReminder.ReminderAtUtc) }),
             (typeof(SentSlipAlert), new[] { nameof(SentSlipAlert.HabitId), nameof(SentSlipAlert.WeekStart) }),
             (typeof(ProactiveItem), new[] { nameof(ProactiveItem.UserId), nameof(ProactiveItem.Trigger), nameof(ProactiveItem.LocalDate) }),
             (typeof(ProcessedPlayNotification), new[] { nameof(ProcessedPlayNotification.MessageId) }),

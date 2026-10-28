@@ -222,7 +222,7 @@ public class HabitScheduleSnapshotInvalidationTests
         else
         {
             var handler = new LogHabitCommandHandler(
-                new LogHabitRepositories(habits, logs, new GenericRepository<User>(context)),
+                new LogHabitRepositories(habits, logs, new GenericRepository<User>(context), new GenericRepository<SentReminder>(context)),
                 new LogHabitServices(dates, streak, gamification, goals,
                     Substitute.For<MediatR.IMediator>(), Substitute.For<IPayGateService>()),
                 unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);

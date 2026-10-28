@@ -8,6 +8,7 @@ public sealed class BulkUpdateHabitsCommandValidator : AbstractValidator<BulkUpd
 {
     public BulkUpdateHabitsCommandValidator()
     {
+        SharedHabitRules.AddRepeatReminderRules(RuleFor(x => x.Changes.RepeatReminder));
         RuleFor(command => command.UserId).NotEmpty();
         RuleFor(command => command.Filter)
             .Must(filter => filter.HasSelector)

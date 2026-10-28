@@ -6,6 +6,8 @@ namespace Orbit.Domain.Common;
 /// </summary>
 public static class DomainErrors
 {
+    public static readonly AppError InvalidRepeatReminder = new("INVALID_REPEAT_REMINDER", "Choose a supported repeat interval and an everyday habit.");
+    public static readonly AppError InvalidTakenAtUtc = new("INVALID_TAKEN_AT_UTC", "Choose a dose instant in UTC that is not in the future.");
     public static readonly AppError ChecklistItemRequired = new("CHECKLIST_ITEM_REQUIRED", "Checklist append requires nonblank text.");
     public static readonly AppError ChecklistItemTooLong = new("CHECKLIST_ITEM_TOO_LONG", "Checklist append text exceeds the domain limit.");
     public static readonly AppError ChecklistFull = new("CHECKLIST_FULL", "Checklist append exceeds the domain item limit.");

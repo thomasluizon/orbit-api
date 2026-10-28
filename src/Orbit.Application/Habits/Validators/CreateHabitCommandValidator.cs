@@ -8,6 +8,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 {
     public CreateHabitCommandValidator()
     {
+        SharedHabitRules.AddRepeatReminderRules(RuleFor(x => x.Options != null ? x.Options.RepeatReminder : null));
         RuleFor(x => x.UserId)
             .NotEmpty();
 

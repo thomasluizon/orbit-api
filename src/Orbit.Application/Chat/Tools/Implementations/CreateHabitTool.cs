@@ -204,7 +204,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             IsBadHabit: isBadHabit,
             DueTime: dueTime,
             DueEndTime: JsonArgumentParser.ParseTimeOnly(args, "due_end_time"),
-            ReminderEnabled: JsonArgumentParser.GetOptionalBool(args, "reminder_enabled") ?? false,
+            ReminderEnabled: JsonArgumentParser.GetOptionalBool(args, "reminder_enabled") ?? RepeatReminderToolArguments.Parse(args) is not null,
             ReminderTimes: reminderTimes,
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(args, "slip_alert_enabled") ?? isBadHabit,
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
@@ -213,6 +213,7 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             Emoji: JsonArgumentParser.GetOptionalString(args, "emoji"),
             IntervalWeeks: intervalWeeks,
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(args),
+            RepeatReminder: RepeatReminderToolArguments.Parse(args),
             StartDate: JsonArgumentParser.ParseDateOnly(args, StartDate)));
     }
 
@@ -278,12 +279,13 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             ParentHabitId: parent.Id,
             DueTime: JsonArgumentParser.ParseTimeOnly(sub, "due_time"),
             DueEndTime: JsonArgumentParser.ParseTimeOnly(sub, "due_end_time"),
-            ReminderEnabled: JsonArgumentParser.GetOptionalBool(sub, "reminder_enabled") ?? false,
+            ReminderEnabled: JsonArgumentParser.GetOptionalBool(sub, "reminder_enabled") ?? RepeatReminderToolArguments.Parse(sub) is not null,
             ReminderTimes: JsonArgumentParser.ParseIntArray(sub, "reminder_times"),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(sub, "slip_alert_enabled") ?? false,
             EndDate: JsonArgumentParser.ParseDateOnly(sub, "end_date"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(sub),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(sub),
+            RepeatReminder: RepeatReminderToolArguments.Parse(sub),
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
             IntervalWeeks: isOneTime ? null : subIntervalWeeks ?? (hasExplicitCadence ? null : parent.IntervalWeeks)));
@@ -306,6 +308,9 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
 
     public bool NeedsClarification(JsonElement args)
     {
+        if (args.TryGetProperty(RepeatReminderToolArguments.Field, out _)
+            && JsonArgumentParser.GetOptionalBool(args, "is_general") == true)
+            return false;
         return (!args.TryGetProperty("frequency_unit", out var frequency) || frequency.ValueKind == JsonValueKind.Null)
             && args.ValueKind == JsonValueKind.Object
             && args.TryGetProperty(TitleProperty, out var titleElement)

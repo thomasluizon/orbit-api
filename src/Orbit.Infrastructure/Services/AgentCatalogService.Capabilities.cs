@@ -239,6 +239,8 @@ public partial class AgentCatalogService
                     "HabitsController.SuggestSetup",
                     "OnboardingController.SuggestSetup",
                     "HabitsController.LogHabit",
+                    "HabitsController.CorrectDose",
+                    "RemindersController.Done",
                     "HabitsController.SkipHabit",
                     "HabitsController.UndoSkipHabit",
                     "HabitsController.UpdateHabit",

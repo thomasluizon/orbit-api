@@ -305,7 +305,11 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore, r.ReminderTimeUtc, r.When })
                 .IsUnique()
-                .AreNullsDistinct(false);
+                .AreNullsDistinct(false)
+                .HasFilter("\"ReminderAtUtc\" IS NULL");
+            entity.HasIndex(r => new { r.HabitId, r.ReminderAtUtc }).IsUnique()
+                .HasFilter("\"ReminderAtUtc\" IS NOT NULL");
+            entity.Property(r => r.ConsumedAtUtc).IsConcurrencyToken();
         });
     }
 
@@ -849,6 +853,7 @@ public class OrbitDbContext : DbContext
                 .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<ScheduledReminderTime>());
 
+            entity.Ignore(h => h.RepeatReminder);
             entity.Property(h => h.RelativeReminders)
                 .HasConversion(
                     v => SerializeJson(v),

@@ -153,7 +153,7 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
-        if (habit.Schedule != HabitSchedule.Flexible && habit.Logs.Any(l => l.Date == targetDate))
+        if (habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && habit.Logs.Any(l => l.Date == targetDate))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
         if (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
@@ -175,7 +175,7 @@ public partial class BulkLogHabitsCommandHandler(
         var logResult = habit.Log(
             targetDate,
             advanceDueDate: shouldAdvanceDueDate,
-            weekStartDay: weekStartDay);
+            weekStartDay: weekStartDay, loggedOnLocalDate: today);
         if (logResult.IsFailure)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: logResult.Error, ErrorCode: logResult.ErrorCode);

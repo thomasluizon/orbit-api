@@ -42,6 +42,7 @@ public sealed class BulkUpdateHabitsTool(IMediator mediator) : IAiTool, IArgumen
                     is_general = new { type = JsonSchemaTypes.Boolean },
                     slip_alert_enabled = new { type = JsonSchemaTypes.Boolean },
                     relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
+                    repeat_reminder = RepeatReminderToolArguments.RepeatReminderSchema(forUpdate: true),
                     is_bad_habit = new { type = JsonSchemaTypes.Boolean },
                     is_flexible = new { type = JsonSchemaTypes.Boolean },
                     reminder_enabled = new { type = JsonSchemaTypes.Boolean },

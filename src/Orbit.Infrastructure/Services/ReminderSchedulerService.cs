@@ -72,6 +72,7 @@ public partial class ReminderSchedulerService(
             var pending = new List<PendingReminderPush>();
             await ProcessRelativeReminders(snapshot, dbContext, pending, nowUtc, ct);
             await ProcessScheduledReminders(snapshot, dbContext, pending, nowUtc, ct);
+            await ProcessRepeatReminders(snapshot, dbContext, pending, nowUtc, ct);
             await SendPushesAsync(pending, ct);
         }
         finally
@@ -93,30 +94,23 @@ public partial class ReminderSchedulerService(
         return _snapshot;
     }
 
-    private static async Task<ReminderSnapshot> LoadSnapshotAsync(
+    private async Task<ReminderSnapshot> LoadSnapshotAsync(
         OrbitDbContext dbContext, ReminderProbe probe, DateTime nowUtc, CancellationToken ct)
     {
         var minLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(-1));
         var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(MaxRelativeLookaheadDays + 1));
-        var relativeHabits = await dbContext.Habits
-            .AsNoTracking()
-            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.DueTime != null
-                && h.NextDueDate <= maxLocalDate
-                && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .ToListAsync(ct);
-        var scheduledHabits = await dbContext.Habits
-            .AsNoTracking()
-            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.DueTime == null
-                && h.NextDueDate <= DateOnly.FromDateTime(nowUtc.AddDays(2))
-                && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
-            .ToListAsync(ct);
-        scheduledHabits = scheduledHabits.Where(h => h.ScheduledReminders.Count > 0).ToList();
+        var (relativeHabits, scheduledHabits) = await LoadLegacyHabits(dbContext, nowUtc, minLocalDate, maxLocalDate, ct);
 
-        var userIds = relativeHabits.Concat(scheduledHabits).Select(h => h.UserId).Distinct().ToList();
+        var repeatHabits = await LoadRepeatHabits(dbContext, minLocalDate, ct);
+
+        var userIds = relativeHabits.Concat(scheduledHabits).Concat(repeatHabits).Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
+
+        var (repeatAnchors, repeatLoggedDates, repeatSent) = await LoadRepeatSnapshot(
+            dbContext, repeatHabits, users, nowUtc, minLocalDate, ct);
 
         var habitIds = relativeHabits.Select(h => h.Id).ToList();
         var minWindowDate = minLocalDate.AddDays(MinRelativeDayOffset);
@@ -164,7 +158,7 @@ public partial class ReminderSchedulerService(
             .ToHashSet();
 
         return new ReminderSnapshot(nowUtc, probe, relativeHabits, scheduledHabits,
-            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet);
+            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatLoggedDates, repeatSent);
     }
 
     private async Task ProcessRelativeReminders(ReminderSnapshot snapshot, OrbitDbContext dbContext,
@@ -176,6 +170,26 @@ public partial class ReminderSchedulerService(
                 habit, snapshot.Users, snapshot.LoggedHabitDates, snapshot.SentReminderSet,
                 snapshot.SentClockSet, pending, dbContext, nowUtc, ct);
         }
+    }
+
+    private static async Task<(List<Habit> Relative, List<Habit> Scheduled)> LoadLegacyHabits(
+        OrbitDbContext dbContext, DateTime nowUtc, DateOnly minLocalDate, DateOnly maxLocalDate, CancellationToken ct)
+    {
+        var relativeHabits = await dbContext.Habits
+            .AsNoTracking()
+            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.RepeatIntervalMinutes == null && h.DueTime != null
+                && h.NextDueDate <= maxLocalDate
+                && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
+            .ToListAsync(ct);
+        var scheduledHabits = await dbContext.Habits
+            .AsNoTracking()
+            .Where(h => !h.IsCompleted && h.Schedule != HabitSchedule.General && h.ReminderEnabled && h.RepeatIntervalMinutes == null && h.DueTime == null
+                && h.NextDueDate <= DateOnly.FromDateTime(nowUtc.AddDays(2))
+                && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
+            .ToListAsync(ct);
+        scheduledHabits = scheduledHabits.Where(h => h.ScheduledReminders.Count > 0).ToList();
+
+        return (relativeHabits, scheduledHabits);
     }
 
     /// <summary>
@@ -212,6 +226,8 @@ public partial class ReminderSchedulerService(
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
         var userToday = DateOnly.FromDateTime(userNow);
+        if (HasEnded(habit, userToday))
+            return;
         var sentInstants = sentReminderSet.Where(r => r.HabitId == habit.Id)
             .Select(r => LocalDueInstantUtc(r.Date.ToDateTime(habit.DueTime!.Value), tz).AddMinutes(-r.MinutesBefore))
             .Concat(sentClockSet.Where(r => r.HabitId == habit.Id)
@@ -302,6 +318,8 @@ public partial class ReminderSchedulerService(
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
         var userToday = DateOnly.FromDateTime(userNow);
+        if (HasEnded(habit, userToday))
+            return;
         var userTomorrow = userToday.AddDays(1);
         var userTimeNow = TimeOnly.FromDateTime(userNow);
 
@@ -394,8 +412,10 @@ public partial class ReminderSchedulerService(
         {
             try
             {
-                await pushService.SendToUserAsync(
-                    push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
+                if (push.Data is { } data)
+                    await pushService.SendReminderToUserAsync(push.UserId, push.Title, push.Body, data, NotificationUrls.Home, ct);
+                else
+                    await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, NotificationUrls.Home, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -410,7 +430,8 @@ public partial class ReminderSchedulerService(
             entry.State = EntityState.Detached;
     }
 
-    private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId);
+    private readonly record struct PendingReminderPush(Guid UserId, string Title, string Body, Guid HabitId,
+        IReadOnlyDictionary<string, string>? Data = null);
 
     private sealed record ReminderProbe
     {
@@ -428,7 +449,14 @@ public partial class ReminderSchedulerService(
         HashSet<(Guid HabitId, DateOnly Date)> LoggedHabitDates,
         HashSet<(Guid HabitId, DateOnly Date, int MinutesBefore)> SentReminderSet,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> SentClockSet,
-        HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> SentScheduledSet);
+        HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> SentScheduledSet,
+        List<Habit> RepeatHabits,
+        Dictionary<Guid, DateTime> RepeatAnchors,
+        HashSet<(Guid HabitId, DateOnly Date)> RepeatLoggedDates,
+        List<SentReminder> RepeatSent);
+
+    private static bool HasEnded(Habit habit, DateOnly today) =>
+        habit.IsDeleted || habit.IsCompleted || habit.EndDate is { } end && today > end;
 
     private static string Pluralize(string singular, int count) => count > 1 ? singular + "s" : singular;
 

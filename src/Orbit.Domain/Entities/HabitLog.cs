@@ -10,6 +10,9 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
     public int CompletionOrdinal { get; private set; }
     public bool IsSlip { get; private set; }
     public string? Note { get; private set; }
+    public DateTime? ReminderAtUtc { get; private set; }
+    public DateTime? TakenAtUtc { get; private set; }
+    public DateOnly? LoggedOnLocalDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; private set; }
@@ -31,7 +34,10 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
         DateOnly date,
         decimal value,
         int completionOrdinal,
-        DateTime createdAtUtc)
+        DateTime createdAtUtc,
+        DateTime? takenAtUtc = null,
+        DateTime? reminderAtUtc = null,
+        DateOnly? loggedOnLocalDate = null)
     {
         if (id == Guid.Empty || habitId == Guid.Empty)
             throw new ArgumentException("Schedule log ids must be set.");
@@ -44,13 +50,17 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
             Value = value,
             CompletionOrdinal = completionOrdinal,
             CreatedAtUtc = createdAtUtc,
+            TakenAtUtc = takenAtUtc,
+            ReminderAtUtc = reminderAtUtc,
+            LoggedOnLocalDate = loggedOnLocalDate,
             UpdatedAtUtc = createdAtUtc
         };
     }
 
     internal static HabitLog Create(Guid habitId, DateOnly date, decimal value, string? note = null,
-        bool isSlip = false, int completionOrdinal = 0)
+        bool isSlip = false, int completionOrdinal = 0, DateOnly? loggedOnLocalDate = null)
     {
+        var createdAtUtc = DateTime.UtcNow;
         return new HabitLog
         {
             HabitId = habitId,
@@ -59,9 +69,31 @@ public class HabitLog : Entity, ITimestamped, ISoftDeletable
             CompletionOrdinal = completionOrdinal,
             IsSlip = isSlip,
             Note = note?.Trim(),
-            CreatedAtUtc = DateTime.UtcNow,
-            UpdatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = createdAtUtc,
+            TakenAtUtc = createdAtUtc,
+            LoggedOnLocalDate = loggedOnLocalDate,
+            UpdatedAtUtc = createdAtUtc
         };
+    }
+
+    public static bool IsValidTakenAtUtc(DateTime takenAtUtc, DateTime nowAtUtc) =>
+        takenAtUtc.Kind == DateTimeKind.Utc && nowAtUtc.Kind == DateTimeKind.Utc && takenAtUtc <= nowAtUtc;
+
+    public Result SetReminderAtUtc(DateTime reminderAtUtc, DateTime nowAtUtc)
+    {
+        if (!IsValidTakenAtUtc(reminderAtUtc, nowAtUtc))
+            return Result.Failure(DomainErrors.InvalidTakenAtUtc);
+        ReminderAtUtc = reminderAtUtc;
+        return Result.Success();
+    }
+
+    public Result CorrectTakenAtUtc(DateTime takenAtUtc, DateTime nowAtUtc)
+    {
+        if (!IsValidTakenAtUtc(takenAtUtc, nowAtUtc))
+            return Result.Failure(DomainErrors.InvalidTakenAtUtc);
+        TakenAtUtc = takenAtUtc;
+        UpdatedAtUtc = nowAtUtc;
+        return Result.Success();
     }
 
     public void SoftDelete()

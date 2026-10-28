@@ -10,7 +10,9 @@ public record HabitLogResponse(
     Guid Id,
     DateOnly Date,
     decimal Value,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    DateTime? TakenAtUtc = null,
+    DateTime? ReminderAtUtc = null);
 
 public record GetHabitLogsQuery(
     Guid UserId,
@@ -49,7 +51,7 @@ public class GetHabitLogsQueryHandler(
         }
 
         var result = logs
-            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
+            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc))
             .ToList();
 
         return Result.Success<IReadOnlyList<HabitLogResponse>>(result);

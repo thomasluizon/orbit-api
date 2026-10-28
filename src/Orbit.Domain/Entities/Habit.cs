@@ -31,7 +31,8 @@ public record HabitCreateParams(
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
     DateTime? CreatedAtUtc = null,
     DateOnly? StartDate = null,
-    int WeekStartDay = 1);
+    int WeekStartDay = 1,
+    RepeatReminderOptions? RepeatReminder = null);
 
 public record HabitUpdateParams(
     HabitSchedule Schedule,
@@ -57,7 +58,9 @@ public record HabitUpdateParams(
     int? IntervalWeeks = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
     DateOnly? StartDate = null,
-    int WeekStartDay = 1);
+    int WeekStartDay = 1,
+    RepeatReminderOptions? RepeatReminder = null,
+    bool ClearRepeatReminder = false);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -93,6 +96,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public TimeOnly? DueEndTime { get; private set; }
     public bool ReminderEnabled { get; private set; }
     public IReadOnlyList<int> ReminderTimes { get; private set; } = [15];
+    public int? RepeatIntervalMinutes { get; private set; }
+    public TimeOnly? RepeatActiveStart { get; private set; }
+    public TimeOnly? RepeatActiveEnd { get; private set; }
+    public DateTime? RepeatStartAtUtc { get; private set; }
+    public RepeatReminderOptions? RepeatReminder => RepeatIntervalMinutes is { } minutes
+        ? new(minutes, RepeatActiveStart, RepeatActiveEnd, RepeatStartAtUtc) : null;
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; private set; } = [];
@@ -249,6 +258,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (relativeValidation is not null)
             return Result.Failure<Habit>(relativeValidation);
 
+        if (p.RepeatReminder is { } repeat && (!repeat.IsValid()
+            || !RepeatReminderOptions.SupportsSchedule(p.Schedule, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks)))
+            return Result.Failure<Habit>(DomainErrors.InvalidRepeatReminder);
+
         return CreateWithSchedule(p);
     }
 
@@ -269,7 +282,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         var startDate = p.StartDate ?? p.DueDate;
         var schedule = p.Schedule;
-        return new Habit
+        var habit = new Habit
         {
             UserId = p.UserId,
             Title = p.Title.Trim(),
@@ -303,6 +316,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             GoogleEventId = p.GoogleEventId,
             CreatedAtUtc = ResolveCreatedAtUtc(p.CreatedAtUtc)
         };
+        if (p.RepeatReminder is { } repeat)
+            habit.SetRepeatReminder(repeat);
+        return habit;
     }
 
     private static DateTime ResolveCreatedAtUtc(DateTime? createdAtUtc) => createdAtUtc ?? DateTime.UtcNow;
@@ -311,21 +327,22 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DateOnly date,
         string? note = null,
         bool advanceDueDate = true,
-        int weekStartDay = 1)
+        int weekStartDay = 1,
+        DateOnly? loggedOnLocalDate = null)
     {
         var validation = CheckLog(date, weekStartDay);
         if (validation.IsFailure)
             return new Result<HabitLog>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
-        var completionOrdinal = Schedule == HabitSchedule.Flexible
+        var completionOrdinal = Schedule == HabitSchedule.Flexible || Schedule == HabitSchedule.General && RepeatIntervalMinutes.HasValue
             ? _logs.Where(l => l.Date == date && l.Value > 0)
                 .Select(l => l.CompletionOrdinal)
                 .DefaultIfEmpty(-1)
                 .Max() + 1
             : 0;
         var log = HabitLog.Create(Id, date, 1, note, isSlip: IsBadHabit,
-            completionOrdinal: completionOrdinal);
+            completionOrdinal: completionOrdinal, loggedOnLocalDate: loggedOnLocalDate);
         _logs.Add(log);
 
         if (Schedule == HabitSchedule.OneTime)
@@ -355,9 +372,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         if (IsCompleted && Schedule != HabitSchedule.General)
             return Result.Failure(DomainErrors.CannotLogCompletedHabit);
-        if (!IsBadHabit && Schedule != HabitSchedule.Flexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
+        if (!IsBadHabit && Schedule != HabitSchedule.Flexible && !(Schedule == HabitSchedule.General && RepeatIntervalMinutes.HasValue) && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure(DomainErrors.AlreadyLoggedForDate);
-        if (Schedule == HabitSchedule.Flexible && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
+        if (Schedule == HabitSchedule.Flexible && !RepeatIntervalMinutes.HasValue && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
             return Result.Failure(DomainErrors.AllInstancesDone);
         return Result.Success();
     }
@@ -647,6 +664,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success();
     }
 
+    public Result CorrectDose(Guid logId, DateTime takenAtUtc, DateTime nowAtUtc)
+    {
+        var log = _logs.Find(l => l.Id == logId && l.Value > 0 && !l.IsDeleted);
+        if (log is null)
+            return Result.Failure(DomainErrors.LogNotFoundForDate);
+        var result = log.CorrectTakenAtUtc(takenAtUtc, nowAtUtc);
+        if (result.IsSuccess)
+            UpdatedAtUtc = nowAtUtc;
+        return result;
+    }
+
     public Result<HabitLog> Unlog(DateOnly date)
     {
         var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
@@ -719,8 +747,34 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             RelativeReminders = [];
         }
 
+        if (p.ClearRepeatReminder)
+        {
+            RepeatIntervalMinutes = null;
+            RepeatActiveStart = null;
+            RepeatActiveEnd = null;
+            RepeatStartAtUtc = null;
+        }
+        else if (p.RepeatReminder is { } repeat)
+            SetRepeatReminder(repeat);
+        else if (RepeatIntervalMinutes.HasValue)
+        {
+            ReminderTimes = [];
+            ScheduledReminders = [];
+            RelativeReminders = [];
+        }
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
+    }
+
+    private void SetRepeatReminder(RepeatReminderOptions repeat)
+    {
+        RepeatIntervalMinutes = repeat.IntervalMinutes;
+        RepeatActiveStart = repeat.ActiveStart;
+        RepeatActiveEnd = repeat.ActiveEnd;
+        RepeatStartAtUtc = repeat.StartAtUtc ?? RepeatStartAtUtc ?? DateTime.UtcNow;
+        ReminderTimes = [];
+        ScheduledReminders = [];
+        RelativeReminders = [];
     }
 
     public Result<Habit> PreviewUpdate(HabitUpdateParams p)
@@ -761,8 +815,19 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success();
     }
 
+    private AppError? ValidateUpdatedRepeat(HabitUpdateParams p)
+    {
+        var effective = p.ClearRepeatReminder ? null : p.RepeatReminder ?? RepeatReminder;
+        return effective is { } repeat && (!repeat.IsValid()
+            || !RepeatReminderOptions.SupportsSchedule(p.Schedule, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks))
+            ? DomainErrors.InvalidRepeatReminder : null;
+    }
+
     private AppError? ValidateUpdateParams(HabitUpdateParams p)
     {
+        var repeatValidation = ValidateUpdatedRepeat(p);
+        if (repeatValidation is not null)
+            return repeatValidation;
         var schedule = p.Schedule;
         var effectiveIsGeneral = schedule == HabitSchedule.General;
 

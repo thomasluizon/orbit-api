@@ -1152,6 +1152,18 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[15]'::jsonb");
 
+                    b.Property<TimeOnly?>("RepeatActiveEnd")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<TimeOnly?>("RepeatActiveStart")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int?>("RepeatIntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RepeatStartAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Schedule")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -1230,8 +1242,17 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsSlip")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("LoggedOnLocalDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Note")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReminderAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("TakenAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2111,14 +2132,30 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
+
+                    b.Property<DateTime?>("DoseAnchorAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("HabitId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("MinutesBefore")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentReminderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReminderAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<TimeOnly?>("ReminderTimeUtc")
                         .HasColumnType("time without time zone");
@@ -2131,8 +2168,13 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("HabitId", "ReminderAtUtc")
+                        .IsUnique()
+                        .HasFilter("\"ReminderAtUtc\" IS NOT NULL");
+
                     b.HasIndex("HabitId", "Date", "MinutesBefore", "ReminderTimeUtc", "When")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"ReminderAtUtc\" IS NULL");
 
                     NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("HabitId", "Date", "MinutesBefore", "ReminderTimeUtc", "When"), false);
 

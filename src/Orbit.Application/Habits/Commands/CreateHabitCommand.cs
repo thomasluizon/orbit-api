@@ -99,6 +99,7 @@ public partial class CreateHabitCommandHandler(
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
+            RepeatReminder: opts.RepeatReminder,
             Position: nextPosition,
             IntervalWeeks: request.IntervalWeeks,
             StartDate: request.StartDate,

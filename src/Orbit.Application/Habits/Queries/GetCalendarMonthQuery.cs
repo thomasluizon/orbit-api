@@ -168,7 +168,7 @@ public class GetCalendarMonthQueryHandler(
                 h => h.Logs
                     .Where(l => l.Date >= dateFrom && l.Date <= dateTo)
                     .OrderByDescending(l => l.Date)
-                    .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
+                    .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc))
                     .ToList());
     }
 
@@ -214,6 +214,7 @@ public class GetCalendarMonthQueryHandler(
             Emoji: habit.Emoji,
             IntervalWeeks: habit.IntervalWeeks,
             RelativeReminders: habit.RelativeReminders,
+            RepeatReminder: habit.RepeatReminder,
             Schedule: habit.Schedule,
             StartDate: habit.StartDate,
             ParentHabitId: habit.ParentHabitId,

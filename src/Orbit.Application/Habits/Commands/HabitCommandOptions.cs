@@ -17,7 +17,8 @@ public record HabitCommandOptions(
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     DateOnly? EndDate = null,
     bool IsFlexible = false,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    RepeatReminderOptions? RepeatReminder = null);
 
 /// <summary>
 /// Optional settings for UpdateHabitCommand. Uses nullable booleans
@@ -34,4 +35,6 @@ public record UpdateHabitCommandOptions(
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     DateOnly? EndDate = null,
     bool? IsFlexible = null,
-    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null);
+    IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
+    RepeatReminderOptions? RepeatReminder = null,
+    bool ClearRepeatReminder = false);
