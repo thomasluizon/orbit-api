@@ -108,7 +108,6 @@ public sealed class ToolResultFailureMessagesTests
     [InlineData("Each position requires a valid habit_id GUID and an integer position.", "invalidHabitPosition")]
     [InlineData("Each position requires a valid goal_id GUID and an integer position.", "invalidGoalPosition")]
     [InlineData("Bulk habit operation failed before any changes were applied.", "bulkOperationFailed")]
-    [InlineData("This request was started by an earlier server version. Nothing more was changed. Check the habits and repeat the request.", "bulkReplayExpired")]
     [InlineData("name, email, subject, and message are required.", "supportFieldsRequired")]
     [InlineData("Habit not found.", "habitNotFound")]
     [InlineData("Goal not found.", "goalNotFound")]

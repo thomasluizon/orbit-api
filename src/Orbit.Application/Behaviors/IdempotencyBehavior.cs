@@ -2,7 +2,6 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
-using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Behaviors;
@@ -29,33 +28,10 @@ public sealed class IdempotencyBehavior<TRequest, TResponse>(
 
         var requestType = RequestType;
         var requestOrdinal = idempotencyContext.NextRequestOrdinal(RequestType);
-        int? legacyOrdinal = null;
         if (request is IIdempotencyFingerprint fingerprint)
-        {
             requestType = $"{RequestType}:{fingerprint.IdempotencyFingerprint}";
-            legacyOrdinal = requestOrdinal;
-        }
         var storedResponse = await idempotencyStore.FindResponseBodyAsync(
             userId, idempotencyKey, requestType, requestOrdinal, cancellationToken);
-        if (storedResponse is null && legacyOrdinal is { } ordinal)
-        {
-            var legacyResponse = await idempotencyStore.FindResponseBodyAsync(
-                userId, idempotencyKey, RequestType, ordinal, cancellationToken);
-            if (legacyResponse is not null)
-            {
-                var legacyIds = LegacyBulkHabitResult.ReadHabitIds(legacyResponse, RequestType);
-                var requestedIds = request switch
-                {
-                    BulkLogHabitsCommand log => log.Items.Select(item => item.HabitId).ToArray(),
-                    BulkSkipHabitsCommand skip => skip.Items.Select(item => item.HabitId).ToArray(),
-                    _ => []
-                };
-                if (legacyIds is not null
-                    && legacyIds.Count == requestedIds.Length
-                    && legacyIds.ToHashSet().SetEquals(requestedIds))
-                    storedResponse = legacyResponse;
-            }
-        }
         if (storedResponse is not null)
             return Deserialize(storedResponse);
 
