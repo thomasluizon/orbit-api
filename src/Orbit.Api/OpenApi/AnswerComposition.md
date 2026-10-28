@@ -83,6 +83,12 @@ its supplied question, option labels and free-text permission remain intact and 
 validator and domain guard. No write is prepared before the answer. Habit clarification and streak selection live in the prompt and
 tool contract.
 
+The shared `ask` schema reserves `intro` for the question form. Choice and pick-list
+projection omit that question-only introduction before validation, so an otherwise valid
+selection still produces its typed block. Its title, items, details and action remain the
+model's structured output. Item and combined bulk arguments pass the existing checks;
+issuing the selection prepares no write. The pick-list response shape stays unchanged.
+
 The full registered tool set remains available regardless of message wording or language.
 Composition never renames calls, invokes an uncalled tool, or substitutes fixed advice.
 Prompt instructions direct provider/connection/sync reads to `get_calendar_overview`, habit

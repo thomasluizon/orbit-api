@@ -1,0 +1,45 @@
+{
+  "caseId": "composition-pickList-pt-BR",
+  "repeat": 3,
+  "reason": "Missing typed data block.",
+  "answer": "Quais hábitos você quer concluir? Ainda não vou agir.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "pickList",
+        "question": "Quais hábitos você quer concluir?",
+        "title": "Escolher hábitos",
+        "multiSelect": true,
+        "allowFreeText": false,
+        "intro": "Selecione os hábitos para preparar a conclusão. Nada será concluído ainda.",
+        "progress": null,
+        "questions": null,
+        "options": null,
+        "action": "log_habits",
+        "items": [
+          {
+            "id": "[redacted]",
+            "label": "Beber água",
+            "detail": null,
+            "arguments": {
+              "habit_id": "[redacted]",
+              "date": "2026-10-28"
+            }
+          },
+          {
+            "id": "[redacted]",
+            "label": "Caminhada",
+            "detail": null,
+            "arguments": {
+              "habit_id": "[redacted]",
+              "date": "2026-10-28"
+            }
+          }
+        ],
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Failed"
+    }
+  ]
+}

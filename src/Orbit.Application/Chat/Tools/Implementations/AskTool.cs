@@ -32,7 +32,7 @@ public sealed class AskTool(
                 title = new { type = "string" },
                 multiSelect = new { type = "boolean" },
                 allowFreeText = new { type = "boolean" },
-                intro = new { type = "string", maxLength = 500 },
+                intro = new { type = "string", maxLength = 500, description = "Introduction for form question only. Omit for choice and pickList." },
                 progress = new
                 {
                     type = "object",
