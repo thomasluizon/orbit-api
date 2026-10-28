@@ -158,6 +158,53 @@ preview or a coalesced preview, and at least one pending preview remains. Incomp
 failed writes retain continuation. Completion uses structured tool calls and typed preview
 results, never patterns in the person's message.
 
+### Restart plans
+
+Restart requests use the existing `query_habits` read with `date: "today"`,
+`is_completed: false` and `include_overdue: true`. The model gathers any remaining
+pages before proposing a complete plan. The model chooses a smaller set for today
+and later dates for the rest from those results and the person's preferences.
+No message pattern routes this behavior.
+
+`bulk_reschedule_habits` exposes optional `revised_items` for individual dates:
+
+```json
+{
+  "revised_items": [
+    { "habit_id": "owned habit UUID", "updates": { "due_date": "YYYY-MM-DD" } }
+  ],
+  "orbit_write_complete": true
+}
+```
+
+The model includes every selected habit, including today's choices whose date may
+stay unchanged. It omits the shared `filter` and `due_date` when using this shape.
+The original shared-date shape remains supported. Stored revisions retain their
+existing precedence: `revised_items` overrides a shared filter/date.
+
+The response uses one existing `pendingOperations` entry with action
+`rescheduleHabits`, complete `items`, editable `due_date` fields and
+`previewFingerprint`. Item dates distinguish today's smaller plan from deferred
+habits. Unchanged proposed dates remain in `items[].fields`; `changes` contains
+actual differences only and is not a complete rendering source. There is no new
+block kind, strict enum value, client capability or response field. Composition
+returns the preview alone, with no separate prerequisite read blocks or repeated
+figures. Existing legacy preview negotiation remains available.
+
+Approve, edit and reject use the existing pending-operation routes. An edit
+preserves every unmentioned item and field. Rejection changes no habits. Approval
+executes the stored per-habit dates through `BulkUpdateHabitsCommand`, its existing
+FluentValidation validator and the domain's update guards. It preserves cadence,
+titles, times, reminders, checklists and historical logs. Rescheduling retains the
+app's existing due-date/recurrence semantics; this is not a history rewrite.
+
+The paired web and Android ticket must render all preview item dates, retain the
+existing controls and add real-call en and pt-BR cases in `evals/astra`, including
+approval with independent persisted readback and pass^3. Those consumer evals are
+owned by the coordinator. Local structured model-port replays do not establish
+real-call pass^3. Deploy the API before the paired consumer. Tracks
+thomasluizon/orbit-tickets#1855.
+
 Registered tools and awaiting previews remain available to the model regardless of message
 wording or date count. The prompt distinguishes a fresh request from a correction; the
 model selects creation or `revise_pending_changes` and supplies the target preview and edits.

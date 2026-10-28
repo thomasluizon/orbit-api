@@ -62,6 +62,25 @@ They forward to `McpExecutorBridge` → `IAgentOperationExecutor`, which resolve
 per capability; read-only MCP tools stay on MediatR.
 
 
+## Restart plans
+
+`bulk_reschedule_habits` accepts either the existing `filter` plus shared
+`due_date`, or optional `revised_items: [{ habit_id, updates: { due_date } }]`.
+Individual dates reuse the existing revision adapter and `BulkUpdateHabitsCommand`;
+they do not introduce a repository write path. Every item is checked by the
+existing command validator and domain guards before the preview is held.
+The complete plan includes habits kept today as well as deferred habits, even
+when a proposed date equals its stored value. Model instructions read the dated
+remaining schedule with overdue entries before planning, preserve unrelated fields
+and past records, and finish with one approval preview. No message routing is added.
+
+The wire contract, rendering requirements and coordinator-owned bilingual live
+eval handoff are in `src/Orbit.Api/OpenApi/AnswerComposition.md`, under Restart
+plans. All new model-facing instructions and their native pt-BR translation are
+in `RestartPlanInstructions.cs`; schema descriptions are English model metadata.
+The feature adds no fixed user-facing copy. Existing localized preview labels and
+controls are reused. Tracks thomasluizon/orbit-tickets#1855.
+
 ## Typed habit query results
 
 `query_habits` retains its formatted `EntityName` and also returns a `HabitListCard`

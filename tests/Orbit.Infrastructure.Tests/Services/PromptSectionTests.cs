@@ -116,6 +116,16 @@ public class EncouragingToneSectionTests
 public class GlobalRulesSectionTests
 {
     [Fact]
+    public void Build_OffersRestartPlansThroughToolsInBothLanguages()
+    {
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().Contain(Orbit.Application.Chat.RestartPlanInstructions.English);
+        result.Should().Contain(Orbit.Application.Chat.RestartPlanInstructions.Portuguese);
+    }
+
+    [Fact]
     public void Order_Is200()
     {
         new GlobalRulesSection().Order.Should().Be(200);
