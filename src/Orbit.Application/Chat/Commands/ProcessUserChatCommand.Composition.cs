@@ -67,7 +67,7 @@ public partial class ProcessUserChatCommandHandler
     private ResponseCards ComposeAnswerCore(ParsedResponseDirectives parsed, bool truncated, string? language,
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
-        if ((StartingStepAnswer(results) ?? SuggestionAnswer(results)) is { } suggestions) return suggestions;
+        if ((StartingStepAnswer(results, request, context) ?? SuggestionAnswer(results)) is { } suggestions) return suggestions;
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)

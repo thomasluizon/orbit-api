@@ -26,6 +26,5 @@ public sealed record OneSmallStepCard(StartingStep Suggestion, IReadOnlyList<One
         ]);
     }
 
-    internal static string Readable(OneSmallStepCard card) => card.Suggestion.Step + "\n\n"
-        + string.Join("\n", card.Actions.Select(action => action.Message));
+    internal static string Readable(OneSmallStepCard card) => card.Suggestion.Step;
 }

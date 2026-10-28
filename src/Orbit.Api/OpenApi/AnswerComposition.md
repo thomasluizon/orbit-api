@@ -294,9 +294,10 @@ another model call. The response has no framing prose and one typed part:
 
 Clients advertise `supportsParts: true` and include `oneSmallStep` in `partKinds`.
 The kind is a string extension, without adding a value to any strict enum.
-The parts kill flag still applies. Unsupported clients and stored-answer replay
-receive readable text containing the step and the action requests. Both ordinary
-and block-first composition support the contract. SSE final and synchronous
+The parts kill flag still applies. Fresh replies and stored-answer replay negotiate
+the kind against the client capabilities. Unsupported clients receive readable text
+containing only the step, without action requests or an unsupported block. Both
+ordinary and block-first composition support the contract. SSE final and synchronous
 responses agree. No new endpoint, account mutation or minimum client version applies.
 
 Actions submit their complete `message` as a fresh chat request with the current

@@ -10,13 +10,16 @@ public partial class ProcessUserChatCommandHandler
         && calls.All(call => call.Name == "suggest_breakdown" && outcomes.TryGetValue(call.Id, out var outcome)
             && outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: StartingStep });
 
-    private static ResponseCards? StartingStepAnswer(ToolExecutionAccumulator results)
+    private static ResponseCards? StartingStepAnswer(ToolExecutionAccumulator results,
+        ProcessUserChatCommand request, ChatContext context)
     {
         if (results.PendingOperations.Count > 0 || results.ActionResults.Any(action => action.Status != ActionStatus.Suggestion))
             return null;
         var suggestion = results.LastSuccessfulPayload<StartingStep>("suggest_breakdown");
-        return suggestion is null ? null : new(null,
-            Parts: [new ChatBlockPart("oneSmallStep", OneSmallStepCard.Build(suggestion))])
-        { ServerComposedText = true };
+        if (suggestion is null) return null;
+        var response = ChatResponseNegotiation.ForClient(new ChatResponse(null, [],
+            Parts: [new ChatBlockPart("oneSmallStep", OneSmallStepCard.Build(suggestion))]),
+            request.ClientContext, context.EnabledFeatureFlags, context.Language, context.User?.TimeZone);
+        return new(response.AiMessage, Parts: response.Parts) { ServerComposedText = true };
     }
 }

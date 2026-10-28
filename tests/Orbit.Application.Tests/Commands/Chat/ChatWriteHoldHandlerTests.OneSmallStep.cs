@@ -49,11 +49,11 @@ public sealed partial class ChatWriteHoldHandlerTests
         foreach (var unsupported in new AgentClientContext?[] { null, client with { PartKinds = [] } })
         {
             var legacy = ChatResponseNegotiation.ForClient(storedResponse, unsupported, [], language);
-            legacy.AiMessage.Should().Contain(first).And.Contain(card.Actions[0].Message);
+            legacy.AiMessage.Should().Be(first);
             legacy.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         }
         var disabled = ChatResponseNegotiation.ForClient(storedResponse, client, [FeatureFlagKeys.AstraPartsDisabled], language);
-        disabled.AiMessage.Should().Contain(first);
+        disabled.AiMessage.Should().Be(first);
         disabled.Parts.Should().BeNull();
 
         var refined = StartingStepCard(await ReplayStartingStep(card.Actions[0].Message, message, smaller, language, client));
@@ -81,6 +81,62 @@ public sealed partial class ChatWriteHoldHandlerTests
         readback.IsSuccess.Should().BeTrue(readback.Error);
         readback.Value.Title.Should().Be(smaller);
         readback.Value.Schedule.Should().Be(HabitSchedule.OneTime);
+    }
+
+    public static IEnumerable<object[]> StartingStepClientCases()
+    {
+        foreach (var language in new[] { "en", "pt-BR" })
+            foreach (var clientMode in new[] { "legacy", "unknownKind", "partsDisabled", "supported" })
+                foreach (var streaming in new[] { false, true })
+                    foreach (var composition in new[] { false, true })
+                        yield return [language, clientMode, streaming, composition];
+    }
+
+    [Theory]
+    [MemberData(nameof(StartingStepClientCases))]
+    public async Task OneSmallStep_FreshReplyNegotiatesClientCapabilities(
+        string language, string clientMode, bool streaming, bool composition)
+    {
+        _user.SetLanguage(language);
+        var flags = new List<string>();
+        if (composition) flags.Add(FeatureFlagKeys.AstraBlockFirst);
+        if (clientMode == "partsDisabled") flags.Add(FeatureFlagKeys.AstraPartsDisabled);
+        _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns(flags);
+        AgentClientContext? client = clientMode == "legacy" ? null
+            : new(SupportsParts: true, PartKinds: clientMode == "unknownKind" ? [] : ["oneSmallStep"]);
+        var goal = language == "en" ? "Study" : "Estudar";
+        var step = language == "en" ? "Open the book" : "Abrir o livro";
+        var response = await ReplayStartingStep(goal, goal, step, language, client, streaming);
+        var wire = streaming ? ChatStreamEvent.Final(response).ToJson()
+            : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions);
+        using var document = JsonDocument.Parse(wire);
+        var delivered = streaming ? document.RootElement.GetProperty("response") : document.RootElement;
+
+        if (clientMode == "supported")
+        {
+            StartingStepCard(response).Suggestion.Step.Should().Be(step);
+            response.AiMessage.Should().BeNull();
+            delivered.GetProperty("parts")[0].GetProperty("kind").GetString().Should().Be("oneSmallStep");
+            delivered.GetProperty("parts")[0].GetProperty("block").GetProperty("suggestion")
+                .GetProperty("step").GetString().Should().Be(step);
+        }
+        else
+        {
+            response.AiMessage.Should().Be(step);
+            delivered.GetProperty("aiMessage").GetString().Should().Be(step);
+            (response.Parts ?? []).OfType<ChatBlockPart>().Should().BeEmpty();
+            if (clientMode == "unknownKind")
+            {
+                response.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(step));
+                delivered.GetProperty("parts")[0].GetProperty("type").GetString().Should().Be("text");
+                delivered.GetProperty("parts")[0].GetProperty("text").GetString().Should().Be(step);
+            }
+            else
+            {
+                response.Parts.Should().BeNull();
+                delivered.TryGetProperty("parts", out _).Should().BeFalse();
+            }
+        }
     }
 
     [Theory]
@@ -138,7 +194,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         read.Value.ChecklistItems[0].IsChecked.Should().BeTrue();
     }
 
-    private async Task<ChatResponse> ReplayStartingStep(string message, string goal, string step, string language, AgentClientContext client)
+    private async Task<ChatResponse> ReplayStartingStep(string message, string goal, string step, string language,
+        AgentClientContext? client, bool streaming = true)
     {
         ScriptToolCall(JsonSerializer.Serialize(new
         {
@@ -148,8 +205,8 @@ public sealed partial class ChatWriteHoldHandlerTests
             suggested_sub_habits = new[] { new { title = step } }
         }), "suggest_breakdown");
         var events = new List<ChatStreamEvent>();
-        var result = await CreateHandler().Handle(new(_userId, message, ClientContext: client,
-            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
+        Func<ChatStreamEvent, Task>? sink = streaming ? item => { events.Add(item); return Task.CompletedTask; } : null;
+        var result = await CreateHandler().Handle(new(_userId, message, ClientContext: client, StreamSink: sink), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         events.Should().NotContain(item => item.Type == "delta");
