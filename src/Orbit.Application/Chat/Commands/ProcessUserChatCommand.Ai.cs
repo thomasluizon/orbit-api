@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
@@ -340,36 +339,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Strips a JSON wrapper from the AI response text, extracting the "aiMessage" property
-    /// if the model returned a raw JSON object instead of using function calling.
+    /// Extracts narrative from model-authored envelopes without accepting their blocks or actions.
     /// </summary>
-    private static string? StripJsonWrapper(string? text)
-    {
-        if (text is null || !text.TrimStart().StartsWith('{'))
-            return text;
-
-        if (!TryParseJsonObject(text, out var document))
-            return text;
-
-        using (document)
-        {
-            return document.RootElement.TryGetProperty("aiMessage", out var messageElement)
-                ? messageElement.GetString()
-                : text;
-        }
-    }
-
-    private static bool TryParseJsonObject(string text, [NotNullWhen(true)] out JsonDocument? document)
-    {
-        try
-        {
-            document = JsonDocument.Parse(text);
-            return true;
-        }
-        catch (JsonException)
-        {
-            document = null;
-            return false;
-        }
-    }
+    private static string? StripJsonWrapper(string? text) => ModelAnswerText.Extract(text);
 }

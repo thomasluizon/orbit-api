@@ -83,9 +83,13 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", "Show my piano progress.", "No matching habit was found, so its streak is unavailable.")]
-    [InlineData("pt-BR", "E o piano?", "Não encontrei um hábito correspondente para consultar a sequência.")]
-    public async Task HonestyReplay_MissingNamedHabitReportsUnavailableWithoutFigures(string language, string message, string expected)
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, true)]
+    [InlineData("en", false, true)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, false)]
+    [InlineData("pt-BR", true, false)]
+    public async Task HonestyReplay_MissingNamedHabitReportsUnavailableWithoutFigures(string language, bool parts, bool kind)
     {
         var user = User.Create("Reader", "reader@example.test").Value;
         user.SetLanguage(language);
@@ -103,14 +107,27 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(response with { ToolCalls = [lookup with { Args = JsonSerializer.SerializeToElement(arguments) }] });
         ContinueWithReadDirective("No data.");
 
-        var result = await handler.Handle(new(UserId, message,
-            ClientContext: new(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
+        var result = await handler.Handle(new(UserId, "Show my piano progress.",
+            ClientContext: new(SupportsParts: parts, PartKinds: kind ? ["habitList"] : [], SupportsHabitListCard: true)), default);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expected);
-        result.Value.AiMessage.Should().Be(expected);
+        if (parts && kind)
+        {
+            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+                .Which.Block.Should().BeOfType<HabitListCard>().Which.Items.Should().BeEmpty();
+            result.Value.AiMessage.Should().BeNullOrEmpty();
+            result.Value.RelatedSurfaces.Should().Contain("today");
+        }
+        else
+        {
+            result.Value.AiMessage.Should().Be(language == "en"
+                ? "No matching habit was found, so its streak is unavailable."
+                : "Não encontrei um hábito correspondente para consultar a sequência.");
+            result.Value.Parts?.OfType<ChatBlockPart>().Should().BeNullOrEmpty();
+        }
         result.Value.Operations.Should().ContainSingle().Which.OperationId.Should().Be("query_habits");
-        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+        await _aiIntentService.Received(parts ? 0 : 1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]

@@ -1,0 +1,16 @@
+{
+  "caseId": "composition-notifications-en",
+  "repeat": 1,
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"No records match this request.\"}],\"relatedActions\":[\"Notifications\"]}",
+  "toolCalls": [
+    {
+      "name": "get_notifications",
+      "arguments": {
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

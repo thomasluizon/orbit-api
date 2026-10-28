@@ -246,14 +246,12 @@ public partial class ProcessUserChatCommandHandler
                     built.Duplicates++;
                     continue;
                 }
-                if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
-                    && EmptyCompositionText(read, language) is { } empty)
+                if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
                 {
-                    results.AddRelatedSurface(SurfaceForRead(read));
-                    parts.Add(new ChatTextPart(empty));
-                }
-                else if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
+                    if (IsCompleteEmptyList(read))
+                        results.AddRelatedSurface(SurfaceForRead(read));
                     parts.Add(new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block));
+                }
                 else
                 {
                     built.Fallback = "missing_capability";
@@ -376,18 +374,14 @@ public partial class ProcessUserChatCommandHandler
         return text.Length == 0 ? null : text;
     }
 
-    private static string? EmptyCompositionText(QueryReadBlock read, string? language)
-    {
-        if (read.Read.TotalCount != 0 || read.Read.Completeness != "complete") return null;
-        var key = read.Block switch
+    private static bool IsCompleteEmptyList(QueryReadBlock read) =>
+        read.Read.TotalCount == 0 && read.Read.Completeness == "complete" && read.Block switch
         {
-            HabitListCard { Items.Count: 0 } => "habitsEmpty",
-            GoalListCard { Items.Count: 0 } => "goalsEmpty",
-            RecordListCard { Items.Count: 0 } => "recordsEmpty",
-            _ => null
+            HabitListCard { Items.Count: 0 } => true,
+            GoalListCard { Items.Count: 0 } => true,
+            RecordListCard { Items.Count: 0 } => true,
+            _ => false
         };
-        return key is null ? null : ErrorCopy.Resolve("chat.read." + key, LocaleHelper.IsPortuguese(language));
-    }
 
     private static string ShortText(string? text, int maxLines, bool steps = false) => string.Join("\n",
         Regex.Split(text ?? string.Empty, @"(?<=[.!?;])\s+(?=(?:I can help|I can also|Posso ajudar|Também posso)\b)",
