@@ -18,9 +18,6 @@ public class GlobalRulesSection : IPromptSection
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine(Orbit.Application.Chat.RestartPlanInstructions.English);
-        sb.AppendLine(Orbit.Application.Chat.RestartPlanInstructions.Portuguese);
-
         sb.AppendLine("""
             ## Core Rules
 

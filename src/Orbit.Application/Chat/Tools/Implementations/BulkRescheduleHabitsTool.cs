@@ -5,8 +5,10 @@ using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool
+public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
 {
+    public bool SupportsAtomicExecution(JsonElement arguments) => true;
+
     public string Name => "bulk_reschedule_habits";
 
     public string Description =>
@@ -59,7 +61,7 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
     {
         if (args.TryGetProperty("revised_items", out var revisedItems))
             return await BulkUpdateHabitsTool.ExecuteRevisedAsync(mediator,
-                revisedItems, userId, "Rescheduled", ct, checkOnly);
+                revisedItems, userId, "Rescheduled", ct, checkOnly, requireAll: true);
 
         var (filter, filterError) = BulkHabitToolArguments.ParseRequiredFilter(args);
         if (filterError is not null)

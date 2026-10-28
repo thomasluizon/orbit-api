@@ -116,13 +116,16 @@ public class EncouragingToneSectionTests
 public class GlobalRulesSectionTests
 {
     [Fact]
-    public void Build_OffersRestartPlansThroughToolsInBothLanguages()
+    public void Build_RestartInstructionsAppearOnlyInToolDescription()
     {
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
-        result.Should().Contain(Orbit.Application.Chat.RestartPlanInstructions.English);
-        result.Should().Contain(Orbit.Application.Chat.RestartPlanInstructions.Portuguese);
+        var description = new Orbit.Application.Chat.Tools.Implementations.BulkRescheduleHabitsTool(
+            NSubstitute.Substitute.For<MediatR.IMediator>()).Description;
+        description.Should().Contain(Orbit.Application.Chat.RestartPlanInstructions.English);
+        result.Should().NotContain(Orbit.Application.Chat.RestartPlanInstructions.English);
+        result.Should().NotContain("Quando a pessoa pedir ajuda para retomar");
     }
 
     [Fact]
