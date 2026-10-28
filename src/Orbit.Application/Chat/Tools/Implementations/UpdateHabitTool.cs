@@ -58,7 +58,7 @@ public class UpdateHabitTool(
             is_general = new { type = JsonSchemaTypes.Boolean, description = "General habit without a schedule. Children must match their parent." },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alerts. Requires Pro." },
             relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
-            repeat_reminder = RepeatReminderToolArguments.Schema(),
+            repeat_reminder = RepeatReminderToolArguments.Schema(forUpdate: true),
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = HabitModelInstructions.Polarity },
             is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking. Cannot have days set." },
             reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable or disable reminders" },

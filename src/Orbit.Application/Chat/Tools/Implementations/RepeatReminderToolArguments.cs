@@ -8,10 +8,11 @@ internal static class RepeatReminderToolArguments
 {
     public const string Field = "repeat_reminder";
 
-    public static object Schema() => new
+    public static object Schema(bool forUpdate = false) => new
     {
         type = JsonSchemaTypes.Object,
-        description = "Repeat from the latest dose across midnight. Replaces other reminders. Use only everyday Recurring, Flexible per day, or General habits. Recurring once a day stops after that day is done. The daily target does not stop Flexible or General reminders. When no daily target was requested, use General with no frequency, and do not derive a target from the reminder interval. Keep doctor-prescribed fixed clock times in scheduled_reminders.",
+        description = "Repeat from the latest dose across midnight. Replaces other reminders. Use only everyday Recurring, Flexible per day, or General habits. Recurring once a day stops after that day is done. The daily target does not stop Flexible or General reminders. When no daily target was requested, use General with no frequency, and do not derive a target from the reminder interval. Keep doctor-prescribed fixed clock times in scheduled_reminders."
+            + (forUpdate ? " Use clear_fields to clear repeat_reminder." : ""),
         properties = new
         {
             interval_minutes = new { type = JsonSchemaTypes.Integer, @enum = new[] { 15, 20, 30, 45 }.Concat(Enumerable.Range(1, 23).Select(h => h * 60)).ToArray() },
