@@ -12,6 +12,45 @@ public sealed class ProactiveItemTests
         ProactiveTrigger.EveningCheckin, new(2030, 10, 14), "{}", text, "Action", "Prompt", Now);
 
     [Fact]
+    public void CurrentContent_PreservesIdentityAndLifecycleWithoutChangingStoredContent()
+    {
+        var item = Create();
+        item.Show(Now);
+        item.Push(Now);
+        item.Open(Now.AddMinutes(1));
+        var facts = new ProactiveFacts(item.Trigger, ["Read"], HabitCount: 1);
+
+        var current = item.WithCurrentContent(facts, new("One habit.", "See habits", "Show habits."));
+
+        current.Should().NotBeSameAs(item);
+        current.Should().BeEquivalentTo(item, options => options.ComparingByMembers<ProactiveItem>()
+            .Excluding(x => x.Text).Excluding(x => x.FactsJson)
+            .Excluding(x => x.ActionLabel).Excluding(x => x.ActionPrompt));
+        current.Text.Should().Be("One habit.");
+        current.ActionLabel.Should().Be("See habits");
+        current.ActionPrompt.Should().Be("Show habits.");
+        item.Text.Should().Be("Text.");
+        item.FactsJson.Should().Be("{}");
+    }
+
+    [Fact]
+    public void CurrentContent_RejectsInvalidContentAndMismatchedFacts()
+    {
+        var item = Create();
+        var facts = new ProactiveFacts(item.Trigger, [], HabitCount: 1);
+        var message = new ProactiveMessage("One habit.", "Action", "Prompt");
+        Action wrongTrigger = () => item.WithCurrentContent(facts with { Trigger = ProactiveTrigger.MorningPlan }, message);
+        Action wrongGoal = () => item.WithCurrentContent(facts with { GoalId = Guid.NewGuid() }, message);
+        Action emptyText = () => item.WithCurrentContent(facts, message with { Text = "" });
+        Action longText = () => item.WithCurrentContent(facts, message with { Text = new string('x', 141) });
+        Action emptyAction = () => item.WithCurrentContent(facts, message with { ActionLabel = "" });
+        Action emptyPrompt = () => item.WithCurrentContent(facts, message with { ActionPrompt = "" });
+        foreach (var action in new[] { wrongTrigger, wrongGoal, emptyText, longText, emptyAction, emptyPrompt })
+            action.Should().Throw<ArgumentException>();
+        item.Text.Should().Be("Text.");
+    }
+
+    [Fact]
     public void LifecycleEvaluation_DoesNotChangeTimestamps()
     {
         var item = Create();

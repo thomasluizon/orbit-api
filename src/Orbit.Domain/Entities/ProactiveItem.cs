@@ -32,13 +32,7 @@ public sealed class ProactiveItem : Entity
         if (userId == Guid.Empty) throw new ArgumentException("User is required.", nameof(userId));
         if (!Enum.IsDefined(trigger)) throw new ArgumentOutOfRangeException(nameof(trigger));
         if (localDate == default) throw new ArgumentException("Local date is required.", nameof(localDate));
-        using var facts = JsonDocument.Parse(factsJson);
-        if (facts.RootElement.ValueKind != JsonValueKind.Object)
-            throw new ArgumentException("Facts must be an object.", nameof(factsJson));
-        if (string.IsNullOrWhiteSpace(text) || text.Length > ProactiveRules.MaxTextLength)
-            throw new ArgumentException("Text must contain at most 140 characters.", nameof(text));
-        if (string.IsNullOrWhiteSpace(actionLabel) || string.IsNullOrWhiteSpace(actionPrompt))
-            throw new ArgumentException("An action label and prompt are required.", nameof(actionLabel));
+        ValidateContent(factsJson, text, actionLabel, actionPrompt);
         if (trigger == ProactiveTrigger.GoalBehind && (!goalId.HasValue || goalId == Guid.Empty))
             throw new ArgumentException("A goal is required.", nameof(goalId));
         RequireUtc(createdAtUtc);
@@ -54,6 +48,20 @@ public sealed class ProactiveItem : Entity
             CreatedAtUtc = createdAtUtc,
             GoalId = goalId
         };
+    }
+
+    public ProactiveItem WithCurrentContent(ProactiveFacts facts, ProactiveMessage message)
+    {
+        if (facts.Trigger != Trigger || facts.GoalId != GoalId)
+            throw new ArgumentException("Facts must describe this item's trigger and goal.", nameof(facts));
+        var factsJson = JsonSerializer.Serialize(facts);
+        ValidateContent(factsJson, message.Text, message.ActionLabel, message.ActionPrompt);
+        var current = (ProactiveItem)MemberwiseClone();
+        current.FactsJson = factsJson;
+        current.Text = message.Text.Trim();
+        current.ActionLabel = message.ActionLabel.Trim();
+        current.ActionPrompt = message.ActionPrompt.Trim();
+        return current;
     }
 
     public bool Ignored => (ShownAtUtc.HasValue || PushedAtUtc.HasValue)
@@ -106,6 +114,17 @@ public sealed class ProactiveItem : Entity
         EndedAtUtc = nowUtc;
         EndReason = reason;
         return true;
+    }
+
+    private static void ValidateContent(string factsJson, string text, string actionLabel, string actionPrompt)
+    {
+        using var facts = JsonDocument.Parse(factsJson);
+        if (facts.RootElement.ValueKind != JsonValueKind.Object)
+            throw new ArgumentException("Facts must be an object.", nameof(factsJson));
+        if (string.IsNullOrWhiteSpace(text) || text.Length > ProactiveRules.MaxTextLength)
+            throw new ArgumentException("Text must contain at most 140 characters.", nameof(text));
+        if (string.IsNullOrWhiteSpace(actionLabel) || string.IsNullOrWhiteSpace(actionPrompt))
+            throw new ArgumentException("An action label and prompt are required.", nameof(actionLabel));
     }
 
     private static void RequireUtc(DateTime timestamp)
