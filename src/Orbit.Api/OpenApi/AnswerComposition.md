@@ -102,16 +102,32 @@ calculations remain owned by the existing producers and every write retains appr
 
 Skipped habit reads retain their dated skip facts, including active skip receipts for
 recurring habits. They exclude skipped entries from completed and remaining totals.
-The existing habit-list wire statuses cannot express a skip, so these reads use localized
-text produced from the typed skip facts and stored titles. Stored titles remain verbatim.
+`HabitListCardItem` appends optional nullable boolean `isSkippedOnDate`. A dated query
+emits true for a skipped row and false for other rows; an undated query omits it.
+Its date is the enclosing habit list's resolved account-local `date`, including after
+refresh crosses midnight. Existing `status` values remain unchanged; a skipped row
+retains `status: "none"`. Supported clients receive the query-bound `habitList` first,
+with no repeated prose. Stored replay retains the field, and missing-capability text
+uses it to preserve the localized skip state. Stored titles remain verbatim. Deploy
+the API before the paired web and Android consumer renders the optional field.
 Legacy clients without parts keep their readable path; unsupported kinds use typed fallbacks.
 The parts and family kill flags still apply. No contract field changes type or optionality.
+For a complete filtered habit read with zero total rows, the empty block retains
+`read.scope.search` and its existing screen action. One short contextual text part names
+that searched value: `No habit matches “piano”.` or `Nenhum hábito corresponde a “piano”.`
+This essential scope explanation comes only from typed query metadata, with no metrics
+fabrication or additional model call. Nonempty, partial, failed and unfiltered reads
+do not receive that explanation. Legacy unavailable-streak text remains supported.
 The API regression fixtures replay #26's executed tool arguments at the model-service port;
 they do not claim raw provider output or correct erroneous calls by rewriting them. Tests
 verify unchanged tool availability, faithful dispatch, typed dependency selection, incomplete
 plan continuation, declared-complete empty termination and later-round terminal reads.
 The partial-list fixture has 51 habits, so limit 100 truthfully produces complete data and
-limit 50 produces partial data with a cursor. #1822 owns the disconnected-calendar stale
+limit 50 produces partial data with an authenticated next cursor. The tool description
+keeps the normal page size at 50 for an all-habits request unless the person explicitly
+requests another page size. An all-habits request does not silently enlarge that page.
+Completeness still follows returned rows and total count, rather than a consumer's
+three-row preview. #1822 owns the disconnected-calendar stale
 expectation. #26 owns the live bilingual rerun before activation.
 
 Each write tool declares the required boolean `orbit_write_complete` argument. The model

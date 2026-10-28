@@ -29,6 +29,7 @@ public static partial class ErrorCopy
         ("chat.read.skippedToday", "skipped today", "pulado hoje"),
         ("chat.read.skippedOnDate", "skipped on this date", "pulado nesta data"),
         ("chat.read.missingHabitStreak", "No matching habit was found, so its streak is unavailable.", "Não encontrei um hábito correspondente para consultar a sequência."),
+        ("chat.read.noMatchingHabit", "No habit matches “{0}”.", "Nenhum hábito corresponde a “{0}”."),
         ("chat.read.none", "Not completed", "Não concluído"),
         ("chat.read.dayDone", "Completed / scheduled", "Concluídos / agendados"),
         ("chat.read.streak", "Current streak", "Sequência atual"),

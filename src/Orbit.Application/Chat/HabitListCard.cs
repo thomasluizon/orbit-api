@@ -25,7 +25,8 @@ public record HabitListCardItem(
     DateOnly? StartDate = null,
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
-    IReadOnlyList<Orbit.Application.Habits.Queries.HabitTagItem>? Tags = null);
+    IReadOnlyList<Orbit.Application.Habits.Queries.HabitTagItem>? Tags = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? IsSkippedOnDate = null);
 
 public static partial class HabitListCardBuilder
 {

@@ -21,7 +21,8 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read habits, schedules, metrics and checklists. Call before answering habit questions; indexes do not ground replies.";
+        "Read habits, schedules, metrics and checklists. Call before answering habit questions; indexes do not ground replies. "
+        + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries.";
 
     public object GetParameterSchema() => new
     {
@@ -40,7 +41,13 @@ public class QueryHabitsTool(
             include_sub_habits = new { type = JsonSchemaTypes.Boolean, description = "Include children. Default: true." },
             include_metrics = new { type = JsonSchemaTypes.Boolean, description = "Include streak/completion metrics for progress questions. Default: false." },
             offset = new { type = JsonSchemaTypes.Integer, description = "Typed row offset. Default: 0." },
-            limit = new { type = JsonSchemaTypes.Integer, description = "Maximum results to return. Default: 50" }
+            limit = new
+            {
+                type = JsonSchemaTypes.Integer,
+                minimum = 1,
+                maximum = 200,
+                description = "Page size. Use 50 unless the user requests a different page size. Asking for all habits keeps the default page size; use the returned nextCursor for further pages."
+            }
         },
         required = Array.Empty<string>()
     };
@@ -129,7 +136,8 @@ public class QueryHabitsTool(
                 : habit.NextDueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
         rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status, habit.StartDate, habit.ParentHabitId,
             habit.ParentHabitId is { } parentId ? parentTitles.GetValueOrDefault(parentId) : null,
-            habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList()));
+            habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
+            schedule is null ? null : schedule.Facts.SkippedIds.Contains(habit.Id)));
         if (includeSubs)
             foreach (var child in habits.Where(item => item.ParentHabitId == habit.Id).OrderBy(item => item.Position))
                 AppendReadRows(child, depth + 1, rows, habits, schedule, today, true, parentTitles);

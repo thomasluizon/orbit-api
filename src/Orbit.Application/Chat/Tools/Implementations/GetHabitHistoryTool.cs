@@ -8,7 +8,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public sealed class GetHabitHistoryTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_habit_history";
-    public string Description => "Read actual dated habit logs for a relative period or explicit dates. Values indicate completion records, never measured amounts.";
+    public string Description => "Read actual dated habit logs for a relative period or explicit dates. Values indicate completion records, never measured amounts. "
+        + "For whether a habit is done or skipped on a day, use query_habits with date and is_completed null; an empty completion history does not establish its skip state.";
     public bool IsReadOnly => true;
     public object GetParameterSchema() => new
     {

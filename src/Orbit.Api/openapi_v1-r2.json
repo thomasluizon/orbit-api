@@ -21236,6 +21236,12 @@
             "items": {
               "$ref": "#/components/schemas/HabitTagItem"
             }
+          },
+          "isSkippedOnDate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

@@ -251,6 +251,9 @@ public partial class ProcessUserChatCommandHandler
                     if (IsCompleteEmptyList(read))
                         results.AddRelatedSurface(SurfaceForRead(read));
                     parts.Add(new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block));
+                    if (read.Block is HabitListCard habit && HabitReadMessages.FilteredEmpty(habit, language) is { } empty
+                        && !parts.OfType<ChatTextPart>().Any())
+                        parts.Add(new ChatTextPart(empty));
                 }
                 else
                 {

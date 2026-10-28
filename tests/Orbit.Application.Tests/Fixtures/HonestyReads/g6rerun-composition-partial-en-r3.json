@@ -1,0 +1,26 @@
+{
+  "caseId": "composition-partial-en",
+  "repeat": 3,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

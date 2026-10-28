@@ -71,6 +71,20 @@ The scope is `date` for a historical or future schedule, `today` for the resolve
 current day, and `all` for an undated query. An undated query retains its filters;
 `all` does not mean the payload contains every habit.
 
+Habit rows append optional nullable boolean `isSkippedOnDate`. Dated queries emit
+true for a skipped occurrence and false otherwise; undated queries omit it. The
+enclosing `date` remains authoritative after refresh and replay. The existing `status`
+enum is unchanged: skipped rows keep `none`. A day's completion or skip question uses
+`query_habits` with `date` and null `is_completed`, rather than inferring skip state
+from completion logs. Missing-capability text preserves the typed skip state.
+
+The normal page size is 50, including an all-habits request; the model supplies another
+size only when requested. A 51-row result with limit 50 is partial and has a signed
+next cursor; limit 100 returns complete data. Consumer preview truncation cannot
+change source completeness. A complete, empty filtered read retains its `search`
+in exact query metadata and adds one short localized scope explanation after its
+empty block. It names the typed search term without deriving anything from the message.
+
 The chat builder carries the successful typed result into its block. Each read tool
 call gets its own query identity. A continuation result's `readDirective`, for example
 `[[orbit:read:call_1]]`, refers only to that call. An unqualified legacy directive

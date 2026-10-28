@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
@@ -124,11 +125,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(query);
         UseProductionReadExecutor(query);
-        var response = HonestyReplay("missing-query");
-        var lookup = response.ToolCalls!.Single();
-        var arguments = lookup.Args.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);
-        arguments[TerminalReadDirective.CompleteArgument] = JsonSerializer.SerializeToElement(true);
-        SetupAiResponse(response with { ToolCalls = [lookup with { Args = JsonSerializer.SerializeToElement(arguments) }] });
+        SetupAiResponse(HonestyReplay("g6rerun-grounding-missing-pt-r1"));
         ContinueWithReadDirective("No data.");
 
         var result = await handler.Handle(new(UserId, "Show my piano progress.",
@@ -137,9 +134,10 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         if (parts && kind)
         {
-            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            result.Value.Parts!.First().Should().BeOfType<ChatBlockPart>()
                 .Which.Block.Should().BeOfType<HabitListCard>().Which.Items.Should().BeEmpty();
-            result.Value.AiMessage.Should().BeNullOrEmpty();
+            result.Value.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text.Should().Be(language == "en"
+                ? "No habit matches “piano”." : "Nenhum hábito corresponde a “piano”.");
             result.Value.RelatedSurfaces.Should().Contain("today");
         }
         else
@@ -204,9 +202,13 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", "Caminhada: skipped today.")]
-    [InlineData("pt-BR", "Caminhada: pulado hoje.")]
-    public async Task HonestyReplay_SkippedHabitUsesDatedDataAndLocalizedStatus(string language, string expected)
+    [InlineData("en", "edge-skipped-pt-r1")]
+    [InlineData("pt-BR", "edge-skipped-pt-r1")]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r2")]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r2")]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r3")]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r3")]
+    public async Task HonestyReplay_SkippedHabitUsesDatedDataAndLocalizedStatus(string language, string capture)
     {
         var today = new DateOnly(2026, 10, 27);
         var user = User.Create("Reader", "reader@example.test").Value;
@@ -223,18 +225,31 @@ public partial class ProcessUserChatCommandHandlerTests
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
         var handler = CreateHandler(query);
         UseProductionReadExecutor(query);
-        SetupAiResponse(HonestyReplay("edge-skipped-pt-r1"));
+        SetupAiResponse(HonestyReplay(capture));
+        var events = new List<ChatStreamEvent>();
 
         var result = await handler.Handle(new(UserId, "O que aconteceu com a Caminhada hoje? Eu tinha pulado.",
             ClientContext: new(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true,
-                SupportsDatedHabitListCard: true)), default);
+                SupportsDatedHabitListCard: true),
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue();
         var card = result.Value.Operations.Should().ContainSingle().Which.ReadBlock!.Block.Should().BeOfType<HabitListCard>().Subject;
         card.Date.Should().Be(today);
         card.Items.Should().ContainSingle().Which.Status.Should().Be("none");
         card.SkippedIds.Should().Contain(habit.Id.ToString());
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expected);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("habitList");
+        var row = JsonSerializer.SerializeToElement(card.Items.Single(), ChatStreamEvent.SerializerOptions);
+        row.TryGetProperty("isSkippedOnDate", out var skipped).Should().BeTrue();
+        skipped.GetBoolean().Should().BeTrue();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        events.Should().NotContain(item => item.Type == "delta");
+        AssertStoredComposition(result.Value);
+        var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions),
+            ChatStreamEvent.SerializerOptions)!;
+        var fallback = ChatResponseNegotiation.ForClient(stored, null, [], language);
+        fallback.Parts.Should().BeNull();
+        fallback.AiMessage.Should().Be(language == "en" ? "Caminhada: skipped today." : "Caminhada: pulado hoje.");
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 }
