@@ -15,24 +15,59 @@ namespace Orbit.Infrastructure.Services;
 
 public partial class ReminderSchedulerService
 {
-    private static async Task<(List<Habit> Habits, List<RepeatDose> Doses, List<SentReminder> Sent)> LoadRepeatSnapshot(
-        OrbitDbContext dbContext, DateTime nowUtc, DateOnly minLocalDate, CancellationToken ct)
-    {
-        var repeatHabits = await dbContext.Habits.AsNoTracking()
+    private static Task<List<Habit>> LoadRepeatHabits(
+        OrbitDbContext dbContext, DateOnly minLocalDate, CancellationToken ct) =>
+        dbContext.Habits.AsNoTracking()
             .Where(h => !h.IsCompleted && h.ReminderEnabled && h.RepeatIntervalMinutes != null
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
+
+    private async Task<(Dictionary<Guid, DateTime> Anchors, HashSet<(Guid HabitId, DateOnly Date)> LoggedDates,
+        List<SentReminder> Sent)> LoadRepeatSnapshot(OrbitDbContext dbContext, List<Habit> repeatHabits,
+        Dictionary<Guid, User> users, DateTime nowUtc, DateOnly minLocalDate, CancellationToken ct)
+    {
         var repeatIds = repeatHabits.Select(h => h.Id).ToList();
-        var repeatDoses = await dbContext.HabitLogs.AsNoTracking()
-            .Where(l => repeatIds.Contains(l.HabitId) && l.Value > 0)
-            .Select(l => new RepeatDose(l.HabitId, l.Date, l.TakenAtUtc ?? l.CreatedAtUtc, l.CreatedAtUtc, l.LoggedOnLocalDate))
-            .ToListAsync(ct);
+        var zones = repeatHabits.Where(h => users.ContainsKey(h.UserId)).ToDictionary(h => h.Id,
+            h => TimeZoneHelper.FindTimeZone(users[h.UserId].TimeZone, logger, h.UserId));
+        var pendingIds = zones.Keys.ToList();
+        var excludedIds = new List<Guid>();
+        var anchors = new Dictionary<Guid, DateTime>();
+        while (pendingIds.Count > 0)
+        {
+            var candidates = await LatestRepeatDoseCandidates(dbContext, pendingIds, excludedIds).ToListAsync(ct);
+            pendingIds = [];
+            foreach (var dose in candidates)
+            {
+                var loggedDate = dose.LoggedOnLocalDate ?? DateOnly.FromDateTime(
+                    TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(dose.CreatedAtUtc, DateTimeKind.Utc), zones[dose.HabitId]));
+                if (dose.Date == loggedDate)
+                    anchors[dose.HabitId] = dose.TakenAtUtc ?? dose.CreatedAtUtc;
+                else
+                {
+                    excludedIds.Add(dose.Id);
+                    pendingIds.Add(dose.HabitId);
+                }
+            }
+        }
+        var recurringIds = repeatHabits.Where(h => h.Schedule == HabitSchedule.Recurring).Select(h => h.Id).ToList();
+        var maxLocalDate = minLocalDate.AddDays(2);
+        var loggedDates = (await dbContext.HabitLogs.AsNoTracking()
+            .Where(l => recurringIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= minLocalDate && l.Date <= maxLocalDate)
+            .Select(l => new { l.HabitId, l.Date }).Distinct()
+            .ToListAsync(ct)).Select(l => (l.HabitId, l.Date)).ToHashSet();
         var repeatSent = await dbContext.SentReminders.AsNoTracking()
             .Where(r => repeatIds.Contains(r.HabitId) && r.ReminderAtUtc >= nowUtc.AddDays(-3))
             .ToListAsync(ct);
 
-        return (repeatHabits, repeatDoses, repeatSent);
+        return (anchors, loggedDates, repeatSent);
     }
+
+    internal static IQueryable<HabitLog> LatestRepeatDoseCandidates(OrbitDbContext dbContext, List<Guid> habitIds,
+        List<Guid> excludedIds) => dbContext.HabitLogs.AsNoTracking()
+        .Where(l => habitIds.Contains(l.HabitId) && l.Value > 0 && !excludedIds.Contains(l.Id)
+            && (l.LoggedOnLocalDate == null || l.Date == l.LoggedOnLocalDate))
+        .GroupBy(l => l.HabitId)
+        .Select(g => g.OrderByDescending(l => l.TakenAtUtc ?? l.CreatedAtUtc).ThenByDescending(l => l.Id).First());
 
     private async Task ProcessRepeatReminders(ReminderSnapshot snapshot, OrbitDbContext db,
         List<PendingReminderPush> pending, DateTime nowAtUtc, CancellationToken ct)
@@ -46,12 +81,9 @@ public partial class ReminderSchedulerService
             if (!CanSendRepeat(habit, today, user.WeekStartDay)
                 || RepeatReminderClock.MoveIntoWindow(nowAtUtc, options, zone) != nowAtUtc)
                 continue;
-            var doses = snapshot.RepeatDoses.Where(d => d.HabitId == habit.Id).ToList();
-            if (habit.Schedule == HabitSchedule.Recurring && doses.Any(d => d.Date == today))
+            if (habit.Schedule == HabitSchedule.Recurring && snapshot.RepeatLoggedDates.Contains((habit.Id, today)))
                 continue;
-            var anchorAtUtc = doses.Where(d => d.Date == (d.LoggedOnLocalDate ?? DateOnly.FromDateTime(
-                    TimeZoneInfo.ConvertTimeFromUtc(d.CreatedAtUtc, zone))))
-                .Select(d => (DateTime?)d.TakenAtUtc).Max() ?? options.StartAtUtc!.Value;
+            var anchorAtUtc = snapshot.RepeatAnchors.GetValueOrDefault(habit.Id, options.StartAtUtc!.Value);
             anchorAtUtc = DateTime.SpecifyKind(anchorAtUtc, DateTimeKind.Utc);
             if (anchorAtUtc > nowAtUtc)
                 continue;

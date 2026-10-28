@@ -418,7 +418,7 @@ public class BulkCreateHabitsTool(
         properties["reminder_times"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } };
         properties["scheduled_reminders"] = BulkHabitToolArguments.ScheduledRemindersSchema();
         properties["relative_reminders"] = BulkHabitToolArguments.RelativeRemindersSchema();
-        properties[RepeatReminderToolArguments.Field] = RepeatReminderToolArguments.Schema();
+        properties["repeat_reminder"] = RepeatReminderToolArguments.RepeatReminderSchema();
         properties["slip_alert_enabled"] = new { type = JsonSchemaTypes.Boolean };
         properties["tag_names"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
         properties["habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing habit ID to reuse and edit instead of creating a duplicate." };

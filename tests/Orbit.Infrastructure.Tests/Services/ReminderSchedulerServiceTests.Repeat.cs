@@ -5,11 +5,57 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public partial class ReminderSchedulerServiceTests
 {
+    [Fact]
+    public void Repeat_LatestDoseQueryTranslatesWithPostgresWithoutConnecting()
+    {
+        using var db = new OrbitDbContext(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql("Host=unused;Database=translation_only").Options);
+
+        var sql = ReminderSchedulerService.LatestRepeatDoseCandidates(db, [Guid.NewGuid()], []).ToQueryString();
+
+        sql.Should().Contain("HabitLogs");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Repeat_HistoricalLogsLoadOnlyTheLatestQualifyingDose(bool legacy)
+    {
+        var reads = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(reads);
+        var db = factory.Context;
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetTimeZone("America/Sao_Paulo");
+        var doseAtUtc = UtcToday.ToDateTime(new(2, 0), DateTimeKind.Utc);
+        var localDate = UtcToday.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, user.Id, "Water", FrequencyUnit.Day, 1,
+            localDate.AddDays(-400), ReminderEnabled: true, RepeatReminder: new(480, StartAtUtc: doseAtUtc.AddDays(-400)))).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        db.HabitLogs.AddRange(Enumerable.Range(0, 400).Select(day => HabitLog.FromScheduleRead(
+            Guid.NewGuid(), habit.Id, localDate.AddDays(-day), 1, 0, doseAtUtc.AddDays(-day),
+            loggedOnLocalDate: legacy ? null : localDate.AddDays(-day))));
+        db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, localDate.AddDays(-500), 1, 0,
+            doseAtUtc.AddHours(1), loggedOnLocalDate: legacy ? null : localDate));
+        await db.SaveChangesAsync();
+        reads.Reset();
+
+        await CreateService(db, Substitute.For<IPushNotificationService>(),
+            new MutableTimeProvider(new(doseAtUtc.AddHours(8)))).CheckAndSendReminders(default);
+
+        reads.Commands.Where(c => c.Sql.Contains("FROM \"HabitLogs\"", StringComparison.Ordinal))
+            .Sum(c => c.Rows).Should().BeLessThanOrEqualTo(2);
+        (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(doseAtUtc.AddHours(8));
+    }
+
     [Theory]
     [InlineData(HabitSchedule.General)]
     [InlineData(HabitSchedule.Flexible)]

@@ -8,14 +8,14 @@ internal static class RepeatReminderToolArguments
 {
     public const string Field = "repeat_reminder";
 
-    public static object Schema(bool forUpdate = false) => new
+    public static object RepeatReminderSchema(bool forUpdate = false) => new
     {
         type = JsonSchemaTypes.Object,
         description = "Repeat from the latest dose across midnight. Replaces other reminders. Use only everyday Recurring, Flexible per day, or General habits. Recurring once a day stops after that day is done. The daily target does not stop Flexible or General reminders. When no daily target was requested, use General with no frequency, and do not derive a target from the reminder interval. Keep doctor-prescribed fixed clock times in scheduled_reminders."
             + (forUpdate ? " Use clear_fields to clear repeat_reminder." : ""),
         properties = new
         {
-            interval_minutes = new { type = JsonSchemaTypes.Integer, @enum = new[] { 15, 20, 30, 45 }.Concat(Enumerable.Range(1, 23).Select(h => h * 60)).ToArray() },
+            interval_minutes = new { type = JsonSchemaTypes.Integer, @enum = new[] { 15, 20, 30, 45, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1020, 1080, 1140, 1200, 1260, 1320, 1380 } },
             active_start = new { type = JsonSchemaTypes.String, description = "Optional local HH:mm; supply active_end too. May cross midnight. Omit both for all day." },
             active_end = new { type = JsonSchemaTypes.String, description = "Optional local HH:mm, paired with active_start." },
             start_at_utc = new { type = JsonSchemaTypes.String, description = "Optional ISO 8601 UTC instant before the first dose. Defaults to when the change is saved." }

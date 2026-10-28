@@ -94,20 +94,23 @@ public partial class ReminderSchedulerService(
         return _snapshot;
     }
 
-    private static async Task<ReminderSnapshot> LoadSnapshotAsync(
+    private async Task<ReminderSnapshot> LoadSnapshotAsync(
         OrbitDbContext dbContext, ReminderProbe probe, DateTime nowUtc, CancellationToken ct)
     {
         var minLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(-1));
         var maxLocalDate = DateOnly.FromDateTime(nowUtc.AddDays(MaxRelativeLookaheadDays + 1));
         var (relativeHabits, scheduledHabits) = await LoadLegacyHabits(dbContext, nowUtc, minLocalDate, maxLocalDate, ct);
 
-        var (repeatHabits, repeatDoses, repeatSent) = await LoadRepeatSnapshot(dbContext, nowUtc, minLocalDate, ct);
+        var repeatHabits = await LoadRepeatHabits(dbContext, minLocalDate, ct);
 
         var userIds = relativeHabits.Concat(scheduledHabits).Concat(repeatHabits).Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
+
+        var (repeatAnchors, repeatLoggedDates, repeatSent) = await LoadRepeatSnapshot(
+            dbContext, repeatHabits, users, nowUtc, minLocalDate, ct);
 
         var habitIds = relativeHabits.Select(h => h.Id).ToList();
         var minWindowDate = minLocalDate.AddDays(MinRelativeDayOffset);
@@ -155,7 +158,7 @@ public partial class ReminderSchedulerService(
             .ToHashSet();
 
         return new ReminderSnapshot(nowUtc, probe, relativeHabits, scheduledHabits,
-            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatDoses, repeatSent);
+            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatLoggedDates, repeatSent);
     }
 
     private async Task ProcessRelativeReminders(ReminderSnapshot snapshot, OrbitDbContext dbContext,
@@ -448,11 +451,9 @@ public partial class ReminderSchedulerService(
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly Time, ScheduledReminderWhen? When)> SentClockSet,
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> SentScheduledSet,
         List<Habit> RepeatHabits,
-        List<RepeatDose> RepeatDoses,
+        Dictionary<Guid, DateTime> RepeatAnchors,
+        HashSet<(Guid HabitId, DateOnly Date)> RepeatLoggedDates,
         List<SentReminder> RepeatSent);
-
-    private sealed record RepeatDose(Guid HabitId, DateOnly Date, DateTime TakenAtUtc, DateTime CreatedAtUtc,
-        DateOnly? LoggedOnLocalDate);
 
     private static bool HasEnded(Habit habit, DateOnly today) =>
         habit.IsDeleted || habit.IsCompleted || habit.EndDate is { } end && today > end;

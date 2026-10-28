@@ -6,6 +6,43 @@ namespace Orbit.Application.Tests.Chat;
 
 public sealed class RepeatReminderClockTests
 {
+    [Theory]
+    [InlineData("UTC", 15, 8, 22, 2027, 1)]
+    [InlineData("UTC", 420, 22, 6, 2027, 1)]
+    [InlineData("UTC", 1380, 0, 23, 2027, 1)]
+    [InlineData("America/New_York", 30, 22, 6, 2027, 1)]
+    [InlineData("America/New_York", 1380, 0, 23, 2027, 1)]
+    [InlineData("America/New_York", 15, 1, 2, 2027, 9)]
+    [InlineData("America/New_York", 1380, 0, 23, 2050, 9)]
+    [InlineData("America/New_York", 420, 22, 6, 2050, 1)]
+    [InlineData("Australia/Lord_Howe", 30, 1, 3, 2027, 8)]
+    public void NinetyDayAnchor_MatchesTheStepWalk(string zoneId, int minutes, int startHour, int endHour, int year, int month)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+        var anchorAtUtc = new DateTime(year, month, 1, 12, 30, 0, DateTimeKind.Utc);
+        var options = new RepeatReminderOptions(minutes, new(startHour, 0), new(endHour, 59));
+        var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, zone);
+        var nowAtUtc = anchorAtUtc.AddDays(90);
+        var expectedAtUtc = firstAtUtc;
+        while (RepeatReminderClock.Next(expectedAtUtc, options, zone) <= nowAtUtc)
+            expectedAtUtc = RepeatReminderClock.Next(expectedAtUtc, options, zone);
+
+        RepeatReminderClock.LatestDue(firstAtUtc, nowAtUtc, options, zone).Should().Be(expectedAtUtc);
+    }
+
+    [Fact]
+    public async Task ActiveWindow_CalculationIsBoundedForAnAncientAnchor()
+    {
+        var firstAtUtc = new DateTime(1, 1, 1, 8, 0, 0, DateTimeKind.Utc);
+        var nowAtUtc = new DateTime(9990, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var options = new RepeatReminderOptions(15, new(8, 0), new(22, 0));
+
+        var dueAtUtc = await Task.Run(() => RepeatReminderClock.LatestDue(firstAtUtc, nowAtUtc, options, TimeZoneInfo.Utc))
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        dueAtUtc.Should().Be(nowAtUtc);
+    }
+
     [Fact]
     public void OldAnchor_PreservesTheIntervalPhaseInsideAnActiveWindow()
     {

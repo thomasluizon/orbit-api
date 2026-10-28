@@ -221,9 +221,9 @@ export const deliberateFields = {
 }
 
 export const forms = {
-  CreateHabitRequest: { tools: ["create_habit"], aliases: { TagIds: ["tag_ids"], SubHabits: ["sub_habits"] } },
-  UpdateHabitRequest: { tools: ["update_habit"], aliases: { ClearEndDate: ["clear_fields"], ParentId: ["parent_habit_id"], ClearParent: ["clear_parent"] } },
-  CreateSubHabitRequest: { tools: ["create_sub_habit"] },
+  CreateHabitRequest: { tools: ["create_habit"], aliases: { TagIds: ["tag_ids"], SubHabits: ["sub_habits"], RepeatReminder: ["repeat_reminder"] } },
+  UpdateHabitRequest: { tools: ["update_habit"], aliases: { ClearEndDate: ["clear_fields"], ParentId: ["parent_habit_id"], ClearParent: ["clear_parent"], ClearRepeatReminder: ["clear_fields"] } },
+  CreateSubHabitRequest: { tools: ["create_sub_habit"], aliases: { RepeatReminder: ["repeat_reminder"] } },
   UpdateChecklistRequest: { tools: ["update_checklist"] },
   CreateGoalRequest: { tools: ["create_goal"], aliases: { Type: ["goal_type"] } },
   UpdateGoalRequest: { tools: ["update_goal"] },

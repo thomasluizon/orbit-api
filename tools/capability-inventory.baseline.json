@@ -246,8 +246,13 @@
         },
         {
           "name": "RepeatReminder",
-          "status": "absent",
-          "routes": []
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_habit",
+              "parameter": "repeat_reminder"
+            }
+          ]
         }
       ]
     },
@@ -526,8 +531,13 @@
         },
         {
           "name": "ClearRepeatReminder",
-          "status": "absent",
-          "routes": []
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "clear_fields"
+            }
+          ]
         }
       ]
     },
@@ -726,8 +736,13 @@
         },
         {
           "name": "RepeatReminder",
-          "status": "absent",
-          "routes": []
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "create_sub_habit",
+              "parameter": "repeat_reminder"
+            }
+          ]
         }
       ]
     },
@@ -1410,6 +1425,60 @@
             "required": false
           },
           {
+            "name": "habits[].repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "habits[].repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "habits[].repeat_reminder.start_at_utc",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "habits[].scheduled_reminders",
             "type": "array",
             "items": {
@@ -1625,6 +1694,60 @@
             "items": {
               "type": "integer"
             },
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "habits[].sub_habits[].repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "habits[].sub_habits[].repeat_reminder.start_at_utc",
+            "type": "string",
             "required": false
           },
           {
@@ -2393,6 +2516,56 @@
           },
           {
             "name": "updates.repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "updates.repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "updates.repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "updates.repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "updates.repeat_reminder.start_at_utc",
+            "type": "string",
             "required": false
           },
           {
@@ -2680,6 +2853,60 @@
             "required": false
           },
           {
+            "name": "repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "repeat_reminder.start_at_utc",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "scheduled_reminders",
             "type": "array",
             "items": {
@@ -2895,6 +3122,60 @@
             "items": {
               "type": "integer"
             },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.start_at_utc",
+            "type": "string",
             "required": false
           },
           {
@@ -3159,6 +3440,60 @@
             "required": false
           },
           {
+            "name": "repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "repeat_reminder.start_at_utc",
+            "type": "string",
+            "required": false
+          },
+          {
             "name": "scheduled_reminders",
             "type": "array",
             "items": {
@@ -3374,6 +3709,60 @@
             "items": {
               "type": "integer"
             },
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "sub_habits[].repeat_reminder.start_at_utc",
+            "type": "string",
             "required": false
           },
           {
@@ -5227,6 +5616,56 @@
           },
           {
             "name": "repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "repeat_reminder.start_at_utc",
+            "type": "string",
             "required": false
           },
           {
@@ -6172,6 +6611,56 @@
           },
           {
             "name": "updatesJson.repeat_reminder",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "updatesJson.repeat_reminder.active_end",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "updatesJson.repeat_reminder.active_start",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "updatesJson.repeat_reminder.interval_minutes",
+            "type": "integer",
+            "required": true,
+            "values": [
+              1020,
+              1080,
+              1140,
+              120,
+              1200,
+              1260,
+              1320,
+              1380,
+              15,
+              180,
+              20,
+              240,
+              30,
+              300,
+              360,
+              420,
+              45,
+              480,
+              540,
+              60,
+              600,
+              660,
+              720,
+              780,
+              840,
+              900,
+              960
+            ]
+          },
+          {
+            "name": "updatesJson.repeat_reminder.start_at_utc",
+            "type": "string",
             "required": false
           },
           {
