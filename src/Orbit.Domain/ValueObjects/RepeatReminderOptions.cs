@@ -8,7 +8,7 @@ public sealed record RepeatReminderOptions(
     TimeOnly? ActiveEnd = null,
     DateTime? StartAtUtc = null)
 {
-    public bool IsValid => IsSupportedInterval(IntervalMinutes)
+    public bool IsValid() => IsSupportedInterval(IntervalMinutes)
         && ActiveStart.HasValue == ActiveEnd.HasValue
         && (!ActiveStart.HasValue || ActiveStart != ActiveEnd)
         && (StartAtUtc is null || StartAtUtc.Value.Kind == DateTimeKind.Utc);

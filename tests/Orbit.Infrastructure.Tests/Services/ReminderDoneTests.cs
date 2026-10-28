@@ -41,7 +41,33 @@ public sealed class ReminderDoneTests : IDisposable
         var log = await _factory.Context.HabitLogs.SingleAsync();
         log.TakenAtUtc.Should().Be(_clock.GetUtcNow().UtcDateTime);
         log.Value.Should().Be(1);
+        log.ReminderAtUtc.Should().Be(_clock.GetUtcNow().UtcDateTime.AddMinutes(-30));
         await _mediator.Received(1).Send(Arg.Is<LogHabitCommand>(c => c.HabitId == habit.Id && !c.ToggleExisting), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CorrectDose_PreservesTheReminderInstantAndInvalidatesTheClockSnapshot()
+    {
+        var (done, habit, token) = await Seed();
+        var completed = await done.Handle(new(token), default);
+        completed.IsSuccess.Should().BeTrue();
+        var db = _factory.Context;
+        var before = habit.ReminderProbeVersion;
+        var correctedAtUtc = _clock.Now.UtcDateTime.AddMinutes(-10);
+        var correction = new CorrectHabitDoseCommandHandler(new GenericRepository<Habit>(db),
+            new UnitOfWork(db, new DatabaseConnectionSettings()), _dates, _cache);
+        (await correction.Handle(new(habit.UserId, habit.Id, completed.Value.LogId, correctedAtUtc), default))
+            .IsSuccess.Should().BeTrue();
+        db.ChangeTracker.Clear();
+        var persisted = await db.Habits.SingleAsync();
+        persisted.ReminderProbeVersion.Should().BeGreaterThan(before);
+        var logs = new Orbit.Application.Habits.Queries.GetHabitLogsQueryHandler(new GenericRepository<Habit>(db),
+            new HabitLogReader(db), _dates);
+        var response = await logs.Handle(new(habit.UserId, habit.Id), default);
+        response.Value.Single().TakenAtUtc.Should().Be(correctedAtUtc);
+        response.Value.Single().ReminderAtUtc.Should().Be(_clock.Now.UtcDateTime.AddMinutes(-30));
+        (await correction.Handle(new(Guid.NewGuid(), habit.Id, completed.Value.LogId, correctedAtUtc.AddMinutes(-1)), default))
+            .IsFailure.Should().BeTrue();
     }
 
     [Theory]

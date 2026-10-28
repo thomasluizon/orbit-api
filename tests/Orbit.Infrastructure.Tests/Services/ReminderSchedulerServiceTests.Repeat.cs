@@ -168,6 +168,93 @@ public partial class ReminderSchedulerServiceTests
         (await db.SentReminders.CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task Repeat_ActualDoseAtTwentyIsFollowedAtFourTheNextDay()
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, start) = await SeedRepeat();
+        var doseAtUtc = UtcToday.ToDateTime(new(20, 0), DateTimeKind.Utc);
+        db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, doseAtUtc, doseAtUtc));
+        await db.SaveChangesAsync();
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), new MutableTimeProvider(new(doseAtUtc.AddHours(8))));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(doseAtUtc.AddHours(8));
+    }
+
+    [Fact]
+    public async Task Repeat_SubHourIntervalHasNoFollowUp()
+    {
+        var db = CreateSqliteDbContext();
+        var startAtUtc = UtcToday.ToDateTime(new(4, 0), DateTimeKind.Utc);
+        await SeedRepeat(new(30, StartAtUtc: startAtUtc));
+        var clock = new MutableTimeProvider(new(startAtUtc.AddMinutes(30)));
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        await service.CheckAndSendReminders(default);
+        clock.SetUtcNow(new(startAtUtc.AddMinutes(45)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(1);
+        clock.SetUtcNow(new(startAtUtc.AddMinutes(60)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(2);
+        (await db.SentReminders.AnyAsync(r => r.ParentReminderId != null)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Repeat_RecurringResumesTheNextLocalDay()
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, startAtUtc) = await SeedRepeat(schedule: HabitSchedule.Recurring);
+        var doseAtUtc = UtcToday.ToDateTime(new(12, 0), DateTimeKind.Utc);
+        db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, doseAtUtc, doseAtUtc));
+        await db.SaveChangesAsync();
+        var clock = new MutableTimeProvider(new(doseAtUtc.AddHours(8)));
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(0);
+        clock.SetUtcNow(new(doseAtUtc.AddHours(16)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(doseAtUtc.AddHours(16));
+    }
+
+    [Fact]
+    public async Task Repeat_IntervalEditInvalidatesTheCachedSnapshot()
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, startAtUtc) = await SeedRepeat();
+        var clock = new MutableTimeProvider(new(startAtUtc.AddHours(1)));
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(0);
+        habit.Update(new HabitUpdateParams(habit.Schedule, habit.Title, habit.Description, habit.FrequencyUnit,
+            habit.FrequencyQuantity, [], false, habit.NextDueDate, RepeatReminder: new(60))).IsSuccess.Should().BeTrue();
+        await db.SaveChangesAsync();
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(startAtUtc.AddHours(1));
+    }
+
+    [Fact]
+    public async Task Repeat_EndDateUsesTheUsersLocalDayAndSuppressesFollowUp()
+    {
+        var db = CreateSqliteDbContext();
+        var user = User.Create("Alex", "alex@test.com").Value;
+        user.SetTimeZone("America/Sao_Paulo");
+        var reminderAtUtc = UtcToday.AddDays(1).ToDateTime(new(2, 50), DateTimeKind.Utc);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, user.Id, "Drink water", FrequencyUnit.Day, 1,
+            UtcToday, EndDate: UtcToday, ReminderEnabled: true, RepeatReminder: new(480, StartAtUtc: reminderAtUtc.AddHours(-8)))).Value;
+        db.Users.Add(user);
+        db.Habits.Add(habit);
+        await db.SaveChangesAsync();
+        var clock = new MutableTimeProvider(new(reminderAtUtc));
+        var service = CreateService(db, Substitute.For<IPushNotificationService>(), clock);
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(1);
+        clock.SetUtcNow(new(reminderAtUtc.AddMinutes(15)));
+        await service.CheckAndSendReminders(default);
+        clock.SetUtcNow(new(reminderAtUtc.AddHours(8)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(1);
+    }
+
     private async Task<(Habit Habit, DateTime Start)> SeedRepeat(RepeatReminderOptions? options = null,
         HabitSchedule schedule = HabitSchedule.Flexible)
     {

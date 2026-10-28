@@ -232,7 +232,7 @@ public class BulkCreateHabitsTool(
     {
         var options = new HabitCommandOptions(item.Days ?? (item.DueDate.HasValue ? [] : null), item.DueTime, item.DueEndTime,
             item.ReminderEnabled, item.ReminderTimes, item.SlipAlertEnabled, item.ChecklistItems,
-            item.ScheduledReminders, item.EndDate, item.IsFlexible, item.RelativeReminders);
+            item.ScheduledReminders, item.EndDate, item.IsFlexible, item.RelativeReminders, item.RepeatReminder);
         return parentId is { } parent
             ? new CreateSubHabitCommand(userId, parent, item.Title, item.Description,
                 item.FrequencyUnit, item.FrequencyQuantity, item.IsBadHabit, item.DueDate, options,
@@ -340,10 +340,11 @@ public class BulkCreateHabitsTool(
             SubHabits: subHabits,
             Emoji: JsonArgumentParser.GetOptionalString(el, "emoji"),
             IntervalWeeks: oneTime ? null : JsonArgumentParser.GetOptionalInt(el, IntervalWeeks),
-            ReminderEnabled: JsonArgumentParser.GetOptionalBool(el, "reminder_enabled") ?? false,
+            ReminderEnabled: JsonArgumentParser.GetOptionalBool(el, "reminder_enabled") ?? RepeatReminderToolArguments.Parse(el) is not null,
             ReminderTimes: JsonArgumentParser.ParseIntArray(el, "reminder_times"),
             ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(el),
             RelativeReminders: JsonArgumentParser.ParseRelativeReminders(el),
+            RepeatReminder: RepeatReminderToolArguments.Parse(el),
             Tags: JsonArgumentParser.ParseStringArray(el, TagNames),
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(el, "slip_alert_enabled") ?? false,
             StartDate: JsonArgumentParser.ParseDateOnly(el, StartDate))
@@ -417,6 +418,7 @@ public class BulkCreateHabitsTool(
         properties["reminder_times"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.Integer } };
         properties["scheduled_reminders"] = BulkHabitToolArguments.ScheduledRemindersSchema();
         properties["relative_reminders"] = BulkHabitToolArguments.RelativeRemindersSchema();
+        properties[RepeatReminderToolArguments.Field] = RepeatReminderToolArguments.Schema();
         properties["slip_alert_enabled"] = new { type = JsonSchemaTypes.Boolean };
         properties["tag_names"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
         properties["habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing habit ID to reuse and edit instead of creating a duplicate." };

@@ -52,6 +52,8 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
             request.Headers.Authorization = new AuthenticationHeaderValue("bearer", GetProviderToken());
             request.Headers.Add("apns-topic", deliveryTopic);
             request.Headers.Add("apns-push-type", "alert");
+            if (data is not null && data.TryGetValue("tag", out var tag))
+                request.Headers.Add("apns-collapse-id", tag);
             using var response = await _http.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.OK)
                 return ApnsDeliveryOutcome.Delivered;

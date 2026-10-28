@@ -273,7 +273,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new LogHabitCommand(
             HttpContext.GetUserId(),
             id,
-            request?.Date, TakenAtUtc: request?.TakenAtUtc);
+            request?.Date, TakenAtUtc: request?.TakenAtUtc, ReminderAtUtc: request?.ReminderAtUtc);
 
         var result = await mediator.Send(command, cancellationToken);
 

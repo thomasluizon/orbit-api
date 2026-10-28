@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261028143028_AddRepeatReminders")]
+    [Migration("20261028145431_AddRepeatReminders")]
     partial class AddRepeatReminders
     {
         /// <inheritdoc />
@@ -1247,6 +1247,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("Note")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReminderAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("TakenAtUtc")
                         .HasColumnType("timestamp with time zone");

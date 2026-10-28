@@ -64,7 +64,7 @@ public partial class HabitsController
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
-    public record LogHabitRequest(DateOnly? Date = null, DateTime? TakenAtUtc = null);
+    public record LogHabitRequest(DateOnly? Date = null, DateTime? TakenAtUtc = null, DateTime? ReminderAtUtc = null);
 
     public record SkipHabitRequest(DateOnly? Date = null, Guid? SkipId = null);
 

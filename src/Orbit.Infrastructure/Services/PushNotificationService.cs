@@ -340,6 +340,8 @@ public partial class PushNotificationService(
         {
             Token = token,
             Notification = new Notification { Title = title, Body = body },
+            Android = data.TryGetValue("tag", out var tag)
+                ? new AndroidConfig { Notification = new AndroidNotification { Tag = tag } } : null,
             Data = data
         };
     }

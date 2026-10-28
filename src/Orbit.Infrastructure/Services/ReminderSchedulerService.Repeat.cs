@@ -53,6 +53,8 @@ public partial class ReminderSchedulerService
                     TimeZoneInfo.ConvertTimeFromUtc(d.CreatedAtUtc, zone)))
                 .Select(d => (DateTime?)d.TakenAtUtc).Max() ?? options.StartAtUtc!.Value;
             anchorAtUtc = DateTime.SpecifyKind(anchorAtUtc, DateTimeKind.Utc);
+            if (anchorAtUtc > nowAtUtc)
+                continue;
             var firstAtUtc = RepeatReminderClock.Next(anchorAtUtc, options, zone);
             if (firstAtUtc > nowAtUtc)
                 continue;
@@ -101,6 +103,7 @@ public partial class ReminderSchedulerService
         var data = new Dictionary<string, string>
         {
             ["habitId"] = habit.Id.ToString(),
+            ["tag"] = "orbit-repeat-" + habit.Id.ToString("N"),
             ["reminderAtUtc"] = reminderAtUtc.ToString("O", CultureInfo.InvariantCulture),
             ["doneExpiresAtUtc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture),
             ["doneToken"] = token,

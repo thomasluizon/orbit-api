@@ -5,7 +5,7 @@ namespace Orbit.Application.Chat.Tools;
 
 public static class OptionalToolArguments
 {
-    internal static readonly string[] HabitClearFields = ["description", "emoji", "frequency_unit", "end_date", "due_time", "due_end_time"];
+    internal static readonly string[] HabitClearFields = ["description", "emoji", "frequency_unit", "end_date", "due_time", "due_end_time", "repeat_reminder"];
     internal static readonly string[] GoalClearFields = ["description", "deadline"];
     internal static readonly string[] BulkHabitClearFields = [.. HabitClearFields, "frequency_quantity", "interval_weeks"];
 

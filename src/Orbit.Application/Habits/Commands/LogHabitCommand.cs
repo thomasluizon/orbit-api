@@ -31,7 +31,8 @@ public record LogHabitCommand(
     Guid HabitId,
     DateOnly? Date = null,
     bool ToggleExisting = true,
-    DateTime? TakenAtUtc = null) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
+    DateTime? TakenAtUtc = null,
+    DateTime? ReminderAtUtc = null) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit logging to reduce constructor parameter count (S107).
@@ -327,6 +328,12 @@ public partial class LogHabitCommandHandler(
             var doseResult = logEntity.CorrectTakenAtUtc(request.TakenAtUtc ?? logEntity.CreatedAtUtc, DateTime.UtcNow);
             if (doseResult.IsFailure)
                 return doseResult.PropagateError<PersistedLog>();
+            if (request.ReminderAtUtc is { } reminderAtUtc)
+            {
+                var reminderResult = logEntity.SetReminderAtUtc(reminderAtUtc, DateTime.UtcNow);
+                if (reminderResult.IsFailure)
+                    return reminderResult.PropagateError<PersistedLog>();
+            }
 
             await repos.HabitLogRepository.AddAsync(logEntity, cancellationToken);
 

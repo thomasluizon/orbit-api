@@ -21,6 +21,7 @@ public sealed record HabitFieldSummary
     public IReadOnlyList<int> ReminderTimes { get; init; } = [];
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; init; } = [];
     public IReadOnlyList<RelativeReminderTime> RelativeReminders { get; init; } = [];
+    public RepeatReminderOptions? RepeatReminder { get; init; }
     public bool SlipAlertEnabled { get; init; }
     public HabitSchedule Schedule { get; init; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; init; } = [];
@@ -41,6 +42,7 @@ public sealed record HabitFieldSummary
         ReminderTimes = habit.ReminderTimes,
         ScheduledReminders = habit.ScheduledReminders,
         RelativeReminders = habit.RelativeReminders,
+        RepeatReminder = habit.RepeatReminder,
         SlipAlertEnabled = habit.SlipAlertEnabled,
         Schedule = habit.Schedule,
         ChecklistItems = habit.ChecklistItems
@@ -64,6 +66,8 @@ public sealed record HabitFieldSummary
             fields.Add($"Scheduled reminders: {string.Join(", ", ScheduledReminders.Select(r => FormatClock(r.When, r.Time)))}");
         if (RelativeReminders.Count > 0)
             fields.Add($"Relative reminders: {string.Join(", ", RelativeReminders.Select(FormatRelative))}");
+        if (RepeatReminder is { } repeat)
+            fields.Add($"Repeat reminder: {repeat.IntervalMinutes} minutes; active {repeat.ActiveStart?.ToString("HH:mm", CultureInfo.InvariantCulture)} to {repeat.ActiveEnd?.ToString("HH:mm", CultureInfo.InvariantCulture)}; start {repeat.StartAtUtc?.ToString("O", CultureInfo.InvariantCulture)}");
         if (SlipAlertEnabled) fields.Add("Slip alerts: enabled");
         if (Schedule == HabitSchedule.Flexible) fields.Add("Flexible: true");
         if (ChecklistItems.Count > 0)

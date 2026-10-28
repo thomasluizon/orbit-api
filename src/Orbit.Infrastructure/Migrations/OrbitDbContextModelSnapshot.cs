@@ -1245,6 +1245,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ReminderAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("TakenAtUtc")
                         .HasColumnType("timestamp with time zone");
 

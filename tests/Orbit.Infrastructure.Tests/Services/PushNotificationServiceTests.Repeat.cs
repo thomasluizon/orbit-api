@@ -24,6 +24,7 @@ public sealed partial class PushNotificationServiceTests
         {
             ["habitId"] = Guid.NewGuid().ToString(),
             ["reminderAtUtc"] = "2027-09-26T12:00:00.0000000Z",
+            ["tag"] = "orbit-repeat-habit",
             ["doneToken"] = "signed-action",
             ["doneExpiresAtUtc"] = "2027-09-26T20:00:00.0000000Z",
             ["doneLabel"] = "Concluído"
@@ -35,6 +36,7 @@ public sealed partial class PushNotificationServiceTests
         var payload = PushNotificationService.CreateWebPushPayload("Água", "Próximo às 20:00", "/", data);
         await wns.Received(1).SendAsync(Arg.Any<string>(), payload, Arg.Any<CancellationToken>());
         var fcm = PushNotificationService.CreateFcmMessage("token", "Água", "Próximo às 20:00", "/", data);
+        fcm.Android.Notification.Tag.Should().Be(data["tag"]);
         using var web = JsonDocument.Parse(payload);
         using var apple = JsonDocument.Parse(JsonSerializer.Serialize(ApnsPushSender.CreatePayload("Água", "Próximo às 20:00", "/", data)));
         foreach (var (key, value) in data)

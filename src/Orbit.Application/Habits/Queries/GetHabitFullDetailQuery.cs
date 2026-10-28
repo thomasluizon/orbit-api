@@ -103,7 +103,7 @@ public class GetHabitFullDetailQueryHandler(
         var logs = allRootLogs
             .Where(l => l.Date >= cutoff)
             .OrderByDescending(l => l.Date)
-            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc))
+            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc))
             .ToList();
 
         return Result.Success(new HabitFullDetailResponse(detail, metrics, logs));

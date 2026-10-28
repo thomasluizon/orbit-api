@@ -32,7 +32,7 @@ public class GetAllHabitLogsQueryHandler(
             .GroupBy(l => l.HabitId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc)).ToList());
+                g => g.Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc, l.TakenAtUtc, l.ReminderAtUtc)).ToList());
 
         return Result.Success(grouped);
     }

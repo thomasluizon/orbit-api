@@ -243,6 +243,11 @@
               "parameter": "start_date"
             }
           ]
+        },
+        {
+          "name": "RepeatReminder",
+          "status": "absent",
+          "routes": []
         }
       ]
     },
@@ -508,6 +513,21 @@
               "parameter": "clear_parent"
             }
           ]
+        },
+        {
+          "name": "RepeatReminder",
+          "status": "covered",
+          "routes": [
+            {
+              "tool": "update_habit",
+              "parameter": "repeat_reminder"
+            }
+          ]
+        },
+        {
+          "name": "ClearRepeatReminder",
+          "status": "absent",
+          "routes": []
         }
       ]
     },
@@ -703,6 +723,11 @@
               "parameter": "relative_reminders"
             }
           ]
+        },
+        {
+          "name": "RepeatReminder",
+          "status": "absent",
+          "routes": []
         }
       ]
     },
@@ -2212,6 +2237,7 @@
                 "end_date",
                 "due_time",
                 "due_end_time",
+                "repeat_reminder",
                 "frequency_quantity",
                 "interval_weeks"
               ]
@@ -2363,6 +2389,10 @@
             "items": {
               "type": "integer"
             },
+            "required": false
+          },
+          {
+            "name": "updates.repeat_reminder",
             "required": false
           },
           {
@@ -5025,7 +5055,8 @@
                 "frequency_unit",
                 "end_date",
                 "due_time",
-                "due_end_time"
+                "due_end_time",
+                "repeat_reminder"
               ]
             },
             "required": false
@@ -5192,6 +5223,10 @@
             "items": {
               "type": "integer"
             },
+            "required": false
+          },
+          {
+            "name": "repeat_reminder",
             "required": false
           },
           {
@@ -5981,6 +6016,7 @@
                 "end_date",
                 "due_time",
                 "due_end_time",
+                "repeat_reminder",
                 "frequency_quantity",
                 "interval_weeks"
               ]
@@ -6132,6 +6168,10 @@
             "items": {
               "type": "integer"
             },
+            "required": false
+          },
+          {
+            "name": "updatesJson.repeat_reminder",
             "required": false
           },
           {
@@ -21908,6 +21948,298 @@
           }
         },
         {
+          "name": "RepeatActiveEnd",
+          "type": "TimeOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatActiveStart",
+          "type": "TimeOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatIntervalMinutes",
+          "type": "int?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatStartAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Schedule",
           "type": "HabitSchedule",
           "surfaces": {
@@ -24406,6 +24738,152 @@
         {
           "name": "Note",
           "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "ReminderAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "unlog_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "TakenAtUtc",
+          "type": "DateTime?",
           "surfaces": {
             "chat": {
               "verdict": "inventoried",
@@ -41363,6 +41841,298 @@
                       "via": "execute_agent_operation_v2"
                     }
                   ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatActiveEnd",
+          "type": "TimeOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatActiveStart",
+          "type": "TimeOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatIntervalMinutes",
+          "type": "int?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "RepeatStartAtUtc",
+          "type": "DateTime?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_habit",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
                 }
               }
             }

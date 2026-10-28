@@ -17,13 +17,8 @@ public static class RepeatReminderClock
             return firstAtUtc.AddTicks((nowAtUtc - firstAtUtc).Ticks / interval * interval);
         }
         var candidate = firstAtUtc;
-        if (candidate < nowAtUtc.AddDays(-3))
-        {
-            var local = TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone);
-            candidate = LocalInstant(DateOnly.FromDateTime(local).AddDays(-2).ToDateTime(options.ActiveStart.Value), zone);
-        }
-        while (Next(candidate, options, zone) <= nowAtUtc)
-            candidate = Next(candidate, options, zone);
+        for (var next = Next(candidate, options, zone); next <= nowAtUtc; next = Next(candidate, options, zone))
+            candidate = next;
         return candidate;
     }
 
@@ -39,7 +34,17 @@ public static class RepeatReminderClock
         var date = DateOnly.FromDateTime(local);
         if (start < end && time >= end)
             date = date.AddDays(1);
-        return LocalInstant(date.ToDateTime(start), zone);
+        var localStart = date.ToDateTime(start);
+        var candidateAtUtc = LocalInstant(localStart, zone);
+        if (candidateAtUtc >= instantAtUtc)
+            return candidateAtUtc;
+        if (zone.IsAmbiguousTime(localStart))
+        {
+            var laterAtUtc = DateTime.SpecifyKind(localStart - zone.GetAmbiguousTimeOffsets(localStart).Min(), DateTimeKind.Utc);
+            if (laterAtUtc >= instantAtUtc)
+                return laterAtUtc;
+        }
+        return LocalInstant(date.AddDays(1).ToDateTime(start), zone);
     }
 
     private static DateTime LocalInstant(DateTime local, TimeZoneInfo zone)

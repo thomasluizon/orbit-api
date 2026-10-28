@@ -21473,6 +21473,13 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "reminderAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -22927,6 +22934,13 @@
             "format": "date"
           },
           "takenAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "reminderAtUtc": {
             "type": [
               "null",
               "string"
@@ -26239,9 +26253,6 @@
               "string"
             ],
             "format": "date-time"
-          },
-          "isValid": {
-            "type": "boolean"
           }
         }
       },

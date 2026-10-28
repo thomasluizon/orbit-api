@@ -173,6 +173,56 @@
         }
       }
     },
+    "repeat_reminder": {
+      "type": "object",
+      "properties": {
+        "interval_minutes": {
+          "type": "integer",
+          "enum": [
+            15,
+            20,
+            30,
+            45,
+            60,
+            120,
+            180,
+            240,
+            300,
+            360,
+            420,
+            480,
+            540,
+            600,
+            660,
+            720,
+            780,
+            840,
+            900,
+            960,
+            1020,
+            1080,
+            1140,
+            1200,
+            1260,
+            1320,
+            1380
+          ]
+        },
+        "active_start": {
+          "type": "string"
+        },
+        "active_end": {
+          "type": "string"
+        },
+        "start_at_utc": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "interval_minutes"
+      ],
+      "additionalProperties": false
+    },
     "slip_alert_enabled": {
       "type": "boolean"
     },
@@ -379,6 +429,56 @@
                 }
               }
             }
+          },
+          "repeat_reminder": {
+            "type": "object",
+            "properties": {
+              "interval_minutes": {
+                "type": "integer",
+                "enum": [
+                  15,
+                  20,
+                  30,
+                  45,
+                  60,
+                  120,
+                  180,
+                  240,
+                  300,
+                  360,
+                  420,
+                  480,
+                  540,
+                  600,
+                  660,
+                  720,
+                  780,
+                  840,
+                  900,
+                  960,
+                  1020,
+                  1080,
+                  1140,
+                  1200,
+                  1260,
+                  1320,
+                  1380
+                ]
+              },
+              "active_start": {
+                "type": "string"
+              },
+              "active_end": {
+                "type": "string"
+              },
+              "start_at_utc": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "interval_minutes"
+            ],
+            "additionalProperties": false
           },
           "slip_alert_enabled": {
             "type": "boolean"
@@ -587,6 +687,56 @@
                     }
                   }
                 },
+                "repeat_reminder": {
+                  "type": "object",
+                  "properties": {
+                    "interval_minutes": {
+                      "type": "integer",
+                      "enum": [
+                        15,
+                        20,
+                        30,
+                        45,
+                        60,
+                        120,
+                        180,
+                        240,
+                        300,
+                        360,
+                        420,
+                        480,
+                        540,
+                        600,
+                        660,
+                        720,
+                        780,
+                        840,
+                        900,
+                        960,
+                        1020,
+                        1080,
+                        1140,
+                        1200,
+                        1260,
+                        1320,
+                        1380
+                      ]
+                    },
+                    "active_start": {
+                      "type": "string"
+                    },
+                    "active_end": {
+                      "type": "string"
+                    },
+                    "start_at_utc": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "interval_minutes"
+                  ],
+                  "additionalProperties": false
+                },
                 "slip_alert_enabled": {
                   "type": "boolean"
                 },
@@ -794,6 +944,56 @@
                           }
                         }
                       },
+                      "repeat_reminder": {
+                        "type": "object",
+                        "properties": {
+                          "interval_minutes": {
+                            "type": "integer",
+                            "enum": [
+                              15,
+                              20,
+                              30,
+                              45,
+                              60,
+                              120,
+                              180,
+                              240,
+                              300,
+                              360,
+                              420,
+                              480,
+                              540,
+                              600,
+                              660,
+                              720,
+                              780,
+                              840,
+                              900,
+                              960,
+                              1020,
+                              1080,
+                              1140,
+                              1200,
+                              1260,
+                              1320,
+                              1380
+                            ]
+                          },
+                          "active_start": {
+                            "type": "string"
+                          },
+                          "active_end": {
+                            "type": "string"
+                          },
+                          "start_at_utc": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "interval_minutes"
+                        ],
+                        "additionalProperties": false
+                      },
                       "slip_alert_enabled": {
                         "type": "boolean"
                       },
@@ -1000,6 +1200,56 @@
                                   }
                                 }
                               }
+                            },
+                            "repeat_reminder": {
+                              "type": "object",
+                              "properties": {
+                                "interval_minutes": {
+                                  "type": "integer",
+                                  "enum": [
+                                    15,
+                                    20,
+                                    30,
+                                    45,
+                                    60,
+                                    120,
+                                    180,
+                                    240,
+                                    300,
+                                    360,
+                                    420,
+                                    480,
+                                    540,
+                                    600,
+                                    660,
+                                    720,
+                                    780,
+                                    840,
+                                    900,
+                                    960,
+                                    1020,
+                                    1080,
+                                    1140,
+                                    1200,
+                                    1260,
+                                    1320,
+                                    1380
+                                  ]
+                                },
+                                "active_start": {
+                                  "type": "string"
+                                },
+                                "active_end": {
+                                  "type": "string"
+                                },
+                                "start_at_utc": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "interval_minutes"
+                              ],
+                              "additionalProperties": false
                             },
                             "slip_alert_enabled": {
                               "type": "boolean"

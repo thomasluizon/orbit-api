@@ -41,7 +41,7 @@ public sealed class CompleteReminderCommandHandler(
         if (reminder is null || reminder.ConsumedAtUtc is not null)
             return Result.Failure<LogHabitResponse>(InvalidAction);
         var result = await mediator.Send(new LogHabitCommand(claims.UserId, claims.HabitId,
-            ToggleExisting: false, TakenAtUtc: nowAtUtc), ct);
+            ToggleExisting: false, TakenAtUtc: nowAtUtc, ReminderAtUtc: claims.ReminderAtUtc), ct);
         if (result.IsFailure)
             return result;
         if (!reminder.TryConsume(nowAtUtc))
