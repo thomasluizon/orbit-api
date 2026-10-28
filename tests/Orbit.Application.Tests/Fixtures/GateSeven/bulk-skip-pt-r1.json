@@ -1,0 +1,21 @@
+{
+  "caseId": "bulk-skip-pt",
+  "repeat": 1,
+  "reason": "Codex rubric grading failed; check the installed CLI and its authenticated session.",
+  "answer": "{\"pendingOperations\":[{\"count\":2,\"items\":[{\"title\":\"Beber água\",\"removesData\":false,\"fields\":[{\"field\":\"date\",\"newValue\":\"2026-10-28\"},{\"field\":\"action\",\"newValue\":\"Pular\"}]},{\"title\":\"Caminhada\",\"removesData\":false,\"fields\":[{\"field\":\"date\",\"newValue\":\"2026-10-28\"},{\"field\":\"action\",\"newValue\":\"Pular\"}]}]}],\"parts\":[]}",
+  "toolCalls": [
+    {
+      "name": "bulk_skip_habits",
+      "arguments": {
+        "filter": null,
+        "habit_ids": [
+          "[redacted]",
+          "[redacted]"
+        ],
+        "date": "2026-10-28",
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "caseId": "voice-pt",
+  "repeat": 1,
+  "reason": "All assertions passed",
+  "answer": "{\"pendingOperations\":[{\"count\":1,\"items\":[{\"title\":\"Caminhada\",\"removesData\":false,\"fields\":[{\"field\":\"date\",\"newValue\":\"2026-10-28\"},{\"field\":\"action\",\"newValue\":\"Pular\"}]}]}],\"parts\":[]}",
+  "toolCalls": [
+    {
+      "name": "skip_habit",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "date": "2026-10-28",
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

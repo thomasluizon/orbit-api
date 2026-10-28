@@ -135,10 +135,33 @@ the existing preview routes still require approval. The captured tool-plan repla
 live bilingual gate rerun, including suggestion quality, and #1751/#1620 own rendering.
 
 Temporary preparation commitments preserve the requested action and negation in their titles.
+An exact record title stays verbatim. For an activity described in prose, the model normalizes
+spelling, casing and proper names while keeping its action and negation. Supplied event dates,
+including past dates, anchor the preparation offsets and do not require another question.
 Preparation continuing until an event uses daily recurrence with `due_date` at its start and
 inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. An activity
 ending at a collection uses `due_end_time` for that deadline. These are model instructions;
 composition and execution preserve the structured arguments rather than rewriting message text.
+
+Write completion covers every requested action, target and occurrence. A target lookup is a
+prerequisite, not a mutation. A rename plus a skip uses both write tools; skipping several
+habits uses `bulk_skip_habits`. The server combines the model's held writes into one preview
+and preserves their action labels. It never infers missing writes from the person's wording
+or changes a log call into a skip call.
+
+New suggestion drafts contain requested values and the fields required by the existing draft
+contract. For new activities, unrequested weekdays and checklist items stay empty, and reminders stay null.
+Adjustment drafts copy the existing values for every unrequested field, including weekdays,
+checklist text and reminder minutes. Explicit empty collections replace their stored values;
+an explicit null reminder disables reminders. Model responses must include every required
+constructor field, including nullable reminders, so omission requests a correction rather than a clear.
+Approval preserves checklist checked state when its text and order are unchanged, and preserves
+the full reminder configuration when the draft retains an existing reminder. An unchanged cadence
+retains its interval, recurrence anchor and cutoff. Validation, conflict checks and single or combined
+previews use the same typed adjustment arguments. Adjustments preserve the existing cadence and clock interval unless a change was requested.
+When a required cadence or clock interval is absent, the model proposes minimal valid values
+from account context. Those are editable proposals, not supplied facts. Start and end times
+remain required; no response field becomes optional.
 
 Skipped habit reads retain their dated skip facts, including active skip receipts for
 recurring habits. They exclude skipped entries from completed and remaining totals.

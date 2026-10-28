@@ -8,7 +8,12 @@ public static class TerminalWriteDirective
     public const string CompleteArgument = "orbit_write_complete";
 
     public const string Instruction = "Plan every requested account change before proposing writes. "
+        + "Account for each requested action, target and occurrence, even when different actions affect different habits. "
+        + "A lookup never fulfills a requested mutation. After resolving a target, call its write tool. "
+        + "For example, rename and skip require both update_habit and skip_habit in the same round. "
+        + "Skipping one occurrence uses skip_habit; skipping several habits uses bulk_skip_habits, never log_habit or bulk_log_habits. "
         + "Set orbit_write_complete to true on every write in a round when those calls cover the entire request, including all dates, times and bounded preparation items. "
+        + "Do not declare completion after only the first action or target. "
         + "Use one bulk_create_habits call for independent creations. Set it to false when another lookup or dependent action is still needed. "
         + "Successful complete writes end the turn with the server's approval preview alone. Do not revise that preview without a new correction from the person. "
         + "Corrections to an earlier preview still use revise_pending_changes and preserve all unrelated fields and items.";

@@ -24,7 +24,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Application.Tests.Chat;
 
-public sealed class AstraApprovalPathTests : IDisposable
+public sealed partial class AstraApprovalPathTests : IDisposable
 {
     private readonly OrbitDbContext _db = new(new DbContextOptionsBuilder<OrbitDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

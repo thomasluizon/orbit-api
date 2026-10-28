@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
@@ -11,8 +12,10 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
+internal sealed record PreparedHabitSuggestion(HabitSuggestionDraft Draft, JsonElement Arguments);
+
 internal sealed class HabitSuggestionSetFailure(string error, int draftIndex)
-    : Result<HabitSuggestionsCard>(null, false, error, "HABIT_SUGGESTION_UNAVAILABLE")
+    : Result<IReadOnlyList<PreparedHabitSuggestion>>(null, false, error, "HABIT_SUGGESTION_UNAVAILABLE")
 {
     public int DraftIndex { get; } = draftIndex;
 }
@@ -45,14 +48,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
         return Result.Failure<HabitSuggestionsCard>(Unavailable(language), "HABIT_SUGGESTION_UNAVAILABLE");
     }
 
-    public async Task<Result<HabitSuggestionDraft>> CheckForPreviewAsync(Guid userId, HabitSuggestionDraft draft,
-        string language, CancellationToken ct)
-    {
-        var result = await CheckAllForPreviewAsync(userId, [draft], language, ct);
-        return result.IsSuccess ? Result.Success(result.Value.Drafts[0]) : result.PropagateError<HabitSuggestionDraft>();
-    }
-
-    internal async Task<Result<HabitSuggestionsCard>> CheckAllForPreviewAsync(Guid userId, IReadOnlyList<HabitSuggestionDraft> drafts,
+    internal async Task<Result<IReadOnlyList<PreparedHabitSuggestion>>> PrepareAllForPreviewAsync(Guid userId, IReadOnlyList<HabitSuggestionDraft> drafts,
         string language, CancellationToken ct)
     {
         var today = await dates.GetUserTodayAsync(userId, ct);
@@ -61,17 +57,22 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
         var result = Normalize(drafts, new(userId, string.Empty, language, drafts.Count, today, active, [], WeekStartDay: weekStart),
             out var draftIndex);
         if (result.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), draftIndex);
+        var prepared = new List<PreparedHabitSuggestion>();
         for (var index = 0; index < result.Value.Drafts.Count; index++)
         {
             var candidate = result.Value.Drafts[index];
-            if (candidate.ExistingHabitId is not { } existing) continue;
-            var target = active.Single(habit => habit.Id == existing);
-            var update = ResolveUpdate(target, candidate, today, weekStart);
-            if (update.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), index);
-            var validation = await HabitUpdateValidation.ValidateAsync(userId, target, update.Value, habits, ct);
-            if (validation.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), index);
+            var target = candidate.ExistingHabitId is { } existing ? active.Single(habit => habit.Id == existing) : null;
+            var arguments = PreviewHabitSuggestionCommandHandler.Arguments(candidate, target);
+            if (target is not null)
+            {
+                var update = ResolveUpdate(target, candidate, today, weekStart);
+                if (update.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), index);
+                var validation = await HabitUpdateValidation.ValidateAsync(userId, target, update.Value, habits, ct);
+                if (validation.IsFailure) return new HabitSuggestionSetFailure(Unavailable(language), index);
+            }
+            prepared.Add(new(candidate, arguments));
         }
-        return result;
+        return Result.Success<IReadOnlyList<PreparedHabitSuggestion>>(prepared);
     }
 
     internal static Result<HabitSuggestionsCard> Normalize(IReadOnlyList<HabitSuggestionDraft>? drafts, HabitSuggestionRequest request) =>
@@ -130,7 +131,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
 
     private static Result<HabitUpdateParams> ResolveUpdate(Habit target, HabitSuggestionDraft draft, DateOnly today, int weekStart)
     {
-        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(PreviewHabitSuggestionCommandHandler.Arguments(draft), allowHabitId: true);
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(PreviewHabitSuggestionCommandHandler.Arguments(draft, target), allowHabitId: true);
         if (error is not null) return Result.Failure<HabitUpdateParams>(error);
         var update = HabitUpdateValidation.ResolveSingleUpdate(target, changes!, today);
         return update.IsSuccess ? Result.Success(update.Value with { WeekStartDay = weekStart }) : update;
