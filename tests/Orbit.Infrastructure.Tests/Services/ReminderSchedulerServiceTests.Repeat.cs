@@ -398,7 +398,7 @@ public partial class ReminderSchedulerServiceTests
     [Theory]
     [InlineData("en", false, "Next at 4:00 AM", "Done")]
     [InlineData("en", true, "Next at 04:00", "Done")]
-    [InlineData("pt-BR", true, "Próximo às 04:00", "Concluído")]
+    [InlineData("pt-BR", true, "Próximo às 04:00", "Concluir")]
     public async Task Repeat_PayloadUsesTheUsersLanguageClockAndSignedReminderInstant(string language, bool clock24,
         string body, string doneLabel)
     {

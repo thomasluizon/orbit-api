@@ -27,7 +27,7 @@ public sealed partial class PushNotificationServiceTests
             ["tag"] = "orbit-repeat-habit",
             ["doneToken"] = "signed-action",
             ["doneExpiresAtUtc"] = "2027-09-26T20:00:00.0000000Z",
-            ["doneLabel"] = "Concluído"
+            ["doneLabel"] = "Concluir"
         };
         var service = new PushNotificationService(_dbContext, Options.Create(_vapidSettings),
             NullLogger<PushNotificationService>.Instance, new HttpClient(), apns, wns);

@@ -139,7 +139,7 @@ public partial class ReminderSchedulerService
             ["reminderAtUtc"] = reminderAtUtc.ToString("O", CultureInfo.InvariantCulture),
             ["doneExpiresAtUtc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture),
             ["doneToken"] = token,
-            ["doneLabel"] = LocaleHelper.IsPortuguese(user.Language) ? "Concluído" : "Done"
+            ["doneLabel"] = LocaleHelper.IsPortuguese(user.Language) ? "Concluir" : "Done"
         };
         pending.Add(new PendingReminderPush(user.Id, habit.Title, body, habit.Id, data));
         return true;
