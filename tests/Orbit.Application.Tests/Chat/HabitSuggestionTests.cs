@@ -181,7 +181,7 @@ public partial class HabitSuggestionTests
     [Theory]
     [InlineData(HabitSchedule.Recurring, 2)]
     [InlineData(HabitSchedule.Flexible, 1)]
-    public async Task Preview_AdjustmentSavesExactlyTheDraftSchedule(HabitSchedule schedule, int intervalWeeks)
+    public async Task Preview_AdjustmentPreservesCadenceUnlessTheDraftChangesIt(HabitSchedule schedule, int intervalWeeks)
     {
         var existing = Habit.Create(new HabitCreateParams(schedule, _userId, "Read", FrequencyUnit.Day, 1,
             _today, DueTime: new(22, 0), DueEndTime: new(22, 15), IntervalWeeks: intervalWeeks)).Value;
@@ -201,9 +201,14 @@ public partial class HabitSuggestionTests
         existing.Update(resolved.Value).IsSuccess.Should().BeTrue();
 
         existing.Schedule.Should().Be(HabitSchedule.Recurring);
-        HabitScheduleService.IsHabitDueOnDate(existing, _today.AddDays(7)).Should().BeTrue();
-        HabitScheduleService.GetScheduledDates(existing, _today, _today.AddDays(366)).Should()
-            .Equal(HabitScheduleService.GetScheduledDates(draft.ToHabit(_userId).Value, _today, _today.AddDays(366)));
+        if (schedule == HabitSchedule.Recurring)
+        {
+            existing.IntervalWeeks.Should().Be(intervalWeeks);
+            HabitScheduleService.IsHabitDueOnDate(existing, _today.AddDays(7)).Should().BeFalse();
+        }
+        else
+            HabitScheduleService.GetScheduledDates(existing, _today, _today.AddDays(366)).Should()
+                .Equal(HabitScheduleService.GetScheduledDates(draft.ToHabit(_userId).Value, _today, _today.AddDays(366)));
     }
 
     [Fact]
@@ -221,6 +226,44 @@ public partial class HabitSuggestionTests
         result.ErrorCode.Should().Be("HABIT_SUGGESTION_UNAVAILABLE");
         executor.ReceivedCalls().Should().BeEmpty();
         existing.Schedule.Should().Be(HabitSchedule.General);
+    }
+
+    [Theory]
+    [InlineData("days")]
+    [InlineData("checklist")]
+    [InlineData("reminder")]
+    public async Task Preview_AdjustmentHonorsExplicitOptionalClears(string field)
+    {
+        var original = Draft() with
+        {
+            Days = [DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday],
+            ChecklistItems = ["Choose a book"],
+            ReminderMinutesBefore = 30
+        };
+        var existing = original.ToHabit(_userId).Value;
+        var draft = original with { ExistingHabitId = existing.Id };
+        draft = field switch
+        {
+            "days" => draft with { Days = [] },
+            "checklist" => draft with { ChecklistItems = [] },
+            _ => draft with { ReminderMinutesBefore = null }
+        };
+        var executor = Substitute.For<IAgentOperationExecutor>();
+
+        var result = await new PreviewHabitSuggestionCommandHandler(Service(existing), executor)
+            .Handle(new(_userId, draft), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var arguments = ((AgentExecuteOperationRequest)executor.ReceivedCalls().Single().GetArguments()[0]!).Arguments;
+        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(arguments, allowHabitId: true);
+        error.Should().BeNull();
+        var update = HabitUpdateValidation.ResolveSingleUpdate(existing, changes!, _today);
+        update.IsSuccess.Should().BeTrue(update.Error);
+        existing.Update(update.Value).IsSuccess.Should().BeTrue();
+        existing.Days.Should().Equal(field == "days" ? [] : original.Days);
+        existing.ChecklistItems.Select(item => item.Text).Should().Equal(field == "checklist" ? [] : original.ChecklistItems);
+        existing.ReminderEnabled.Should().Be(field != "reminder");
+        existing.ReminderTimes.Should().Equal(field == "reminder" ? [] : new[] { 30 });
     }
 
     [Theory]
@@ -261,7 +304,7 @@ public partial class HabitSuggestionTests
     }
 
     [Fact]
-    public async Task Preview_ConflictsUseEffectiveUpdateAfterCompletedOccurrence()
+    public async Task Preview_ConflictsUsePreservedAnchorAndEffectiveDueDate()
     {
         var existing = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", FrequencyUnit.Day, 1,
             _today.AddDays(-1))).Value;
@@ -273,16 +316,10 @@ public partial class HabitSuggestionTests
 
         var result = await handler.Handle(new(_userId, Draft()), default);
 
-        result.IsSuccess.Should().BeTrue(result.Error);
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("HABIT_SUGGESTION_UNAVAILABLE");
+        executor.ReceivedCalls().Should().BeEmpty();
         existing.NextDueDate.Should().Be(_today.AddDays(-1));
-        var arguments = ((AgentExecuteOperationRequest)executor.ReceivedCalls().Single().GetArguments()[0]!).Arguments;
-        var (changes, error) = BulkHabitToolArguments.ParseUpdateFields(arguments, allowHabitId: true);
-        error.Should().BeNull();
-        var update = HabitUpdateValidation.ResolveSingleUpdate(existing, changes!, _today);
-        update.IsSuccess.Should().BeTrue(update.Error);
-        existing.Update(update.Value).IsSuccess.Should().BeTrue();
-        existing.NextDueDate.Should().Be(_today.AddDays(1));
-        HabitScheduleService.IsHabitDueOnDate(existing, busy.NextDueDate).Should().BeFalse();
     }
 
     [Theory]

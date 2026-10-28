@@ -29,17 +29,17 @@ public sealed class PreviewAllHabitSuggestionsCommandHandler(HabitSuggestionServ
     {
         if (request.Drafts is null || !HabitSuggestionsCard.IsValidDraftCount(request.Drafts.Count))
             return Result.Failure<AgentExecuteOperationResponse>("Invalid suggestion count.", ValidationErrorCodes.HabitSuggestionCount);
-        var checkedDrafts = await suggestions.CheckAllForPreviewAsync(request.UserId, request.Drafts, request.Language, ct);
+        var checkedDrafts = await suggestions.PrepareAllForPreviewAsync(request.UserId, request.Drafts, request.Language, ct);
         if (checkedDrafts is HabitSuggestionSetFailure failure)
             return new HabitSuggestionPreviewFailure(failure, failure.DraftIndex);
-        var drafts = checkedDrafts.Value.Drafts;
+        var drafts = checkedDrafts.Value;
         var pending = new List<PendingAgentOperation>();
         var complete = false;
         try
         {
-            foreach (var draft in drafts)
+            foreach (var prepared in drafts)
             {
-                var arguments = PreviewHabitSuggestionCommandHandler.Arguments(draft);
+                var (draft, arguments) = prepared;
                 var operationId = draft.ExistingHabitId.HasValue ? "update_habit" : "create_habit";
                 if (!draft.ExistingHabitId.HasValue && drafts.Count > 1)
                 {

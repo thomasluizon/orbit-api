@@ -28,6 +28,21 @@ public sealed class HabitSuggestionReplayTests
 
     [Theory]
     [InlineData("en", false)]
+    [InlineData("pt-BR", true)]
+    public async Task OmittedReminder_UsesCorrectionRatherThanDefaultingToDisabled(string language, bool refine)
+    {
+        var valid = TimedModelResponse(language, refine);
+        using var replay = new ReplayHandler(valid.Replace("\"reminderMinutesBefore\":null,", ""), valid);
+
+        var result = await Run(replay, language, refine);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        replay.RequestCount.Should().Be(2);
+        replay.CorrectionAt(1).Should().Contain("reminderMinutesBefore");
+    }
+
+    [Theory]
+    [InlineData("en", false)]
     [InlineData("pt-BR", false)]
     [InlineData("en", true)]
     [InlineData("pt-BR", true)]

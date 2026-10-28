@@ -3,6 +3,8 @@ using System.Text.Json;
 using MediatR;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -19,10 +21,9 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
 {
     public async Task<Result<AgentExecuteOperationResponse>> Handle(PreviewHabitSuggestionCommand request, CancellationToken ct)
     {
-        var checkedDraft = await suggestions.CheckForPreviewAsync(request.UserId, request.Draft, request.Language, ct);
-        if (checkedDraft.IsFailure) return checkedDraft.PropagateError<AgentExecuteOperationResponse>();
-        var draft = checkedDraft.Value;
-        var arguments = Arguments(draft);
+        var prepared = await suggestions.PrepareAllForPreviewAsync(request.UserId, [request.Draft], request.Language, ct);
+        if (prepared.IsFailure) return prepared.PropagateError<AgentExecuteOperationResponse>();
+        var (draft, arguments) = prepared.Value[0];
         var result = await executor.ExecuteAsync(new(request.UserId,
             draft.ExistingHabitId.HasValue ? "update_habit" : "create_habit", arguments,
             AgentExecutionSurface.Chat, request.AuthMethod, request.GrantedScopes, request.IsReadOnlyCredential,
@@ -30,7 +31,7 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
         return Result.Success(result);
     }
 
-    internal static JsonElement Arguments(HabitSuggestionDraft draft)
+    internal static JsonElement Arguments(HabitSuggestionDraft draft, Habit? target)
     {
         var fields = new Dictionary<string, object?>
         {
@@ -48,20 +49,37 @@ public sealed class PreviewHabitSuggestionCommandHandler(HabitSuggestionService 
             ["checklist_items"] = draft.ChecklistItems.Select(text => new { text, is_checked = false }).ToArray()
         };
         var clearFields = new List<string>();
+        var replacesCadence = target is null || target.Schedule == HabitSchedule.General
+            || target.FrequencyUnit != draft.FrequencyUnit || target.FrequencyQuantity != draft.FrequencyQuantity
+            || !target.Days.ToHashSet().SetEquals(draft.Days);
         if (draft.ExistingHabitId is { } existing)
         {
             fields["habit_id"] = existing.ToString();
-            clearFields.Add("end_date");
+            if (replacesCadence) clearFields.Add("end_date");
         }
         if (draft.FrequencyUnit is { } unit)
         {
             fields["frequency_unit"] = unit.ToString();
             fields["frequency_quantity"] = draft.FrequencyQuantity;
-            fields["start_date"] = draft.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            if (replacesCadence) fields["start_date"] = draft.DueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
         else if (draft.ExistingHabitId.HasValue)
             clearFields.Add("frequency_unit");
         else fields["frequency_unit"] = "OneTime";
+        if (target is not null)
+        {
+            if (!replacesCadence)
+                foreach (var field in new[] { "is_general", "is_flexible", "interval_weeks" }) fields.Remove(field);
+            if (draft.ChecklistItems.SequenceEqual(target.ChecklistItems.Select(item => item.Text)))
+                fields.Remove("checklist_items");
+            if (target.ReminderEnabled
+                ? draft.ReminderMinutesBefore is { } retainedMinutes && target.ReminderTimes.Contains(retainedMinutes)
+                : draft.ReminderMinutesBefore is null)
+            {
+                fields.Remove("reminder_enabled");
+                fields.Remove("reminder_times");
+            }
+        }
         if (clearFields.Count > 0) fields["clear_fields"] = clearFields;
         return JsonSerializer.SerializeToElement(fields);
     }

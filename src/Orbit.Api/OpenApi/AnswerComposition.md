@@ -121,9 +121,16 @@ habits uses `bulk_skip_habits`. The server combines the model's held writes into
 and preserves their action labels. It never infers missing writes from the person's wording
 or changes a log call into a skip call.
 
-Suggestion drafts contain requested values and the fields required by the existing draft
-contract. Unrequested weekdays and checklist items stay empty, and reminders stay null.
-Adjustments preserve the existing cadence and clock interval unless a change was requested.
+New suggestion drafts contain requested values and the fields required by the existing draft
+contract. For new activities, unrequested weekdays and checklist items stay empty, and reminders stay null.
+Adjustment drafts copy the existing values for every unrequested field, including weekdays,
+checklist text and reminder minutes. Explicit empty collections replace their stored values;
+an explicit null reminder disables reminders. Model responses must include every required
+constructor field, including nullable reminders, so omission requests a correction rather than a clear.
+Approval preserves checklist checked state when its text and order are unchanged, and preserves
+the full reminder configuration when the draft retains an existing reminder. An unchanged cadence
+retains its interval, recurrence anchor and cutoff. Validation, conflict checks and single or combined
+previews use the same typed adjustment arguments. Adjustments preserve the existing cadence and clock interval unless a change was requested.
 When a required cadence or clock interval is absent, the model proposes minimal valid values
 from account context. Those are editable proposals, not supplied facts. Start and end times
 remain required; no response field becomes optional.
