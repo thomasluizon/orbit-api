@@ -34,3 +34,20 @@ an unsupported question form. Replays verify capability negotiation to the exist
 form, preserving the supplied question, options and free-text permission without continuation
 or a write. Re-derive them from `eval-g6rerun` attempt files by retaining `caseId`, `repeat`,
 `reason`, `answer` and `toolCalls`.
+
+`composition-pickList-pt-BR-r1`, `r2` and `r3` retain the failed `ask` calls from
+the Gate 6 rerun on staging API `cd9f6401`, harness `ad302ad51`. Re-derive them
+from the identically named `g6rerun-reports/attempts` files by retaining `caseId`,
+`repeat`, `reason`, `answer` and `toolCalls`, filtering calls to `ask`. All three
+calls supplied a question-only `intro` on a pick list. None revised a pending
+preview. The successful prerequisite query in r2 is excluded to isolate the
+failed selection at the model-service port.
+
+The reports redact record IDs. Replays bind item IDs and nested habit IDs to
+entities created by the real domain factory, retaining the captured dates and
+other arguments. The English variants translate only the supplied display text;
+they are synthetic bilingual coverage, not live English model evidence. Replays
+exercise the real ask tool, validator, domain guard and handler composition,
+assert a stored typed selection and verify that only argument checks run, with
+no preview, write or model continuation. Question-form introductions remain
+covered by their existing round-trip test.

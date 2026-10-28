@@ -130,10 +130,13 @@ public partial class AskToolTests
     }
 
     [Theory]
-    [InlineData("create_habits")]
-    [InlineData("log_habits")]
-    [InlineData("skip_habits")]
-    public async Task PickList_ChecksEachItemAndCombinedArgumentsWithoutWriting(string action)
+    [InlineData("create_habits", false)]
+    [InlineData("log_habits", false)]
+    [InlineData("skip_habits", false)]
+    [InlineData("create_habits", true)]
+    [InlineData("log_habits", true)]
+    [InlineData("skip_habits", true)]
+    public async Task PickList_ChecksEachItemAndCombinedArgumentsWithoutWriting(string action, bool includeIntro)
     {
         var items = Enumerable.Range(0, 2).Select(i => new
         {
@@ -142,9 +145,17 @@ public partial class AskToolTests
             arguments = action == "create_habits" ? JsonSerializer.SerializeToElement(new { title = "Habit " + i })
                 : JsonSerializer.SerializeToElement(new { habit_id = Guid.NewGuid(), date = "2026-04-03" })
         });
-        var result = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { form = "pickList", title = "Choose", action, items }), UserId, default);
-        result.Success.Should().BeTrue();
+        var result = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        {
+            form = "pickList",
+            title = "Choose",
+            action,
+            items,
+            intro = includeIntro ? "Choose habits to prepare a preview." : null
+        }), UserId, default);
+        result.Success.Should().BeTrue(result.Error);
         var definition = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject;
+        definition.Intro.Should().BeNull();
         definition.Items.Should().HaveCount(2);
         if (action == "create_habits")
             definition.Items.Should().OnlyContain(item => item.Arguments.GetProperty("due_date").GetString() == "2026-04-03");

@@ -1,0 +1,36 @@
+{
+  "caseId": "composition-pickList-pt-BR",
+  "repeat": 2,
+  "reason": "Missing typed data block.",
+  "answer": "Não consegui abrir a seleção de hábitos. Nenhum hábito foi concluído.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "pickList",
+        "question": null,
+        "title": "Escolha hábitos para concluir",
+        "multiSelect": true,
+        "allowFreeText": false,
+        "intro": "Nenhum hábito será concluído agora. A seleção apenas preparará uma prévia para aprovação.",
+        "progress": null,
+        "questions": null,
+        "options": null,
+        "action": "log_habits",
+        "items": [
+          {
+            "id": "[redacted]",
+            "label": "Beber água",
+            "detail": "Devido hoje",
+            "arguments": {
+              "habit_id": "[redacted]",
+              "date": "2026-10-28"
+            }
+          }
+        ],
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Failed"
+    }
+  ]
+}

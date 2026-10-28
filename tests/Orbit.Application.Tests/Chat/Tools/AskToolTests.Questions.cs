@@ -46,6 +46,7 @@ public partial class AskToolTests
 
         result.Success.Should().BeTrue(locale);
         var definition = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject;
+        definition.Intro.Should().Be(prompt);
         var json = JsonSerializer.SerializeToElement(definition, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         json.GetProperty("questions").GetArrayLength().Should().Be(5);
         json.GetProperty("questions")[0].GetProperty("options")[0].GetProperty("recommended").GetBoolean().Should().BeTrue();
