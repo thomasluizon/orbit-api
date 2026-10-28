@@ -4,5 +4,5 @@ public enum ApnsDeliveryOutcome { Delivered, Stale, Retained }
 
 public interface IApnsPushSender
 {
-    Task<ApnsDeliveryOutcome> SendAsync(string deviceToken, string title, string body, string? url, CancellationToken cancellationToken, string? topic = null);
+    Task<ApnsDeliveryOutcome> SendAsync(string deviceToken, string title, string body, string? url, CancellationToken cancellationToken, string? topic = null, IReadOnlyDictionary<string, string>? data = null);
 }

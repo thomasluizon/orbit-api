@@ -55,6 +55,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         When(x => x.Options is not null, () =>
         {
             SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.Options!.ChecklistItems));
+            SharedHabitRules.AddRepeatReminderRules(RuleFor(x => x.Options!.RepeatReminder));
         });
 
         RuleFor(x => x.FrequencyQuantity)

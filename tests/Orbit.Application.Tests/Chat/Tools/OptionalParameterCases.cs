@@ -34,6 +34,7 @@ public static partial class OptionalParameterCases
         habit.ChecklistItems,
         habit.ScheduledReminders,
         habit.RelativeReminders,
+        habit.RepeatReminder,
         habit.SlipAlertEnabled
     });
 }

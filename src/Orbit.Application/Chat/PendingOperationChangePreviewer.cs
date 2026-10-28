@@ -44,7 +44,7 @@ public sealed partial class PendingOperationChangePreviewer(
         IntervalWeeks, "days", DueDate, StartDate, EndDate, DueTime, GoalIds, TagNames, TagIds, HabitId,
         IsBadHabit, IsGeneralField, IsFlexible, ChecklistItemsField, SubHabits,
         DueEndTimeField, SlipAlertEnabledField, ReminderEnabledField, ReminderTimesField,
-        ScheduledRemindersField, RelativeRemindersField
+        ScheduledRemindersField, RelativeRemindersField, RepeatReminderToolArguments.Field
     };
 
     internal static bool CanReviseHabitField(string operationId, string field) =>
@@ -67,16 +67,32 @@ public sealed partial class PendingOperationChangePreviewer(
         if (RequiresEmojiInference(operationId, arguments))
             return await PreviewInferredEmojisAsync(userId, arguments, cancellationToken);
         if (operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits)
-            return Result.Success(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext));
-        return Result.Success(LocalizeActions(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken), clientContext));
+            return Result.Success(await LocalizePreviewAsync(await PreviewPlacementAsync(userId, operationId, arguments, cancellationToken, clientContext), userId, clientContext, cancellationToken));
+        return Result.Success(await LocalizePreviewAsync(await PreviewChangesAsync(userId, operationId, arguments, cancellationToken), userId, clientContext, cancellationToken));
     }
 
-    private static PendingOperationChangePreview? LocalizeActions(PendingOperationChangePreview? preview, AgentClientContext? client)
+    private async Task<PendingOperationChangePreview?> LocalizePreviewAsync(PendingOperationChangePreview? preview,
+        Guid userId, AgentClientContext? client, CancellationToken ct)
+    {
+        if (preview is null)
+            return null;
+        var hasRepeat = preview.Changes.Any(c => c.Field == RepeatReminderToolArguments.Field)
+            || preview.Items?.Any(i => i.Fields.Any(f => f.Field == RepeatReminderToolArguments.Field)) == true;
+        var zone = hasRepeat ? await userDateService.GetUserTimeZoneAsync(userId, ct) : null;
+        return LocalizeActions(preview, client, zone ?? TimeZoneInfo.Utc);
+    }
+
+    private static PendingOperationChangePreview? LocalizeActions(PendingOperationChangePreview? preview, AgentClientContext? client, TimeZoneInfo zone)
     {
         if (preview is null) return null;
         var skip = Orbit.Application.Common.LocaleHelper.IsPortuguese(client?.Locale) ? "Pular" : "Skip";
-        PendingOperationChange Localize(PendingOperationChange field) =>
-            field is { Field: "action", NewValue: "skip" } ? field with { NewValue = skip } : field;
+        PendingOperationChange Localize(PendingOperationChange field) => field.Field == RepeatReminderToolArguments.Field
+            ? field with
+            {
+                OldValue = RepeatReminderPreview.Format(field.OldValue, client, zone),
+                NewValue = RepeatReminderPreview.Format(field.NewValue, client, zone)
+            }
+            : field is { Field: "action", NewValue: "skip" } ? field with { NewValue = skip } : field;
         return preview with
         {
             Changes = preview.Changes.Select(Localize).ToArray(),
@@ -448,6 +464,7 @@ public sealed partial class PendingOperationChangePreviewer(
         [DueEndTimeField] = AgentArgumentPreview.Format(habit.DueEndTime),
         [IsGeneralField] = AgentArgumentPreview.Format(habit.Schedule == HabitSchedule.General),
         [SlipAlertEnabledField] = AgentArgumentPreview.Format(habit.SlipAlertEnabled),
+        [RepeatReminderToolArguments.Field] = JsonSerializer.Serialize(RepeatReminderToolArguments.Value(habit.RepeatReminder)),
         [RelativeRemindersField] = string.Join(", ", habit.RelativeReminders.Select(HabitFieldSummary.FormatRelative)),
         [ScheduledRemindersField] = string.Join(", ", habit.GetScheduledRemindersForLegacyClients().Select(FormatScheduledReminder)),
         [IsBadHabit] = AgentArgumentPreview.Format(habit.IsBadHabit),
@@ -867,6 +884,7 @@ public sealed partial class PendingOperationChangePreviewer(
             habit.ChecklistItems,
             habit.ScheduledReminders,
             habit.RelativeReminders,
+            habit.RepeatReminder,
             habit.IsDeleted
         }));
 
@@ -901,6 +919,15 @@ public sealed partial class PendingOperationChangePreviewer(
         Add(DueEndTimeField, habit.DueEndTime, effective.DueEndTime, "time");
         Add(IsGeneralField, habit.Schedule == HabitSchedule.General, effective.Schedule == HabitSchedule.General, JsonSchemaTypes.Boolean);
         Add(SlipAlertEnabledField, habit.SlipAlertEnabled, effective.SlipAlertEnabled, JsonSchemaTypes.Boolean);
+        if (changes.HasRepeatReminder)
+        {
+            var proposed = changes.RepeatReminder is { } repeat
+                ? repeat with { StartAtUtc = repeat.StartAtUtc ?? habit.RepeatStartAtUtc } : null;
+            Add(RepeatReminderToolArguments.Field,
+                JsonSerializer.Serialize(RepeatReminderToolArguments.Value(habit.RepeatReminder)),
+                JsonSerializer.Serialize(RepeatReminderToolArguments.Value(proposed)), "text",
+                typedValue: JsonSerializer.SerializeToElement(RepeatReminderToolArguments.Value(proposed)));
+        }
         AddList(RelativeRemindersField, habit.RelativeReminders, effective.RelativeReminders,
             HabitFieldSummary.FormatRelative,
             JsonSerializer.SerializeToElement(effective.RelativeReminders.Select(RelativeReminderValue)));
@@ -951,7 +978,7 @@ public sealed partial class PendingOperationChangePreviewer(
             "title" or "description" or "emoji" or "frequency_unit" or "frequency_quantity"
                 or IntervalWeeks or DueDate or DueTime or IsBadHabit
                 or IsFlexible or ReminderEnabledField or ChecklistItemsField
-                or DueEndTimeField or IsGeneralField or SlipAlertEnabledField or RelativeRemindersField => true,
+                or DueEndTimeField or IsGeneralField or SlipAlertEnabledField or RelativeRemindersField or RepeatReminderToolArguments.Field => true,
             "days" => effective.Schedule != HabitSchedule.Flexible,
             EndDate => habit.Schedule != HabitSchedule.General,
             ReminderTimesField => effective.DueTime is null

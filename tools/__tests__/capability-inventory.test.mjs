@@ -186,7 +186,7 @@ test("nullable schemas, constant enums and helper schemas retain their contracts
   assert.deepEqual(tool.parameters.find(row => row.name === "emoji").type, ["string", "null"])
   assert.deepEqual(tool.parameters.find(row => row.name === "frequency_unit").values, ["Day", "Week", "Month", "Year"])
   assert.ok(tool.parameters.some(row => row.name === "relative_reminders[].minutes_before"))
-  assert.deepEqual(tool.parameters.find(row => row.name === "clear_fields").items.values, ["description", "emoji", "frequency_unit", "end_date", "due_time", "due_end_time"])
+  assert.deepEqual(tool.parameters.find(row => row.name === "clear_fields").items.values, ["description", "emoji", "frequency_unit", "end_date", "due_time", "due_end_time", "repeat_reminder"])
   assert.equal(inventory.registries.chat.find(row => row.name === "bulk_create_habits").parameters.find(row => row.name === "habits").items.type, "object")
 })
 
@@ -274,6 +274,15 @@ test("helpers inside a nested object never flatten their fields onto its parent"
 test("every habit, goal, checklist and tag form field has a registered Astra path", () => {
   const missing = inventory.formFields.flatMap(form => form.fields.filter(field => field.status !== "covered").map(field => `${form.form}.${field.name}`))
   assert.deepEqual(missing, [])
+})
+
+test("repeat reminder form coverage follows the shared create schema", () => {
+  mutate("src/Orbit.Application/Chat/Tools/Implementations/BulkCreateHabitsTool.cs", text => text.replace('["repeat_reminder"] =', '["inventory_probe"] ='), build => {
+    for (const name of ["CreateHabitRequest", "CreateSubHabitRequest"]) {
+      const form = build().formFields.find(form => form.form === name)
+      assert.equal(form.fields.find(field => field.name === "RepeatReminder").status, "absent")
+    }
+  })
 })
 
 test("adding a form field without an Astra parameter exposes the gap", () => {

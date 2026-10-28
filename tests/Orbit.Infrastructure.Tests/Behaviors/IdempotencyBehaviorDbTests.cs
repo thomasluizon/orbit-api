@@ -916,7 +916,8 @@ public class IdempotencyBehaviorDbTests : IDisposable
             new LogHabitRepositories(
                 new GenericRepository<Habit>(_dbContext),
                 new GenericRepository<HabitLog>(_dbContext),
-                new GenericRepository<User>(_dbContext)),
+                new GenericRepository<User>(_dbContext),
+                new GenericRepository<SentReminder>(_dbContext)),
             new LogHabitServices(userDateService, streakService, gamificationService,
                 goalService, mediator, payGate),
             _unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);

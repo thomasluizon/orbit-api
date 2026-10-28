@@ -40,7 +40,8 @@ public record BulkHabitItem(
     int? IntervalWeeks = null,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
     bool SlipAlertEnabled = false,
-    DateOnly? StartDate = null)
+    DateOnly? StartDate = null,
+    RepeatReminderOptions? RepeatReminder = null)
 {
     internal bool InheritParentFrequency { get; init; } = true;
 }

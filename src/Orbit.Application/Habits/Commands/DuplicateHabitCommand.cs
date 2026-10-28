@@ -148,6 +148,7 @@ public class DuplicateHabitCommandHandler(
             EndDate: source.EndDate,
             ScheduledReminders: source.ScheduledReminders,
             RelativeReminders: source.RelativeReminders,
+            RepeatReminder: source.RepeatReminder is { } repeat ? repeat with { StartAtUtc = null } : null,
             ReminderTimes: source.ReminderTimes,
             Position: position,
             IntervalWeeks: source.IntervalWeeks));

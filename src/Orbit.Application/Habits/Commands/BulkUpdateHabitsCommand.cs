@@ -53,14 +53,16 @@ public sealed record BulkHabitChanges(
     bool HasRelativeReminders = false,
     IReadOnlyList<RelativeReminderTime>? RelativeReminders = null,
     bool HasStartDate = false,
-    DateOnly? StartDate = null)
+    DateOnly? StartDate = null,
+    bool HasRepeatReminder = false,
+    RepeatReminderOptions? RepeatReminder = null)
 {
     public bool HasAnyChange =>
         HasTitle || HasDescription || HasEmoji || HasFrequencyUnit || HasFrequencyQuantity
         || HasIntervalWeeks || HasDays || HasDueDate || HasEndDate || HasDueTime
         || HasIsBadHabit || HasIsFlexible || HasReminderEnabled || HasReminderTimes
         || HasChecklistItems || HasScheduledReminders || HasDueEndTime || HasIsGeneral
-        || HasSlipAlertEnabled || HasRelativeReminders || HasStartDate;
+        || HasSlipAlertEnabled || HasRelativeReminders || HasStartDate || HasRepeatReminder;
 }
 
 public sealed record BulkUpdateHabitsCommand(

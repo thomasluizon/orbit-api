@@ -6,6 +6,10 @@ namespace Orbit.Application.Habits.Validators;
 
 public static class SharedHabitRules
 {
+    public static void AddRepeatReminderRules<T>(IRuleBuilder<T, RepeatReminderOptions?> rule) =>
+        rule.Must(repeat => repeat is null || repeat.IsValid())
+            .WithCopy(Orbit.Domain.Common.DomainErrors.InvalidRepeatReminder.Code);
+
     public static void AddTitleRules<T>(
         IRuleBuilder<T, string> rule,
         string? requiredCode = null,

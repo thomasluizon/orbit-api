@@ -215,6 +215,7 @@ public static partial class ServiceCollectionExtensions
             sp.GetRequiredService<ILogger<ApnsPushSender>>(), TimeProvider.System));
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
+        builder.Services.AddSingleton<IReminderActionTokenService, ReminderActionTokenService>();
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
             .ConfigureHttpClient(c => c.Timeout = httpTimeout)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });

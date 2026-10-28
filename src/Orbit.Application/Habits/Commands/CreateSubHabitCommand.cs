@@ -150,6 +150,7 @@ public class CreateSubHabitCommandHandler(
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
+            RepeatReminder: opts.RepeatReminder,
             Position: position,
             IntervalWeeks: intervalWeeks,
             StartDate: request.StartDate));

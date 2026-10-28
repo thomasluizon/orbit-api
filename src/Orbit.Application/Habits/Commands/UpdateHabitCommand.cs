@@ -251,6 +251,8 @@ public class UpdateHabitCommandHandler(
             ClearEndDate: request.ClearEndDate,
             ScheduledReminders: opts.ScheduledReminders,
             RelativeReminders: opts.RelativeReminders,
+            RepeatReminder: opts.RepeatReminder,
+            ClearRepeatReminder: opts.ClearRepeatReminder,
             Emoji: request.Emoji,
             UserToday: today,
             IntervalWeeks: request.IntervalWeeks ?? habit.IntervalWeeks,

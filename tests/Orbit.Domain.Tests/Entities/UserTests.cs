@@ -59,7 +59,7 @@ public class UserTests
     }
 
     [Fact]
-    public void SetClockFormat_StoresChoiceWithoutChangingReminderPreferencesVersion()
+    public void SetClockFormat_StoresChoiceAndInvalidatesReminderPreferences()
     {
         var user = CreateValidUser();
         var version = user.ReminderPreferencesVersion;
@@ -69,7 +69,7 @@ public class UserTests
         user.Uses24HourClockPreference.Should().BeFalse();
         user.SetClockFormat(true);
         user.Uses24HourClockPreference.Should().BeTrue();
-        user.ReminderPreferencesVersion.Should().Be(version);
+        user.ReminderPreferencesVersion.Should().Be(version + 2);
     }
 
     [Fact]

@@ -154,7 +154,7 @@ public class GetHabitLogsQueryHandlerTests
         var result = await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId, from, to), cancellation.Token);
 
         result.Value.Should().ContainSingle().Which.Should().BeEquivalentTo(
-            new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc));
+            new HabitLogResponse(log.Id, log.Date, log.Value, log.CreatedAtUtc, log.TakenAtUtc, log.ReminderAtUtc));
         await _habitLogReader.Received(1).ReadRangeLogsAsync(HabitId, from, to, cancellation.Token);
         await _habitLogReader.DidNotReceive().ReadRecentLogsAsync(
             Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>());

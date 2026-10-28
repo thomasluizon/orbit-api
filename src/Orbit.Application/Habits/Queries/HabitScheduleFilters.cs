@@ -322,6 +322,7 @@ internal static class HabitScheduleFilters
             Emoji: h.Emoji,
             IntervalWeeks: h.IntervalWeeks,
             RelativeReminders: h.RelativeReminders,
+            RepeatReminder: h.RepeatReminder,
             Schedule: h.Schedule,
             StartDate: h.StartDate,
             ParentHabitId: h.ParentHabitId,
@@ -524,6 +525,7 @@ internal static class HabitScheduleFilters
             ReminderTimes: c.ReminderTimes,
             ScheduledReminders: c.GetScheduledRemindersForLegacyClients(),
             RelativeReminders: c.RelativeReminders,
+            RepeatReminder: c.RepeatReminder,
             SlipAlertEnabled: c.SlipAlertEnabled,
             ParentHabitId: c.ParentHabitId,
             ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == c.ParentHabitId)?.Title);
