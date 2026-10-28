@@ -22,13 +22,16 @@ public class QueryHabitsTool(
 
     public string Description =>
         "Read habits, schedules, metrics and checklists. Call before answering habit questions; indexes do not ground replies. "
-        + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries.";
+        + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries. "
+        + "For choosing records or resolving a write target, set for_selection=true and orbit_read_complete=false, then call ask. "
+        + "A selection lookup never finishes the answer or authorizes a write, even with one candidate. Multiple matches require the person's choice.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            for_selection = new { type = JsonSchemaTypes.Boolean, description = "True for a choice or pick list, or to resolve an unclear write target. False only for a read answer. Selection requires ask before any write." },
             relative_period = RelativeReadPeriod.DaySchema(),
             search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
             date = new { type = JsonSchemaTypes.String, description = "Schedule on YYYY-MM-DD or today, including done entries. Null is_completed returns the full schedule." },
@@ -117,9 +120,21 @@ public class QueryHabitsTool(
                     ScheduleRevision = query.Schedule?.Facts.SourceRevision
                 }))
             {
+                Selection = BuildSelection(args, filters.Search, rows.Count, page),
                 SkippedIds = query.Schedule?.Facts.SkippedIds.Select(id => id.ToString())
                     .Intersect(page.Select(item => item.Id)).ToHashSet() ?? []
             });
+    }
+
+    private static HabitSelectionCandidates? BuildSelection(JsonElement args, string? search, int total,
+        IReadOnlyList<HabitListCardItem> page)
+    {
+        var hasPurpose = args.TryGetProperty("for_selection", out var selection)
+            && selection.ValueKind is JsonValueKind.True or JsonValueKind.False;
+        var requested = hasPurpose && selection.ValueKind == JsonValueKind.True;
+        var ambiguous = !string.IsNullOrWhiteSpace(search) && total > 1;
+        return total > 0 && (requested || ambiguous)
+            ? new HabitSelectionCandidates(search, page, requested || !hasPurpose) : null;
     }
 
     private static void AppendReadRows(Habit habit, int depth, List<HabitListCardItem> rows,

@@ -65,12 +65,20 @@ public partial class ProcessUserChatCommandHandler
             BuildToolError(operationResult),
             operationResult.Payload switch
             {
+                HabitListCard { Selection: { RequiresAnswer: true } selection } => new
+                {
+                    selection_required = true,
+                    selection.Reference,
+                    selection.Candidates,
+                    instruction = "Ask the person to select from these candidates using a supported ask form. Do not choose an ID or prepare any write before the answer."
+                },
                 HabitMonthCard month => HabitMonthModelPayload.From(month),
                 IReadOnlyList<ChecklistTemplateResponse> templates when !ModelPayloadBudget.Fits(templates) => ChecklistTemplateModelPayload.From(templates),
                 HabitRankingResponse ranking when !ModelPayloadBudget.Fits(ranking) => HabitRankingModelPayload.From(ranking),
                 _ => operationResult.Payload
             },
-            operationResult.ReadBlock is null ? null : "[[orbit:read:" + call.Id + "]]");
+            operationResult.ReadBlock is null || operationResult.Payload is HabitListCard { Selection.RequiresAnswer: true }
+                ? null : "[[orbit:read:" + call.Id + "]]");
     }
 
     private static string? BuildToolError(AgentOperationResult operationResult)

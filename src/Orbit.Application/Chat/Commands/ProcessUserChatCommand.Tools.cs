@@ -136,6 +136,12 @@ public partial class ProcessUserChatCommandHandler
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
         ct.ThrowIfCancellationRequested();
+        if (results.PendingSelection is { } selection && results.AskBlock is null)
+        {
+            var cards = SelectionQuestion(selection, context.Language, request.ClientContext?.SupportsParts == true);
+            return Result.Success(new ChatResponse(cards.AiMessage, [], results.OperationResults,
+                CorrelationId: request.CorrelationId, Parts: cards.Parts));
+        }
         if (request.BlockAnswer is null && loop.ProviderError is { } error)
         {
             if (error.Code == ErrorCodes.AiEmptyResponse && CanRecoverReadAnswer(request, results))
@@ -241,7 +247,7 @@ public partial class ProcessUserChatCommandHandler
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
-        return new ToolRoundResult(askCall is not null ? continueResult.Value with { ToolCalls = null } : continueResult.Value,
+        return new ToolRoundResult(askCall is not null ? LimitAskContinuation(continueResult.Value, executionResults) : continueResult.Value,
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
     }
@@ -283,6 +289,8 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
         IsDeclaredTerminalReadRound(response, request, context, iteration)
+        && results.PendingSelection is null
+        && calls.All(call => HasDeclaredReadPurpose(call, request))
         && calls.All(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
         && calls.Count == response.ToolCalls!.Count
         && outcomes.Count == calls.Count && toolResults.Count == calls.Count && toolResults.All(result => result.Success)
@@ -441,9 +449,6 @@ public partial class ProcessUserChatCommandHandler
         }
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
         var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
-        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
-        CoalesceTagCalls(resolvedWrites, executionResults);
-        PrepareHabitProposals(resolvedWrites, request, executionResults, language);
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))
@@ -452,16 +457,42 @@ public partial class ProcessUserChatCommandHandler
 
         var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
         for (var index = 0; index < readOnlyCalls.Count; index++)
+        {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
+            if (readOnlyOutcomes[index].OperationResult is
+                {
+                    Status: AgentOperationStatus.Succeeded,
+                    Payload: HabitListCard { Selection: { } selection }
+                })
+            {
+                if (selection.RequiresAnswer)
+                    executionResults.PendingSelection ??= selection;
+                if (selection.RequiresAnswer || selection.Reference is not null)
+                    executionResults.AmbiguousReadCandidates.Add(selection);
+            }
+        }
+
+        RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
+        await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
+        CoalesceTagCalls(resolvedWrites, executionResults);
+        PrepareHabitProposals(resolvedWrites, request, executionResults, language);
 
         foreach (var call in writeCalls)
         {
+            if (outcomesByCallId.ContainsKey(call.Id))
+                continue;
+            var resolved = resolvedWrites[call.Id];
+            if (resolved is not null && SelectionForWrite(resolved, executionResults) is { } unanswered)
+            {
+                executionResults.PendingSelection = unanswered;
+                outcomesByCallId[call.Id] = SelectionRequiredOutcome(call);
+                continue;
+            }
             if (bulkRedirects.TryGetValue(call.Id, out var bulkTool))
             {
                 outcomesByCallId[call.Id] = RepeatedSingleEntityToolOutcome(call, bulkTool);
                 continue;
             }
-            var resolved = resolvedWrites[call.Id];
             if (resolved is null || !executionResults.PreviewedCalls.Add(
                 Orbit.Domain.Common.AgentOperationFingerprint.Compute(resolved.Name, resolved.Args.GetRawText())))
             {

@@ -60,7 +60,7 @@ public static partial class OptionalParameterCases
             [(typeof(ManageSubscriptionTool), "")] = ["interval"],
             [(typeof(QueryHabitsTool), "")] =
             [
-                "relative_period", "search", "date", "include_overdue", "is_general", "is_completed", "is_bad_habit", "frequency", "tag",
+                "for_selection", "relative_period", "search", "date", "include_overdue", "is_general", "is_completed", "is_bad_habit", "frequency", "tag",
                 "include_sub_habits", "include_metrics", "offset", "limit"
             ],
             [(typeof(SendSupportRequestTool), "")] = [],

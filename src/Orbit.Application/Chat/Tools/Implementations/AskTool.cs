@@ -14,7 +14,9 @@ public sealed class AskTool(
     IUserDateService userDateService) : IChatOnlyAiTool
 {
     public string Name => "ask";
-    public string Description => "Ask for missing input with a question block, a choice, or a pick list for a bulk preview. Read account data first. Ends the reply. Never request approval or repeat a preview question.";
+    public string Description => "Ask for missing input with a question block, a choice, or a pick list for a bulk preview. Read account data first. Ends the reply. Never request approval or repeat a preview question. "
+        + "A request to choose habits requires ask, even with one candidate. Use pickList for selecting habits to log or skip, with action and items; it prepares no write. "
+        + "For one unclear existing target, use choice with question and options. If the change is also missing, ask for both target and change with allowFreeText=true. Use only a form the client supports.";
     public bool IsReadOnly => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -27,7 +29,7 @@ public sealed class AskTool(
             type = "object",
             properties = new
             {
-                form = new { type = "string", @enum = new[] { "choice", "pickList", "question" } },
+                form = new { type = "string", @enum = new[] { "choice", "pickList", "question" }, description = "choice needs question and options; pickList needs title, action and items; question needs a nonempty questions array. Use only a supported form." },
                 question = new { type = "string", maxLength = 120, description = "Question, at most 120 characters." },
                 title = new { type = "string" },
                 multiSelect = new { type = "boolean" },

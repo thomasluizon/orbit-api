@@ -1,0 +1,37 @@
+{
+  "caseId": "ambiguity-pt",
+  "repeat": 3,
+  "reason": "The answer shows an invalid habitList block and a proposed date change instead of asking which of the two Caminhada habits the user means.",
+  "answer": "{\"pendingOperations\":[{\"count\":1,\"items\":[{\"title\":\"Caminhada\",\"removesData\":false,\"fields\":[{\"field\":\"date\",\"newValue\":\"2026-10-28\"}]}]}],\"parts\":[{\"type\":\"block\",\"kind\":\"habitList\",\"block\":{\"title\":\"Hábitos\",\"count\":\"2 de 2\",\"items\":[{\"title\":\"Caminhada\",\"emoji\":null},{\"title\":\"Caminhada\",\"emoji\":null}],\"window\":\"28 de out. de 2026\"}}]}",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "relative_period": "today",
+        "search": "Caminhada",
+        "date": "2026-10-28",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "log_habit",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "date": "2026-10-28",
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

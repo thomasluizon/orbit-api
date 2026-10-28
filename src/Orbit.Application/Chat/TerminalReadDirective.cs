@@ -11,6 +11,7 @@ public static class TerminalReadDirective
     public const string Instruction = "Set orbit_read_complete to true on every read when those reads fully answer the request. "
         + "Plan independent reads together in one round. A partial page or recovery block is a valid answer; do not fetch more pages unless requested. "
         + "Set it to false for prerequisite lookups, dependent reads or any request that still needs a write or another tool. "
+        + "Choosing records requires ask, so query_habits uses for_selection=true and orbit_read_complete=false even for one candidate. "
         + "The server composes typed results without another model call when the read plan is complete. "
         + "Emit no framing prose. The typed block is the answer; never repeat its figures, dates or entity facts.";
 
