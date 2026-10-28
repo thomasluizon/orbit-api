@@ -1,3 +1,4 @@
+using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
@@ -53,7 +54,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(habits.AsReadOnly());
-        var calendarHandler = new GetCalendarMonthQueryHandler(_habitRepo, _userDateService, _unitOfWork);
+        var calendarHandler = new GetCalendarMonthQueryHandler(_habitRepo, _userDateService, _unitOfWork, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         _mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => calendarHandler.Handle(call.Arg<GetCalendarMonthQuery>(), call.Arg<CancellationToken>()));
         var monthHandler = new GetHabitMonthQueryHandler(_mediator, _userDateService);

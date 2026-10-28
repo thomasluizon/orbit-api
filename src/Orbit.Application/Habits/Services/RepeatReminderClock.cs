@@ -113,7 +113,7 @@ public static class RepeatReminderClock
         return LocalInstant(date.AddDays(1).ToDateTime(start), zone);
     }
 
-    private static DateTime LocalInstant(DateTime local, TimeZoneInfo zone)
+    internal static DateTime LocalInstant(DateTime local, TimeZoneInfo zone)
     {
         while (zone.IsInvalidTime(local))
             local = local.AddMinutes(1);

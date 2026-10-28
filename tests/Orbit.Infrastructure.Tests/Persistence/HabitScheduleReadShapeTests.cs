@@ -57,7 +57,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
         var handler = new GetHabitScheduleQueryHandler(repository,
             new HabitScheduleLogReader(factory.Context), new HabitSchedulePageLoader(factory.Context),
-            dates, Substitute.For<IUnitOfWork>());
+            dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         var result = await handler.Handle(new GetHabitScheduleQuery(user.Id, Today, Today), CancellationToken.None);
 
@@ -100,7 +100,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             new HabitScheduleLogReader(factory.Context),
             new HabitSchedulePageLoader(factory.Context),
             dateService,
-            Substitute.For<IUnitOfWork>());
+            Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         counter.Reset();
         var result = await handler.Handle(
@@ -152,7 +152,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             new HabitScheduleLogReader(factory.Context),
             new HabitSchedulePageLoader(factory.Context),
             dateService,
-            Substitute.For<IUnitOfWork>());
+            Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         var descriptionResult = await handler.Handle(
             new GetHabitScheduleQuery(userId, Today, Today, Search: "reflection"), CancellationToken.None);
@@ -188,7 +188,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             new HabitScheduleLogReader(factory.Context),
             new HabitSchedulePageLoader(factory.Context),
             dateService,
-            Substitute.For<IUnitOfWork>());
+            Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         var result = await handler.Handle(
             new GetHabitScheduleQuery(userId, Today, Today, IncludeOverdue: true),
@@ -259,7 +259,7 @@ public class HabitScheduleReadShapeTests(ITestOutputHelper output)
             logReader,
             new HabitSchedulePageLoader(factory.Context),
             dateService,
-            Substitute.For<IUnitOfWork>());
+            Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
 
         counter.Reset();
         var result = await handler.Handle(

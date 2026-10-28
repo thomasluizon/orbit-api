@@ -136,7 +136,7 @@ public class BulkReminderValidationContractTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(root.UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 4, 3));
         var detail = await new GetHabitByIdQueryHandler(new GenericRepository<Habit>(readback),
-            new GenericRepository<HabitLog>(readback), dates).Handle(new(root.UserId, root.Id), CancellationToken.None);
+            new GenericRepository<HabitLog>(readback), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>()).Handle(new(root.UserId, root.Id), CancellationToken.None);
 
         detail.IsSuccess.Should().BeTrue();
         detail.Value.ReminderEnabled.Should().BeFalse();

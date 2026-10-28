@@ -33,7 +33,7 @@ public sealed class GetHabitMonthQueryTests
         _habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { parent, child }.AsReadOnly());
-        var sourceHandler = new GetCalendarMonthQueryHandler(_habits, _dates, Substitute.For<IUnitOfWork>());
+        var sourceHandler = new GetCalendarMonthQueryHandler(_habits, _dates, Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         CalendarMonthResponse? source = null;
         _mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {

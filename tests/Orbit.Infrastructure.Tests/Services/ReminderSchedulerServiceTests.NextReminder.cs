@@ -140,7 +140,7 @@ public partial class ReminderSchedulerServiceTests
             DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(clock.GetUtcNow().UtcDateTime, zone)));
         dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user.WeekStartDay);
         var result = await new GetHabitByIdQueryHandler(new GenericRepository<Habit>(db),
-            new GenericRepository<HabitLog>(db), dates).Handle(new(user.Id, habit.Id), default);
+            new GenericRepository<HabitLog>(db), dates, repeatReminderReader: new Orbit.Infrastructure.Services.RepeatReminderReader(db, dates, clock)).Handle(new(user.Id, habit.Id), default);
         result.IsSuccess.Should().BeTrue();
         var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         json.TryGetProperty("nextReminderAtUtc", out var next).Should().BeTrue();

@@ -1,3 +1,4 @@
+using NSubstitute;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +42,7 @@ public sealed partial class BulkCreateAgentOperationTests
         using var saved = _factory.CreateContext();
         var added = saved.Habits.Single(habit => habit.ParentHabitId == parent.Id);
         var reader = new GetHabitByIdQueryHandler(new GenericRepository<Habit>(saved),
-            new GenericRepository<HabitLog>(saved), _provider.GetRequiredService<IUserDateService>());
+            new GenericRepository<HabitLog>(saved), _provider.GetRequiredService<IUserDateService>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         var readback = await reader.Handle(new(_userId, added.Id), default);
         readback.IsSuccess.Should().BeTrue(readback.Error);
         readback.Value.Schedule.Should().Be(type == "General" ? HabitSchedule.General
@@ -122,7 +123,7 @@ public sealed partial class BulkCreateAgentOperationTests
         rows.Should().HaveCount(3);
         rows.Count(habit => habit.Title == title).Should().Be(1);
         var dates = _provider.GetRequiredService<IUserDateService>();
-        var reader = new GetHabitByIdQueryHandler(new GenericRepository<Habit>(saved), new GenericRepository<HabitLog>(saved), dates);
+        var reader = new GetHabitByIdQueryHandler(new GenericRepository<Habit>(saved), new GenericRepository<HabitLog>(saved), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         foreach (var row in rows)
         {
             var readback = await reader.Handle(new(_userId, row.Id), default);

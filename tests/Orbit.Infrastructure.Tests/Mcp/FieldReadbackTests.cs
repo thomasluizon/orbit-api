@@ -57,9 +57,9 @@ public sealed class FieldReadbackTests
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
         dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);
         var logs = new HabitScheduleLogReader(db);
-        var detail = new GetHabitByIdQueryHandler(habits, new GenericRepository<HabitLog>(db), dates);
+        var detail = new GetHabitByIdQueryHandler(habits, new GenericRepository<HabitLog>(db), dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         var schedule = new GetHabitScheduleQueryHandler(habits, logs, new HabitSchedulePageLoader(db), dates,
-            Substitute.For<IUnitOfWork>());
+            Substitute.For<IUnitOfWork>(), repeatReminderReader: Substitute.For<IRepeatReminderReader>());
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => detail.Handle(call.Arg<GetHabitByIdQuery>(), default));

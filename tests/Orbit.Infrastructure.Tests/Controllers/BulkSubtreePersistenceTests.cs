@@ -109,7 +109,7 @@ public class BulkSubtreePersistenceTests
         imported.ImportedHabitId.Should().Be(leaf.Id);
         imported.ImportedAtUtc.Should().NotBeNull();
         var detail = await new GetHabitByIdQueryHandler(new GenericRepository<Habit>(readback),
-            new GenericRepository<HabitLog>(readback), fixture.Dates)
+            new GenericRepository<HabitLog>(readback), fixture.Dates, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new(fixture.UserId, leaf.Id), CancellationToken.None);
         detail.IsSuccess.Should().BeTrue();
         detail.Value.DueEndTime.Should().Be(leaf.DueEndTime);

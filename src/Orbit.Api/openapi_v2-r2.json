@@ -21295,6 +21295,13 @@
                 "$ref": "#/components/schemas/RepeatReminderOptions"
               }
             ]
+          },
+          "nextReminderAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -21554,6 +21561,13 @@
                 "$ref": "#/components/schemas/RepeatReminderOptions"
               }
             ]
+          },
+          "nextReminderAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -22513,6 +22527,13 @@
                 "$ref": "#/components/schemas/RepeatReminderOptions"
               }
             ]
+          },
+          "nextReminderAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -22799,6 +22820,13 @@
                 "$ref": "#/components/schemas/RepeatReminderOptions"
               }
             ]
+          },
+          "nextReminderAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
