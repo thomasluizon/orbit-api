@@ -1,0 +1,51 @@
+{
+  "caseId": "compound-update-skip-en",
+  "repeat": 1,
+  "reason": "All assertions passed",
+  "answer": "{\"pendingOperations\":[{\"count\":2,\"items\":[{\"title\":\"Drink water\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Drink water\"}]},{\"title\":\"Walk\",\"removesData\":false,\"fields\":[{\"field\":\"date\",\"newValue\":\"2026-10-28\"},{\"field\":\"action\",\"newValue\":\"Skip\"}]}]}],\"parts\":[]}",
+  "toolCalls": [
+    {
+      "name": "update_habit",
+      "arguments": {
+        "clear_fields": null,
+        "habit_id": "[redacted]",
+        "start_date": null,
+        "parent_habit_id": null,
+        "clear_parent": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "title": "Drink water",
+        "description": null,
+        "emoji": null,
+        "frequency_unit": null,
+        "frequency_quantity": null,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": null,
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_general": null,
+        "slip_alert_enabled": null,
+        "relative_reminders": null,
+        "is_bad_habit": null,
+        "is_flexible": null,
+        "reminder_enabled": null,
+        "reminder_times": null,
+        "checklist_items": null,
+        "scheduled_reminders": null,
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    },
+    {
+      "name": "skip_habit",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "date": "2026-10-28",
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}
