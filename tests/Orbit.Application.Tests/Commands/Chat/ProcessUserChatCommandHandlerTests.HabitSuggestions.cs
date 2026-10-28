@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("Recommend habits for better sleep", "en", true)]
     [InlineData("Sugira três hábitos para dormir melhor", "pt-BR", false)]
     [InlineData("Quais hábitos você recomenda para dormir melhor?", "pt-BR", true)]
-    public async Task HabitSuggestions_ProductionPathReturnsDraftBlockAndOneSentence(string message, string language, bool composition)
+    public async Task HabitSuggestions_ProductionPathReturnsDraftBlockWithoutFraming(string message, string language, bool composition)
     {
         SetupUserAndPayGate();
         if (composition) EnableComposition();
@@ -53,9 +53,8 @@ public partial class ProcessUserChatCommandHandlerTests
         block.Kind.Should().Be("habitSuggestions");
         block.Block.Should().BeOfType<HabitSuggestionsCard>().Which.Drafts.Should().Equal(drafts);
         await generator.Received(1).GenerateAsync(Arg.Is<HabitSuggestionRequest>(request => request.Count == 3), Arg.Any<CancellationToken>());
-        result.Value.Parts!.OfType<ChatTextPart>().Should().ContainSingle().Which.Text
-            .Should().Be(HabitSuggestionsPresentation.Introduction(language));
-        result.Value.AiMessage.Should().NotMatchRegex("[0-9]").And.NotContain("caffeine");
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
         var wire = JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions);

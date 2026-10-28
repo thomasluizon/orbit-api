@@ -7,10 +7,6 @@ namespace Orbit.Application.Chat;
 
 internal static class HabitSuggestionsPresentation
 {
-    internal static string Introduction(string language) => LocaleHelper.IsPortuguese(language)
-        ? "Aqui estão sugestões para sua rotina."
-        : "Here are suggestions for your routine.";
-
     internal static string Readable(HabitSuggestionsCard card)
     {
         var portuguese = LocaleHelper.IsPortuguese(card.Language);

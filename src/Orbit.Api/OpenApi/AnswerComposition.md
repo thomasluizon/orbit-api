@@ -30,6 +30,7 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Notifications, tags, templates and keys | Relevant `recordList` subtype | #1619 |
 | Profile, settings, plan and referrals | Relevant `accountRows` subtype | #1619 |
 | Retrospectives | Focused `periodInsight`; narrative stays in its block | #1619 |
+| Editable habit suggestions | `habitSuggestions`, without surrounding prose | #1751, #1620 |
 | Writes and outcomes | Existing pending preview or action outcome, without repeated prose | #24, #1620 |
 | Clarification and choices | `choice` or `pickList`; question lives in the block | #1620 |
 | Proactive chat turns | Corresponding read block or short no-data nudge | #1620 |
@@ -105,6 +106,17 @@ checklist. The model prepares writes only for requested record changes and reuse
 activity for an adjustment. Editable suggestions with a resolved `existingHabitId` use that
 habit's stored title, including in their approval arguments; the model's proposed title cannot
 rename it. A title match without an ID receives the same stored identity and title.
+
+A successful typed `HabitSuggestionsCard` supplies the suggestions answer directly. When
+`habitSuggestions` is negotiated, it is the only part and `aiMessage` is empty; the server
+adds no introductory sentence. This applies with block-first composition enabled or disabled,
+including declared-complete reads and reads that continue through a narrative round. Legacy
+clients, missing-kind clients and the parts kill flag receive the existing readable draft
+details. Negotiation happens before recording, and SSE final delivery and stored replay retain
+the same composition. Suggestions remain drafts without pending writes or execution claims;
+the existing preview routes still require approval. The captured tool-plan replays in
+`G7SuggestionCompositionTests` cover both languages and capability fallbacks. #26 owns the
+live bilingual gate rerun, including suggestion quality, and #1751/#1620 own rendering.
 
 Temporary preparation commitments preserve the requested action and negation in their titles.
 Preparation continuing until an event uses daily recurrence with `due_date` at its start and
