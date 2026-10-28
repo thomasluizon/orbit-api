@@ -110,7 +110,14 @@ public class PendingAgentOperationState : Entity
     {
         if (IsExpired(utcNow) || ConsumedAtUtc.HasValue)
             return false;
-        ConsumedAtUtc = utcNow;
+        return CancelForAccountCleanup(UserId, utcNow);
+    }
+
+    public bool CancelForAccountCleanup(Guid userId, DateTime cancelledAtUtc)
+    {
+        if (userId == Guid.Empty || userId != UserId || ConsumedAtUtc.HasValue)
+            return false;
+        ConsumedAtUtc = cancelledAtUtc;
         ConfirmationTokenHash = null;
         RevisionNumber++;
         return true;

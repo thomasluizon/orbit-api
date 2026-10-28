@@ -1,5 +1,10 @@
 # Selecting an OpenAPI artifact
 
+The restricted staging eval pending-operation fixture and independent readback for
+thomasluizon/orbit-tickets#1845 are documented in
+[EvalPendingOperations.md](EvalPendingOperations.md). Deploy the API and obtain
+owner approval for its account allowlist before the paired eval harness uses it.
+
 The negotiated Astra `question` block and structured next-turn answers are
 documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract
 before the renderer in thomasluizon/orbit-tickets#1828 advertises support.
