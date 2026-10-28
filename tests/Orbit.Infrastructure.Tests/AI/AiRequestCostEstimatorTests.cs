@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Microsoft.ML.Tokenizers;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
 using Xunit.Abstractions;
@@ -46,6 +47,51 @@ public sealed class AiRequestCostEstimatorTests(ITestOutputHelper output)
             output.WriteLine($"{Path.GetFileName(file)}: provider {providerTokens} input tokens, local bound {estimatedTokens}, reservation {reserved} microdollars");
         }
         cache.Count.Should().BeLessThan(9, "identical prefixes share cached counts");
+    }
+
+    [Fact]
+    public void VariableInput_UsesTokenizerForContextHistoryToolResultsAndInstructions()
+    {
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var estimator = new AiRequestCostEstimator(cache, Options.Create(Settings));
+        var text = string.Concat(Enumerable.Repeat("Organize minha rotina, café e leitura. ", 1000));
+        using var request = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            model = "gpt-6-luna",
+            instructions = text,
+            input = new object[]
+            {
+                new { role = "system", content = "Astra" },
+                new { role = "system", content = text },
+                new { role = "user", content = text },
+                new { type = "function_call_output", call_id = "read", output = text }
+            },
+            max_output_tokens = 8192
+        }));
+        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+        var tokens = tokenizer.CountTokens(request.RootElement.GetRawText());
+
+        estimator.EstimateInputTokens(request.RootElement).Should().BeInRange(tokens, tokens * 3L / 2 + 2048);
+    }
+
+    [Theory]
+    [InlineData(128)]
+    [InlineData(2048)]
+    [InlineData(8192)]
+    public async Task Reservation_UsesTheRequestedOutputLimit(int limit)
+    {
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var estimator = new AiRequestCostEstimator(cache, Options.Create(Settings));
+        var baseline = await estimator.EstimateMicroDollarsAsync(
+            """{"model":"gpt-6-luna","max_output_tokens":2,"input":[]}""", default);
+        var reservation = await estimator.EstimateMicroDollarsAsync(JsonSerializer.Serialize(new
+        {
+            model = "gpt-6-luna",
+            max_output_tokens = limit,
+            input = Array.Empty<object>()
+        }), default);
+
+        reservation.Should().BeInRange(baseline + (limit - 2) / 2 - 2, baseline + (limit - 2) / 2 + 2);
     }
 
     [Theory]
