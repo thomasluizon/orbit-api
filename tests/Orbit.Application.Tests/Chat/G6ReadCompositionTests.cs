@@ -136,14 +136,14 @@ public partial class ProcessUserChatCommandHandlerTests
         AssertStoredComposition(result.Value);
     }
 
-    private void AssertStoredComposition(ChatResponse response)
+    private void AssertStoredComposition(ChatResponse response, AgentClientContext? client = null, string? language = null)
     {
         var json = JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions);
         _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == json));
         var stored = JsonSerializer.Deserialize<ChatResponse>(json, ChatStreamEvent.SerializerOptions)!;
-        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "recordList"],
+        client ??= new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "recordList"],
             SupportsHabitListCard: true, SupportsRecordListCard: true, SupportsHabitListDoneStatus: true);
-        var replay = ChatResponseNegotiation.ForClient(stored, client, ["astra_block_first"]);
+        var replay = ChatResponseNegotiation.ForClient(stored, client, ["astra_block_first"], language);
         ChatStreamEvent.Final(replay).ToJson().Should().Be(ChatStreamEvent.Final(response).ToJson());
     }
 }

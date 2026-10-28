@@ -68,9 +68,14 @@ public sealed class ReadBlockScopeTests
         skipped.GetBoolean().Should().BeTrue();
         _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(_day.AddDays(1));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
-        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true);
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true,
+            SupportsSkippedHabitRows: true);
 
         (await refresh.Handle(new(_userId, original.Read.RefreshToken, client), default)).ErrorCode.Should().Be(ErrorMessages.NoPermission.Code);
+        foreach (var supportsSkipped in new bool?[] { null, false })
+            (await refresh.Handle(new(_userId, original.Read.RefreshToken,
+                client with { SupportsDatedHabitListCard = true, SupportsSkippedHabitRows = supportsSkipped }), default))
+                .ErrorCode.Should().Be(ErrorMessages.NoPermission.Code);
         var refreshed = await refresh.Handle(new(_userId, original.Read.RefreshToken,
             client with { SupportsDatedHabitListCard = true }), default);
 

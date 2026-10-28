@@ -76,7 +76,11 @@ true for a skipped occurrence and false otherwise; undated queries omit it. The
 enclosing `date` remains authoritative after refresh and replay. The existing `status`
 enum is unchanged: skipped rows keep `none`. A day's completion or skip question uses
 `query_habits` with `date` and null `is_completed`, rather than inferring skip state
-from completion logs. Missing-capability text preserves the typed skip state.
+from completion logs. A habit list containing a skipped row additionally requires
+`clientContext.supportsSkippedHabitRows: true`. Clients declare it only when they
+render `isSkippedOnDate` against the enclosing date. Omission, null or false keeps
+the localized typed skip text, including on stored replay. Dated query rows keep
+emitting `isSkippedOnDate` regardless of the requesting client's capabilities.
 
 The normal page size is 50, including an all-habits request; the model supplies another
 size only when requested. A 51-row result with limit 50 is partial and has a signed
@@ -256,7 +260,8 @@ the original query's result, rather than an invented full-data claim.
 ```
 
 Success returns `{ kind, block, read }`. For existing kinds, send their existing
-card capability boolean as well. Dated habit lists also require
+card capability boolean as well. Habit lists containing skipped rows also require
+`supportsSkippedHabitRows: true`. Dated habit lists additionally require
 `supportsDatedHabitListCard: true`; habit history also requires
 `supportsHabitHistoryCard: true`. Every refresh rechecks these capabilities, including
 when a formerly current-day query becomes historical after local midnight. Set `page: true` only with `nextCursor`. Refresh

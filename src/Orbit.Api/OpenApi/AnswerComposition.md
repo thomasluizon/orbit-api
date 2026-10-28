@@ -106,10 +106,17 @@ recurring habits. They exclude skipped entries from completed and remaining tota
 emits true for a skipped row and false for other rows; an undated query omits it.
 Its date is the enclosing habit list's resolved account-local `date`, including after
 refresh crosses midnight. Existing `status` values remain unchanged; a skipped row
-retains `status: "none"`. Supported clients receive the query-bound `habitList` first,
-with no repeated prose. Stored replay retains the field, and missing-capability text
-uses it to preserve the localized skip state. Stored titles remain verbatim. Deploy
+retains `status: "none"`. A habit list containing skipped rows requires optional
+`clientContext.supportsSkippedHabitRows: true`, in addition to the existing parts,
+kind and dated-list capabilities. Omission, null or false keeps the localized typed
+text fallback, including on stored replay. Refresh also requires that capability.
+Clients that declare support receive the query-bound `habitList` first, with no
+repeated prose. Stored replay retains the field, and missing-capability text uses
+it to preserve the localized skip state. Stored titles remain verbatim. Deploy
 the API before the paired web and Android consumer renders the optional field.
+The request-only `AgentClientContext.supportsSkippedHabitRows` OpenAPI property is
+`{ "type": ["null", "boolean"] }` and is absent from `required`; its default is null.
+Consumers declare it only when they render `isSkippedOnDate` against the list's date.
 Legacy clients without parts keep their readable path; unsupported kinds use typed fallbacks.
 The parts and family kill flags still apply. No contract field changes type or optionality.
 For a complete filtered habit read with zero total rows, the empty block retains

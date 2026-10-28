@@ -153,8 +153,10 @@ public partial class ProcessUserChatCommandHandler
                 + string.Join(", ", client.PartKinds?.Where(k => k is "periodTotal" or "periodComparison") ?? []));
         prompt = string.Join(Environment.NewLine, prompt,
             "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
+            + "Habit lists with skipped rows require supportsSkippedHabitRows. "
             + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
             + $"Dated habit lists supported: {client?.SupportsDatedHabitListCard == true}. Habit history supported: {client?.SupportsHabitHistoryCard == true}. "
+            + $"Skipped habit rows supported: {client?.SupportsSkippedHabitRows == true}. "
             + "For an unsupported subtype, answer from the queried facts in text.");
         if (UsesComposition(request, context))
             prompt = string.Join(Environment.NewLine, prompt,

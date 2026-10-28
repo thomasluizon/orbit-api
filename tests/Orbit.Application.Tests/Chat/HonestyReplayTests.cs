@@ -202,13 +202,26 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", "edge-skipped-pt-r1")]
-    [InlineData("pt-BR", "edge-skipped-pt-r1")]
-    [InlineData("en", "g6rerun-edge-skipped-pt-r2")]
-    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r2")]
-    [InlineData("en", "g6rerun-edge-skipped-pt-r3")]
-    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r3")]
-    public async Task HonestyReplay_SkippedHabitUsesDatedDataAndLocalizedStatus(string language, string capture)
+    [InlineData("en", "edge-skipped-pt-r1", true)]
+    [InlineData("pt-BR", "edge-skipped-pt-r1", true)]
+    [InlineData("en", "edge-skipped-pt-r1", false)]
+    [InlineData("pt-BR", "edge-skipped-pt-r1", false)]
+    [InlineData("en", "edge-skipped-pt-r1", null)]
+    [InlineData("pt-BR", "edge-skipped-pt-r1", null)]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r2", true)]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r2", true)]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r2", false)]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r2", false)]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r2", null)]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r2", null)]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r3", true)]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r3", true)]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r3", false)]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r3", false)]
+    [InlineData("en", "g6rerun-edge-skipped-pt-r3", null)]
+    [InlineData("pt-BR", "g6rerun-edge-skipped-pt-r3", null)]
+    public async Task HonestyReplay_SkippedHabitUsesDatedDataAndLocalizedStatus(string language, string capture,
+        bool? supportsSkippedHabitRows)
     {
         var today = new DateOnly(2026, 10, 27);
         var user = User.Create("Reader", "reader@example.test").Value;
@@ -227,10 +240,20 @@ public partial class ProcessUserChatCommandHandlerTests
         UseProductionReadExecutor(query);
         SetupAiResponse(HonestyReplay(capture));
         var events = new List<ChatStreamEvent>();
+        var capabilities = new Dictionary<string, object?>
+        {
+            ["supportsParts"] = true,
+            ["partKinds"] = new[] { "habitList" },
+            ["supportsHabitListCard"] = true,
+            ["supportsDatedHabitListCard"] = true
+        };
+        if (supportsSkippedHabitRows is not null)
+            capabilities["supportsSkippedHabitRows"] = supportsSkippedHabitRows;
+        var client = JsonSerializer.SerializeToElement(capabilities)
+            .Deserialize<AgentClientContext>(ChatStreamEvent.SerializerOptions)!;
 
         var result = await handler.Handle(new(UserId, "O que aconteceu com a Caminhada hoje? Eu tinha pulado.",
-            ClientContext: new(SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true,
-                SupportsDatedHabitListCard: true),
+            ClientContext: client,
             StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -238,18 +261,36 @@ public partial class ProcessUserChatCommandHandlerTests
         card.Date.Should().Be(today);
         card.Items.Should().ContainSingle().Which.Status.Should().Be("none");
         card.SkippedIds.Should().Contain(habit.Id.ToString());
-        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("habitList");
         var row = JsonSerializer.SerializeToElement(card.Items.Single(), ChatStreamEvent.SerializerOptions);
         row.TryGetProperty("isSkippedOnDate", out var skipped).Should().BeTrue();
         skipped.GetBoolean().Should().BeTrue();
-        result.Value.AiMessage.Should().BeNullOrEmpty();
+        var expectedText = language == "en" ? "Caminhada: skipped today." : "Caminhada: pulado hoje.";
+        if (supportsSkippedHabitRows == true)
+        {
+            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("habitList");
+            result.Value.AiMessage.Should().BeNullOrEmpty();
+            var wireClient = JsonSerializer.SerializeToElement(client, ChatStreamEvent.SerializerOptions);
+            wireClient.TryGetProperty("supportsSkippedHabitRows", out var supported).Should().BeTrue();
+            supported.GetBoolean().Should().BeTrue();
+        }
+        else
+        {
+            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expectedText);
+            result.Value.AiMessage.Should().Be(expectedText);
+        }
         events.Should().NotContain(item => item.Type == "delta");
-        AssertStoredComposition(result.Value);
+        AssertStoredComposition(result.Value, client, language);
         var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions),
             ChatStreamEvent.SerializerOptions)!;
         var fallback = ChatResponseNegotiation.ForClient(stored, null, [], language);
         fallback.Parts.Should().BeNull();
-        fallback.AiMessage.Should().Be(language == "en" ? "Caminhada: skipped today." : "Caminhada: pulado hoje.");
+        fallback.AiMessage.Should().Be(expectedText);
+        capabilities.Remove("supportsSkippedHabitRows");
+        var oldClient = JsonSerializer.SerializeToElement(capabilities)
+            .Deserialize<AgentClientContext>(ChatStreamEvent.SerializerOptions)!;
+        var oldReplay = ChatResponseNegotiation.ForClient(stored, oldClient, ["astra_block_first"], language);
+        oldReplay.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expectedText);
+        oldReplay.AiMessage.Should().Be(expectedText);
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 }

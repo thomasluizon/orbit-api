@@ -16952,6 +16952,12 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsSkippedHabitRows": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
