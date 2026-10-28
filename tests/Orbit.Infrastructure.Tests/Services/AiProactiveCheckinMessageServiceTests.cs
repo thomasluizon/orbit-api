@@ -16,10 +16,11 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.AI;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class AiProactiveCheckinMessageServiceTests
+public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper output)
 {
     public static TheoryData<ProactiveTrigger, string> LocalesAndTriggers
     {
@@ -94,7 +95,9 @@ public sealed class AiProactiveCheckinMessageServiceTests
         request.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         request.TryGetProperty("temperature", out _).Should().BeFalse();
         request.GetProperty("text").GetProperty("format").GetProperty("type").GetString().Should().Be("json_object");
-        body.Should().Contain("feminine").And.Contain("Read");
+        body.Should().Contain("Read");
+        if (locale == "pt-BR") body.Should().Contain("feminine");
+        else body.Should().NotContain("feminine");
         body.Should().Contain("{{habit:N}}").And.Contain("{{goal}}")
             .And.Contain("zero-based index").And.Contain("Never write a literal habit or goal title")
             .And.Contain("Never name anything else").And.Contain("AFTER the server substitutes");
@@ -124,6 +127,75 @@ public sealed class AiProactiveCheckinMessageServiceTests
         var result = await Service(sentence, line: Line(sentence, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
 
         result.Text.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("en", "Para esta noite, escolha o que combinar com você: {{habit:0}}.")]
+    [InlineData("en", "Hoje, retome por {{habit:0}}; há 4 outros pontos, sem compensar ontem.")]
+    [InlineData("pt-BR", "Choose what fits tonight: {{habit:0}}.")]
+    [InlineData("en", "Choose {{habit:0}} para esta noite.")]
+    [InlineData("pt-BR", "Escolha {{habit:0}} for tonight.")]
+    [InlineData("en", "{{habit:0}}.")]
+    [InlineData("pt-BR", "{{habit:0}}.")]
+    public async Task WrongOrUncertainLanguageModelSentence_UsesLocalizedTemplate(string locale, string text)
+    {
+        var facts = new ProactiveFacts(ProactiveTrigger.EveningCheckin, ["Journal"], HabitCount: 5,
+            HadScheduledHabitsYesterday: true, HadPositiveLogsYesterday: false, HadRecentActivity: true);
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        result.Should().Be(AiProactiveCheckinMessageService.Template(facts, locale));
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "Choose your habit today", "Para esta noite, escolha o que combina com você: {{habit:0}}.")]
+    [InlineData("en", "Escolha seu hábito hoje", "Choose what fits tonight: {{habit:0}}.")]
+    public async Task CorrectLanguageModelSentence_PreservesForeignHabitTitle(string locale, string title, string text)
+    {
+        var facts = new ProactiveFacts(ProactiveTrigger.EveningCheckin, [title], HabitCount: 1);
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        result.Text.Should().Be(text.Replace("{{habit:0}}", title, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("pt-BR", "Choose your next step", "Para {{goal}}, escolha um passo que caiba no seu dia.")]
+    [InlineData("en", "Escolha seu próximo passo", "For {{goal}}, choose a step that fits your day.")]
+    public async Task CorrectLanguageModelSentence_PreservesForeignGoalTitle(string locale, string title, string text)
+    {
+        var facts = Facts(ProactiveTrigger.GoalBehind) with { GoalTitle = title };
+
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, locale, [title], default);
+
+        result.Text.Should().Be(text.Replace("{{goal}}", title, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("en", "English")]
+    [InlineData("pt-BR", "Brazilian Portuguese")]
+    public async Task Request_PrioritizesAccountLanguageOverFactAndInstructionLanguage(string locale, string languageName)
+    {
+        var facts = new ProactiveFacts(ProactiveTrigger.EveningCheckin,
+            [locale == "en" ? "Leitura" : "Journal"], HabitCount: 1);
+        string? body = null;
+
+        await Service(null, captureRequest: request => body = request).GenerateAsync(facts, locale, facts.HabitTitles, default);
+
+        output.WriteLine(body);
+        using var document = JsonDocument.Parse(body!);
+        var messages = document.RootElement.GetProperty("input");
+        messages[0].GetProperty("role").GetString().Should().Be("system");
+        var system = messages[0].GetProperty("content")[0].GetProperty("text").GetString()!;
+        system.Should().StartWith($"You are Astra. Write ONLY in {languageName}.");
+        system.Should().Contain("Do not infer the language from titles or from the language of these instructions");
+        if (locale == "en") system.Should().NotContain("Portuguese").And.NotContain("você");
+        else system.Should().Contain("feminine").And.Contain("você");
+        messages[1].GetProperty("role").GetString().Should().Be("user");
+        var prompt = messages[1].GetProperty("content")[0].GetProperty("text").GetString()!;
+        prompt.Should().StartWith($"Write ONLY in {languageName}.")
+            .And.EndWith($"Write ONLY in {languageName}.")
+            .And.NotContain("Grounded fallback:");
     }
 
     [Theory]
