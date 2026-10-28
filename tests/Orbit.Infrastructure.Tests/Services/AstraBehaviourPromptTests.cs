@@ -29,6 +29,8 @@ public class AstraBehaviourPromptTests
     [Fact]
     public void WriteCompletion_RequiresEveryActionTargetAndOccurrence()
     {
+        Build(true).Should().Contain("When the same action affects multiple habits, use one matching bulk tool")
+            .And.Contain("Mixed actions use their matching tools together in one approval preview");
         Orbit.Application.Chat.TerminalWriteDirective.Instruction.Should()
             .Contain("each requested action, target and occurrence")
             .And.Contain("A lookup never fulfills a requested mutation")

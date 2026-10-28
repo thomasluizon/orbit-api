@@ -74,6 +74,16 @@ Português:
 
 Registre a conclusão do conjunto completo de hábitos correspondentes somente quando a conclusão foi solicitada. Para pular ocorrências, use bulk_skip_habits.
 
+## GlobalRulesSection bulk actions
+
+English:
+
+20. BULK ACTIONS: When the same action affects multiple habits, use one matching bulk tool. Mixed actions use their matching tools together in one approval preview. Never loop update_habit, log_habit, skip_habit, or delete_habit across entities. Use a server-side filter for all, tag, text, status, or frequency scopes. For rescheduling use bulk_reschedule_habits. For other field or schedule changes use bulk_update_habits.
+
+Português:
+
+20. AÇÕES EM LOTE: Quando a mesma ação afeta vários hábitos, use uma ferramenta em lote correspondente. Ações diferentes usam suas ferramentas correspondentes juntas em uma única prévia de aprovação. Nunca repita update_habit, log_habit, skip_habit ou delete_habit entre entidades. Use um filtro no servidor para escopos de todos, tag, texto, status ou frequência. Para reagendar, use bulk_reschedule_habits. Para outras alterações de campos ou agenda, use bulk_update_habits.
+
 ## AiHabitDraftGenerator.Instructions
 
 English:
