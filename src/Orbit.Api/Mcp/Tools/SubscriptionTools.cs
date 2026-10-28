@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -31,11 +32,12 @@ public class SubscriptionTools(
 
         var aiLimit = await payGate.GetAiMessageLimit(userId, cancellationToken);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var period = AiAllowancePeriod.ActiveFor(today, u.HasProAccess, u.WeekStartDay, u.AiMessagesWeekStart);
 
         return $"Plan: {(u.HasProAccess ? "Pro" : "Free")}\n" +
                (u.IsTrialActive ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Trial active, ends: {u.TrialEndsAt:yyyy-MM-dd}\n") : "") +
                (u.PlanExpiresAt is not null ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Plan expires: {u.PlanExpiresAt:yyyy-MM-dd}\n") : "") +
-               $"AI Messages ({(u.HasProAccess ? "week" : "day")}): {u.GetAiMessagesUsedForQuota(today)}/{aiLimit}\n" +
+               $"AI Messages ({period.Name}): {u.GetAiMessagesUsedForQuota(today)}/{aiLimit}\n" +
                $"AI Messages reset: {AiAllowanceReset.GetResetsAtUtc(u, today):O}\n" +
                (u.IsLifetimePro ? "Lifetime Pro: Yes\n" : "") +
                (u.SubscriptionInterval is not null ? $"Billing: {u.SubscriptionInterval.ToString()!.ToLowerInvariant()}" : "");

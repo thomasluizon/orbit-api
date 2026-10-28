@@ -17,6 +17,7 @@ using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Application.Common;
 using Orbit.Application.Chat;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -31,6 +32,45 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiDailyBudgetTests
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
+
+    [Theory]
+    [InlineData(1, 0, "2026-08-03", true)]
+    [InlineData(1, 0, "2026-08-03", false)]
+    [InlineData(0, 1, "2026-08-02", true)]
+    [InlineData(0, 1, "2026-08-02", false)]
+    public async Task WeekStartPreferenceChange_SafetyBudgetRetainsEarlierCallsUntilAnchoredBoundary(
+        int originalStart, int newStart, string start, bool callsExhausted)
+    {
+        using var fixture = new BudgetFixture(pro: true);
+        var weekStart = DateOnly.Parse(start);
+        fixture.User.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        fixture.User.IncrementAiMessageCount(weekStart);
+        fixture.Database.Context.AiBudgetCalls.Add(AiBudgetCall.Reserve(fixture.User.Id, weekStart,
+            callsExhausted ? 1 : AppConfigKeys.DefaultProAiMicroDollarsPerWeek));
+        fixture.User.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+        await fixture.Database.Context.SaveChangesAsync();
+        if (callsExhausted)
+            fixture.Config.GetAsync(AppConfigKeys.ProAiCallsPerWeek,
+                Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(6));
+        var reserve = () => fixture.Budget.ReserveAsync(fixture.User.Id, 6546, default);
+        await reserve.Should().ThrowAsync<AiBudgetExceededException>();
+
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(7));
+        var reservation = await reserve();
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Single(call => call.Id == reservation).LocalDate.Should().Be(weekStart.AddDays(7));
+        if (!callsExhausted)
+            await fixture.Budget.SettleAsync(reservation, AppConfigKeys.DefaultProAiMicroDollarsPerWeek, default);
+        await reserve.Should().ThrowAsync<AiBudgetExceededException>();
+
+        fixture.User.IncrementAiMessageCount(weekStart.AddDays(7));
+        await fixture.Database.Context.SaveChangesAsync();
+        var nextPeriod = AiAllowancePeriod.For(weekStart.AddDays(7), true, newStart);
+        fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(nextPeriod.End);
+        (await reserve()).Should().NotBeEmpty();
+    }
 
     [Theory]
     [InlineData(false, 0, true)]

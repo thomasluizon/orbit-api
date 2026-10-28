@@ -164,7 +164,7 @@ public class GetProfileQueryHandler(
             lastCompletionDate,
             activeApiKeyCount,
             user.SubscriptionSource.ToBillingProvider(),
-            AiAllowancePeriod.For(today, user.HasProAccess, user.WeekStartDay).Name,
+            AiAllowancePeriod.ActiveFor(today, user.HasProAccess, user.WeekStartDay, user.AiMessagesWeekStart).Name,
             AiAllowanceReset.GetResetsAtUtc(user, today)));
     }
 }

@@ -22,4 +22,12 @@ public readonly record struct AiAllowancePeriod
             ? new(userToday.AddDays(-((int)userToday.DayOfWeek - weekStartDay + 7) % 7), 7, "week")
             : new(userToday, 1, "day");
     }
+
+    public static AiAllowancePeriod ActiveFor(DateOnly userToday, bool pro, int weekStartDay, DateOnly? storedWeekStart)
+    {
+        var preferredPeriod = For(userToday, pro, weekStartDay);
+        return pro && storedWeekStart.HasValue && userToday < storedWeekStart.Value.AddDays(7)
+            ? new(storedWeekStart.Value, 7, "week")
+            : preferredPeriod;
+    }
 }

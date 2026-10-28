@@ -475,7 +475,7 @@ public partial class User : Entity
             AiMessagesLocalDate = userToday;
         }
         AiMessagesUsedToday++;
-        var weekStart = AiAllowancePeriod.For(userToday, true, WeekStartDay).Start;
+        var weekStart = AiAllowancePeriod.ActiveFor(userToday, true, WeekStartDay, AiMessagesWeekStart).Start;
         if (!AiMessagesWeekStart.HasValue || AiMessagesWeekStart.Value < weekStart)
         {
             AiMessagesUsedThisWeek = 0;
@@ -491,7 +491,8 @@ public partial class User : Entity
     {
         if (AiMessagesLocalDate == reservedDate && AiMessagesUsedToday > 0)
             AiMessagesUsedToday--;
-        if (AiMessagesWeekStart == AiAllowancePeriod.For(reservedDate, true, WeekStartDay).Start
+        var period = AiAllowancePeriod.ActiveFor(reservedDate, true, WeekStartDay, AiMessagesWeekStart);
+        if (AiMessagesWeekStart == period.Start && reservedDate >= period.Start && reservedDate < period.End
             && AiMessagesUsedThisWeek > 0)
             AiMessagesUsedThisWeek--;
     }
@@ -501,7 +502,7 @@ public partial class User : Entity
         if (!HasProAccess)
             return AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
 
-        var weekStart = AiAllowancePeriod.For(userToday, true, WeekStartDay).Start;
+        var weekStart = AiAllowancePeriod.ActiveFor(userToday, true, WeekStartDay, AiMessagesWeekStart).Start;
         return AiMessagesWeekStart >= weekStart ? AiMessagesUsedThisWeek : 0;
     }
 

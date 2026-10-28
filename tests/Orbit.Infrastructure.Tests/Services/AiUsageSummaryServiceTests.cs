@@ -9,6 +9,25 @@ public class AiUsageSummaryServiceTests
 {
     private static readonly DateOnly Date = new(2026, 6, 29);
 
+    [Theory]
+    [InlineData(1, 0, "2026-08-03")]
+    [InlineData(0, 1, "2026-08-02")]
+    public void WeekStartPreferenceChange_QuotaSummaryKeepsAnchoredCapHit(int originalStart, int newStart, string start)
+    {
+        var user = User.Create("Pro", "pro@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        var weekStart = DateOnly.Parse(start);
+        for (var message = 0; message < 250; message++)
+            user.IncrementAiMessageCount(weekStart.AddDays(message * 7 / 250));
+        user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+
+        AiUsageSummaryService.BuildQuotaSummaryLine(weekStart.AddDays(6), [user], 5, 250)
+            .Should().Contain("pro_cap_hits=1");
+        AiUsageSummaryService.BuildQuotaSummaryLine(weekStart.AddDays(7), [user], 5, 250)
+            .Should().Contain("pro_cap_hits=0");
+    }
+
     private static readonly IReadOnlyDictionary<string, AiModelPrice> Pricing =
         new Dictionary<string, AiModelPrice>
         {

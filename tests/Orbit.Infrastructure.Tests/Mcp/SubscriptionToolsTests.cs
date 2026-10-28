@@ -52,6 +52,28 @@ public class SubscriptionToolsTests
             .Returns(response);
     }
 
+    [Theory]
+    [InlineData(1, 0, "2026-08-03")]
+    [InlineData(0, 1, "2026-08-02")]
+    public async Task WeekStartPreferenceChange_SubscriptionReadKeepsUsageAndReset(int originalStart, int newStart, string start)
+    {
+        var user = User.Create("Pro", "pro@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        var weekStart = DateOnly.Parse(start);
+        for (var message = 0; message < 250; message++)
+            user.IncrementAiMessageCount(weekStart);
+        user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+        _userRepo.GetByIdAsync(_userId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(_userId, Arg.Any<CancellationToken>()).Returns(250);
+        _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(weekStart.AddDays(6));
+
+        var result = await _tools.GetSubscriptionStatus(_user);
+
+        result.Should().Contain("AI Messages (week): 250/250");
+        result.Should().Contain($"AI Messages reset: {weekStart.AddDays(7).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc):O}");
+    }
+
     [Fact]
     public async Task GetSubscriptionStatus_UserNotFound_ReturnsError()
     {

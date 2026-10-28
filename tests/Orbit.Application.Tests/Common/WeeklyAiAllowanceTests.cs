@@ -8,6 +8,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Chat;
 using Orbit.Application.Profile.Queries;
 using Orbit.Application.Subscriptions.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Services;
@@ -21,7 +22,9 @@ public class WeeklyAiAllowanceTests
     [InlineData(1, "Pacific/Auckland", "2026-08-02T12:00:00Z", 50)]
     [InlineData(0, "America/Sao_Paulo", "2026-08-02T03:00:00Z", 250)]
     [InlineData(1, "Pacific/Auckland", "2026-08-02T12:00:00Z", 250)]
-    public async Task Pro_Allows250AcrossLocalWeekThenPayGateUntilNextWeek(int weekStartDay, string zone, string start, int messagesPerDay)
+    [InlineData(0, "America/Sao_Paulo", "2026-08-02T03:00:00Z", 50, 1)]
+    [InlineData(1, "Pacific/Auckland", "2026-08-02T12:00:00Z", 50, 0)]
+    public async Task Pro_Allows250AcrossLocalWeekThenPayGateUntilNextWeek(int weekStartDay, string zone, string start, int messagesPerDay, int? newWeekStartDay = null)
     {
         var user = User.Create("Pro", "pro@example.com").Value;
         user.GrantLifetimePro();
@@ -50,6 +53,8 @@ public class WeeklyAiAllowanceTests
         }
 
         clock.Now = weekStart.AddDays(7).AddTicks(-1);
+        if (newWeekStartDay.HasValue)
+            user.SetWeekStartDay(newWeekStartDay.Value).IsSuccess.Should().BeTrue();
         var refused = await gate.TryConsumeAiMessage(user.Id, work);
         refused.ErrorCode.Should().Be(ErrorCodes.PayGate);
         (await gate.GetAiMessageLimit(user.Id)).Should().Be(250);
@@ -76,6 +81,13 @@ public class WeeklyAiAllowanceTests
         clock.Now = weekStart.AddDays(7);
         (await gate.TryConsumeAiMessage(user.Id, work)).IsSuccess.Should().BeTrue();
         user.GetAiMessagesUsedForQuota(await dates.GetUserTodayAsync(user.Id)).Should().Be(1);
+        var nextLocalDate = await dates.GetUserTodayAsync(user.Id);
+        var nextPeriod = AiAllowancePeriod.For(nextLocalDate, true, user.WeekStartDay);
+        user.AiMessagesWeekStart.Should().Be(nextPeriod.Start);
+        var nextStatus = (await statusHandler.Handle(new(user.Id), default)).Value;
+        var zoneInfo = TimeZoneInfo.FindSystemTimeZoneById(zone);
+        nextStatus.AiMessagesResetsAt.Should().Be(TimeZoneInfo.ConvertTimeToUtc(
+            nextPeriod.End.ToDateTime(TimeOnly.MinValue), zoneInfo));
         await work.Received(251).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

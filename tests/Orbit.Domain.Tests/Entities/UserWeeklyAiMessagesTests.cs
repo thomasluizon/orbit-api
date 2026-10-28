@@ -7,6 +7,57 @@ namespace Orbit.Domain.Tests.Entities;
 public class UserWeeklyAiMessagesTests
 {
     [Theory]
+    [InlineData(1, 0, "2026-08-03")]
+    [InlineData(0, 1, "2026-08-02")]
+    public void WeekStartPreferenceChange_PreservesCountUntilAnchoredBoundary(int originalStart, int newStart, string start)
+    {
+        var user = User.Create("Pro", "pro@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        var weekStart = DateOnly.Parse(start);
+        user.IncrementAiMessageCount(weekStart);
+        user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+
+        for (var day = 1; day < 7; day++)
+        {
+            user.GetAiMessagesUsedForQuota(weekStart.AddDays(day)).Should().Be(day);
+            user.IncrementAiMessageCount(weekStart.AddDays(day));
+            user.AiMessagesWeekStart.Should().Be(weekStart);
+        }
+
+        user.GetAiMessagesUsedForQuota(weekStart.AddDays(7)).Should().Be(0);
+        user.IncrementAiMessageCount(weekStart.AddDays(7));
+        var nextPeriod = AiAllowancePeriod.For(weekStart.AddDays(7), true, newStart);
+        user.AiMessagesWeekStart.Should().Be(nextPeriod.Start);
+        user.GetAiMessagesUsedForQuota(weekStart.AddDays(7)).Should().Be(1);
+        user.GetAiMessagesUsedForQuota(nextPeriod.End).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(1, 0, "2026-08-03")]
+    [InlineData(0, 1, "2026-08-02")]
+    public void WeekStartPreferenceChange_RefundReleasesReservationWithinStoredWeek(int originalStart, int newStart, string start)
+    {
+        var user = User.Create("Pro", "pro@example.com").Value;
+        user.GrantLifetimePro();
+        user.SetWeekStartDay(originalStart).IsSuccess.Should().BeTrue();
+        var weekStart = DateOnly.Parse(start);
+        user.IncrementAiMessageCount(weekStart);
+        user.IncrementAiMessageCount(weekStart.AddDays(6));
+        user.SetWeekStartDay(newStart).IsSuccess.Should().BeTrue();
+
+        user.RefundAiMessage(weekStart.AddDays(6));
+        user.AiMessagesUsedThisWeek.Should().Be(1);
+        user.AiMessagesUsedToday.Should().Be(0);
+        user.RefundAiMessage(weekStart);
+        user.AiMessagesUsedThisWeek.Should().Be(0);
+
+        user.IncrementAiMessageCount(weekStart.AddDays(7));
+        user.RefundAiMessage(weekStart);
+        user.AiMessagesUsedThisWeek.Should().Be(1);
+    }
+
+    [Theory]
     [InlineData(0, 2)]
     [InlineData(1, 3)]
     public void WeeklyCount_AccumulatesAcrossDaysAndResetsAtChosenWeekStart(int weekStartDay, int nextWeekDay)

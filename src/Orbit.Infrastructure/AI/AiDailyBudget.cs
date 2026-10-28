@@ -32,7 +32,7 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var user = await db.Users.AsNoTracking().SingleAsync(user => user.Id == userId, cancellationToken);
         var localDate = await dates.GetUserTodayAsync(userId, cancellationToken);
         var pro = user.HasProAccess;
-        var period = AiAllowancePeriod.For(localDate, pro, user.WeekStartDay);
+        var period = AiAllowancePeriod.ActiveFor(localDate, pro, user.WeekStartDay, user.AiMessagesWeekStart);
         var callLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiCallsPerWeek : AppConfigKeys.FreeAiCallsPerDay,
             pro ? AppConfigKeys.DefaultProAiCallsPerWeek : AppConfigKeys.DefaultFreeAiCallsPerDay, cancellationToken);
         var spendLimit = await config.GetAsync(pro ? AppConfigKeys.ProAiMicroDollarsPerWeek : AppConfigKeys.FreeAiMicroDollarsPerDay,

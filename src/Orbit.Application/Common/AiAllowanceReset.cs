@@ -7,7 +7,7 @@ public static class AiAllowanceReset
 {
     public static DateTime GetResetsAtUtc(User user, DateOnly userToday)
     {
-        var period = AiAllowancePeriod.For(userToday, user.HasProAccess, user.WeekStartDay);
+        var period = AiAllowancePeriod.ActiveFor(userToday, user.HasProAccess, user.WeekStartDay, user.AiMessagesWeekStart);
         var zone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var midnight = period.End.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
         while (zone.IsInvalidTime(midnight))
