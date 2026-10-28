@@ -178,6 +178,8 @@ public partial class ProcessUserChatCommandHandler
         bool truncated, string? language, ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results, CancellationToken ct)
     {
+        if (results.PendingSelection is not null && results.AskBlock is null)
+            return SelectionQuestion(results.PendingSelection, language, request.ClientContext?.SupportsParts == true);
         if (results.IsPreviewDiscussion)
         {
             var sentence = FramingSentence(results.PreviewDiscussionText ?? parsed.VisibleText, context, results);

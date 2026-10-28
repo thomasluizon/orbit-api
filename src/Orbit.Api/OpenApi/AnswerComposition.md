@@ -74,6 +74,16 @@ streak metrics. Missing-capability and legacy clients keep the localized missing
 unavailable-streak text. Refresh and stored replay apply the same composition capability policy.
 A prerequisite lookup keeps the tool loop even when empty,
 so the model can request creation details or prepare the remaining change.
+Habit lookups append the model argument `for_selection`. True declares a lookup for an
+unanswered choice or pick list, including a single candidate. These typed results keep
+the tool loop open for `ask` and block every write in that turn until the person answers.
+A searched lookup with multiple matches retains its candidate signal even when an ID
+appears in a later write call. Ordinary list reads explicitly declare false and retain
+their list projection. For clients advertising ask forms, a lookup without a declared
+purpose requires continuation before it can be treated as the completed answer.
+No request-text pattern selects this behavior. See [HabitSelection.md](HabitSelection.md)
+for the selection contract and the English and Brazilian Portuguese copy submitted for review.
+
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
 message-based rewriting. Ask instructions name the client's supported forms while the shared

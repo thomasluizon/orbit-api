@@ -4519,6 +4519,11 @@
             "required": false
           },
           {
+            "name": "for_selection",
+            "type": "boolean",
+            "required": false
+          },
+          {
             "name": "frequency",
             "type": "string",
             "required": false,

@@ -13,7 +13,12 @@ public record HabitListCard(string Scope, IReadOnlyList<HabitListCardItem> Items
 {
     [JsonIgnore]
     public IReadOnlySet<string> SkippedIds { get; init; } = new HashSet<string>();
+
+    [JsonIgnore]
+    public HabitSelectionCandidates? Selection { get; init; }
 }
+
+public sealed record HabitSelectionCandidates(string? Reference, IReadOnlyList<HabitListCardItem> Candidates, bool RequiresAnswer);
 
 public record HabitListCardItem(
     string Id,
