@@ -14,9 +14,9 @@ namespace Orbit.Infrastructure.Tests.Middleware;
 public partial class LocalizedErrorResultFilterTests
 {
     [Theory]
-    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 250 messages per week.")]
+    [InlineData(false, "en", "You've reached your daily AI message limit (5).")]
     [InlineData(true, "en", "You've reached your weekly AI message limit (250).")]
-    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 250 mensagens por semana.")]
+    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5).")]
     [InlineData(true, "pt-BR", "Você atingiu seu limite semanal de mensagens de IA (250).")]
     public async Task ExhaustedAstraAllowance_LocalizesTheQuotaReasonThroughHttpAndStream(bool pro, string locale, string expected)
     {

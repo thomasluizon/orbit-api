@@ -507,7 +507,7 @@ public class PayGateServiceTests
                 result.ErrorCode.Should().Be(ErrorCodes.PayGate);
                 result.Error.Should().Be(pro
                     ? $"You've reached your weekly AI message limit ({limit})."
-                    : $"You've reached your daily AI message limit ({limit}). Upgrade to Pro for 250 messages per week.");
+                    : $"You've reached your daily AI message limit ({limit}).");
             }
             user.AiMessagesUsedToday.Should().Be(limit + 1 + (allowed ? 1 : 0));
             await work.Received(allowed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -515,9 +515,9 @@ public class PayGateServiceTests
     }
 
     [Theory]
-    [InlineData(false, "en", "You've reached your daily AI message limit (5). Upgrade to Pro for 250 messages per week.")]
+    [InlineData(false, "en", "You've reached your daily AI message limit (5).")]
     [InlineData(true, "en", "You've reached your weekly AI message limit (250).")]
-    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5). Assine o Pro para ter 250 mensagens por semana.")]
+    [InlineData(false, "pt-BR", "Você atingiu seu limite diário de mensagens de IA (5).")]
     [InlineData(true, "pt-BR", "Você atingiu seu limite semanal de mensagens de IA (250).")]
     public async Task TryConsumeAiMessage_ExhaustedAllowancePreservesPayGateAndAccountLanguage(bool pro, string language, string expected)
     {

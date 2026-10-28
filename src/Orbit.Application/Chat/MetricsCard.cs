@@ -82,11 +82,19 @@ public static partial class MetricsCardBuilder
         "habit", (int)Math.Round(metrics.Period?.CompletionRate ?? 0), metrics.TotalCompletions,
         metrics.Period?.ScheduledDates ?? 0, metrics.Period?.DistinctLoggedDates ?? 0,
         metrics.CurrentStreak, metrics.LongestStreak, metrics.TotalCompletions > 0 || metrics.Period?.ScheduledDates > 0,
-        "habit", metrics.PeriodSeries is { } series ? new CompletionSeries(series.Granularity,
-            series.Points.Select(p => new CompletionSeriesPoint(p.StartDate, p.EndDate, p.Scheduled, p.Completed, p.CompletionRate)).ToList()) : null,
+        "habit", HabitSeries(metrics),
         HabitId: metrics.HabitId, HabitTitle: metrics.HabitTitle,
         WeeklyCompletionRate: metrics.WeeklyCompletionRate, MonthlyCompletionRate: metrics.MonthlyCompletionRate,
         LastCompletedDate: metrics.LastCompletedDate, PeriodMetrics: metrics.Period);
+
+    private static CompletionSeries? HabitSeries(HabitMetrics metrics)
+    {
+        if (metrics.PeriodSeries is not { } series || metrics.Period is { } period
+            && series.Points.Sum(point => point.Completed) != period.PositiveLogRecords)
+            return null;
+        return new(series.Granularity, series.Points.Select(point => new CompletionSeriesPoint(
+            point.StartDate, point.EndDate, point.Scheduled, point.Completed, point.CompletionRate)).ToList());
+    }
 
     [GeneratedRegex(@"\[\[orbit:metrics\]\]", RegexOptions.IgnoreCase)]
     private static partial Regex DirectiveRegex();

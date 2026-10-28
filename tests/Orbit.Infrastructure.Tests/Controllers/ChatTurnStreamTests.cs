@@ -116,7 +116,7 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
         denied.GetProperty("type").GetString().Should().Be("error");
         denied.GetProperty("code").GetString().Should().Be(Result.PayGateErrorCode);
         denied.GetProperty("error").GetString().Should().Be(
-            "You've reached your daily AI message limit (1). Upgrade to Pro for 250 messages per week.");
+            "You've reached your daily AI message limit (1).");
         var deniedReplay = CreateController(services, userId, "next-key");
         await deniedReplay.ProcessChatStream("Next message", null, null, default,
             clientContext: "{\"locale\":\"en\"}");

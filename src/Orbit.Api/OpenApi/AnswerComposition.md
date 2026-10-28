@@ -44,10 +44,18 @@ from the typed result. Builder failure never becomes an empty success. Successfu
 survive narrative outage. Complete empty habit, goal and record lists retain their query-bound
 typed block with empty items, zero total and complete metadata. The consumer renders its compact
 localized empty state without a heading. They carry an existing screen action in `relatedSurfaces`
-when applicable. Habit queries use
+when applicable. With composition disabled, successful typed reads also survive an empty
+continuation or grounding removing the entire narrative. Supported clients receive the produced
+block; other clients receive its localized readable text. Recovery resets streamed text, preserves
+the read operation and consumes no additional model call or message allowance. Habit queries use
 `today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
 Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
+Habit metrics retain their period log counts and lifetime totals. The optional completion
+series is emitted only when its scheduled-completion total represents the period's log count.
+Backdated logs can predate known schedule history; those figures remain available without
+an incompatible chart. The server never invents a schedule or changes a lifetime total to
+make the chart agree.
 
 For composition clients, each read tool requires the boolean `orbit_read_complete` argument.
 It is true only when the current round fully answers the request and false for prerequisite
@@ -68,7 +76,11 @@ A prerequisite lookup keeps the tool loop even when empty,
 so the model can request creation details or prepare the remaining change.
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
-message-based rewriting. Habit clarification and streak selection live in the prompt and
+message-based rewriting. Ask instructions name the client's supported forms while the shared
+tool schemas remain stable across clients. A model-emitted
+single-choice question can use the existing choice surface when question blocks are unsupported;
+its supplied question, option labels and free-text permission remain intact and pass the choice
+validator and domain guard. No write is prepared before the answer. Habit clarification and streak selection live in the prompt and
 tool contract.
 
 The full registered tool set remains available regardless of message wording or language.
@@ -146,10 +158,14 @@ must preserve readable legacy answers. Stream reset and replacement text agree w
 response and recorded history. A pending preview keeps contextual follow-ups suppressed.
 
 Daily Astra allowance exhaustion retains HTTP 403 with `errorCode: PAY_GATE` and the same
-code on SSE errors. Its localized reason states the allowance limit; free accounts also
-receive the existing Pro upgrade sentence. Account language selects the initial copy,
+code on SSE errors. Its localized reason states the allowance limit without an upgrade offer.
+Account language selects the initial copy,
 and HTTP/SSE localization uses internal copy arguments to preserve the quota reason.
 Those arguments are excluded from the wire response. Other Pro gates retain their copy.
+
+Injection refusals include the brief offer of normal habit help required by the security rule.
+Other refusals and plan navigation stay within the requested scope. Composition preserves the
+model's concise answer rather than deleting a help sentence with a text pattern.
 
 ## Append-only follow-up context
 

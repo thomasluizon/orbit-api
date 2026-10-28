@@ -12,7 +12,10 @@ public partial class ProcessUserChatCommandHandler
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
         if (BulkNoChangesMessage(results, context.Language) is not { } message)
-            return await ComposeRegularReplyAsync(request, context, results, loop, response, grounding, ct);
+        {
+            var reply = await ComposeRegularReplyAsync(request, context, results, loop, response, grounding, ct);
+            return await RecoverEmptyReadReplyAsync(reply, request, context, results, ct);
+        }
         if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
         return (new ResponseCards(message,
             Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(message)] : null)

@@ -15,6 +15,30 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task HonestyReplay_UnsupportedSingleQuestionUsesSupportedChoice(int repeat)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        SetupAiResponse(HonestyReplay("unsupported-question-r" + repeat));
+
+        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
+        choice.Question.Should().Be("Which habit would you like to change, and what would you like to change?");
+        choice.AllowFreeText.Should().BeTrue();
+        choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+    }
+
     private static AiResponse HonestyReplay(string name)
     {
         using var capture = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,

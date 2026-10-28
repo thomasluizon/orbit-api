@@ -27,3 +27,10 @@ tool selection nor response composition depends on matching the person's message
 
 Stored option labels and habit titles stay verbatim. Locale rules apply to generated
 questions and status messages.
+
+`unsupported-question-r1`, `r2` and `r3` retain the subsequent rerun's three `ambiguity-en`
+tool plans against staging API `82fc57f2`. The model supplied both requested inputs inside
+an unsupported question form. Replays verify capability negotiation to the existing choice
+form, preserving the supplied question, options and free-text permission without continuation
+or a write. Re-derive them from `eval-g6rerun` attempt files by retaining `caseId`, `repeat`,
+`reason`, `answer` and `toolCalls`.

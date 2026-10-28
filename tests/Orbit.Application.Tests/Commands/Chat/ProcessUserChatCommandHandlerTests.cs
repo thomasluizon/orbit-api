@@ -2167,7 +2167,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_OverdueOffCadenceLog_BuildsThirtyDayHabitSeries()
+    public async Task Handle_OffCadenceLog_OmitsSeriesThatCannotRepresentItsCompletions()
     {
         SetupUserAndPayGate();
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
@@ -2196,8 +2196,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.MetricsCard!.TotalScheduled.Should().Be(1);
         result.Value.MetricsCard.PeriodMetrics!.PositiveLogRecords.Should().Be(1);
         result.Value.MetricsCard.PeriodMetrics.MetScheduledDates.Should().Be(0);
-        result.Value.MetricsCard.Series!.Points[^1].Should().Be(
-            new CompletionSeriesPoint(Today, Today, 0, 0, null));
+        result.Value.MetricsCard.Series.Should().BeNull();
     }
 
     [Fact]

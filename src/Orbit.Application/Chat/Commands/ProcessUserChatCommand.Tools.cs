@@ -138,6 +138,8 @@ public partial class ProcessUserChatCommandHandler
         ct.ThrowIfCancellationRequested();
         if (request.BlockAnswer is null && loop.ProviderError is { } error)
         {
+            if (error.Code == ErrorCodes.AiEmptyResponse && CanRecoverReadAnswer(request, results))
+                return Result.Success(await RecoverReadAnswerAsync(request, context, results, ct));
             if (await RecoverExplicitHeadingsAsync(request, context, Result.Failure<AiResponse>(error), results, ct) is { } headings)
                 return headings;
         }

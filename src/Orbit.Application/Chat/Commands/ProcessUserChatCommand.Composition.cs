@@ -384,8 +384,7 @@ public partial class ProcessUserChatCommandHandler
         };
 
     private static string ShortText(string? text, int maxLines, bool steps = false) => string.Join("\n",
-        Regex.Split(text ?? string.Empty, @"(?<=[.!?;])\s+(?=(?:I can help|I can also|Posso ajudar|Também posso)\b)",
-                RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))[0]
+        (text ?? string.Empty)
             .Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0)
             .Where(line => !line.StartsWith('#'))
             .Select(line => steps ? line : Regex.Replace(line, @"^(?:[-*•]|\d+[.)])\s*", string.Empty,
