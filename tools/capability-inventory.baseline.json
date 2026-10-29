@@ -5305,7 +5305,7 @@
             "items": {
               "type": "object"
             },
-            "required": true
+            "required": false
           },
           {
             "name": "checklist_items[].is_checked",
@@ -5321,6 +5321,11 @@
             "name": "habit_id",
             "type": "string",
             "required": true
+          },
+          {
+            "name": "item_to_add",
+            "type": "string",
+            "required": false
           }
         ]
       },
