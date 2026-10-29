@@ -5,12 +5,15 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private static ResponseCards? CombinedCreationPreviewAnswer(ToolExecutionAccumulator results, ProcessUserChatCommand request) =>
+    private static ResponseCards SuppressCreationReadCards(ResponseCards cards, ProcessUserChatCommand request,
+        ToolExecutionAccumulator results) => HasCombinedCreationPreview(results)
+            ? new ResponseCards(null, Parts: request.ClientContext?.SupportsParts == true ? [] : null)
+            { ServerComposedText = true } : cards;
+
+    private static bool HasCombinedCreationPreview(ToolExecutionAccumulator results) =>
         results.PendingOperations is [var pending]
         && results.PendingWriteCalls.TryGetValue(pending.Id, out var held) && held.ToolName == "bulk_create_habits"
-        && results.ActionResults.Count == 0 && results.AskBlock is null && SuppressPreviewNarrative(results)
-            ? new ResponseCards(null, Parts: request.ClientContext?.SupportsParts == true ? [] : null)
-            { ServerComposedText = true } : null;
+        && results.ActionResults.Count == 0 && results.AskBlock is null && SuppressPreviewNarrative(results);
 
     private static ToolCallOutcome AwaitCreationReads(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, true, null, null, null,
