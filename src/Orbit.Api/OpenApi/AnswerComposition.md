@@ -159,18 +159,30 @@ the existing preview routes still require approval. The captured tool-plan repla
 `G7SuggestionCompositionTests` cover both languages and capability fallbacks. #26 owns the
 live bilingual gate rerun, including suggestion quality, and #1751/#1620 own rendering.
 
-Temporary preparation commitments preserve the requested action and negation in their titles.
+Ongoing avoid habits default to `frequency_unit: Day`, `frequency_quantity: 1` and
+`is_general: false` unless the person requested another cadence. Creation schemas expose
+that default for both root and nested items. The proposal validator rejects the incompatible
+General and avoid combination before preparing a preview, matching the existing domain guard.
+The typed failure asks the model to correct its arguments while retaining the rest of the request.
+
+Temporary preparation commitments preserve the person's action wording and negation in their titles.
+Medical instructions normalize only spelling and casing without expanding or substituting the verb.
 An exact record title stays verbatim. For an activity described in prose, the model normalizes
 spelling, casing and proper names while keeping its action and negation. Supplied event dates,
 including past dates, anchor the preparation offsets and do not require another question.
 Preparation continuing until an event uses daily recurrence with `due_date` at its start and
-inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. An activity
-ending at a collection uses `due_end_time` for that deadline. These are model instructions;
+inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. Each preparation
+uses its own offset from its referenced event, independently of the other preparation items.
+An activity ending at a collection uses its collection date and `due_end_time` for that deadline.
+These are model instructions;
 composition and execution preserve the structured arguments rather than rewriting message text.
 
 Write completion covers every requested action, target and occurrence. A target lookup is a
 prerequisite, not a mutation. A rename plus a skip uses both write tools; skipping several
-habits uses `bulk_skip_habits`. The server combines the model's held writes into one preview
+habits uses `bulk_skip_habits`. A lookup showing an already skipped occurrence does not replace
+the requested skip call: the matching write tool validates the current state. The completion
+argument, query description and skip description carry this instruction to the model.
+The server combines the model's held writes into one preview
 and preserves their action labels. It never infers missing writes from the person's wording
 or changes a log call into a skip call.
 
