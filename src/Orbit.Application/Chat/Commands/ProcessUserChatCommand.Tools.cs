@@ -227,7 +227,7 @@ public partial class ProcessUserChatCommandHandler
 
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
-                "The ask call ended this turn. Ask in plain text and make no further tool calls."));
+                "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
         RetireConsumedReads(aiResponse.ConversationContext, executionResults, toolResults);
         cancellationToken.ThrowIfCancellationRequested();
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
@@ -243,7 +243,7 @@ public partial class ProcessUserChatCommandHandler
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
-        return new ToolRoundResult(AskContinuation(continueResult.Value, aiResponse, deferAsk, executionResults),
+        return new ToolRoundResult(continueResult.Value,
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
     }
@@ -471,7 +471,7 @@ public partial class ProcessUserChatCommandHandler
                 if (selection.RequiresAnswer)
                     executionResults.PendingSelection ??= selection;
                 if (selection.RequiresAnswer || selection.Reference is not null)
-                    executionResults.AmbiguousReadCandidates.Add(selection);
+                    executionResults.SelectionCandidates.Add(selection);
             }
         }
 

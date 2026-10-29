@@ -38,6 +38,24 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Ask_WireSchemaExplainsNullableFields()
+    {
+        var tool = AllTools().Single(tool => tool is AskTool);
+        var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var sdkTool = (ResponseTool)method.Invoke(null, [new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() }])!;
+        using var wire = JsonDocument.Parse(ModelReaderWriter.Write(sdkTool).ToString());
+        output.WriteLine(wire.RootElement.GetRawText());
+        var schema = wire.RootElement.GetProperty("parameters");
+        AssertStrict(schema);
+        foreach (var field in schema.GetProperty("properties").EnumerateObject().Where(field => field.Name != "form"))
+        {
+            field.Value.GetProperty("type").EnumerateArray().Select(type => type.GetString()).Should().Contain("null");
+            field.Value.TryGetProperty("description", out var description).Should().BeTrue(field.Name);
+            description.GetString()!.ToLowerInvariant().Should().Contain("null", field.Name);
+        }
+    }
+
+    [Fact]
     public void StartingStep_WireSchemaRequiresAnAction()
     {
         var tool = new SuggestBreakdownTool();

@@ -38,7 +38,7 @@ public partial class ProcessUserChatCommandHandler
         var ids = EffectiveWriteTargetIds(call, results).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (results.PendingSelection is { } pending && pending.Candidates.Any(candidate => ids.Contains(candidate.Id)))
             return pending;
-        return results.AmbiguousReadCandidates.FirstOrDefault(selection =>
+        return results.SelectionCandidates.FirstOrDefault(selection =>
             selection.Candidates.Any(candidate => ids.Contains(candidate.Id)));
     }
 

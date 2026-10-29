@@ -1,7 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Commands;
-using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -47,7 +46,7 @@ public partial class ProcessUserChatCommandHandlerTests
         const string question = "Which habit would you like to change, and what would you like to change?";
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(invalid with { TextMessage = question }));
+            .Returns(Result.Success(invalid), Result.Success(new AiResponse { TextMessage = question }));
 
         var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
@@ -62,29 +61,4 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task AskCorrectionReplay_ClarificationRetryCannotDispatchAWrite()
-    {
-        SetupUserAndPayGate();
-        EnableComposition();
-        SetupAiResponse(GateSevenReplay("composition-choice-en-r1"));
-        var write = ReadTool("log_habit", new ToolResult(true));
-        write.IsReadOnly.Returns(false);
-        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AiResponse
-            {
-                TextMessage = "Which habit would you like to change?",
-                ToolCalls = [GateSevenReplay("ambiguity-pt-r3").ToolCalls![1]],
-                ConversationContext = TestConversationContext
-            }));
-
-        var result = await CreateHandler(RealAskTool(), write).Handle(new(UserId, "Change my habit.",
-            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
-
-        result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.PendingOperations.Should().BeNullOrEmpty();
-        result.Value.Actions.Should().BeEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
-    }
 }
