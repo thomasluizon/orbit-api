@@ -10,7 +10,7 @@ using Orbit.Domain.ValueObjects;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class BulkCreateHabitsTool(
-    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool, IHabitCreationCapacityTool
 {
     private const string TitleProperty = "title";
 
@@ -52,6 +52,14 @@ public class BulkCreateHabitsTool(
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ExecuteCoreAsync(args, userId, ct, checkOnly: false);
+
+    public Task<Orbit.Domain.Common.Result> CheckCreationCapacityAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        return args.TryGetProperty(ToolArgumentNames.Habits, out var habits) && habits.ValueKind == JsonValueKind.Array
+            ? HabitCreationCapacity.CheckAsync(mediator, userId, habits.EnumerateArray(), args.TryGetProperty(ParentHabitId, out _), ct)
+            : Task.FromResult(Orbit.Domain.Common.Result.Success());
+    }
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

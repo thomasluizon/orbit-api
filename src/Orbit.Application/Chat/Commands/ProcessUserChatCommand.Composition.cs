@@ -338,8 +338,8 @@ public partial class ProcessUserChatCommandHandler
     private static string? CompositionStatus(ToolExecutionAccumulator results, bool hasOutcome,
         bool missingProjection, bool truncated, string? language)
     {
-        var failed = results.OperationResults.Any(operation => operation.Status is AgentOperationStatus.Failed
-            or AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy);
+        var failed = results.OperationResults.Any(operation => operation.ErrorCode != ErrorCodes.HabitLimitReached
+            && operation.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy);
         string? status = null;
         if (HasResolutionQuestion(results) && results.AskBlock is null)
             status = AddResolutionQuestion(null, results, language);

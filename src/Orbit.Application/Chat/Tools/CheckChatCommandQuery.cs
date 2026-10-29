@@ -59,6 +59,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
 
     private async Task<Result?> CheckHabitAsync(object command, CancellationToken ct) => command switch
     {
+        HabitCreationCapacityRequest capacity => await CheckHabitCreationCapacityAsync(capacity, ct),
         CreateSubHabitCommand create => await CheckSubHabitAsync(create, ct),
         AppendChecklistItemCommand append => await AppendChecklistItemCommandHandler.CheckAsync(append, Repository<Habit>(), ct),
         UpdateChecklistCommand update => await ExistsAsync<Habit>(h => h.Id == update.HabitId && h.UserId == update.UserId, ct),
@@ -80,6 +81,16 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         BulkDeleteHabitsCommand delete => await CheckHabitIdsAsync(delete.UserId, delete.HabitIds, ct),
         _ => null
     };
+
+    private async Task<Result> CheckHabitCreationCapacityAsync(HabitCreationCapacityRequest request, CancellationToken ct)
+    {
+        var result = await services.GetRequiredService<IPayGateService>().CanCreateHabits(request.UserId, request.RootCount, ct);
+        if (result.ErrorCode != ErrorCodes.HabitLimitReached)
+            return result;
+        var user = await Repository<User>().GetByIdAsync(request.UserId, ct);
+        return ErrorCopy.TryResolve(result.ErrorCode, LocaleHelper.IsPortuguese(user?.Language), result.ErrorArgs, out var message)
+            ? Result.Failure(message, result.ErrorCode, result.ErrorArgs) : result;
+    }
 
     private async Task<Result> CheckHabitIdsAsync(Guid userId, IReadOnlyList<Guid> ids, CancellationToken ct)
     {

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Application.ChecklistTemplates.Queries;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Enums;
@@ -18,7 +19,8 @@ public partial class ProcessUserChatCommandHandler
     /// </summary>
     private static ActionResult? BuildActionResult(AiToolCall call, IAiTool tool, ToolResult result)
     {
-        if (tool.IsReadOnly || result is { Success: true, Payload: BulkNoChangesOutcome })
+        if (tool.IsReadOnly || result.ErrorCode == ErrorCodes.HabitLimitReached
+            || result is { Success: true, Payload: BulkNoChangesOutcome })
             return null;
 
         if (!result.Success)
@@ -102,7 +104,7 @@ public partial class ProcessUserChatCommandHandler
             operationResult.TargetId,
             operationResult.TargetName,
             BuildToolError(operationResult),
-            operationResult.Payload);
+            operationResult.Payload, operationResult.ErrorCode);
     }
 
     /// <summary>

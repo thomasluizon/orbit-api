@@ -243,6 +243,9 @@ public sealed partial class PendingOperationRevisionService(
         var tool = toolRegistry.GetTool(operationId);
         if (tool is null)
             return false;
+        if (tool is IHabitCreationCapacityTool creation
+            && (await creation.CheckCreationCapacityAsync(revised, userId, cancellationToken)).IsFailure)
+            return false;
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
         if (operationId == BulkCreateHabits)
         {

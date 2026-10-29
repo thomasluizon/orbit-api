@@ -19,7 +19,7 @@ public static class HabitToolCommandMediator
 {
     public static IMediator Create(IGenericRepository<Habit> habits, IGenericRepository<Tag> tags,
         IGenericRepository<Goal> goals, IUserDateService dates, IPayGateService quota, IUnitOfWork work,
-        bool configureTransactions = true)
+        bool configureTransactions = true, IGenericRepository<User>? users = null)
     {
         if (configureTransactions)
         {
@@ -44,6 +44,7 @@ public static class HabitToolCommandMediator
         services.AddSingleton(Substitute.For<IGamificationService>());
         services.AddSingleton(Substitute.For<IGoalCompletionService>());
         services.AddSingleton(Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>());
+        services.AddSingleton(users ?? Substitute.For<IGenericRepository<User>>());
         services.AddTransient<CreateHabitRepositories>();
         services.AddTransient<BulkCreateHabitsRepositories>();
         return services.BuildServiceProvider().GetRequiredService<IMediator>();

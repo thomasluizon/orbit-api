@@ -352,8 +352,11 @@ public sealed class PendingOperationRevisionServiceTests
         var config = Substitute.For<IAppConfigService>();
         config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<int>(1));
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         using var services = new ServiceCollection()
             .AddSingleton(config)
+            .AddSingleton(payGate)
             .AddSingleton<IValidator<BulkCreateHabitsCommand>>(new BulkCreateHabitsCommandValidator())
             .AddSingleton(_dateService).BuildServiceProvider();
         var mediator = Substitute.For<IMediator>();

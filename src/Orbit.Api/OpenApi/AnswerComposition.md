@@ -563,6 +563,26 @@ prompt convention. Their pt-BR versions below are for copy review.
 
 ## Capability fallback and feature-help copy review
 
+Root habit creation is checked against the configured account capacity before
+`create_habit` or `bulk_create_habits` can hold an approval preview. The check
+counts new roots across the full call, including explicit new-parent placements.
+Existing activities and children do not consume new root slots. Save commands
+retain their locked capacity checks to handle changes after preview preparation.
+
+`HABIT_LIMIT_REACHED` returns the existing localized error and its formatting
+arguments as a typed failure. The model explains it through ordinary continuation;
+the failure cannot offer approval or become a generic retry message. Grounding
+accepts the returned capacity as a refusal fact without treating it as a saved
+habit. No message keywords route this behavior.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| Existing `HABIT_LIMIT_REACHED` copy, reused | You've reached the {0} habit limit. | Você chegou ao limite de {0} hábitos. |
+| `TerminalWriteDirective` addition | If a write returns HABIT_LIMIT_REACHED, explain the returned limit in the person's language. It applies to every plan; do not propose upgrading, deleting data or bypassing it. | Se uma alteração retornar HABIT_LIMIT_REACHED, explique o limite retornado no idioma da pessoa. Ele vale para todos os planos; não proponha mudar de plano, excluir dados ou contornar o limite. |
+
+The instruction is English at runtime; its Portuguese version is for copy review.
+The error copy is unchanged in both languages. No fixed answer text is added.
+
 The following server copy is retained verbatim and moved into the localization catalog.
 The model instruction is shared by the tool description and its result. Its Portuguese
 translation is for copy review; the model receives the English instruction in both locales.

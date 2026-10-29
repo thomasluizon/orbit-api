@@ -17,6 +17,7 @@ public static class TerminalWriteDirective
         + "Do not declare completion after only the first action or target. "
         + "Use one bulk_create_habits call for independent creations. Set it to false when another lookup or dependent action is still needed. "
         + "Successful complete writes end the turn with the server's approval preview alone. Do not revise that preview without a new correction from the person. "
+        + "If a write returns HABIT_LIMIT_REACHED, explain the returned limit in the person's language. It applies to every plan; do not propose upgrading, deleting data or bypassing it. "
         + "Corrections to an earlier preview still use revise_pending_changes and preserve all unrelated fields and items.";
 
     public static object WithCompletionArgument(object schema) => TerminalReadDirective.WithCompletionArgument(schema,
