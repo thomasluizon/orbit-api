@@ -30,10 +30,10 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
             return Result.Failure<HabitSuggestionsCard>(ErrorCopy.Resolve("HABIT_SUGGESTION_INVALID", LocaleHelper.IsPortuguese(language)),
                 "HABIT_SUGGESTION_INVALID");
         var today = await dates.GetUserTodayAsync(userId, ct);
-        var active = await habits.FindAsync(habit => habit.UserId == userId && !habit.IsCompleted, ct);
+        var accountHabits = await habits.FindAsync(habit => habit.UserId == userId && (excludedActivities != null || !habit.IsCompleted), ct);
         var activeGoals = await goals.FindAsync(goal => goal.UserId == userId && goal.Status == GoalStatus.Active, ct);
         var weekStart = await dates.GetUserWeekStartDayAsync(userId, ct);
-        var request = new HabitSuggestionRequest(userId, instruction, language, count, today, active, activeGoals, original,
+        var request = new HabitSuggestionRequest(userId, instruction, language, count, today, accountHabits, activeGoals, original,
             WeekStartDay: weekStart, ExcludedActivities: excludedActivities);
         for (var attempt = 0; attempt < 2; attempt++)
         {
@@ -152,7 +152,7 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
 
     private static bool HasScheduleConflict(Habit entity, HabitSuggestionDraft draft, IEnumerable<Habit> habits, int weekStart)
     {
-        var timed = habits.Where(habit => habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();
+        var timed = habits.Where(habit => !habit.IsCompleted && habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();
         return HabitScheduleService.GetScheduledDates(entity, draft.DueDate, draft.DueDate.AddDays(366), weekStart)
             .Any(day => timed.Any(habit => HabitScheduleService.IsHabitDueOnDate(habit, day, weekStart)
                 && draft.DueTime.ToTimeSpan() < (habit.DueEndTime?.ToTimeSpan() ?? habit.DueTime.GetValueOrDefault().ToTimeSpan().Add(TimeSpan.FromMinutes(1)))

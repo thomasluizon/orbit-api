@@ -97,6 +97,7 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         {
             habit.Id,
             habit.Title,
+            habit.IsCompleted,
             habit.Description,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,

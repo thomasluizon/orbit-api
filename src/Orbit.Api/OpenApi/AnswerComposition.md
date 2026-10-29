@@ -510,6 +510,7 @@ For additional ideas, the model supplies optional `suggest_habits.excluded_activ
 with the titles already planned for the combined preview. The server passes this
 structured list to the generator without parsing the person's message. A supplied
 list, including `[]`, requires new activities outside both the list and the account.
+This exclusion includes completed account activities, which do not reserve schedule time.
 Omission or null preserves ordinary suggestions and adjustment drafts. The list
 accepts at most 100 titles, each with letters or digits and at most 200 characters;
 FluentValidation and the domain request guard enforce the same bounds. The server
