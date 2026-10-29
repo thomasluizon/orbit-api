@@ -67,7 +67,15 @@ public class RestoreHabitCommandHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(habits.ToList());
+            .Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList());
+        _habitRepo.FindOneTrackedIgnoringFiltersAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.FirstOrDefault(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()));
+        _habitRepo.FindIgnoringFiltersAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToList());
     }
 
     [Fact]
@@ -101,6 +109,47 @@ public class RestoreHabitCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         parent.IsDeleted.Should().BeFalse();
         child.IsDeleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_RestoresMatchingDescendantBelowSeparatelyDeletedNode()
+    {
+        var parent = CreateHabit();
+        var child = CreateHabit(parent.Id);
+        var descendant = CreateHabit(child.Id);
+        var deletedAt = new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc);
+        parent.SoftDelete(deletedAt);
+        child.SoftDelete(deletedAt.AddDays(-1));
+        descendant.SoftDelete(deletedAt);
+        SetupUserHabits(parent, child, descendant);
+
+        var result = await _handler.Handle(new RestoreHabitCommand(UserId, parent.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        parent.IsDeleted.Should().BeFalse();
+        child.IsDeleted.Should().BeTrue();
+        descendant.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_PartiallyRestoredSubtree_DoesNotTraverseLiveNode()
+    {
+        var parent = CreateHabit();
+        var child = CreateHabit(parent.Id);
+        var descendant = CreateHabit(child.Id);
+        var deletedAt = new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc);
+        parent.SoftDelete(deletedAt);
+        child.SoftDelete(deletedAt);
+        descendant.SoftDelete(deletedAt);
+        child.Restore();
+        SetupUserHabits(parent, child, descendant);
+
+        var result = await _handler.Handle(new RestoreHabitCommand(UserId, parent.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        parent.IsDeleted.Should().BeFalse();
+        child.IsDeleted.Should().BeFalse();
+        descendant.IsDeleted.Should().BeTrue();
     }
 
     [Fact]

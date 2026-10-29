@@ -161,7 +161,7 @@ public class GetRecapQueryHandler(
         if (!codeResult.IsSuccess)
             return codeResult.PropagateError<RecapResponse>();
 
-        var habits = await LoadHabitsAsync(request, isClosedPeriod, cancellationToken);
+        var habits = await LoadHabitsAsync(request, userTimeZone, isClosedPeriod, cancellationToken);
 
         var streakState = await userStreakService.RecalculateAsync(
             request.UserId, awardFreezeIfEligible: false, cancellationToken);
@@ -210,6 +210,7 @@ public class GetRecapQueryHandler(
 
     private async Task<IReadOnlyList<Habit>> LoadHabitsAsync(
         GetRecapQuery request,
+        TimeZoneInfo userTimeZone,
         bool isClosedPeriod,
         CancellationToken cancellationToken)
     {
@@ -217,9 +218,14 @@ public class GetRecapQueryHandler(
             q => q.Include(h => h.Logs.Where(l => !l.IsDeleted
                 && l.Date >= request.DateFrom
                 && l.Date <= request.DateTo));
+        var periodStartUtc = ToUtcStart(request.DateFrom, userTimeZone);
         return isClosedPeriod
             ? await habitRepository.FindIgnoringFiltersAsync(
-                h => h.UserId == request.UserId,
+                h => h.UserId == request.UserId
+                    && (!h.IsDeleted || !h.DeletedAtUtc.HasValue || h.DeletedAtUtc >= periodStartUtc
+                        || h.Logs.Any(l => !l.IsDeleted
+                            && l.Date >= request.DateFrom
+                            && l.Date <= request.DateTo)),
                 includePeriodLogs,
                 cancellationToken)
             : await habitRepository.FindAsync(
