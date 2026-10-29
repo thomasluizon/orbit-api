@@ -5,7 +5,10 @@ requirements as well as field bounds. The strict provider schema retains these
 descriptions; optional null placeholders are removed before deserialization.
 Domain guards remain the source of the constraints and now identify the failing
 field. FluentValidation returns that reason through the tool result. The chat
-loop sends it back to the model, permits one corrected ask, then asks for prose.
+loop sends it back to the model and continues the original request within its turn
+limits. A necessary ask can be corrected once; otherwise the model uses normal
+tools or prose. Only a valid, accepted ask ends the reply. See the
+[failed-ask recovery contract and current bilingual schema copy](AnswerComposition.md).
 
 A question form's top-level `allowFreeText` is ignored; each question's setting
 controls its answer. The optional heading comes from `title`, then `question`.
@@ -64,7 +67,7 @@ questions remain unchanged.
 
 | en | pt-BR |
 | --- | --- |
-| Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Ends the reply. Never request approval or repeat a preview question. | Peça os dados que faltam com uma escolha, uma lista de seleção para uma prévia em lote ou um formulário com vários campos. Consulte os dados da conta primeiro. Encerra a resposta. Nunca peça aprovação nem repita uma pergunta já feita pela prévia. |
+| Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. | Peça os dados que faltam com uma escolha, uma lista de seleção para uma prévia em lote ou um formulário com vários campos. Consulte os dados da conta primeiro. Só uma chamada válida e aceita de ask encerra a resposta. Nunca peça aprovação nem repita uma pergunta já feita pela prévia. |
 | A request to choose habits requires ask, even with one candidate. Use pickList for selecting habits to log or skip, with action and items; it prepares no write. | Um pedido para escolher hábitos exige ask, mesmo com apenas uma opção. Use pickList para selecionar hábitos que serão registrados ou pulados, com action e items; isso não prepara nenhuma alteração. |
 | For a single choice among existing records, use form choice with top-level question and options, even when form question is supported. Reserve form question for multiple fields. If the change is also missing, ask for both target and change in the choice question with allowFreeText=true. Use only a form the client supports. | Para uma única escolha entre registros existentes, use form choice com question e options no nível superior, mesmo quando form question estiver disponível. Reserve form question para vários campos. Se a alteração também não estiver definida, pergunte qual registro e o que mudar na pergunta de choice, com allowFreeText=true. Use apenas um formato aceito pelo cliente. |
 

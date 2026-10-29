@@ -227,7 +227,7 @@ public partial class ProcessUserChatCommandHandler
 
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
-                "The ask call ended this turn. Ask in plain text and make no further tool calls."));
+                "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
         RetireConsumedReads(aiResponse.ConversationContext, executionResults, toolResults);
         cancellationToken.ThrowIfCancellationRequested();
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,

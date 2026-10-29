@@ -80,6 +80,52 @@ plain-text fallback instructions remain available.
 | The ask retry limit has been reached. | O limite de tentativas de ask foi atingido. |
 | A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request. | A chamada de ask que falhou não emitiu uma pergunta. Continue o pedido original com as ferramentas adequadas quando as informações estiverem claras; um pedido que já pode ser atendido não precisa de ask. |
 
+Strict tool conversion requires every property on the wire and represents optional
+values as nullable. Null means absent, with false as the existing default for optional
+booleans; it does not satisfy a form's required input. The source schema and validator
+still own field requirements. A question form needs its nonempty `questions` array.
+Neither a title nor null placeholders supply a question. Clear requests, including
+dated batches and habit-and-goal reads, use their normal tools without ask.
+
+The following changed model instructions and schema descriptions are recorded for
+copy review in both languages. The model receives the English tool instructions;
+the Portuguese column records their meaning for review. No person-visible fallback
+copy or public DTO changes in this round.
+
+| Location | en | pt-BR |
+| --- | --- | --- |
+| Ask context | A valid, accepted ask ends the reply: put it last and make no further tool calls after acceptance. A failed ask returns validation feedback; continue the original request using that feedback. | Uma chamada válida e aceita de ask encerra a resposta: coloque-a por último e não faça outras chamadas após a aceitação. Se ask falhar, use o retorno da validação para continuar o pedido original. |
+| Withheld call feedback | This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved. | Esta chamada foi retida enquanto ask estava pendente. Continue o pedido original usando o resultado de ask; prepare apenas alterações com as informações necessárias já definidas. |
+| Tool description prefix | Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. | Peça as informações que faltam com uma escolha, uma lista de seleção para a prévia de um lote ou um formulário com várias perguntas. Leia primeiro os dados da conta. Só uma chamada válida e aceita de ask encerra a resposta. Nunca peça aprovação nem repita uma pergunta da prévia. |
+| Tool description addition | Do not call ask for a clear request you can act on, including a batch of dated items or a request to show habits and goals. Null fields are absent; form question requires nonempty questions. | Não chame ask quando o pedido estiver claro e já puder ser atendido, incluindo um lote de itens com datas ou um pedido para mostrar hábitos e metas. Campos null estão ausentes; form question exige questions preenchido. |
+| question | Required nonempty question for choice, at most 120 characters. Use null for other forms. | Pergunta obrigatória e preenchida para choice, com até 120 caracteres. Use null nos outros formatos. |
+| title | Required nonempty heading for pickList; optional heading of at most 120 characters for question. Null means absent. | Título obrigatório e preenchido para pickList; título opcional de até 120 caracteres para question. Null indica ausência. |
+| multiSelect | For choice only; null means false. pickList always selects multiple items; question requires false or null. | Apenas para choice; null equivale a false. pickList sempre permite vários itens; question exige false ou null. |
+| allowFreeText | For choice only; null means false. Must be false for pickList. In form question, each questions entry controls its own allowFreeText; this top-level value is ignored. | Apenas para choice; null equivale a false. Deve ser false em pickList. Em form question, cada entrada de questions controla seu próprio allowFreeText; o valor do nível superior é ignorado. |
+| intro | Optional nonempty introduction of at most 500 characters for question only. Use null for choice and pickList. | Introdução opcional e preenchida, com até 500 caracteres, apenas para question. Use null em choice e pickList. |
+| progress | For question only. Requires 0 <= current <= total and total >= 1. Null means absent. | Apenas para question. Exige 0 <= current <= total e total >= 1. Null indica ausência. |
+| questions | Required for question only. Use unique nonempty question ids. singleChoice and multipleChoice require 2 to 10 options even with allowFreeText=true. scale requires lowLabel and highLabel. slider requires min, max, step and unit. yesNo has no options. Null means absent and is allowed only for other forms. Use null for fields belonging to another question type. | Obrigatório apenas para question. Use identificadores únicos e preenchidos. singleChoice e multipleChoice exigem de 2 a 10 opções, mesmo com allowFreeText=true. scale exige lowLabel e highLabel. slider exige min, max, step e unit. yesNo não tem opções. Null indica ausência e só é aceito nos outros formatos. Use null nos campos de outro tipo de pergunta. |
+| questions[].options | Required for singleChoice and multipleChoice. Null means absent for scale, slider and yesNo. Option ids must be unique within the question. | Obrigatório para singleChoice e multipleChoice. Null indica ausência em scale, slider e yesNo. Os identificadores das opções devem ser únicos em cada pergunta. |
+| questions[].options[].recommended | At most one recommended option, only for singleChoice. Null means false. | No máximo uma opção recomendada, apenas em singleChoice. Null equivale a false. |
+| questions[].allowFreeText | Allow a custom answer for singleChoice, multipleChoice, or yesNo. Null means false; must be false or null for scale and slider. | Permita uma resposta livre em singleChoice, multipleChoice ou yesNo. Null equivale a false; em scale e slider, deve ser false ou null. |
+| questions[].lowLabel | Required nonempty label for 1 on a scale, at most 120 characters. Use null for other types. | Rótulo obrigatório e preenchido para o valor 1 da escala, com até 120 caracteres. Use null nos outros tipos. |
+| questions[].highLabel | Required nonempty label for 5 on a scale, at most 120 characters. Use null for other types. | Rótulo obrigatório e preenchido para o valor 5 da escala, com até 120 caracteres. Use null nos outros tipos. |
+| questions[].min | Required slider lower bound. Use null for other types. | Limite inferior obrigatório para slider. Use null nos outros tipos. |
+| questions[].max | Required slider upper bound, greater than min. Use null for other types. | Limite superior obrigatório para slider, maior que min. Use null nos outros tipos. |
+| questions[].step | Required positive slider step dividing max minus min exactly. Use null for other types. | Passo positivo obrigatório para slider, que divida exatamente a diferença entre max e min. Use null nos outros tipos. |
+| questions[].unit | Required nonempty slider unit in the person's language, at most 24 characters. Use null for other types. | Unidade obrigatória e preenchida para slider, no idioma da pessoa, com até 24 caracteres. Use null nos outros tipos. |
+| options | Required for choice. Null means absent for other forms. | Obrigatório para choice. Null indica ausência nos outros formatos. |
+| options[].description; items[].detail | Supporting text, at most 24 characters. Null means absent. | Texto de apoio com até 24 caracteres. Null indica ausência. |
+| action | Required bulk action for pickList. Null means absent for other forms. | Ação em lote obrigatória para pickList. Null indica ausência nos outros formatos. |
+| items | Required for pickList. Null means absent for other forms. | Obrigatório para pickList. Null indica ausência nos outros formatos. |
+
+The retained recovery suffixes are also model-facing:
+
+| en | pt-BR |
+| --- | --- |
+| Retry ask once with valid arguments and a supported form: {forms}. choice requires question and options; pickList requires title, action and items; question requires questions. | Tente ask mais uma vez com argumentos válidos e um formato aceito: {forms}. choice exige question e options; pickList exige title, action e items; question exige questions. |
+| Ask in plain text instead. | Faça a pergunta em texto simples. |
+
 Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
