@@ -1,0 +1,26 @@
+{
+  "caseId": "composition-coaching-advice-en",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "en",
+        "title": "Walking",
+        "suggested_sub_habits": [
+          {
+            "title": "Put on your walking shoes",
+            "description": null,
+            "frequency_unit": null,
+            "frequency_quantity": null,
+            "days": null
+          }
+        ],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ],
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"oneSmallStep\",\"block\":{\"step\":\"Put on your walking shoes\",\"actions\":[\"Smaller\",\"Save as task\",\"Save as checklist item\"]}}]}"
+}

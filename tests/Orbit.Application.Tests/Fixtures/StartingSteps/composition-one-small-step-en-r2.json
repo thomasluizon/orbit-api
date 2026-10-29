@@ -1,0 +1,18 @@
+{
+  "caseId": "composition-one-small-step-en",
+  "repeat": 2,
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "en",
+        "title": "Studying",
+        "suggested_sub_habits": [],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Failed"
+    }
+  ],
+  "answer": "{\"notice\":\"This answer could not be displayed. Please ask again.\",\"parts\":[]}"
+}

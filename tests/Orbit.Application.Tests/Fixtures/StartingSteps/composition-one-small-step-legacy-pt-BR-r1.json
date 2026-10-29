@@ -1,0 +1,26 @@
+{
+  "caseId": "composition-one-small-step-legacy-pt-BR",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "pt-BR",
+        "title": "Estudar",
+        "suggested_sub_habits": [
+          {
+            "title": "Abrir o material de estudo e ler uma linha",
+            "description": null,
+            "frequency_unit": null,
+            "frequency_quantity": null,
+            "days": null
+          }
+        ],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ],
+  "answer": "Abrir o material de estudo e ler uma linha"
+}
