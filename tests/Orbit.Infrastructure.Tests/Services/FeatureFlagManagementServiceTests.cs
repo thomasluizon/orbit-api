@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,7 @@ public class FeatureFlagManagementServiceTests : IDisposable
         _admin.GrantAdmin();
         _context.Users.AddRange(_admin, _account, _other);
         _context.SaveChanges();
-        _resolver = new FeatureFlagService(_context, _cache, Substitute.For<IHostEnvironment>());
+        _resolver = new FeatureFlagService(_context, _cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
         _service = new FeatureFlagManagementService(_context, _resolver, _logger);
     }
 

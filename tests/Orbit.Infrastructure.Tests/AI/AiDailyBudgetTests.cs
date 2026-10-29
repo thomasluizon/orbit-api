@@ -10,6 +10,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -110,22 +111,30 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData("Staging", true, "calls")]
-    [InlineData("Staging", true, "spend")]
-    [InlineData("Staging", true, "legacy")]
-    [InlineData("Staging", true, "reservation")]
-    [InlineData("Staging", false, "calls")]
-    [InlineData("Staging", false, "spend")]
-    [InlineData("Staging", false, "legacy")]
-    [InlineData("Staging", false, "reservation")]
-    [InlineData("Production", true, "calls")]
-    [InlineData("Production", true, "spend")]
-    [InlineData("Production", true, "legacy")]
-    [InlineData("Production", true, "reservation")]
-    public async Task EvalUnmetered_SpentBudgetsRequireStagingAndTargetedFlag_UsageStillGrows(
-        string environmentName, bool flagged, string guard)
+    [InlineData("Staging", true, "calls", false)]
+    [InlineData("Staging", true, "spend", false)]
+    [InlineData("Staging", true, "legacy", false)]
+    [InlineData("Staging", true, "reservation", false)]
+    [InlineData("Staging", false, "calls", false)]
+    [InlineData("Staging", false, "spend", false)]
+    [InlineData("Staging", false, "legacy", false)]
+    [InlineData("Staging", false, "reservation", false)]
+    [InlineData("Production", true, "calls", false)]
+    [InlineData("Production", true, "spend", false)]
+    [InlineData("Production", true, "legacy", false)]
+    [InlineData("Production", true, "reservation", false)]
+    [InlineData("Production", true, "calls", true)]
+    [InlineData("Production", true, "spend", true)]
+    [InlineData("Production", true, "legacy", true)]
+    [InlineData("Production", true, "reservation", true)]
+    [InlineData("Production", false, "calls", true)]
+    [InlineData("Production", false, "spend", true)]
+    [InlineData("Production", false, "legacy", true)]
+    [InlineData("Production", false, "reservation", true)]
+    public async Task EvalUnmetered_SpentBudgetsRequireAnEligibleEnvironmentAndTargetedFlag_UsageStillGrows(
+        string environmentName, bool flagged, string guard, bool listed)
     {
-        using var fixture = new BudgetFixture(pro: true, evalExempt: flagged, environmentName: environmentName);
+        using var fixture = new BudgetFixture(pro: true, evalExempt: flagged, environmentName: environmentName, listed: listed);
         if (guard == "calls")
             fixture.Config.GetAsync(AppConfigKeys.ProAiCallsPerWeek, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
         if (guard == "reservation")
@@ -142,7 +151,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             await fixture.Database.Context.SaveChangesAsync();
         }
 
-        if (environmentName != "Staging" || !flagged)
+        if (!flagged || (environmentName != "Staging" && !(environmentName == "Production" && listed)))
         {
             var blocked = () => fixture.Client.CompleteTextAsync("system", "write");
             await blocked.Should().ThrowAsync<AiBudgetExceededException>();
@@ -580,7 +589,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _estimateCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
         internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185,
-            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging")
+            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging", bool listed = false)
         {
             User = User.Create("Writer", "writer@example.com").Value;
             User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
@@ -598,6 +607,8 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
                 .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
                 .AddSingleton<IHostEnvironment>(Host.CreateApplicationBuilder(
                     new HostApplicationBuilderSettings { EnvironmentName = environmentName }).Environment)
+                .AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(
+                    new Dictionary<string, string?> { [EvalAccountAccess.AccountIdsKey] = listed ? User.Id.ToString() : null }).Build())
                 .AddMemoryCache().AddScoped<IFeatureFlagService, FeatureFlagService>()
                 .AddSingleton(Config).AddSingleton(dates).BuildServiceProvider();
             var options = Options.Create(new AiSettings

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 using FluentAssertions;
@@ -210,7 +211,7 @@ public sealed partial class AstraApprovalPathTests : IDisposable
         bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
-        var policy = new AgentPolicyEvaluator(_db, catalog, store, bridge, settings, new FeatureFlagService(_db, _cache, Substitute.For<IHostEnvironment>()));
+        var policy = new AgentPolicyEvaluator(_db, catalog, store, bridge, settings, new FeatureFlagService(_db, _cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         var previewer = new PendingOperationChangePreviewer(new GenericRepository<Habit>(_db),
             new GenericRepository<Goal>(_db), new GenericRepository<Tag>(_db), _dates, registry);
         var unit = Substitute.For<IUnitOfWork>();

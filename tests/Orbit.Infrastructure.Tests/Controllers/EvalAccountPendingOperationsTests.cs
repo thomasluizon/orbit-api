@@ -24,12 +24,12 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public class StagingEvalPendingOperationsTests
+public class EvalAccountPendingOperationsTests
 {
     [Fact]
     public void FixtureRoutes_ProvideCleanupAndIndependentReadback()
     {
-        var controller = typeof(AiController).Assembly.GetType("Orbit.Api.Controllers.StagingEvalController");
+        var controller = typeof(AiController).Assembly.GetType("Orbit.Api.Controllers.EvalAccountController");
         controller.Should().NotBeNull("eval cleanup needs an authoritative fixture independent of conversation recording");
         controller!.GetMethods().Should().Contain(method => method.IsDefined(typeof(HttpDeleteAttribute), false));
         controller.GetMethods().Should().Contain(method => method.IsDefined(typeof(HttpGetAttribute), false));
@@ -114,7 +114,7 @@ public class StagingEvalPendingOperationsTests
     private static async Task<JsonElement> Send(ServiceProvider provider, Guid owner, bool clear)
     {
         using var scope = provider.CreateScope();
-        var controller = new StagingEvalController(scope.ServiceProvider.GetRequiredService<ISender>())
+        var controller = new EvalAccountController(scope.ServiceProvider.GetRequiredService<ISender>())
         {
             ControllerContext = new ControllerContext
             {

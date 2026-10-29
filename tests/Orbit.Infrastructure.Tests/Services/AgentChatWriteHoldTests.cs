@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 #pragma warning disable OPENAI001
 
@@ -86,7 +87,7 @@ public partial class AgentChatWriteHoldTests : IDisposable
             .Returns((AgentConfirmationRequirement?)null);
         _policyEvaluator = new AgentPolicyEvaluator(
             _dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
-            new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>()));
+            new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
     }
 
     public void Dispose()

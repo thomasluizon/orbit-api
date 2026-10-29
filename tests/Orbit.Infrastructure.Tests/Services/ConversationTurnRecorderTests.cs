@@ -229,6 +229,7 @@ public class ConversationTurnRecorderTests
             services.AddScoped<IUnitOfWork>(sp => unitOfWork ?? new UnitOfWork(sp.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()));
             services.AddMemoryCache();
             services.AddSingleton(NSubstitute.Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
+            services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
             services.AddScoped<IFeatureFlagService, FeatureFlagService>();
             _provider = services.BuildServiceProvider();
             Recorder = new ConversationTurnRecorder(_provider.GetRequiredService<IServiceScopeFactory>(),

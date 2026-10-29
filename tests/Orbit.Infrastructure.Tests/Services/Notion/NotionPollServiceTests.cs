@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 using FluentAssertions;
@@ -32,7 +33,7 @@ public class NotionPollServiceTests
     {
         using var test = new NotionTestContext();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var flags = new FeatureFlagService(test.Db, cache, Substitute.For<IHostEnvironment>());
+        var flags = new FeatureFlagService(test.Db, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build());
         var flag = await test.Db.AppFeatureFlags.SingleAsync(f => f.Key == "notion_integration");
         flag.SetEnabled(true);
         await test.Db.SaveChangesAsync();

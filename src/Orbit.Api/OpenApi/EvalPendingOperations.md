@@ -1,21 +1,21 @@
-# Staging eval pending-operation cleanup
+# Eval account pending-operation cleanup
 
 Tracks thomasluizon/orbit-tickets#1845. The paired harness work belongs to
 thomasluizon/orbit-tickets#1822; this producer change does not update that repository.
 
 The coordinator opts disposable accounts into this fixture by setting SSM parameter
-`/orbit/staging/api/StagingEval__AccountIds` to comma-separated account UUIDs,
-applied as `StagingEval__AccountIds` through the staging API environment group.
-The service is the target selected by
-`RENDER_STAGING_SERVICE_ID` in the GitHub `staging` environment. Deploy the API
-through the repository's release workflow with `environment=staging`, and apply
-the environment setting before the harness uses the routes. An absent or empty
-allowlist disables access. Remove an account from the setting and apply the
-environment change to revoke access.
+`/orbit/staging/api/StagingEval__AccountIds` or
+`/orbit/production/api/StagingEval__AccountIds` to comma-separated account UUIDs,
+applied as `StagingEval__AccountIds` through the matching API environment group.
+The service is the target selected by `RENDER_STAGING_SERVICE_ID` or
+`RENDER_PRODUCTION_SERVICE_ID` in the matching GitHub environment. Deploy the API
+through the repository's release workflow, and apply the environment setting
+before the harness uses the routes. An absent or empty allowlist disables access.
+Remove an account from the setting and apply the environment change to revoke access.
 
 Both routes require an authenticated first-party JWT session for an explicitly
-allowed account and `ASPNETCORE_ENVIRONMENT=Staging`. API keys and OAuth credentials
-cannot use them. Production and Development reject them even with an allowlist.
+allowed account and `ASPNETCORE_ENVIRONMENT=Staging` or `Production`. API keys,
+OAuth credentials, Development and every other environment cannot use them.
 The account always comes from the session, with no request account selector.
 Unauthenticated requests receive 401; callers outside the fixture boundary receive
 403. Responses cannot be cached. The fixture has REST cross-references in the
@@ -55,8 +55,8 @@ not undo writes already executed before it started.
 ## Harness handoff
 
 Deploy the producer and have the coordinator set the exact disposable account's
-allowlist entry through `/orbit/staging/api/StagingEval__AccountIds`. Verify access using that account's session
-against `https://api-staging.useorbit.org`. Confirm an unlisted account and an
+allowlist entry through the matching SSM parameter. Verify access using that account's session
+against `https://api-staging.useorbit.org` or `https://api.useorbit.org`. Confirm an unlisted account and an
 API key cannot use either route. No database migration is required.
 
 Give each running eval exclusive use of its account. Stop concurrent chats and
@@ -71,7 +71,7 @@ invalidate isolation. Before every attempt, including retries and process restar
    attempt. Check that earlier previews and confirmation tokens cannot be used.
 
 The published OpenAPI artifacts contain the response schemas.
-`StagingEvalPendingOperationsTests` serializes the actual controller responses with
+`EvalAccountPendingOperationsTests` serializes the actual controller responses with
 MVC JSON options and repeats this sequence across fresh database scopes using the
 real handlers and repository. It covers all catalog operation names, old and expired
 previews, confirmation-token invalidation, no conversation history and account

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Linq.Expressions;
 using System.Text.Json;
@@ -145,7 +146,7 @@ public class AccountChangeSetRegressionTests
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
         var executor = new AgentOperationExecutor(catalog,
-            new AgentPolicyEvaluator(db, catalog, store, bridge, settings, new FeatureFlagService(db, cache, Substitute.For<IHostEnvironment>())),
+            new AgentPolicyEvaluator(db, catalog, store, bridge, settings, new FeatureFlagService(db, cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build())),
             Substitute.For<IAgentAuditService>(), ownership, bridge,
             registry, previewer, store, new UnitOfWork(db, new DatabaseConnectionSettings()),
             NullLogger<AgentOperationExecutor>.Instance);

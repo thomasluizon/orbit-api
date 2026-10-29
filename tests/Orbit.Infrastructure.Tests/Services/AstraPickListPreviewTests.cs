@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Orbit.Domain.Enums;
 using System.Text.Json;
@@ -91,7 +92,7 @@ public class AstraPickListPreviewTests
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
         var pending = new PendingAgentOperationStore(db, settings);
         using var flagCache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
-        var policy = new AgentPolicyEvaluator(db, catalog, pending, bridge, settings, new FeatureFlagService(db, flagCache, Substitute.For<IHostEnvironment>()));
+        var policy = new AgentPolicyEvaluator(db, catalog, pending, bridge, settings, new FeatureFlagService(db, flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         var previewer = new PendingOperationChangePreviewer(repo, new GenericRepository<Goal>(db),
             new GenericRepository<Tag>(db), dates, tools);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();

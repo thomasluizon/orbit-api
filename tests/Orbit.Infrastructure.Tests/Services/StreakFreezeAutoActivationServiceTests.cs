@@ -508,6 +508,7 @@ public class StreakFreezeAutoActivationServiceTests
         var serviceProvider = new ServiceCollection()
             .AddMemoryCache()
             .AddSingleton(Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>())
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
             .AddScoped<IFeatureFlagService, FeatureFlagService>()
             .AddSingleton(dbContext)
             .AddSingleton(pushService)
