@@ -12,9 +12,7 @@ internal static class ChatResponseNegotiation
         string? language, ChatResponse? response, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var message = LocaleHelper.IsPortuguese(language)
-            ? "Não consegui preparar uma resposta. Tente novamente."
-            : "I couldn't prepare an answer. Please try again.";
+        var message = ErrorCopy.Resolve("chat.answer.empty", LocaleHelper.IsPortuguese(ChatLocale.Resolve(request.ClientContext, language)));
         if (request.StreamSink is not null)
         {
             await request.StreamSink(ChatStreamEvent.Reset());
@@ -42,15 +40,14 @@ internal static class ChatResponseNegotiation
                 ?? preview.Changes?.Select(change => change.EntityName) ?? [])
             .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal)
             .Select(name => "- " + name.ReplaceLineEndings(" "));
-        var instruction = LocaleHelper.IsPortuguese(language)
-            ? "Revise as alterações propostas antes de aprovar."
-            : "Review the proposed changes before approving.";
+        var instruction = ErrorCopy.Resolve("chat.answer.pendingPreview", LocaleHelper.IsPortuguese(language));
         return response with { AiMessage = string.Join("\n", new[] { instruction }.Concat(names)), Parts = null };
     }
 
     public static ChatResponse ForClient(ChatResponse response, AgentClientContext? client, IReadOnlyList<string> flags,
         string? language = null, string? timeZone = null)
     {
+        language = ChatLocale.Resolve(client, language);
         response = ForAllowance(response, client, response.MessageAllowanceConsumed ?? false);
         var supportsParts = client?.SupportsParts == true && !flags.Contains(FeatureFlagKeys.AstraPartsDisabled);
         if (response.Parts is null) return ForPendingPreview(response, supportsParts, language);

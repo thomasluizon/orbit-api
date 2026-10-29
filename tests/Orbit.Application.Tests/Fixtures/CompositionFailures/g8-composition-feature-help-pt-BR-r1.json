@@ -1,0 +1,15 @@
+{
+  "caseId": "composition-feature-help-pt-BR",
+  "repeat": 1,
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"Abra **Hoje**, toque no hábito e edite o horário nas opções dele. Se o hábito ainda não tiver horário, você pode definir um ao criar ou editar o hábito.\"}],\"relatedActions\":[\"Hoje\"]}",
+  "toolCalls": [
+    {
+      "name": "describe_feature",
+      "arguments": {
+        "feature_key": "schedule-math",
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

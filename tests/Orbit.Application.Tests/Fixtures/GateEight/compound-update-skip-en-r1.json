@@ -1,0 +1,92 @@
+{
+  "caseId": "compound-update-skip-en",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": "water",
+        "date": null,
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": "walk",
+        "date": null,
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "update_habit",
+      "arguments": {
+        "clear_fields": null,
+        "habit_id": "[redacted]",
+        "start_date": null,
+        "parent_habit_id": null,
+        "clear_parent": false,
+        "tag_ids": null,
+        "goal_ids": null,
+        "title": "Drink water",
+        "description": null,
+        "emoji": null,
+        "frequency_unit": null,
+        "frequency_quantity": null,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": null,
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_general": null,
+        "slip_alert_enabled": null,
+        "relative_reminders": null,
+        "repeat_reminder": null,
+        "is_bad_habit": null,
+        "is_flexible": null,
+        "reminder_enabled": null,
+        "reminder_times": null,
+        "checklist_items": null,
+        "scheduled_reminders": null,
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    },
+    {
+      "name": "skip_habit",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "date": "2026-10-28",
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

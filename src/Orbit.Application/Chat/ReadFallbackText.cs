@@ -31,7 +31,7 @@ internal sealed class ReadFallbackText(string? language, string? timeZone)
         HabitListCard card when HabitReadMessages.Skipped(card, _portuguese ? "pt-BR" : "en") is { } skipped =>
             Lines(card.Items.Where(item => !HabitReadMessages.IsSkipped(card, item)).Select(item => $"{item.Title} ({Text(item.Status)})")
                 .Append(skipped)),
-        HabitListCard card => Lines(new[] { card.Date is { } date ? Date(date) : Text(card.Scope), Total("habits", card.Items.Count) }
+        HabitListCard card => Lines(new[] { card.Date is { } date ? Date(date) : null, Total("habits", card.Items.Count) }
             .Concat(card.Items.Select(item => $"{item.Title} ({Text(item.Status)})"))),
         RecordListCard { Kind: "habitHistory" } card => Lines(new[] { HistoryHeading(card) }
             .Concat(card.Items.Select(item => $"{(item.LogDate is { } date ? Date(date) : Text("notSet"))}: {Number(item.Value ?? 0)}"))),
@@ -98,7 +98,7 @@ internal sealed class ReadFallbackText(string? language, string? timeZone)
     }
 
     private string Month(HabitMonthCard card) => Lines(new[]
-        { $"{Text("habitCalendar")}: {Range(card.DateFrom, card.DateTo)}", Text("calendarLogs") }
+        { Range(card.DateFrom, card.DateTo), Text("calendarLogs") }
         .Concat(card.Calendar.Habits.SelectMany(habit => MonthRows(habit.Title, habit.Id, habit.ScheduledDates, habit.Children, card))));
 
     private IEnumerable<string> MonthRows(string title, Guid id, IReadOnlyList<DateOnly> scheduled,

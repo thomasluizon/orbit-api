@@ -24,6 +24,11 @@ Pending-write text fallback does not require `astra_block_first`. Verify clients
 parts support and accounts with `astra_parts_disabled` receive readable approval text,
 including after a blank narrative or preview recovery. Supported parts clients receive the
 preview without repeated prose. Compare the final stream event with recorded history.
+Check both English and Brazilian Portuguese through client locale and, for legacy clients
+without a locale, profile language. Missing-kind compound reads retain their facts without
+habit-list or calendar title headings, including stored replay. Feature help must use only
+the returned markdown; a related screen does not establish editing steps. These fallback and
+feature-help corrections apply independently of `astra_block_first`. #26 owns their live gate.
 
 Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
 build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and

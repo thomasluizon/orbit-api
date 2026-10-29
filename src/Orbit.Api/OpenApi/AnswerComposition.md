@@ -38,6 +38,14 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
 | Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
 
+A single record selector uses `choice`, including when the client also supports
+`question`. Question forms collect multiple fields. The server validates the complete
+typed definition before negotiating a renderable single selector to `choice`.
+Per-question free-text settings own question forms; the top-level flag applies to
+choice only. Invalid ask calls return the precise failed constraint to the model
+for one corrected call in the same turn, then prose fallback. No question prepares
+a write. See [ask validation and bilingual copy](AskValidation.md).
+
 Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
@@ -52,6 +60,23 @@ the read operation and consumes no additional model call or message allowance. H
 `today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
 Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
+Readable capability fallbacks omit list scope and calendar title headings. Counts, item names,
+statuses, goal progress, date windows and calendar log meaning remain grounded facts. This
+formatter serves both current composition and stored blocks downgraded during replay.
+Negotiation resolves an explicit client locale before the profile language. A legacy client
+without a locale uses the profile language; no message pattern detects the language. Pending
+preview, empty-answer recovery, tool failure, truncation and habit-selection fallback copy use
+the existing `ErrorCopy` catalog in English and Brazilian Portuguese. Pending previews still
+require approval and never claim that a write has executed.
+
+`describe_feature` returns its existing markdown and metadata with an append-only model-facing
+`answer_scope` instruction, also present in the tool description. Only documented mechanics,
+screens, fields and steps support an explanation. `related_surfaces` identifies navigation
+destinations and does not document editing instructions. A missing detail calls for a brief
+acknowledgment in the person's language. This does not fabricate a UI route, execute another
+tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
+The deterministic replay tests verify the tool result supplied to the narrative model and the
+resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without
@@ -134,18 +159,30 @@ the existing preview routes still require approval. The captured tool-plan repla
 `G7SuggestionCompositionTests` cover both languages and capability fallbacks. #26 owns the
 live bilingual gate rerun, including suggestion quality, and #1751/#1620 own rendering.
 
-Temporary preparation commitments preserve the requested action and negation in their titles.
+Ongoing avoid habits default to `frequency_unit: Day`, `frequency_quantity: 1` and
+`is_general: false` unless the person requested another cadence. Creation schemas expose
+that default for both root and nested items. The proposal validator rejects the incompatible
+General and avoid combination before preparing a preview, matching the existing domain guard.
+The typed failure asks the model to correct its arguments while retaining the rest of the request.
+
+Temporary preparation commitments preserve the person's action wording and negation in their titles.
+Medical instructions normalize only spelling and casing without expanding or substituting the verb.
 An exact record title stays verbatim. For an activity described in prose, the model normalizes
 spelling, casing and proper names while keeping its action and negation. Supplied event dates,
 including past dates, anchor the preparation offsets and do not require another question.
 Preparation continuing until an event uses daily recurrence with `due_date` at its start and
-inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. An activity
-ending at a collection uses `due_end_time` for that deadline. These are model instructions;
+inclusive `end_date` at the event; `start_date` does not substitute for `due_date`. Each preparation
+uses its own offset from its referenced event, independently of the other preparation items.
+An activity ending at a collection uses its collection date and `due_end_time` for that deadline.
+These are model instructions;
 composition and execution preserve the structured arguments rather than rewriting message text.
 
 Write completion covers every requested action, target and occurrence. A target lookup is a
 prerequisite, not a mutation. A rename plus a skip uses both write tools; skipping several
-habits uses `bulk_skip_habits`. The server combines the model's held writes into one preview
+habits uses `bulk_skip_habits`. A lookup showing an already skipped occurrence does not replace
+the requested skip call: the matching write tool validates the current state. The completion
+argument, query description and skip description carry this instruction to the model.
+The server combines the model's held writes into one preview
 and preserves their action labels. It never infers missing writes from the person's wording
 or changes a log call into a skip call.
 
@@ -430,6 +467,15 @@ Tracks thomasluizon/orbit-tickets#1857. `suggest_breakdown` appends optional
 When `one_small_step` is true, `title` is the activity and
 `suggested_sub_habits` contains exactly one object whose `title` is the concrete
 starting step. Both texts must be nonempty, single-line and at most 200 characters.
+The model schema requires a nonempty `suggested_sub_habits` array with a required,
+nonempty single-line `title` on each item. Ordinary breakdowns still allow multiple
+suggestions, and execution preserves the legacy ordinary empty-array behavior.
+An isolated failed one-step call returns its error to the model for one correction
+in the same turn. That correction must contain only one `suggest_breakdown` call
+with `one_small_step: true`; it cannot introduce a write, another tool or a mode
+change. A successful correction replaces the failed outcome before composition.
+Provider errors, invalid corrections and exhausted budgets retain the existing
+failure response. Write corrections keep their prepared-intent checks.
 The model chooses the tool and the smaller action through its structured arguments;
 message patterns never select or rewrite tools. Omission preserves the existing
 breakdown suggestion contract and action result.
@@ -499,10 +545,29 @@ prompt convention. Their pt-BR versions below are for copy review.
 | Source | en | pt-BR |
 | --- | --- | --- |
 | GlobalRulesSection | STARTING AN ACTIVITY: When the person cannot get started, use suggest_breakdown with one_small_step=true and language en or pt-BR. Return exactly one concrete, immediately doable action in suggested_sub_habits, not a plan. If they ask for something smaller, reduce the previous step's effort while keeping the same activity. The server supplies the oneSmallStep block and smaller/save actions; emit no prose. Do not call ask or propose a write unless they explicitly request saving. Save as a task through create_habit, or resolve the owned habit and use update_checklist with all existing items plus the new step. Every save uses the existing approval preview. | COMEÇAR UMA ATIVIDADE: Quando a pessoa não conseguir começar, use suggest_breakdown com one_small_step=true e language en ou pt-BR. Retorne exatamente uma ação concreta que ela possa realizar agora em suggested_sub_habits, sem montar um plano. Se ela pedir algo menor, reduza o esforço do passo anterior e mantenha a mesma atividade. O servidor fornece o bloco oneSmallStep e as ações de diminuir e salvar; não acrescente texto. Não chame ask nem proponha alterações sem um pedido explícito para salvar. Para salvar como tarefa, use create_habit. Para uma checklist, identifique o hábito da pessoa e use update_checklist com todos os itens existentes e o novo passo. Todo salvamento passa pela prévia de aprovação existente. |
-| SuggestBreakdownTool.Description | Suggest sub-habits without creating them. When the person is stuck starting an activity, set one_small_step=true, language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, preserving existing checklist items and resolving the owned habit first. Both require the existing approval preview. | Sugira sub-hábitos sem criá-los. Quando a pessoa travar ao começar uma atividade, defina one_small_step=true, language como en ou pt-BR conforme a mensagem, title como a atividade e suggested_sub_habits com exatamente uma ação concreta para começar. Se ela pedir um passo menor, retorne uma ação mais fácil, que exija menos esforço que a anterior, mantendo a mesma atividade. O servidor retorna oneSmallStep com ações para diminuir e salvar. Não acrescente texto nem listas. Sugestões não salvam nada. Somente um pedido explícito para salvar usa create_habit para uma tarefa ou update_checklist, preservando os itens existentes e identificando primeiro o hábito da pessoa. Ambos exigem a prévia de aprovação existente. |
+| SuggestBreakdownTool.Description | Suggest sub-habits without creating them. When the person is stuck starting an activity, set one_small_step=true, language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, preserving existing checklist items and resolving the owned habit first. Both require the existing approval preview. | Sugira sub-hábitos sem criá-los. Quando a pessoa travar ao começar uma atividade, defina one_small_step=true, language como en ou pt-BR conforme a mensagem, title como a atividade e suggested_sub_habits com exatamente uma ação concreta para começar. Nunca retorne uma lista vazia. Se ela pedir um passo menor, retorne uma ação mais fácil, que exija menos esforço que a anterior, mantendo a mesma atividade. O servidor retorna oneSmallStep com ações para diminuir e salvar. Não acrescente texto nem listas. Sugestões não salvam nada. Somente um pedido explícito para salvar usa create_habit para uma tarefa ou update_checklist, preservando os itens existentes e identificando primeiro o hábito da pessoa. Ambos exigem a prévia de aprovação existente. |
 | SuggestHabitsTool.Description change | Help starting an activity uses suggest_breakdown with one_small_step=true instead. | A ajuda para começar uma atividade usa suggest_breakdown com one_small_step=true. |
 | one_small_step schema description | Return exactly one starting step, or a smaller refinement, as a oneSmallStep block. Default false. | Retorne exatamente um passo para começar, ou uma versão menor, em um bloco oneSmallStep. O padrão é false. |
 | language schema description | Required with one_small_step=true; the person's message language. | Obrigatório com one_small_step=true; idioma da mensagem da pessoa. |
 | Argument error | one_small_step must be a boolean. | one_small_step deve ser um booleano. |
 | Argument error | Return exactly one nonempty starting action and goal, each at most 200 characters on one line, with language en or pt-BR. | Retorne exatamente uma ação inicial e uma atividade, ambas preenchidas, cada uma em uma única linha com até 200 caracteres, com language en ou pt-BR. |
 | Domain guard | A starting step requires a goal, a single short action and a supported language. | Um passo inicial exige uma atividade, uma única ação curta e um idioma aceito. |
+
+## Capability fallback and feature-help copy review
+
+The following server copy is retained verbatim and moved into the localization catalog.
+The model instruction is shared by the tool description and its result. Its Portuguese
+translation is for copy review; the model receives the English instruction in both locales.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `chat.answer.pendingPreview` | Review the proposed changes before approving. | Revise as alterações propostas antes de aprovar. |
+| `chat.answer.empty` | I couldn't prepare an answer. Please try again. | Não consegui preparar uma resposta. Tente novamente. |
+| `chat.answer.toolFailure` | I couldn't complete that. Please try again. | Não consegui concluir isso. Tente novamente. |
+| `chat.answer.truncated` | This response was cut off before completion, so the result is partial. | Esta resposta foi interrompida antes do fim e pode estar incompleta. |
+| `chat.answer.selectHabit` | Which habit would you like to choose? | Qual hábito você quer escolher? |
+| `chat.answer.selectHabitReference` | Which habit would you like to use for “{0}”? | Qual hábito você quer usar para “{0}”? |
+| Removed scope heading | All habits; Remaining habits; Habits on this date | Todos os hábitos; Hábitos restantes; Hábitos nesta data |
+| Removed calendar title prefix | Habit calendar: | Calendário de hábitos: |
+| `DescribeFeatureTool.Description` | Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math. Use only mechanics, screens, fields and steps explicitly documented in markdown. related_surfaces lists destinations, not editing instructions. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Consulte as regras oficiais antes de explicar sequências, proteções de sequência, frequências, XP e níveis, notificações, limites do plano ou regras de agendamento. Use apenas os mecanismos, telas, campos e passos descritos no markdown. related_surfaces lista destinos, sem explicar como editar. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
+| `describe_feature.answer_scope` | Use only mechanics, screens, fields and steps explicitly documented in markdown. related_surfaces lists destinations, not editing instructions. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Use apenas os mecanismos, telas, campos e passos descritos no markdown. related_surfaces lista destinos, sem explicar como editar. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |

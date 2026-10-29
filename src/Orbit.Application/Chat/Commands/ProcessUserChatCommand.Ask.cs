@@ -46,9 +46,7 @@ public partial class ProcessUserChatCommandHandler
             return Failed("Interactive questions are unavailable.");
         results.AskAttempts++;
         results.CanRetryAsk = results.AskAttempts < 2 && request.ClientContext.PartKinds?.Any(IsAskKind) == true;
-        call = call with { Args = AskBlockNegotiation.Arguments(call.Args, request.ClientContext) };
-        if (call.Args.ValueKind != JsonValueKind.Object || !call.Args.TryGetProperty("form", out var form) || form.ValueKind != JsonValueKind.String
-            || request.ClientContext.PartKinds?.Contains(form.GetString()!, StringComparer.Ordinal) != true)
+        if (!CanAttemptAsk(call.Args, request.ClientContext))
             return Failed("The client does not support this block kind.");
         var tool = ai.ToolRegistry.GetTool("ask");
         if (tool is null)
@@ -56,6 +54,9 @@ public partial class ProcessUserChatCommandHandler
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
         if (!result.Success || result.Payload is not AstraBlockDefinition definition)
             return Failed(result.Error ?? "Invalid ask arguments.");
+        definition = AskBlockNegotiation.Definition(definition, request.ClientContext, call.Args);
+        if (request.ClientContext.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
+            return Failed("The client does not support this block kind.");
         var block = IssuedAstraBlock.Create(request.UserId, definition);
         await execution.BlockStore.AddAsync(block, ct);
         object payload = definition.Form switch
@@ -79,6 +80,12 @@ public partial class ProcessUserChatCommandHandler
         return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, true, block.Id.ToString(), null, null),
             null, null, null, null);
     }
+
+    private static bool CanAttemptAsk(JsonElement args, AgentClientContext client) =>
+        args.ValueKind == JsonValueKind.Object && args.TryGetProperty("form", out var form)
+        && form.ValueKind == JsonValueKind.String && client.PartKinds is { } kinds
+        && (kinds.Contains(form.GetString()!, StringComparer.Ordinal)
+            || form.GetString() == AstraBlockKinds.Question && kinds.Contains(AstraBlockKinds.Choice));
 
     private static AiResponse LimitAskContinuation(AiResponse response, ToolExecutionAccumulator results) =>
         results.CanRetryAsk && response.ToolCalls is [{ Name: "ask" }]

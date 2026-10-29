@@ -379,19 +379,19 @@ public class BulkCreateHabitsTool(
     {
         var properties = new Dictionary<string, object>
         {
-            [TitleProperty] = new { type = JsonSchemaTypes.String },
+            [TitleProperty] = new { type = JsonSchemaTypes.String, description = "Keep the person's medical instruction wording; normalize only spelling and casing, without substituting the action or negation." },
             ["description"] = new { type = JsonSchemaTypes.String },
             ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
-            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "OneTime for a dated task; Day, Week, Month or Year for recurrence.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "OneTime for a single dated action. Ongoing avoid habits default to Day/1 unless another cadence was requested. Preparation continuing until an event uses Day/1 with due_date and end_date.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
-            ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
-            ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Optional end date." },
+            ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. For preparation, subtract this activity's own offset from its referenced event date. Otherwise defaults to today." },
+            ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Inclusive end date; required for recurring preparation that ends at an event." },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
             ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline." },
-            ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "True for ongoing reduction or slip tracking." },
-            ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a general habit with no schedule. Defaults to false." },
+            ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "True for ongoing reduction or slip tracking, with Day/1 unless another cadence was requested. False for a temporary medical commitment." },
+            ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "No schedule or avoid type. Must be false for an ongoing avoid habit. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },
             ["checklist_items"] = new
             {

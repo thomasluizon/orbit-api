@@ -1,0 +1,18 @@
+{
+  "caseId": "composition-coaching-advice-pt-BR",
+  "repeat": 2,
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "pt-BR",
+        "title": "Caminhar",
+        "suggested_sub_habits": [],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Failed"
+    }
+  ],
+  "answer": "{\"notice\":\"Não foi possível mostrar a resposta. Pergunte de novo.\",\"parts\":[]}"
+}

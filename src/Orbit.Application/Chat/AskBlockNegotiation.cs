@@ -5,33 +5,21 @@ namespace Orbit.Application.Chat;
 
 internal static class AskBlockNegotiation
 {
-    public static JsonElement Arguments(JsonElement args, AgentClientContext client)
+    public static AstraBlockDefinition Definition(AstraBlockDefinition definition, AgentClientContext client, JsonElement arguments)
     {
-        if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("form", out var form)
-            || form.ValueKind != JsonValueKind.String || form.GetString() != AstraBlockKinds.Question
-            || client.PartKinds?.Contains(AstraBlockKinds.Question) == true
+        if (definition.Form != AstraBlockKinds.Question
             || client.PartKinds?.Contains(AstraBlockKinds.Choice) != true
-            || !args.TryGetProperty("questions", out var questions) || questions.ValueKind != JsonValueKind.Array
-            || questions.GetArrayLength() != 1)
-            return args;
-        var question = questions[0];
-        if (!IsSingleChoice(question))
-            return args;
-        var options = question.GetProperty("options");
-        var title = args.TryGetProperty("question", out var heading) && heading.ValueKind == JsonValueKind.String
-            ? heading : question.TryGetProperty("prompt", out var prompt) ? prompt : default;
-        if (title.ValueKind != JsonValueKind.String) return args;
-        return JsonSerializer.SerializeToElement(new
-        {
-            form = AstraBlockKinds.Choice,
-            question = title.GetString(),
-            allowFreeText = question.TryGetProperty("allowFreeText", out var free) && free.ValueKind == JsonValueKind.True,
-            options
-        });
+            || arguments.TryGetProperty("title", out var titleField) && titleField.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(titleField.GetString())
+            || definition.Intro is not null || definition.Progress is not null
+            || definition.Questions is not [var question] || question.Type != "singleChoice"
+            || question.Options is not { Count: >= 2 and <= 4 } options
+            || options.Any(option => option.Label.Length > 20 || option.Recommended))
+            return definition;
+        var title = string.IsNullOrWhiteSpace(definition.Title) ? question.Prompt : definition.Title;
+        if (title.Length > 120) return definition;
+        return new AstraBlockDefinition(AstraBlockKinds.Choice, title,
+            options.Select(option => new AstraBlockOption(option.Id, option.Label)).ToArray(), [],
+            AllowFreeText: question.AllowFreeText);
     }
-
-    private static bool IsSingleChoice(JsonElement question) => question.ValueKind == JsonValueKind.Object
-        && question.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String
-        && type.GetString() == "singleChoice" && question.TryGetProperty("options", out var options)
-        && options.ValueKind == JsonValueKind.Array && options.EnumerateArray().All(option => option.ValueKind == JsonValueKind.Object);
 }

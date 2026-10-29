@@ -59,12 +59,10 @@ public partial class ProcessUserChatCommandHandler
 
     private static ResponseCards SelectionQuestion(HabitSelectionCandidates selection, string? language, bool parts)
     {
-        var text = LocaleHelper.IsPortuguese(language)
-            ? "Qual hábito você quer escolher?" : "Which habit would you like to choose?";
-        if (!string.IsNullOrWhiteSpace(selection.Reference))
-            text = LocaleHelper.IsPortuguese(language)
-                ? $"Qual hábito você quer usar para “{selection.Reference}”?"
-                : $"Which habit would you like to use for “{selection.Reference}”?";
+        var text = string.IsNullOrWhiteSpace(selection.Reference)
+            ? ErrorCopy.Resolve("chat.answer.selectHabit", LocaleHelper.IsPortuguese(language))
+            : string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                ErrorCopy.Resolve("chat.answer.selectHabitReference", LocaleHelper.IsPortuguese(language)), selection.Reference);
         return new ResponseCards(text, Parts: parts ? [new ChatTextPart(text)] : null) { ServerComposedText = true };
     }
 }

@@ -167,6 +167,8 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 Astra composition is opt-in and independent of model configuration. See its
 [producer contract](src/Orbit.Api/OpenApi/AnswerComposition.md) and
 [activation runbook](infra/README.md#astra-answer-composition-activation).
+Capability fallbacks use localized facts without repeated title headings; feature help stays
+within its documented tool result. These corrections do not require global composition activation.
 
 Habit ranking uses an API-first rollout with client capability negotiation. See the
 [consumer contract](src/Orbit.Api/OpenApi/HabitRanking.md) and
