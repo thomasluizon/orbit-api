@@ -110,7 +110,8 @@ public sealed partial class ChatWriteHoldHandlerTests
                 fields.GetProperty("end_date").GetProperty("description").GetString().Should()
                     .Contain("24-hour restriction").And.Contain("never null");
                 fields.GetProperty("due_end_time").GetProperty("description").GetString().Should()
-                    .Contain("event's clock time").And.Contain("due_date must be the event date");
+                    .Contain("deadline-only item that ends at an event uses that event's clock time")
+                    .And.Contain("restriction starting before the event keeps its own start due_date");
                 if (depth < AppConstants.MaxHabitDepth - 1)
                     schema = fields.GetProperty("sub_habits").GetProperty("items");
             }
