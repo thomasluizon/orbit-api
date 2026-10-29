@@ -25,6 +25,8 @@ RUN OpenApiGenerateDocumentsOnBuild=false /tools/dotnet-ef migrations bundle \
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+ARG API_COMMIT_SHA
+ENV RENDER_GIT_COMMIT=$API_COMMIT_SHA
 ENV DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/efbundle
 
 RUN apt-get update \

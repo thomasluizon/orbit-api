@@ -229,6 +229,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      packages: write
     timeout-minutes: 170
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -241,43 +242,101 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Select staging branch
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: release-source
+
+      - name: Verify image source
         env:
           RELEASE_BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
-          test -n "$RENDER_API_KEY"
-          test -n "$RENDER_SERVICE_ID"
-          payload=$(jq -cn --arg branch "$RELEASE_BRANCH" '{branch: $branch, autoDeploy: "no"}')
-          source .github/scripts/render-release.sh
-          response=$(render_request PATCH "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
-            --header 'Content-Type: application/json' \
-            --data "$payload")
-          jq -e --arg branch "$RELEASE_BRANCH" '.branch == $branch and .autoDeploy == "no"' <<< "$response"
+          if [ "$(git -C release-source rev-parse HEAD)" != "$COMMIT_SHA" ]; then
+            echo '::error::Image checkout does not match the selected release SHA'
+            exit 1
+          fi
+          if ! git -C release-source merge-base --is-ancestor "$COMMIT_SHA" "refs/remotes/origin/$RELEASE_BRANCH"; then
+            echo "::error::The selected release SHA is not reachable from $RELEASE_BRANCH"
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver: docker
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push staging image
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./release-source
+          file: ./release-source/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/thomasluizon/orbit-api:${{ needs.prepare.outputs.sha }}
+          build-args: API_COMMIT_SHA=${{ needs.prepare.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/thomasluizon/orbit-api
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+
+      - name: Record image digest
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo '::error::Image build did not return a sha256 digest'
+            exit 1
+          fi
+          echo "Pushed ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trigger and monitor Render deploy
         id: render
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
           source .github/scripts/render-release.sh
-          step_started=$(jq -n 'now')
-          payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
+          image_url="ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST"
+          payload=$(jq -cn --arg image "$image_url" '{imageUrl: $image}')
           response_file=$(mktemp)
           trap 'rm -f "$response_file"' EXIT
-          http_status=$(render_start_deploy "$payload" "$response_file" "$step_started")
+          if ! http_status=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+            --output "$response_file" --write-out '%{http_code}' \
+            --request POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --header 'Content-Type: application/json' --data "$payload"); then
+            echo "::error::Render deploy acceptance is unknown for $image_url; check service deploys before rerunning"
+            exit 1
+          fi
           case "$http_status" in
-            201) deploy_id=$(jq -er '.id' < "$response_file") ;;
+            201) ;;
             202)
-              # Render queues a request behind a running deploy and returns no deploy, so nothing
-              # identifies which later deploy is this request's. Releases are serialized, so fail closed.
-              echo "::error::Render queued the deploy of $COMMIT_SHA behind another deploy and returned no deploy ID; rerun the release once the service is idle"
+              echo '::error::Render queued the deploy without a deploy ID; rerun once the service is idle'
+              exit 1 ;;
+            400)
+              echo '::error::Render rejected imageUrl. If orbit-api-staging is not image-backed yet, the coordinator must switch its source to the published GHCR image through the Render API, refresh Terraform state, then rerun'
               exit 1 ;;
             *)
-              echo "::error::Render answered HTTP $http_status to the deploy request"
+              echo "::error::Render answered HTTP $http_status; check service deploys before rerunning"
               exit 1 ;;
           esac
+          if ! deploy_id=$(jq -er --arg image "$image_url" \
+            'select(.image.ref == $image) | .id | select(type == "string" and length > 0)' < "$response_file"); then
+            echo '::error::Render HTTP 201 did not identify a deploy of the requested image; check service deploys before rerunning'
+            exit 1
+          fi
           log_url="https://dashboard.render.com/web/$RENDER_SERVICE_ID/deploys/$deploy_id"
           echo "log_url=$log_url" >> "$GITHUB_OUTPUT"
           echo "Render deploy: $log_url"
@@ -306,15 +365,17 @@ jobs:
           node-version: 22
 
       - name: Verify staging health and live commit
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
           node tools/verify-release-health.mjs 'https://api-staging.useorbit.org/health'
           source .github/scripts/render-release.sh
           live_commit=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" --get \
             --data-urlencode 'status=live' --data-urlencode 'limit=1' |
-            jq -er '.[0].deploy.commit.id')
-          if [ "$live_commit" != "$COMMIT_SHA" ]; then
-            echo "::error::Render now serves $live_commit, not the released $COMMIT_SHA"
+            jq -er '.[0].deploy.image.ref')
+          if [ "$live_commit" != "ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST" ]; then
+            echo "::error::Render now serves $live_commit, not the released image digest $IMAGE_DIGEST"
             exit 1
           fi
 

@@ -62,6 +62,39 @@ Render API or dashboard instead, and keep the Terraform values matching what the
 API or dashboard sets. Paid services, including the production API and web, are
 unaffected.
 
+## Staging API image source
+
+`render_web_service.staging_api` declares the public
+`ghcr.io/thomasluizon/orbit-api` image with `staging_api_digest` as its initial
+digest. Like the staging web service, it ignores later digest changes so
+`release.yml` owns releases. The service keeps its ID, free plan, domains,
+environment group links and `/health` check. No registry credential is needed.
+
+The staging API source is switched through the Render API because
+[provider issue #80](https://github.com/render-oss/terraform-provider-render/issues/80)
+prevents Terraform updates to free services. The coordinator performs the switch
+after merge and after the first staging release has pushed an image. That first
+run can fail at deployment while the service is still Git-backed; its summary
+contains the published digest. In GitHub, open **thomasluizon > Packages >
+orbit-api > Package settings > Change package visibility** and make the package
+public, then verify an unauthenticated pull of the published digest. Through the
+Render API, switch `orbit-api-staging` (`srv-dasotg8473hc739a5gjg`) to that image
+without replacing the service or changing its environment groups or domains.
+Set `staging_api_digest` in ignored `infra/local.tfvars` to that published digest,
+refresh Terraform state, and review a later plan targeted only to
+`render_web_service.staging_api`; it must show no change and no replacement.
+Do not apply a source update through the affected provider.
+
+Rerun **Actions > Release API** from `main` with `environment=staging`,
+`branch=main` and the planned full `sha`. The staging job builds and pushes before
+requesting `imageUrl=ghcr.io/thomasluizon/orbit-api@sha256:...`, requires HTTP 201
+with that image reference, and polls the returned deploy to `live`. Verify the
+Render deploy has no image build, Render can pull the public image, and
+`https://api-staging.useorbit.org/health` reports `status: Healthy` and the planned
+commit. The existing staging `RENDER_API_KEY` environment secret and repository
+variable `RENDER_STAGING_SERVICE_ID` suffice. Production retains its Git-backed
+Docker build and `./efbundle` pre-deploy command.
+
 ## Staging lifecycle
 
 The staging web app uses `https://app-staging.useorbit.org`. Keep `staging.useorbit.org` as a custom domain on `orbit-web-staging`; the web proxy redirects requests on that host permanently to the new host. The staging API CORS origins, its Google redirect URIs and the staging upload bucket CORS keep the old host beside the new one, so a tab still running the previous web build keeps working through the cutover. Add the new domain to the live Render service before applying the targeted Terraform changes, and confirm the plan has no update to `render_web_service.staging_web`. Update the `STAGING_NEXT_PUBLIC_SITE_URL` repository variable in `orbit-ui-mobile` to `https://app-staging.useorbit.org`, and add `https://app-staging.useorbit.org/auth-callback` to the Google OAuth web client's redirect URIs. Release the staging API and web from `redesign/main`, then verify the new health route, old-host redirect, email sign-in, and Google authorization.
@@ -280,7 +313,7 @@ After apply, read the `cloudflare_name_servers` output. Run `bash infra/check-dn
 
 Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain settings and database network access settings. This file is ignored; `example.tfvars` shows the shape only. Copy the production Postgres IP allow list from the Render Postgres Networking screen into `production_postgres_ip_allow_list`. The production variable defaults to `[]`, which removes production external access when applied. The staging root uses `staging_postgres_ip_allow_list` only at creation and ignores later allow list changes; use the `operator-mac` command above for local staging access. Check both database resources in every plan before applying; neither database should be replaced, and an existing operator address must not be removed. The requested `database_name` and `database_user` values are creation inputs; Terraform ignores later changes to those fields because Render assigns the live database name with a suffix. Connection strings read the database name from the resource URL.
 
-The `production_web_digest` and `staging_web_digest` variables seed the web images only when Terraform first creates each service. Terraform ignores later digest changes on both web services. Subsequent staging and production web deploys use the manual `release.yml` workflow in `orbit-ui-mobile` with its `environment` input.
+The `production_web_digest`, `staging_web_digest` and `staging_api_digest` variables seed their respective images. Terraform ignores later digest changes on these image-backed services. Subsequent staging and production web deploys use the manual `release.yml` workflow in `orbit-ui-mobile` with its `environment` input.
 
 With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Run `terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs` on the saved plan before every local apply. The guard blocks an in-place update, replacement, or deletion of either web service and names the changed attributes. Initial creation remains allowed.
 
@@ -297,7 +330,7 @@ curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
 
 If either image differs, stop further applies and redeploy the approved digest through the corresponding release workflow.
 
-Changing a Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head, including when the change is to an API service. Cancel that deploy unless it is an intended release of the same commit. The API and landing staging services have auto-deploy disabled. Their tracked branches are selected by their release workflows, and Terraform ignores later branch changes.
+Changing a Git-backed Render service's build or deploy settings through Terraform starts a Render deploy of the tracked branch head. Cancel that deploy unless it is an intended release of the same commit. The landing staging service has auto-deploy disabled; its release workflow selects the tracked branch and Terraform ignores later branch changes. The staging API uses a workflow-selected image digest instead.
 
 After apply, set the `RENDER_STAGING_SERVICE_ID` repository variable in the Orbit API GitHub repository to the staging API service ID. Set `RENDER_API_KEY` as the Orbit API GitHub `staging` environment secret and restrict that environment to deployment branch `main`. Set `RENDER_LANDING_STAGING_SERVICE_ID` in the Orbit landing repository to the `landing_staging_service_id` Terraform output. Confirm each variable in its repository Actions variables screen before running the corresponding `release.yml` from `main`.
 
