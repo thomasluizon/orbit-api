@@ -10,13 +10,14 @@ using Orbit.Application.Chat.Queries;
 
 namespace Orbit.Api.Controllers;
 
-[Authorize(Policy = StagingEvalRequirement.PolicyName, AuthenticationSchemes = "JwtBearer")]
+[Authorize(Policy = EvalAccountRequirement.PolicyName, AuthenticationSchemes = "JwtBearer")]
 [ApiController]
+[Tags("StagingEval")]
 [ApiVersion(1.0)]
 [ApiVersion(2.0)]
 [Route("api/eval/pending-operations")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class StagingEvalController(ISender sender) : ControllerBase
+public sealed class EvalAccountController(ISender sender) : ControllerBase
 {
     [HttpGet]
     [DistributedRateLimit("ai-operations")]

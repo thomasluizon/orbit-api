@@ -7,11 +7,12 @@ The append-only authoritative `nextReminderAtUtc` field for habit schedule and
 detail reads is documented in [NextRepeatReminder.md](NextRepeatReminder.md).
 Deploy this producer to staging before the paired consumer updates its pin.
 
-The restricted staging eval pending-operation fixture and independent readback for
+The restricted eval account pending-operation fixture and independent readback for
 thomasluizon/orbit-tickets#1845 are documented in
 [EvalPendingOperations.md](EvalPendingOperations.md). Deploy the API and have the
 coordinator set its account allowlist through SSM parameter
-`/orbit/staging/api/StagingEval__AccountIds` before the paired eval harness uses it.
+`/orbit/staging/api/StagingEval__AccountIds` or
+`/orbit/production/api/StagingEval__AccountIds` before the paired eval harness uses it.
 
 The negotiated Astra `question` block and structured next-turn answers are
 documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Text.Json;
 using FluentAssertions;
@@ -326,7 +327,7 @@ public partial class AgentExecutionAndSanitizerTests
         var pendingStore = new PendingAgentOperationStore(dbContext, settings);
         using var flagCache = new MemoryCache(new MemoryCacheOptions());
         var policy = new AgentPolicyEvaluator(dbContext, catalog, pendingStore, stepUpBridge, settings,
-            new FeatureFlagService(dbContext, flagCache, Substitute.For<IHostEnvironment>()));
+            new FeatureFlagService(dbContext, flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         var arguments = Parse("""{"habit_id":"123"}""");
         var pending = pendingStore.Create(user.Id, capability, operation.Id, arguments.GetRawText(),
             "Delete habit", AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()),

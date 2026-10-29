@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
@@ -8,7 +9,8 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IHostEnvironment environment) : IFeatureFlagService
+public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IHostEnvironment environment,
+    IConfiguration configuration) : IFeatureFlagService
 {
     private const string FlagsCacheKey = "feature-flags:all";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
@@ -80,7 +82,8 @@ public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache, IH
     private List<ResolvedFeatureFlag> Resolve(User user, IEnumerable<FlagSnapshot> flags) => flags
         .OrderBy(flag => flag.Key, StringComparer.OrdinalIgnoreCase)
         .Select(flag => new ResolvedFeatureFlag(flag.Key,
-            (flag.Key != FeatureFlagKeys.AstraEvalUnmetered || environment.IsStaging())
+            (flag.Key != FeatureFlagKeys.AstraEvalUnmetered || environment.IsStaging()
+                || (environment.IsProduction() && EvalAccountAccess.Contains(configuration[EvalAccountAccess.AccountIdsKey], user.Id)))
             && (flag.Enabled || flag.Accounts.Contains(user.Id)) && UserHasFeaturePlan(user, flag.PlanRequirement),
             flag.PlanRequirement))
         .ToList();

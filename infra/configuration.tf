@@ -141,6 +141,10 @@ data "aws_ssm_parameter" "staging_api_billing" {
   name     = "/orbit/staging/api/${each.key}"
 }
 
+data "aws_ssm_parameter" "production_api_eval_account_ids" {
+  name = "/orbit/production/api/StagingEval__AccountIds"
+}
+
 data "aws_ssm_parameter" "staging_api_eval_account_ids" {
   name = "/orbit/staging/api/StagingEval__AccountIds"
 }
@@ -174,6 +178,7 @@ resource "render_env_group" "production_api" {
     { for key, value in local.production_api_values : key => { value = value } },
     { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
+    { StagingEval__AccountIds = { value = data.aws_ssm_parameter.production_api_eval_account_ids.value } },
     {
       Storage__S3__AccessKeyId     = { value = aws_ssm_parameter.uploads_access_key_id["production"].value }
       Storage__S3__SecretAccessKey = { value = aws_ssm_parameter.uploads_secret_access_key["production"].value }

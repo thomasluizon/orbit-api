@@ -975,7 +975,7 @@ public sealed class ProactiveEngineServiceTests
             tokens.TryRefreshAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()).Returns(new GoogleTokenRefreshOutcome("access", GoogleTokenRefreshResult.Success, null));
             var dates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
                 new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())), Clock);
-            Flags = new(Db, _flagCache, Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
+            Flags = new(Db, _flagCache, Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
             Engine = new(Db, Clock, Messages, Push, Calendar, tokens, Analytics, dates, Flags,
                 NullLogger<ProactiveEngineService>.Instance);
         }

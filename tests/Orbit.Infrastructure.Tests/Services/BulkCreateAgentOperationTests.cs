@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
@@ -106,7 +107,7 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
         var reschedule = new BulkRescheduleHabitsTool(_provider.GetRequiredService<IMediator>());
         _registry = new AiToolRegistry([tool, skip, reschedule]);
         var catalog = new AgentCatalogService(_registry.GetAll());
-        var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, settings, new FeatureFlagService(context, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>()));
+        var policy = new AgentPolicyEvaluator(context, catalog, _pending, bridge, settings, new FeatureFlagService(context, new MemoryCache(new MemoryCacheOptions()), Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));
         _audit.RecordAsync(Arg.Any<AgentAuditEntry>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {

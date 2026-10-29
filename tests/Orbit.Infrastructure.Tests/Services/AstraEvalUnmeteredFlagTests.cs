@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -21,14 +22,21 @@ public class AstraEvalUnmeteredFlagTests
     private const string FlagKey = "astra_eval_unmetered";
 
     [Theory]
-    [InlineData("Staging", false, true)]
-    [InlineData("Staging", true, true)]
-    [InlineData("Production", false, false)]
-    [InlineData("Production", true, false)]
-    [InlineData("Development", false, false)]
-    [InlineData("Development", true, false)]
-    public async Task Resolver_RestrictsUnmeteredToStagingAcrossEveryReadPath(
-        string environmentName, bool global, bool enabled)
+    [InlineData("Staging", false, false, true, true)]
+    [InlineData("Staging", true, false, true, true)]
+    [InlineData("Staging", false, true, false, false)]
+    [InlineData("Staging", true, true, false, true)]
+    [InlineData("Production", false, false, true, false)]
+    [InlineData("Production", true, false, true, false)]
+    [InlineData("Production", false, true, true, true)]
+    [InlineData("Production", true, true, true, true)]
+    [InlineData("Production", false, true, false, false)]
+    [InlineData("Production", true, true, false, true)]
+    [InlineData("Development", false, true, true, false)]
+    [InlineData("Development", true, true, true, false)]
+    [InlineData("Custom", true, true, true, false)]
+    public async Task Resolver_RestrictsUnmeteredToStagingOrListedProductionAccountsAcrossEveryReadPath(
+        string environmentName, bool global, bool listed, bool targeted, bool enabled)
     {
         var host = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = environmentName });
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
@@ -38,10 +46,13 @@ public class AstraEvalUnmeteredFlagTests
         var other = User.Create("Other", "other@example.com").Value;
         db.Users.AddRange(account, other);
         db.AppFeatureFlags.Add(AppFeatureFlag.Create(FlagKey, global));
-        db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FlagKey, account.Id));
+        if (targeted)
+            db.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FlagKey, account.Id));
+        host.Configuration["StagingEval:AccountIds"] = listed ? $"invalid, {account.Id}, {Guid.NewGuid()}" : null;
         await db.SaveChangesAsync();
         using var services = new ServiceCollection()
             .AddSingleton<IHostEnvironment>(host.Environment)
+            .AddSingleton<IConfiguration>(host.Configuration)
             .AddSingleton(db).AddMemoryCache()
             .AddScoped<IFeatureFlagService, Orbit.Infrastructure.Services.FeatureFlagService>()
             .BuildServiceProvider();
@@ -54,7 +65,7 @@ public class AstraEvalUnmeteredFlagTests
         (await resolver.GetEnabledKeysForUserAsync(account.Id, forceRefresh: true)).Contains(FlagKey).Should().Be(enabled);
         var batch = await resolver.GetEnabledKeysForUsersAsync([account, other]);
         batch[account.Id].Contains(FlagKey).Should().Be(enabled);
-        batch[other.Id].Contains(FlagKey).Should().Be(global && enabled);
+        batch[other.Id].Contains(FlagKey).Should().Be(environmentName == "Staging" && global);
 
         var config = Substitute.For<IAppConfigService>();
         config.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new Dictionary<string, string>());

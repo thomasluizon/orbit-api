@@ -102,6 +102,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      packages: write
     timeout-minutes: 170
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -137,7 +138,9 @@ jobs:
           echo "Staging served $COMMIT_SHA with status Healthy" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve verified staging image
-        id: image
+        id: staging_image
+        env:
+          FORCE_UNSTAGED: ${{ inputs.force_unstaged }}
         run: |
           set -euo pipefail
           deployment=$(gh api "repos/$GITHUB_REPOSITORY/deployments?sha=$COMMIT_SHA&environment=staging&per_page=1")
@@ -148,12 +151,20 @@ jobs:
             | select(.payload.image_digest | type == "string")
             | select(.payload.image_digest | length == 71 and test("^sha256:[a-f0-9]{64}$"))
           ' <<< "$deployment"); then
+            if [ "$FORCE_UNSTAGED" = true ]; then
+              echo 'build_required=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo '::error::No staging image digest recorded for the selected commit; release that SHA to staging first'
             exit 1
           fi
           deployment_id=$(jq -er '.id' <<< "$record")
           statuses=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses")
           if ! jq -e 'any(.[]; .state == "success")' <<< "$statuses" > /dev/null; then
+            if [ "$FORCE_UNSTAGED" = true ]; then
+              echo 'build_required=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo '::error::The recorded staging image has no successful staging deployment'
             exit 1
           fi
@@ -163,6 +174,72 @@ jobs:
             echo "Verified staging deployment: $deployment_id"
             echo "Promoting ghcr.io/thomasluizon/orbit-api@$digest for $COMMIT_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: release-source
+
+      - name: Verify image source
+        if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
+        env:
+          RELEASE_BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [ "$(git -C release-source rev-parse HEAD)" != "$COMMIT_SHA" ]; then
+            echo '::error::Image checkout does not match the selected release SHA'
+            exit 1
+          fi
+          if ! git -C release-source merge-base --is-ancestor "$COMMIT_SHA" "refs/remotes/origin/$RELEASE_BRANCH"; then
+            echo "::error::The selected release SHA is not reachable from $RELEASE_BRANCH"
+            exit 1
+          fi
+
+      - if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver: docker
+
+      - if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push production image
+        if: inputs.force_unstaged && steps.staging_image.outputs.build_required == 'true'
+        id: build_image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./release-source
+          file: ./release-source/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/thomasluizon/orbit-api:${{ needs.prepare.outputs.sha }}
+          build-args: API_COMMIT_SHA=${{ needs.prepare.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/thomasluizon/orbit-api
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
+
+      - name: Select production image
+        id: image
+        env:
+          STAGING_IMAGE_DIGEST: ${{ steps.staging_image.outputs.digest }}
+          BUILT_IMAGE_DIGEST: ${{ steps.build_image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          digest="${STAGING_IMAGE_DIGEST:-$BUILT_IMAGE_DIGEST}"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo '::error::Production image did not return a sha256 digest'
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Selected ghcr.io/thomasluizon/orbit-api@$digest for $COMMIT_SHA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trigger and monitor Render deploy
         id: render
@@ -246,11 +323,12 @@ jobs:
 
       - name: Record deployment
         env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           RENDER_LOG_URL: ${{ steps.render.outputs.log_url }}
         run: |
           set -euo pipefail
-          deployment=$(jq -cn --arg ref "$COMMIT_SHA" \
-            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: []}')
+          deployment=$(jq -cn --arg ref "$COMMIT_SHA" --arg digest "$IMAGE_DIGEST" \
+            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: [], payload: {image_digest: $digest}}')
           deployment_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" \
             --input - --jq '.id' <<< "$deployment")
           status=$(jq -cn --arg log_url "$RENDER_LOG_URL" \

@@ -274,11 +274,11 @@ public static partial class ServiceCollectionExtensions
         });
 
         builder.Services.AddAuthorizationBuilder()
-            .AddPolicy(StagingEvalRequirement.PolicyName, policy =>
-                policy.RequireAuthenticatedUser().AddRequirements(new StagingEvalRequirement()))
+            .AddPolicy(EvalAccountRequirement.PolicyName, policy =>
+                policy.RequireAuthenticatedUser().AddRequirements(new EvalAccountRequirement()))
             .AddPolicy(AdminPolicy.Name, policy =>
                 policy.Requirements.Add(new AdminRequirement()));
-        builder.Services.AddScoped<IAuthorizationHandler, StagingEvalAuthorizationHandler>();
+        builder.Services.AddScoped<IAuthorizationHandler, EvalAccountAuthorizationHandler>();
         builder.Services.AddScoped<IAuthorizationHandler, AdminAuthorizationHandler>();
 
         return builder;
