@@ -32,7 +32,7 @@ public class BulkCreateHabitsTool(
         HabitModelInstructions.WriteIntent + " Create multiple habits with inline sub-habits. "
         + "Organize an unstructured message into one combined approval preview of tasks and habits. "
         + "Include every proposed item in habits; reuse an existing activity with habit_id and only its requested changes. "
-        + "Finish all account and suggestion reads in earlier rounds before this call. Never submit a partial preview alongside a read. Reused items keep the stored title verbatim. Copy selected suggestion draft fields unchanged, including empty arrays and reminder settings; never invent quantities or activities. The preview groups items by habitType and is the entire answer, without separate read blocks. Nothing is saved before approval.";
+        + "Finish all account and suggestion reads in earlier rounds before this call. Never submit a partial preview alongside a read. Reused items keep the stored title verbatim. Copy selected suggestion draft fields unchanged, including empty arrays and reminder settings; never invent quantities or activities. The preview groups items by habitType and is the entire answer, without separate read blocks. Nothing is saved before approval. " + HabitModelInstructions.EventPreparation;
 
     public object GetParameterSchema() => new
     {
@@ -390,14 +390,14 @@ public class BulkCreateHabitsTool(
             [TitleProperty] = new { type = JsonSchemaTypes.String, description = "Keep the person's medical instruction wording; normalize only spelling and casing, without substituting the action or negation." },
             ["description"] = new { type = JsonSchemaTypes.String },
             ["emoji"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "Emoji icon. Pick a relevant one when clear." },
-            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "OneTime for a single dated action. Ongoing avoid habits default to Day/1 unless another cadence was requested. Preparation continuing until an event uses Day/1 with due_date and end_date.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
+            ["frequency_unit"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "OneTime for a single dated action or deadline-only item. Ongoing avoid habits default to Day/1 unless another cadence was requested. A restriction starting before an event, including a 24-hour restriction, uses Day with frequency_quantity=1, due_date at its start and inclusive end_date on the event; never OneTime on its first day.", @enum = JsonSchemaTypes.FrequencyOrOneTimeEnum },
             ["frequency_quantity"] = new { type = JsonSchemaTypes.Integer, description = "How often. Defaults to 1." },
             ["interval_weeks"] = new { type = JsonSchemaTypes.Integer, description = "Repeat interval in weeks. Omit for every week. Minimum 1." },
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
-            ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. For preparation, subtract this activity's own offset from its referenced event date. Otherwise defaults to today." },
-            ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Inclusive end date; required for recurring preparation that ends at an event." },
+            ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. For a restriction's start, subtract its own offset from its referenced event's local date and time. A deadline-only item uses the event date with due_end_time at the event, never another preparation's start date. Otherwise defaults to today." },
+            ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD, inclusive. A restriction starting before an event, including a 24-hour restriction, must end on that event's date with Day/1, never null. Omit or null for OneTime events and deadline-only items." },
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
-            ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline." },
+            ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline. For an activity until an event, use that event's clock time and due_date must be the event date. Leave due_time absent or null when no start time was supplied; do not drop a supplied collection deadline." },
             ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "True for ongoing reduction or slip tracking, with Day/1 unless another cadence was requested. False for a temporary medical commitment." },
             ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "No schedule or avoid type. Must be false for an ongoing avoid habit. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },

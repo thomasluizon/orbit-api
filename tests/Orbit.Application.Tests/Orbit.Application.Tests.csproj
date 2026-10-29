@@ -32,6 +32,7 @@
     <None Update="Fixtures/GateEightRerunAsk/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/GateSeven/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/GateEight/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/GateNineMedical/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/HonestyReads/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/RestartPlans/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/BrainDumps/*.json" CopyToOutputDirectory="PreserveNewest" />

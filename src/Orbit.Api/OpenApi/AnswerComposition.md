@@ -207,6 +207,39 @@ An activity ending at a collection uses its collection date and `due_end_time` f
 These are model instructions;
 composition and execution preserve the structured arguments rather than rewriting message text.
 
+### Preparation bounds and deadline copy review
+
+The system schedule instructions and both `create_habit` and `bulk_create_habits`
+descriptions share the explicit event-relative mapping below. Shared item schemas
+carry the four field descriptions at every supported nesting depth, including
+`create_sub_habit`. A restriction beginning 24 hours before an event remains a
+daily commitment through the inclusive event day. A deadline without a supplied
+start stays a one-time item on the event day with the supplied event time as its
+ending time. D and T represent that item's referenced local event date and time,
+not the account's current date or another preparation's start.
+
+Runtime model instructions remain English; pt-BR translations are provided for
+coordinator copy approval. These are all added or replaced runtime strings in
+this round. Existing description prefixes remain unchanged. No fixed
+person-visible copy is added or changed.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| HabitModelInstructions.EventPreparation, appended to Schedule and both create tool descriptions | Before submitting a create call, check each preparation against its own referenced event's local date and time. A restriction starting N days or hours before an event continues through the event day. A 24-hour restriction is a bounded daily commitment, not a single action on its first day. For an event on local date D at time T, that restriction uses frequency_unit=Day, frequency_quantity=1, due_date=D-1, end_date=D (inclusive). Subtract other offsets independently from that event's local date and time. A deadline-only instruction such as fast until the collection or jejum até a coleta uses frequency_unit=OneTime, due_date=D, due_end_time=T; leave due_time absent or null when no start time was supplied. Do not copy a preceding preparation's start date into a deadline-only item. Keep the event itself OneTime with its own due_date and due_time. Check every restriction has its event end_date and every deadline-only item has its event date and supplied ending time before submitting the complete preview. | Antes de enviar uma chamada de criação, confira cada preparação com a data e a hora locais do evento ao qual ela se refere. Uma restrição que começa N dias ou horas antes de um evento continua até o dia do evento. Uma restrição de 24 horas é um compromisso diário com prazo definido, não uma ação isolada no primeiro dia. Para um evento na data local D e no horário T, essa restrição usa frequency_unit=Day, frequency_quantity=1, due_date=D-1, end_date=D (inclusive). Subtraia os outros intervalos de forma independente da data e hora locais desse evento. Uma instrução apenas com prazo final, como fast until the collection ou jejum até a coleta, usa frequency_unit=OneTime, due_date=D, due_end_time=T; deixe due_time ausente ou null quando nenhum horário de início tiver sido informado. Não copie a data de início de uma preparação anterior para um item apenas com prazo final. Mantenha o próprio evento como OneTime com sua própria due_date e due_time. Confira se toda restrição tem end_date no evento e se todo item apenas com prazo final tem a data do evento e o horário de término informado antes de enviar a prévia completa. |
+| frequency_unit description | OneTime for a single dated action or deadline-only item. Ongoing avoid habits default to Day/1 unless another cadence was requested. A restriction starting before an event, including a 24-hour restriction, uses Day with frequency_quantity=1, due_date at its start and inclusive end_date on the event; never OneTime on its first day. | OneTime para uma ação isolada com data ou um item apenas com prazo final. Hábitos contínuos de evitar um comportamento usam Day/1 por padrão, salvo outra frequência solicitada. Uma restrição que começa antes de um evento, inclusive uma restrição de 24 horas, usa Day com frequency_quantity=1, due_date no início e end_date inclusiva no evento; nunca OneTime no primeiro dia. |
+| due_date description | YYYY-MM-DD. For a restriction's start, subtract its own offset from its referenced event's local date and time. A deadline-only item uses the event date with due_end_time at the event, never another preparation's start date. Otherwise defaults to today. | YYYY-MM-DD. Para o início de uma restrição, subtraia seu próprio intervalo da data e hora locais do evento ao qual ela se refere. Um item apenas com prazo final usa a data do evento com due_end_time no evento, nunca a data de início de outra preparação. Nos demais casos, o padrão é hoje. |
+| end_date description | YYYY-MM-DD, inclusive. A restriction starting before an event, including a 24-hour restriction, must end on that event's date with Day/1, never null. Omit or null for OneTime events and deadline-only items. | YYYY-MM-DD, inclusive. Uma restrição que começa antes de um evento, inclusive uma restrição de 24 horas, deve terminar na data desse evento com Day/1, nunca null. Omita ou use null para eventos OneTime e itens apenas com prazo final. |
+| due_end_time description | HH:mm end time or deadline. For an activity until an event, use that event's clock time and due_date must be the event date. Leave due_time absent or null when no start time was supplied; do not drop a supplied collection deadline. | HH:mm do término ou prazo final. Para uma atividade até um evento, use o horário desse evento e due_date deve ser a data do evento. Deixe due_time ausente ou null quando nenhum horário de início tiver sido informado; não omita um prazo de coleta informado. |
+
+`GateNine_MedicalPreviewAndApprovedCommandPreserveCapturedBounds` replays the real
+gate 9a arguments through the model-service port and checks the held preview and
+approved typed command. Captured mistakes stay visible, while successful captures
+retain their bounds and collection deadlines, including across a year boundary.
+The unchanged create contract has no typed event link for semantic validation.
+No message pattern or structural repair is added. These local replays do not
+prove that the live model follows the instructions; the coordinator runs that
+real-call gate.
+
 Write completion covers every requested action, target and occurrence. A target lookup is a
 prerequisite, not a mutation. A rename plus a skip uses both write tools; skipping several
 habits uses `bulk_skip_habits`. A lookup showing an already skipped occurrence does not replace
