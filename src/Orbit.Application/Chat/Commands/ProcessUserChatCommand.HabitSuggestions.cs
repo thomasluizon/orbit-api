@@ -10,7 +10,8 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator executionResults,
         ToolLoopResult toolLoopResult, AiResponse aiResponse, GroundingTurn groundingTurn, CancellationToken cancellationToken)
     {
-        if ((StartingStepAnswer(executionResults, request, context) ?? SuggestionAnswer(executionResults, request, context)) is { } suggestions)
+        if ((CombinedCreationPreviewAnswer(executionResults, request) ?? StartingStepAnswer(executionResults, request, context)
+            ?? SuggestionAnswer(executionResults, request, context)) is { } suggestions)
         {
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
             return (suggestions, null, TurnFactSet.FromToolResults(executionResults.ToolResults));
