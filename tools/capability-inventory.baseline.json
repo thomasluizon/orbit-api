@@ -9572,21 +9572,6 @@
       }
     },
     {
-      "capability": "AgentCapabilityIds.ProfilePremiumAppearanceWrite",
-      "surfaces": {
-        "chat": {
-          "verdict": "absent",
-          "direct": [],
-          "viaOperations": []
-        },
-        "mcp": {
-          "verdict": "absent",
-          "direct": [],
-          "viaOperations": []
-        }
-      }
-    },
-    {
       "capability": "AgentCapabilityIds.ProfileProactiveAstraWrite",
       "surfaces": {
         "chat": {

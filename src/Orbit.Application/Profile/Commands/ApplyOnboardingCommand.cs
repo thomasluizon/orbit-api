@@ -49,9 +49,7 @@ public record ApplyOnboardingCommand(
     IReadOnlyList<ApplyHabitInput> Habits,
     ApplyLogInput? FirstLog,
     ApplyGoalInput? Goal,
-    int? WeekStartDay,
-    [property: Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
-    string? ColorScheme) : IRequest<Result<ApplyOnboardingResponse>>, IConcurrencyRetryable;
+    int? WeekStartDay) : IRequest<Result<ApplyOnboardingResponse>>, IConcurrencyRetryable;
 
 public record ApplyOnboardingRepositories(
     IGenericRepository<User> Users,
@@ -121,7 +119,7 @@ public class ApplyOnboardingCommandHandler(
             return goalResult.PropagateError<ApplyOnboardingResponse>();
         var createdGoal = goalResult.Value;
 
-        var prefsResult = ApplyPreferences(user, request.WeekStartDay, request.ColorScheme);
+        var prefsResult = ApplyPreferences(user, request.WeekStartDay);
         if (prefsResult.IsFailure)
             return prefsResult.PropagateError<ApplyOnboardingResponse>();
 
@@ -210,20 +208,13 @@ public class ApplyOnboardingCommandHandler(
         return Result.Success(true);
     }
 
-    private static Result ApplyPreferences(User user, int? weekStartDay, string? colorScheme)
+    private static Result ApplyPreferences(User user, int? weekStartDay)
     {
         if (weekStartDay is { } day)
         {
             var weekStartResult = user.SetWeekStartDay(day);
             if (weekStartResult.IsFailure)
                 return weekStartResult;
-        }
-
-        if (colorScheme is not null)
-        {
-            var colorResult = user.SetColorScheme(colorScheme);
-            if (colorResult.IsFailure)
-                return colorResult;
         }
 
         return Result.Success();

@@ -34,7 +34,6 @@ public static class DomainErrors
     public static readonly AppError InvalidEmailFormat = new("INVALID_EMAIL_FORMAT", "Invalid email format");
     public static readonly AppError InvalidTimezone = new("INVALID_TIMEZONE", "Invalid timezone: {0}");
     public static readonly AppError InvalidThemePreference = new("INVALID_THEME_PREFERENCE", "Invalid theme preference. Must be 'dark' or 'light'.");
-    public static readonly AppError InvalidColorScheme = new("INVALID_COLOR_SCHEME", "Invalid color scheme.");
     public static readonly AppError InvalidWeekStartDay = new("INVALID_WEEK_START_DAY", "Week start day must be 0 (Sunday) or 1 (Monday)");
     public static readonly AppError NoStreakFreezesAccumulated = new("NO_STREAK_FREEZES", "No streak freezes accumulated");
     public static readonly AppError InvalidStreakGap = new("INVALID_STREAK_GAP", "Select consecutive dates ending yesterday.");

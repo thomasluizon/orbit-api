@@ -109,8 +109,7 @@ public class ApplyOnboardingCommandHandlerTests
             [Habit("Drink water"), Habit("Read")],
             new ApplyLogInput(0, Today),
             new ApplyGoalInput("Run 100km", null, 100, "km"),
-            WeekStartDay: 0,
-            ColorScheme: "blue");
+            WeekStartDay: 0);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -121,7 +120,7 @@ public class ApplyOnboardingCommandHandlerTests
         result.Value.LoggedFirstHabit.Should().BeTrue();
         user.HasCompletedOnboarding.Should().BeTrue();
         user.WeekStartDay.Should().Be(0);
-        user.ColorScheme.Should().Be(ColorSchemes.Granted);
+        user.ColorScheme.Should().BeNull();
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _goalRepo.Received(1).AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -138,7 +137,7 @@ public class ApplyOnboardingCommandHandlerTests
         SetupUser(user);
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Drink water")], null, null, null, null);
+            UserId, [Habit("Drink water")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -159,7 +158,7 @@ public class ApplyOnboardingCommandHandlerTests
             .Returns((User?)null);
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Drink water")], null, null, null, null);
+            UserId, [Habit("Drink water")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -175,7 +174,7 @@ public class ApplyOnboardingCommandHandlerTests
         SetupUser(user);
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Valid"), Habit("   ")], null, null, null, null);
+            UserId, [Habit("Valid"), Habit("   ")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -193,7 +192,7 @@ public class ApplyOnboardingCommandHandlerTests
             .Returns(AppConstants.DefaultFreeMaxHabits - 1);
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("One"), Habit("Two"), Habit("Three")], null, null, null, null);
+            UserId, [Habit("One"), Habit("Two"), Habit("Three")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -213,7 +212,7 @@ public class ApplyOnboardingCommandHandlerTests
             .Returns(AppConstants.DefaultFreeMaxHabits - 1);
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("One"), Habit("Two"), Habit("Three")], null, null, null, null);
+            UserId, [Habit("One"), Habit("Two"), Habit("Three")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -243,7 +242,6 @@ public class ApplyOnboardingCommandHandlerTests
             [Habit("One"), Habit("Two"), Habit("Three"), Habit("Four"), Habit("Five")],
             null,
             null,
-            null,
             null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
@@ -260,7 +258,7 @@ public class ApplyOnboardingCommandHandlerTests
 
         var command = new ApplyOnboardingCommand(
             UserId, [Habit("Drink water")], null,
-            new ApplyGoalInput("Run 100km", null, 100, "km"), null, null);
+            new ApplyGoalInput("Run 100km", null, 100, "km"), null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -280,7 +278,7 @@ public class ApplyOnboardingCommandHandlerTests
 
         var command = new ApplyOnboardingCommand(
             UserId, [Habit("Drink water")], null,
-            new ApplyGoalInput("Run 100km", null, 100, "km", Today.AddDays(-1)), null, null);
+            new ApplyGoalInput("Run 100km", null, 100, "km", Today.AddDays(-1)), null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -297,7 +295,7 @@ public class ApplyOnboardingCommandHandlerTests
         SetupUser(user);
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Drink water")], new ApplyLogInput(5, Today), null, null, null);
+            UserId, [Habit("Drink water")], new ApplyLogInput(5, Today), null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -316,7 +314,7 @@ public class ApplyOnboardingCommandHandlerTests
         _cache.Set(cacheKey, "stale-summary");
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Drink water")], null, null, null, null);
+            UserId, [Habit("Drink water")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -335,7 +333,7 @@ public class ApplyOnboardingCommandHandlerTests
         _cache.Set(cacheKey, "fresh-summary");
 
         var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Drink water")], null, null, null, null);
+            UserId, [Habit("Drink water")], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -346,22 +344,6 @@ public class ApplyOnboardingCommandHandlerTests
     }
 
     [Fact]
-    public async Task Apply_InvalidColorScheme_ReturnsFailureWithoutSaving()
-    {
-        var user = CreateProUser();
-        SetupUser(user);
-
-        var command = new ApplyOnboardingCommand(
-            UserId, [Habit("Drink water")], null, null, WeekStartDay: null, ColorScheme: "magenta");
-
-        var result = await CreateHandler().Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        user.HasCompletedOnboarding.Should().BeFalse();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Apply_WeekdayHabitWithIntervalWeeks_CreatesHabitThatRepeatsEverySecondWeek()
     {
         var user = CreateProUser();
@@ -369,7 +351,7 @@ public class ApplyOnboardingCommandHandlerTests
         var created = CaptureCreatedHabits();
 
         var command = new ApplyOnboardingCommand(
-            UserId, [WeekdayHabit("Gym", intervalWeeks: 2)], null, null, null, null);
+            UserId, [WeekdayHabit("Gym", intervalWeeks: 2)], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -389,7 +371,7 @@ public class ApplyOnboardingCommandHandlerTests
         var created = CaptureCreatedHabits();
 
         var command = new ApplyOnboardingCommand(
-            UserId, [WeekdayHabit("Gym", intervalWeeks: null)], null, null, null, null);
+            UserId, [WeekdayHabit("Gym", intervalWeeks: null)], null, null, null);
 
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
@@ -412,7 +394,7 @@ public class ApplyOnboardingCommandHandlerTests
             "Gym", null, null, FrequencyUnit.Day, 1, [DayOfWeek.Monday], false, false, false, FirstMonday);
 
         var result = await CreateHandler().Handle(
-            new ApplyOnboardingCommand(UserId, [legacyInput], null, null, null, null),
+            new ApplyOnboardingCommand(UserId, [legacyInput], null, null, null),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -435,7 +417,7 @@ public class ApplyOnboardingCommandHandlerTests
             IsGeneral: true, DueDate: FirstMonday, IntervalWeeks: 2);
 
         var result = await CreateHandler().Handle(
-            new ApplyOnboardingCommand(UserId, [generalInput], null, null, null, null),
+            new ApplyOnboardingCommand(UserId, [generalInput], null, null, null),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

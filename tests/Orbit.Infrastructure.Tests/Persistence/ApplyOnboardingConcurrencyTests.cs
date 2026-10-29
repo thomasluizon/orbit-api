@@ -43,7 +43,7 @@ public class ApplyOnboardingConcurrencyTests
             new GenericRepository<Goal>(database.Context)), StubToday(new DateOnly(2030, 4, 10)), config,
             database.Work, new MemoryCache(new MemoryCacheOptions()));
         var command = new ApplyOnboardingCommand(user.Id,
-            [new ApplyHabitInput("Drink water", null, null, FrequencyUnit.Day, 1)], null, null, null, null);
+            [new ApplyHabitInput("Drink water", null, null, FrequencyUnit.Day, 1)], null, null, null);
         var retry = new ConcurrencyRetryBehavior<ApplyOnboardingCommand, Result<ApplyOnboardingResponse>>(database.Work);
 
         var result = await retry.Handle(command, ct => handler.Handle(command, ct), default);
@@ -95,7 +95,7 @@ public class ApplyOnboardingConcurrencyTests
         var command = new ApplyOnboardingCommand(
             userId,
             [new ApplyHabitInput("Drink water", null, null, FrequencyUnit.Day, 1)],
-            null, null, null, null);
+            null, null, null);
 
         var behavior = new ConcurrencyRetryBehavior<ApplyOnboardingCommand, Result<ApplyOnboardingResponse>>(unitOfWork);
         var result = await behavior.Handle(command, ct => handler.Handle(command, ct), CancellationToken.None);

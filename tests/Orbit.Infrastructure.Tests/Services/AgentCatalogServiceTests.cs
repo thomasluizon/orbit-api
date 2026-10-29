@@ -106,7 +106,7 @@ public class AgentCatalogServiceTests
     }
 
     [Fact]
-    public void SetColorScheme_IsAvailableOnlyThroughTheHttpCompatibilityEndpoint()
+    public void SetColorScheme_IsAbsentFromEveryAgentSurface()
     {
         var chatToolNames = typeof(AiToolRegistry).Assembly
             .GetTypes()
@@ -122,12 +122,10 @@ public class AgentCatalogServiceTests
         mcpToolNames.Should().NotContain("set_color_scheme");
         _catalogService.GetCapabilityByChatTool("set_color_scheme").Should().BeNull();
         _catalogService.GetCapabilityByMcpTool("set_color_scheme").Should().BeNull();
-        _catalogService.HasEquivalentControllerAction("ProfileController.SetColorScheme").Should().BeTrue();
-        var legacyWrite = _catalogService.GetCapability(Orbit.Domain.Models.AgentCapabilityIds.ProfilePremiumAppearanceWrite);
-        legacyWrite.Should().NotBeNull();
-        legacyWrite!.ChatToolNames.Should().BeNullOrEmpty();
-        legacyWrite.McpToolNames.Should().BeNullOrEmpty();
-        legacyWrite.Description.Should().Contain("one accent").And.Contain("light or dark mode");
+        _catalogService.HasEquivalentControllerAction("ProfileController.SetColorScheme").Should().BeFalse();
+        _catalogService.GetCapability("profile.premium-appearance.write").Should().BeNull();
+        _catalogService.GetUserDataCatalog().Single(entry => entry.Id == "profile")
+            .Fields.Should().NotContain(field => field.Name == "ColorScheme");
     }
 
     [Fact]
@@ -413,14 +411,8 @@ public class AgentCatalogServiceTests
         prompt.Should().Contain("Account Lifecycle");
     }
 
-    /// <summary>
-    /// One field, several surfaces. The data export returns the raw ColorScheme column, so a row
-    /// written before the colour collapse still reports its own key. Any agent-facing sentence that
-    /// promises one value for every account contradicts that export, and fixing one surface while its
-    /// twin keeps the claim is exactly the defect this sweep closes.
-    /// </summary>
     [Fact]
-    public void NoAgentFacingColorSchemeText_PromisesOneStoredValueForEveryAccount()
+    public void AgentFacingDescriptions_DoNotAdvertiseRetiredColorScheme()
     {
         var described = new List<(string Source, string Text)>();
 
@@ -442,15 +434,7 @@ public class AgentCatalogServiceTests
                 || pair.Text.Contains("color-scheme", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        aboutTheColorScheme.Should().NotBeEmpty("the sweep is vacuous if no surface mentions the field");
-
-        var contradictingTheExport = aboutTheColorScheme
-            .Where(pair => pair.Text.Contains("the same value", StringComparison.OrdinalIgnoreCase)
-                || pair.Text.Contains("same for every", StringComparison.OrdinalIgnoreCase))
-            .Select(pair => pair.Source)
-            .ToList();
-
-        contradictingTheExport.Should().BeEmpty();
+        aboutTheColorScheme.Should().BeEmpty();
     }
 
     private static IEnumerable<(string Source, string Text)> ChatToolDescriptions()

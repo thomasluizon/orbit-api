@@ -30,16 +30,12 @@ public partial class ProfileController(
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetClockFormatRequest([property: JsonRequired] bool Uses24HourClock);
     public record SetThemePreferenceRequest(string? ThemePreference);
-    [Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
-    public record SetColorSchemeRequest(string? ColorScheme);
     public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
     public record ApplyOnboardingRequest(
         IReadOnlyList<ApplyHabitInput>? Habits,
         ApplyLogInput? FirstLog,
         ApplyGoalInput? Goal,
-        int? WeekStartDay,
-        [property: Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
-        string? ColorScheme);
+        int? WeekStartDay);
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -195,24 +191,6 @@ public partial class ProfileController(
         return result.ToPayGateAwareResult(() => NoContent());
     }
 
-    [HttpPut("color-scheme")]
-    [Obsolete("Retained for compatibility pending removal in thomasluizon/orbit-tickets#685.")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> SetColorScheme(
-        [FromBody] SetColorSchemeRequest request,
-        CancellationToken cancellationToken)
-    {
-        var command = new SetColorSchemeCommand(HttpContext.GetUserId(), request.ColorScheme);
-        var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
-            logger.LogColorSchemeChanged(request.ColorScheme, HttpContext.GetUserId());
-
-        return result.ToPayGateAwareResult(() => NoContent());
-    }
-
     [HttpPut("onboarding")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -237,8 +215,7 @@ public partial class ProfileController(
             request.Habits ?? [],
             request.FirstLog,
             request.Goal,
-            request.WeekStartDay,
-            request.ColorScheme);
+            request.WeekStartDay);
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(value => Ok(value));
     }
@@ -343,9 +320,6 @@ internal static partial class ProfileControllerLogging
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Theme preference changed to {ThemePreference} for user {UserId}")]
     internal static partial void LogThemePreferenceChanged(this ILogger logger, string? themePreference, Guid userId);
-
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Color scheme changed to {ColorScheme} for user {UserId}")]
-    internal static partial void LogColorSchemeChanged(this ILogger logger, string? colorScheme, Guid userId);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account reset for user {UserId}")]
     internal static partial void LogAccountReset(this ILogger logger, Guid userId);

@@ -45,7 +45,7 @@ types in OpenAPI:
 | Chat SSE | Additional `step` variant and optional `domain`, `access` fields | Steps require `supportsToolSteps=true`; existing event variants remain |
 | Chat client context | Optional capability fields for previews, steps, follow-ups and cards; optional `messageOrigin` | Missing capabilities keep legacy behavior |
 | Calendar connection errors | Portuguese localization breaks a shipped English substring classifier | Keep these two messages in English for both languages, preserving their codes and statuses |
-| Profile color scheme | Historical writes remain accepted; profile reads return the existing `orange` key | The shipped profile schema accepts nullable strings; no enum value is introduced or removed |
+| Profile color scheme | The retired write route and onboarding input are removed; profile reads return the existing `orange` key | Supported clients no longer write a scheme; the export retains the stored historical value |
 
 `AgentContextSnapshot.ColorScheme` was removed from the internal prompt context only.
 `BuildAgentContextSnapshot` and `BuildDynamicSupplement` are its only production
