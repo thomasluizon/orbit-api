@@ -105,7 +105,7 @@ public sealed class ChatResponseNegotiationTests
         if (mode == "parts")
         {
             result.Parts.Should().BeNull();
-            result.AiMessage.Should().Be("All habits\nHabits: 0");
+            result.AiMessage.Should().Be("Habits: 0");
         }
         else result.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>();
         if (mode is "followups" or "legacy") result.FollowUps.Should().BeNull();
