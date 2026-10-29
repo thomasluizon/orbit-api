@@ -1,0 +1,146 @@
+{
+  "caseId": "brain-dump-mixed-pt-BR",
+  "repeat": 2,
+  "message": "Minha cabeça tá uma bagunça. Amanhã preciso ligar para o dentista, e quero alongar todo dia de manhã, às oito, começando hoje. Organiza isso pra mim?",
+  "toolCalls": [
+    {
+      "name": "bulk_create_habits",
+      "arguments": {
+        "parent_habit_id": null,
+        "habits": [
+          {
+            "title": "Ligar para o dentista",
+            "description": null,
+            "emoji": "📞",
+            "frequency_unit": "OneTime",
+            "frequency_quantity": null,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": "2026-10-30",
+            "end_date": null,
+            "due_time": null,
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": false,
+            "reminder_times": [],
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          },
+          {
+            "title": "Alongar",
+            "description": null,
+            "emoji": "🧘",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": null,
+            "end_date": null,
+            "due_time": "08:00",
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": "2026-10-29",
+            "placement": null,
+            "reminder_enabled": false,
+            "reminder_times": [],
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          }
+        ],
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "groundingEvidence": {
+    "fixture": {
+      "habits": [
+        {
+          "title": "Beber água",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-29",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-25T00:10:04.663545Z",
+          "logs": [],
+          "intervalWeeks": null
+        },
+        {
+          "title": "Caminhada",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-29",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-25T00:10:06.266458Z",
+          "logs": [],
+          "intervalWeeks": null
+        }
+      ],
+      "goals": [],
+      "tags": [],
+      "checklistTemplates": [],
+      "apiKeys": [],
+      "notifications": [],
+      "loggedState": {
+        "fixture": "pro",
+        "date": "2026-10-29",
+        "habits": [
+          {
+            "title": "Beber água",
+            "completed": false,
+            "skipped": false
+          },
+          {
+            "title": "Caminhada",
+            "completed": false,
+            "skipped": false
+          }
+        ]
+      }
+    },
+    "successfulTools": [],
+    "readScopes": []
+  },
+  "brainDumpReadback": {
+    "pass": false,
+    "score": 0,
+    "reason": "Brain dump lost a requested item, identity or schedule."
+  },
+  "answer": "{\"pendingOperations\":[{\"count\":2,\"items\":[{\"title\":\"Ligar para o dentista\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Ligar para o dentista\"},{\"field\":\"due_date\",\"newValue\":\"2026-10-30\"},{\"field\":\"emoji\",\"newValue\":\"📞\"},{\"field\":\"frequency_unit\",\"newValue\":\"OneTime\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"reminder_enabled\",\"newValue\":\"False\"},{\"field\":\"reminder_times\",\"values\":[]},{\"field\":\"parent_habit_id\",\"movesToRoot\":true}]},{\"title\":\"Alongar\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Alongar\"},{\"field\":\"due_time\",\"newValue\":\"08:00\"},{\"field\":\"emoji\",\"newValue\":\"🧘\"},{\"field\":\"frequency_quantity\",\"newValue\":\"1\"},{\"field\":\"frequency_unit\",\"newValue\":\"Day\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"reminder_enabled\",\"newValue\":\"False\"},{\"field\":\"reminder_times\",\"values\":[]},{\"field\":\"parent_habit_id\",\"movesToRoot\":true}]}]}],\"parts\":[]}"
+}

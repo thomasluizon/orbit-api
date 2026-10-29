@@ -1,0 +1,156 @@
+{
+  "caseId": "composition-restart-approve-en",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": null,
+        "date": "2026-10-29",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "bulk_reschedule_habits",
+      "arguments": {
+        "filter": null,
+        "due_date": null,
+        "revised_items": [
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-29"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-30"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-30"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-31"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-31"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-11-01"
+            }
+          }
+        ],
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "groundingEvidence": {
+    "fixture": null,
+    "successfulTools": [
+      {
+        "name": "query_habits",
+        "result": {
+          "scope": "today",
+          "items": [
+            {
+              "title": "Water",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-19",
+              "parentTitle": null,
+              "tags": [],
+              "isSkippedOnDate": false
+            },
+            {
+              "title": "Walk",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-19",
+              "parentTitle": null,
+              "tags": [],
+              "isSkippedOnDate": false
+            },
+            {
+              "title": "Additional habit 1",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-23",
+              "parentTitle": null,
+              "tags": [],
+              "isSkippedOnDate": false
+            },
+            {
+              "title": "Additional habit 2",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-23",
+              "parentTitle": null,
+              "tags": [],
+              "isSkippedOnDate": false
+            },
+            {
+              "title": "Additional habit 3",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-23",
+              "parentTitle": null,
+              "tags": [],
+              "isSkippedOnDate": false
+            },
+            {
+              "title": "Additional habit 4",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-23",
+              "parentTitle": null,
+              "tags": [],
+              "isSkippedOnDate": false
+            }
+          ],
+          "date": "2026-10-29",
+          "totalCount": 6
+        }
+      }
+    ],
+    "readScopes": []
+  }
+}

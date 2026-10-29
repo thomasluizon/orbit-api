@@ -9,7 +9,7 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class BulkCreateHabitsTool(
+public partial class BulkCreateHabitsTool(
     IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool, IHabitCreationCapacityTool
 {
     private const string TitleProperty = "title";
@@ -32,7 +32,7 @@ public class BulkCreateHabitsTool(
         HabitModelInstructions.WriteIntent + " Create multiple habits with inline sub-habits. "
         + "Organize an unstructured message into one combined approval preview of tasks and habits. "
         + "Include every proposed item in habits; reuse an existing activity with habit_id and only its requested changes. "
-        + "Finish all account and suggestion reads in earlier rounds before this call. Never submit a partial preview alongside a read. Reused items keep the stored title verbatim. Copy selected suggestion draft fields unchanged, including empty arrays and reminder settings; never invent quantities or activities. The preview groups items by habitType and is the entire answer, without separate read blocks. Nothing is saved before approval.";
+        + "Use query_habits for reuse and suggest_habits for requested ideas; calendars, habit months, profile and analytics are not needed. Finish those reads in earlier rounds before this call. Never submit a partial preview alongside a read. Reused items keep the stored title verbatim. Copy selected suggestion draft fields unchanged, including empty arrays and reminder settings; never invent quantities or activities. The preview groups items by habitType and is the entire answer, without separate read blocks. Nothing is saved before approval.";
 
     public object GetParameterSchema() => new
     {
@@ -55,7 +55,7 @@ public class BulkCreateHabitsTool(
 
     public Task<Orbit.Domain.Common.Result> CheckCreationCapacityAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        args = PrepareArguments(args);
         return args.TryGetProperty(ToolArgumentNames.Habits, out var habits) && habits.ValueKind == JsonValueKind.Array
             ? HabitCreationCapacity.CheckAsync(mediator, userId, habits.EnumerateArray(), args.TryGetProperty(ParentHabitId, out _), ct)
             : Task.FromResult(Orbit.Domain.Common.Result.Success());
@@ -63,6 +63,7 @@ public class BulkCreateHabitsTool(
 
     public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = PrepareArguments(args);
         var schemaArguments = JsonNode.Parse(args.GetRawText());
         if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits)
             foreach (var habit in habits.OfType<JsonObject>())
@@ -78,7 +79,7 @@ public class BulkCreateHabitsTool(
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)
     {
-        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        args = PrepareArguments(args);
         if (!args.TryGetProperty(ToolArgumentNames.Habits, out var habitsEl) || habitsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "habits is required and must be an array.");
 
@@ -241,7 +242,10 @@ public class BulkCreateHabitsTool(
     private static IRequest<Orbit.Domain.Common.Result<Guid>> CreateTreeCommand(JsonElement source, BulkHabitItem item,
         Guid userId, Guid? parentId)
     {
-        var options = new HabitCommandOptions(item.Days ?? (item.DueDate.HasValue ? [] : null), item.DueTime, item.DueEndTime,
+        var days = item.Days ?? (source.TryGetProperty("days", out var suppliedDays)
+            && suppliedDays.ValueKind == JsonValueKind.Array
+            || item.DueDate.HasValue && !item.StartDate.HasValue ? [] : null);
+        var options = new HabitCommandOptions(days, item.DueTime, item.DueEndTime,
             item.ReminderEnabled, item.ReminderTimes, item.SlipAlertEnabled, item.ChecklistItems,
             item.ScheduledReminders, item.EndDate, item.IsFlexible, item.RelativeReminders, item.RepeatReminder);
         return parentId is { } parent
@@ -396,8 +400,8 @@ public class BulkCreateHabitsTool(
             ["days"] = new { type = JsonSchemaTypes.Array, description = "Specific weekdays. Only when frequency_quantity is 1.", items = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.WeekdayEnum } },
             ["due_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. For preparation, subtract this activity's own offset from its referenced event date. Otherwise defaults to today." },
             ["end_date"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD. Inclusive end date; required for recurring preparation that ends at an event." },
-            ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm" },
-            ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline." },
+            ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm. Suggestion times with zero seconds are accepted as HH:mm:ss." },
+            ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline. Suggestion times with zero seconds are accepted as HH:mm:ss." },
             ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "True for ongoing reduction or slip tracking, with Day/1 unless another cadence was requested. False for a temporary medical commitment." },
             ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "No schedule or avoid type. Must be false for an ongoing avoid habit. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },
@@ -418,7 +422,7 @@ public class BulkCreateHabitsTool(
             }
         };
 
-        properties["start_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD recurrence anchor." };
+        properties["start_date"] = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD recurrence anchor. Also set due_date to the requested first date so it is visible in the approval preview." };
         properties["placement"] = new
         {
             type = JsonSchemaTypes.String,
@@ -432,7 +436,7 @@ public class BulkCreateHabitsTool(
         properties["repeat_reminder"] = RepeatReminderToolArguments.RepeatReminderSchema();
         properties["slip_alert_enabled"] = new { type = JsonSchemaTypes.Boolean };
         properties["tag_names"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
-        properties["habit_id"] = new { type = JsonSchemaTypes.String, description = "Existing habit ID to reuse and edit instead of creating a duplicate." };
+        properties["habit_id"] = new { type = JsonSchemaTypes.String, description = "The stored habit ID from query_habits or existingHabitId from suggest_habits. Required for reuse. Keep its stored title verbatim; supply only requested changes and leave other fields null. Null means a new activity." };
         properties["tag_ids"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
         properties["goal_ids"] = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } };
         if (remainingDepth > 1)

@@ -471,7 +471,7 @@ public partial class ProcessUserChatCommandHandler
                 if (selection.RequiresAnswer)
                     executionResults.PendingSelection ??= selection;
                 if (selection.RequiresAnswer || selection.Reference is not null)
-                    executionResults.AmbiguousReadCandidates.Add(selection);
+                    executionResults.SelectionCandidates.Add(selection);
             }
         }
 

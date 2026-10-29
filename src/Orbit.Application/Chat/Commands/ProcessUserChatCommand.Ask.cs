@@ -41,6 +41,7 @@ public partial class ProcessUserChatCommandHandler
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         results.CanRetryAsk = false;
+        PreserveAskRecordSelection(call.Args, request.UserId, results);
         if (deferAsk)
             return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
                 "Account reads were still pending after ask. Reassess the original request using their results. Prepare every resolved change with its write tool; ask only for input that remains missing, after all other calls."),
@@ -96,6 +97,27 @@ public partial class ProcessUserChatCommandHandler
         && form.ValueKind == JsonValueKind.String && client.PartKinds is { } kinds
         && (kinds.Contains(form.GetString()!, StringComparer.Ordinal)
             || form.GetString() == AstraBlockKinds.Question && kinds.Contains(AstraBlockKinds.Choice));
+
+    private sealed record AskSelectionOption(JsonElement Id);
+
+    private static void PreserveAskRecordSelection(JsonElement args, Guid userId, ToolExecutionAccumulator results)
+    {
+        if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("options", out var value)
+            || value.ValueKind != JsonValueKind.Array)
+            return;
+        var ids = value.EnumerateArray().Where(option => option.ValueKind == JsonValueKind.Object)
+            .Select(option => option.Deserialize<AskSelectionOption>(AskArgumentJsonOptions)?.Id ?? default)
+            .Where(id => id.ValueKind == JsonValueKind.String)
+            .Select(id => Guid.TryParse(id.GetString(), out var parsed) ? parsed : Guid.Empty).ToHashSet();
+        var candidates = results.AllHabits.Where(habit => habit.UserId == userId && ids.Contains(habit.Id))
+            .Select(habit => new HabitListCardItem(habit.Id.ToString(), habit.Title, habit.Emoji, 0,
+                habit.IsBadHabit, HabitListCardBuilder.StatusNone)).ToArray();
+        if (candidates.Length == 0)
+            return;
+        var selection = new HabitSelectionCandidates(null, candidates, true);
+        results.PendingSelection ??= selection;
+        results.SelectionCandidates.Add(selection);
+    }
 
     private (List<AiToolCall> Calls, bool DeferAsk) OrderCallsForAsk(IReadOnlyList<AiToolCall> calls, IReadOnlyList<Habit> habits)
     {

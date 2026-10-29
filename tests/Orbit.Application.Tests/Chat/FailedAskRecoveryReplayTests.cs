@@ -13,6 +13,67 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData(false, false, "en")]
+    [InlineData(true, false, "en")]
+    [InlineData(false, false, "pt-BR")]
+    [InlineData(true, false, "pt-BR")]
+    [InlineData(false, true, "en")]
+    [InlineData(true, true, "pt-BR")]
+    public async Task FailedAskRecovery_RecordChoiceWithholdsOnlyCandidateWrites(bool composition, bool unrelated, string locale)
+    {
+        var user = User.Create("Reader", "reader@example.test").Value;
+        user.SetLanguage(locale);
+        SetupUserAndPayGate(user);
+        if (composition) EnableComposition();
+        var candidates = new[] { CreateHabit("Caminhada"), CreateHabit("Caminhada") };
+        var water = CreateHabit("Water");
+        SetupSelectionHabits(candidates[0], candidates[1], water);
+        var log = new LogHabitTool(_mediator, _habitRepo, _userDateService);
+        var handler = CreateHandler(RealAskTool(), log);
+        var held = HoldReplayWrites(log);
+        SetupAiResponse(ToolResponse("ask", "invalid-choice", JsonSerializer.Serialize(new
+        {
+            form = "choice",
+            question = "Which habit would you like to choose?",
+            options = candidates.Select((habit, index) => new
+            {
+                id = habit.Id.ToString(),
+                label = index == 0 ? "The first Caminhada habit" : "The other Caminhada habit"
+            }).ToArray()
+        })));
+        var target = unrelated ? water : candidates[0];
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse(log.Name, "guessed-log", JsonSerializer.Serialize(new { habit_id = target.Id }))),
+                Result.Success(new AiResponse { TextMessage = "Review the changes." }));
+
+        var result = await handler.Handle(new(UserId, "Let me choose which Caminhada habit to log.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"],
+                SupportsPendingOperationChanges: true, Locale: locale)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        if (unrelated)
+        {
+            held.Should().ContainSingle().Which.OperationId.Should().Be(log.Name);
+            result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().ContainSingle()
+                .Which.EntityId.Should().Be(water.Id);
+        }
+        else
+        {
+            held.Should().BeEmpty();
+            result.Value.PendingOperations.Should().BeNullOrEmpty();
+            result.Value.AiMessage.Should().Be(locale == "en"
+                ? "Which habit would you like to choose?"
+                : "Qual hábito você quer escolher?");
+        }
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(TestConversationContext,
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && results[0].Name == "ask"
+                && !results[0].Success && results[0].Error != null && results[0].Error!.Contains("option label max 20")),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task FailedAskRecovery_CapturedNullQuestionPreservesBatchPreview(bool composition)

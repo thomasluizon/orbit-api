@@ -71,6 +71,15 @@ block; an invalid ask never discards recovery tool calls. The ask retry limit ap
 to question attempts, not other tools. No question prepares a write. See
 [ask validation and bilingual copy](AskValidation.md).
 
+An attempted choice retains option IDs that identify owned habits even when its
+question fails validation and no habit query preceded it. The unanswered candidates
+join the same selection state as account reads, so candidate-dependent writes stay
+withheld before coalescing and preview creation. Recovery reads and previews for
+unrelated targets still run. Only typed option IDs establish this state; option
+labels and the person's message do not. Until a valid question is issued, the reply
+reuses `chat.answer.selectHabit`: "Which habit would you like to choose?" in en and
+"Qual hábito você quer escolher?" in pt-BR. No new person-visible copy is added.
+
 The failed-ask recovery path adds the following model-facing diagnostics. These
 are tool feedback, not fixed replies to the person. Existing question retry and
 plain-text fallback instructions remain available.
@@ -98,6 +107,7 @@ copy or public DTO changes in this round.
 | Withheld call feedback | This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved. | Esta chamada foi retida enquanto ask estava pendente. Continue o pedido original usando o resultado de ask; prepare apenas alterações com as informações necessárias já definidas. |
 | Tool description prefix | Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. | Peça as informações que faltam com uma escolha, uma lista de seleção para a prévia de um lote ou um formulário com várias perguntas. Leia primeiro os dados da conta. Só uma chamada válida e aceita de ask encerra a resposta. Nunca peça aprovação nem repita uma pergunta da prévia. |
 | Tool description addition | Do not call ask for a clear request you can act on, including a batch of dated items or a request to show habits and goals. Null fields are absent; form question requires nonempty questions. | Não chame ask quando o pedido estiver claro e já puder ser atendido, incluindo um lote de itens com datas ou um pedido para mostrar hábitos e metas. Campos null estão ausentes; form question exige questions preenchido. |
+| Tool description selection boundary | An explicit request for the person to choose habits requires ask, even with one candidate. Use pickList for selecting habits to log or skip, with action and items; it prepares no write. | Um pedido explícito para a pessoa escolher hábitos exige ask, mesmo com um único candidato. Use pickList para selecionar hábitos para registrar ou pular, com action e items; isso não prepara alterações. |
 | question | Required nonempty question for choice, at most 120 characters. Use null for other forms. | Pergunta obrigatória e preenchida para choice, com até 120 caracteres. Use null nos outros formatos. |
 | title | Required nonempty heading for pickList; optional heading of at most 120 characters for question. Null means absent. | Título obrigatório e preenchido para pickList; título opcional de até 120 caracteres para question. Null indica ausência. |
 | multiSelect | For choice only; null means false. pickList always selects multiple items; question requires false or null. | Apenas para choice; null equivale a false. pickList sempre permite vários itens; question exige false ou null. |
@@ -205,8 +215,9 @@ for the selection contract and the English and Brazilian Portuguese copy submitt
 An issued `ask` block ends the turn and suppresses read completion and readable read
 fallbacks. Its question and options are the model's structured output, preserved without
 message-based rewriting. A rejected ask can retry once with a supported form and valid
-arguments. Only a lone model-emitted ask call can use that retry; it cannot dispatch a write
-or restart the general tool loop. An unavailable ask surface falls back to text.
+arguments through the normal tool loop. Recovery can read or prepare independent changes;
+unanswered candidate selections continue to guard dependent writes. An unavailable ask
+surface falls back to text.
 Ask instructions name the client's supported forms while the shared
 tool schemas remain stable across clients. A model-emitted
 single-choice question can use the existing choice surface when question blocks are unsupported;
@@ -339,9 +350,17 @@ results, never patterns in the person's message.
 
 Restart requests use the existing `query_habits` read with `date: "today"`,
 `is_completed: false` and `include_overdue: true`. The model gathers any remaining
-pages before proposing a complete plan. The model chooses a smaller set for today
-and later dates for the rest from those results and the person's preferences.
-No message pattern routes this behavior.
+pages before proposing a complete plan, with `for_selection: false` and
+`orbit_read_complete: false`. This read prepares a proposal rather than asking
+the person to select records. A restart request is actionable without `ask`, a
+pick list or a question about count or dates. The preview supplies approval,
+editing and rejection.
+
+The model keeps strictly fewer habits today than the complete missed and due set.
+If the person names a count, it keeps exactly that count. Every other habit gets
+a concrete date after the person's local today and within the next seven days.
+The model checks those constraints before emitting the complete proposal.
+No message pattern routes this behavior or rewrites the model's tool arguments.
 
 `bulk_reschedule_habits` exposes optional `revised_items` for individual dates:
 
@@ -375,10 +394,17 @@ FluentValidation validator and the domain's update guards. It preserves cadence,
 titles, times, reminders, checklists and historical logs. Rescheduling retains the
 app's existing due-date/recurrence semantics; this is not a history rewrite.
 
-The paired web and Android ticket must render all preview item dates, retain the
-existing controls and add real-call en and pt-BR cases in `evals/astra`, including
-approval with independent persisted readback and pass^3. Those consumer evals are
-owned by the coordinator. Local structured model-port replays do not establish
+When the person rejects a plan and requests another, the model proposes different
+per-habit dates in a held preview rather than returning a plain habit list. After
+cancellation it uses `bulk_reschedule_habits` with complete `revised_items` for a
+new preview. Edits to an awaiting preview use `revise_pending_changes`, preserving
+unmentioned items. The cancelled preview cannot be approved.
+
+The paired web and Android ticket thomasluizon/orbit-tickets#1868 renders all
+preview item dates and retains the existing controls. The real-call en and pt-BR
+cases in `evals/astra`, including approval with independent persisted readback and
+pass^3, belong to thomasluizon/orbit-tickets#1869. Those consumer evals are owned by
+the coordinator. Local structured model-port replays do not establish
 real-call pass^3. Deploy the API before the paired consumer. Tracks
 thomasluizon/orbit-tickets#1855.
 
@@ -447,6 +473,21 @@ reminders with an empty offset array; empty days and checklists remain empty arr
 The model must not invent a quantity, rename a draft or replace its activity.
 No message pattern routes or triggers a tool.
 
+The message and `query_habits` supply this proposal's task and reuse facts.
+`suggest_habits` supplies additional ideas only when requested. The prompt and
+tool descriptions exclude calendar, habit-month, profile and analytics reads
+from organizing a message. All tools remain available without keyword gating.
+Bulk items normalize suggestion times such as `08:05:00` to `08:05` when seconds
+are zero before validation, preview and execution. Nonzero seconds remain invalid.
+When a new recurring item supplies `start_date` without `due_date`, its preview
+and held execution arguments also carry that first date as `due_date`, retaining
+the recurrence anchor. Both clock bounds and nested items follow this normalization.
+With a supplied recurrence anchor, `start_date` remains editable and `due_date`
+is display-only because creation uses the anchor to compute the first occurrence.
+Revising that anchor updates a matching displayed first date before validation.
+An existing `habit_id` takes precedence over a title match, and reuse binds the
+title field to the stored spelling before holding the proposal.
+
 Bulk creation preview `items` append optional nullable string `habitType`: `Task`
 for one-time items, `Habit` for recurring or flexible items, and `General` for
 unscheduled general items. The server derives it from structured schedule fields
@@ -491,6 +532,10 @@ contract. Cover en and pt-BR dumps, including an existing habit, with three cons
 real-call successes and persisted readback after approval. The local scripted model
 replays in `tests/Orbit.Application.Tests/Fixtures/BrainDumps` are deterministic
 coverage and do not substitute for that real-call gate.
+The captured reuse r1 already supplies `habit_id`; its typed API preview retains
+both `entityId` and the `habit_id` field's proposed UUID. The paired visible-answer
+projection must retain that identity for evaluation. Dropping identifiers from
+the projection cannot establish that the model omitted reuse.
 The added model instructions and proposed consumer labels are reported in
 [BrainDumpCopy.md](BrainDumpCopy.md) in en and pt-BR for coordinator copy approval.
 

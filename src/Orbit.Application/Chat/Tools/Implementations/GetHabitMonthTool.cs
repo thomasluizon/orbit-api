@@ -13,7 +13,7 @@ public sealed class GetHabitMonthTool(IMediator mediator) : IAiTool
     public string Description => "Read the person's habit calendar day by day using the same schedules and logs as Calendário. "
         + "Use for habit calendar, my month, how did my month go day by day, calendário de hábitos, meu mês, como foi meu mês dia a dia. "
         + "Defaults to the current month in the person's timezone. Pass language from the current message. "
-        + "This reads habits, including completed and skipped logs, without Google Calendar events or meetings.";
+        + "This reads habits, including completed and skipped logs, without Google Calendar events or meetings. Organizing an unstructured message into a task and habit preview needs query_habits for reuse, not a habit month read.";
 
     public object GetParameterSchema() => new
     {

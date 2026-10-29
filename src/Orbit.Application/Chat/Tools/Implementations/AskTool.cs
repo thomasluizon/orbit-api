@@ -18,9 +18,9 @@ public sealed class AskTool(
     public string Name => "ask";
     public string Description => "Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. "
         + "Do not call ask for a clear request you can act on, including a batch of dated items or a request to show habits and goals. Null fields are absent; form question requires nonempty questions. "
-        + "A request to choose habits requires ask, even with one candidate. Use pickList for selecting habits to log or skip, with action and items; it prepares no write. "
+        + "An explicit request for the person to choose habits requires ask, even with one candidate. Use pickList for selecting habits to log or skip, with action and items; it prepares no write. "
         + "For a single choice among existing records, use form choice with top-level question and options, even when form question is supported. Reserve form question for multiple fields. If the change is also missing, ask for both target and change in the choice question with allowFreeText=true. Use only a form the client supports. "
-        + TargetResolutionInstruction;
+        + TargetResolutionInstruction + " " + RestartPlanInstructions.ProposalBoundary;
     public bool IsReadOnly => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
