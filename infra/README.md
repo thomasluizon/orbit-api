@@ -123,8 +123,10 @@ The coordinator performs the cutover after merge, with no service replacement:
    `sha`. Verify the successful GitHub staging deployment has `payload.image_digest`,
    staging serves that commit healthy, and Render's staging live deploy names the
    same immutable image.
-2. In **Render > production Postgres > Recovery > Create export**, take a fresh export and
-   wait for completion before the first production image release. Record its
+2. Start a fresh export of `dpg-dasotg8473hc739a5gpg-a` with the Render API
+   (`POST /v1/postgres/{postgresId}/export`, the same action as **Render > production
+   Postgres > Recovery > Create export**), then poll `GET /v1/postgres/{postgresId}/export`
+   until it lists the new export, before the first production image release. Record its
    identity and completion in the release evidence. Repeat before every later
    production release carrying migrations, following
    `.claude/specs/orbit-prod-release.md` in `orbit-ui-mobile`.
