@@ -10,13 +10,17 @@ public static class TerminalReadDirective
 
     public const string Instruction = "Set orbit_read_complete to true on every read when those reads fully answer the request. "
         + "Plan independent reads together in one round. A partial page or recovery block is a valid answer; do not fetch more pages unless requested. "
+        + "For a compound habits-and-goals read, call query_habits and query_goals together and set orbit_read_complete=true on both when they fully answer the request. "
         + "Set it to false for prerequisite lookups, dependent reads or any request that still needs a write or another tool. "
         + "Choosing records requires ask, so query_habits uses for_selection=true and orbit_read_complete=false even for one candidate. "
         + "The server composes typed results without another model call when the read plan is complete. "
         + "Emit no framing prose. The typed block is the answer; never repeat its figures, dates or entity facts.";
 
+    public const string ReadableFallbackInstruction = "The server renders unsupported read blocks and subtypes as readable text from the same typed results. "
+        + "Rendering capabilities do not change read-plan completeness. Do not write a fallback answer or leave a complete read plan open because a block kind, subtype or metric is unsupported.";
+
     public static object WithCompletionArgument(object parameterSchema, string argument = CompleteArgument,
-        string description = "True only when all reads in this round fully answer the request; false for prerequisite lookups or any remaining read or write.")
+        string description = "True when all reads in this round fully answer the request, including compound reads and readable fallback text; false for prerequisite lookups or any remaining read or write.")
     {
         var schema = JsonSerializer.SerializeToNode(parameterSchema)?.AsObject()
             ?? throw new InvalidOperationException("Read tool parameters must be an object schema.");
