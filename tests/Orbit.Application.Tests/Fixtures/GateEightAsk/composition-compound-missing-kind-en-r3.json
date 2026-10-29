@@ -1,0 +1,59 @@
+{
+  "caseId": "composition-compound-missing-kind-en",
+  "repeat": 3,
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "question",
+        "question": "Which habits and goals do you mean?",
+        "title": null,
+        "multiSelect": null,
+        "allowFreeText": null,
+        "intro": null,
+        "progress": null,
+        "questions": null,
+        "options": null,
+        "action": null,
+        "items": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Failed"
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "NotExecuted"
+    },
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": "Active",
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "NotExecuted"
+    }
+  ]
+}

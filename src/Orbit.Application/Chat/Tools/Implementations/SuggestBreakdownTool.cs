@@ -10,7 +10,7 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
 
     public string Description =>
         "Suggest sub-habits without creating them. When the person is stuck starting an activity, set one_small_step=true, "
-        + "language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. "
+        + "language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. "
         + "For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. "
         + "The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. "
         + "Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, "
@@ -27,13 +27,14 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
             suggested_sub_habits = new
             {
                 type = JsonSchemaTypes.Array,
+                minItems = 1,
                 description = "Suggested sub-habit breakdowns",
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        title = new { type = JsonSchemaTypes.String },
+                        title = new { type = JsonSchemaTypes.String, pattern = @"^\S(?:[^\r\n]{0,198}\S)?$" },
                         description = new { type = JsonSchemaTypes.String },
                         frequency_unit = new
                         {

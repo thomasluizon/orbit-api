@@ -4,6 +4,15 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
+    private static bool IsStartingStepCall(AiToolCall call) => call.Name == "suggest_breakdown"
+        && call.Args.ValueKind == System.Text.Json.JsonValueKind.Object
+        && call.Args.TryGetProperty("one_small_step", out var mode)
+        && mode.ValueKind == System.Text.Json.JsonValueKind.True;
+
+    private static bool IsFailedStartingStep(CorrectionOccurrence occurrence) =>
+        IsStartingStepCall(occurrence.Call)
+        && occurrence.Outcome.OperationResult?.Status == AgentOperationStatus.Failed;
+
     private static bool CanCompleteStartingStepRound(AiResponse response, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes) => calls.Count > 0
         && calls.Count == response.ToolCalls?.Count && outcomes.Count == calls.Count

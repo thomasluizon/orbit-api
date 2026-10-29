@@ -18,9 +18,9 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Only a unique server-owned occurrence rejected before dispatch can consume one correction.
-    /// Its tool must certify the same complete prepared intent across all original occurrences,
-    /// including successful siblings. Dispatch uses the original server preparation and request;
+    /// An isolated starting-step suggestion can consume one correction without account changes.
+    /// A write must be rejected before dispatch and certify the same complete prepared intent
+    /// across all original occurrences, including successful siblings. Dispatch uses the original preparation;
     /// a candidate cannot select its parent, change intent, replay an effect or claim an outcome.
     /// </summary>
     private sealed class RejectedCallCorrection(IReadOnlyList<CorrectionOccurrence> occurrences)
@@ -32,7 +32,8 @@ public partial class ProcessUserChatCommandHandler
         public bool HasUnresolvedFailures => _unresolved.Count > 0;
 
         public static bool CanRecover(IReadOnlyList<CorrectionOccurrence> occurrences) =>
-            occurrences.Any(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
+            occurrences.Count == 1 && IsFailedStartingStep(occurrences[0])
+            || occurrences.Any(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
             && occurrences.Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
                 .All(item => item.Outcome.PreparedResponse is RejectedBeforeDispatchResponse);
 
@@ -55,6 +56,9 @@ public partial class ProcessUserChatCommandHandler
         private async Task<IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)>> PrepareBindingsAsync(
             IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, CancellationToken ct)
         {
+            if (occurrences.Count == 1 && IsFailedStartingStep(occurrences[0]))
+                return candidates.Count == 1 && IsStartingStepCall(candidates[0])
+                    ? [(candidates[0], occurrences[0])] : [];
             var bound = new List<(AiToolCall, CorrectionOccurrence)>();
             var selected = new HashSet<CorrectionOccurrence>();
             foreach (var candidate in candidates)
@@ -82,7 +86,9 @@ public partial class ProcessUserChatCommandHandler
 
         public void Accept(CorrectionOccurrence original, ToolCallOutcome outcome)
         {
-            if (outcome.PreparedResponse?.Operation.Status is AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation)
+            if (IsFailedStartingStep(original)
+                    && outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: StartingStep }
+                || outcome.PreparedResponse?.Operation.Status is AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation)
                 _unresolved.Remove(original);
         }
     }
@@ -96,10 +102,11 @@ public partial class ProcessUserChatCommandHandler
         foreach (var (candidate, original) in bound)
         {
             ct.ThrowIfCancellationRequested();
-            var evidence = original.Outcome.PreparedResponse!;
-            var corrected = candidate with { Name = evidence.Request.OperationId, Args = evidence.Intent.ExecutionArguments };
+            var evidence = original.Outcome.PreparedResponse;
+            var corrected = evidence is null ? candidate
+                : candidate with { Name = evidence.Request.OperationId, Args = evidence.Intent.ExecutionArguments };
             var outcome = await ExecuteSingleToolCallAsync(corrected, request, results, execution.OperationExecutor,
-                execution.PendingClarificationStore, ct, evidence.Request with { Arguments = corrected.Args });
+                execution.PendingClarificationStore, ct, evidence is null ? null : evidence.Request with { Arguments = corrected.Args });
             correction.Accept(original, outcome);
             if (original.Outcome.ActionResult is { } action)
                 results.ActionResults.Remove(action);

@@ -347,7 +347,12 @@ append-only producer contracts before that consumer advertises the new kinds.
 
 `suggest_breakdown` supports optional `one_small_step: true` and `language: en|pt-BR`.
 It validates exactly one `suggested_sub_habits` entry and returns a guarded
-`StartingStep` payload. Omitted or false mode preserves ordinary breakdowns.
+`StartingStep` payload. The model schema requires at least one suggestion and a
+nonempty action title. Omitted or false mode preserves ordinary breakdown execution.
+An isolated failed starting-step call returns its error for one model correction
+inside the same turn. Only one call in the same mode can correct it; a write or
+additional tool cannot run through that correction. Successful correction removes
+the failed outcome before the server composes the block.
 Prompt and tool descriptions route starting help and smaller refinements through
 this tool in both languages, independently of message patterns.
 The server composes the negotiated `oneSmallStep` block without a continuation.

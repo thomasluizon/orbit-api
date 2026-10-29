@@ -40,3 +40,13 @@ drafts; the test does not claim to verify model-generated schedules. The rendere
 answer proves the former server-added introduction and is never replayed as model
 prose. Tests cover synchronous and streamed turns, recording and replay, both flag
 states, and supported, legacy, missing-kind and parts-disabled clients.
+
+The `g8-` captures come from gate 8 on API `1e7707b6`, under
+`eval-gate7-g8b/evals/astra/reports/attempts/` in the coordinator's read-only scratchpad.
+Case IDs, repeats, rendered answers and executed tool calls are copied unchanged. The captured
+legacy creation uses a complete bulk write; compound reads use habits or a habit month plus
+goals. Tests replay these plans through production tools and composition, with deterministic
+repository ports and approval previews. They also negotiate serialized responses for replay.
+The captured feature-help plan runs the real description producer; tests inspect its payload
+at the narrative-model port. Its recorded answer is consumer-rendered evidence and is never
+injected as model text. The stub narrative verifies delivery, not live model compliance.

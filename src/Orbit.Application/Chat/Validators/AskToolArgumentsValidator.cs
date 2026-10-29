@@ -10,25 +10,26 @@ public sealed class AskToolArgumentsValidator : AbstractValidator<AskToolArgumen
 {
     public AskToolArgumentsValidator()
     {
-        RuleFor(value => value).Must(HasValidDefinition).WithCopy(ErrorCodes.AstraBlockInvalidDefinition);
-    }
-
-    private static bool HasValidDefinition(AskToolArguments value)
-    {
-        try
+        RuleFor(value => value).Custom((value, context) =>
         {
-            IssuedAstraBlock.Create(Guid.NewGuid(), ToDefinition(value));
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
+            try
+            {
+                IssuedAstraBlock.Create(Guid.NewGuid(), ToDefinition(value));
+            }
+            catch (ArgumentException error)
+            {
+                context.AddFailure(new FluentValidation.Results.ValidationFailure("definition", error.Message)
+                {
+                    ErrorCode = ErrorCodes.AstraBlockInvalidDefinition
+                });
+            }
+        });
     }
 
     internal static AstraBlockDefinition ToDefinition(AskToolArguments value) => new(
-        value.Form, (value.Form == AstraBlockKinds.Choice ? value.Question : value.Title) ?? string.Empty,
+        value.Form, (value.Form == AstraBlockKinds.Choice ? value.Question
+            : value.Title ?? (value.Form == AstraBlockKinds.Question ? value.Question : null)) ?? string.Empty,
         value.Options ?? [], value.Items ?? [], value.Form == AstraBlockKinds.PickList || value.MultiSelect,
-        value.AllowFreeText, value.Action, value.Questions,
+        value.Form != AstraBlockKinds.Question && value.AllowFreeText, value.Action, value.Questions,
         value.Form == AstraBlockKinds.Question ? value.Intro : null, value.Progress);
 }

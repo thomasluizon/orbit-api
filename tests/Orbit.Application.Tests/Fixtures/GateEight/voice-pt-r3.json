@@ -1,0 +1,36 @@
+{
+  "caseId": "voice-pt",
+  "repeat": 3,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": "Caminhada",
+        "date": "2026-10-28",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "skip_habit",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "date": "2026-10-28",
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

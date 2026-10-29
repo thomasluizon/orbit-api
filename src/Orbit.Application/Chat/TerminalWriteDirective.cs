@@ -10,6 +10,7 @@ public static class TerminalWriteDirective
     public const string Instruction = "Plan every requested account change before proposing writes. "
         + "Account for each requested action, target and occurrence, even when different actions affect different habits. "
         + "A lookup never fulfills a requested mutation. After resolving a target, call its write tool. "
+        + "A read showing an occurrence as skipped does not fulfill a requested skip. Call the matching skip tool for the requested target and date, and let it validate the current state. "
         + "For example, rename and skip require both update_habit and skip_habit in the same round. "
         + "Skipping one occurrence uses skip_habit; skipping several habits uses bulk_skip_habits, never log_habit or bulk_log_habits. "
         + "Set orbit_write_complete to true on every write in a round when those calls cover the entire request, including all dates, times and bounded preparation items. "
@@ -19,7 +20,7 @@ public static class TerminalWriteDirective
         + "Corrections to an earlier preview still use revise_pending_changes and preserve all unrelated fields and items.";
 
     public static object WithCompletionArgument(object schema) => TerminalReadDirective.WithCompletionArgument(schema,
-        CompleteArgument, "True when all writes in this round cover the entire request; false when a lookup or dependent action is still needed.");
+        CompleteArgument, "True only when every requested mutation has its matching write call in this round; a read status never fulfills a write. False when a lookup or dependent action is still needed.");
 
     public static bool IsComplete(AiResponse response) => TerminalReadDirective.IsComplete(response, CompleteArgument);
 

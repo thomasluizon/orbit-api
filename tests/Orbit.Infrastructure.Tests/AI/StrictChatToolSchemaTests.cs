@@ -38,6 +38,23 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void StartingStep_WireSchemaRequiresAnAction()
+    {
+        var tool = new SuggestBreakdownTool();
+        var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var sdkTool = (ResponseTool)method.Invoke(null, [new { name = tool.Name, parameters = tool.GetParameterSchema() }])!;
+        using var wire = JsonDocument.Parse(ModelReaderWriter.Write(sdkTool).ToString());
+        var schema = wire.RootElement.GetProperty("parameters");
+        output.WriteLine(wire.RootElement.GetRawText());
+        var steps = schema.GetProperty("properties").GetProperty("suggested_sub_habits");
+        steps.TryGetProperty("minItems", out var minimum).Should().BeTrue();
+        minimum.GetInt32().Should().Be(1);
+        steps.GetProperty("items").GetProperty("properties").GetProperty("title")
+            .TryGetProperty("pattern", out _).Should().BeTrue();
+        AssertStrict(schema);
+    }
+
+    [Fact]
     public void Invariant_RejectsMissingRequiredProperty()
     {
         using var malformed = JsonDocument.Parse("""
