@@ -184,11 +184,31 @@ Habit ranking uses an API-first rollout with client capability negotiation. See 
 | Payments | [Stripe](https://stripe.com) + Google Play Billing |
 | Monitoring | [Sentry](https://sentry.io) |
 
-Run `release.yml` from `main` with an `environment` of `production` or `staging` and a `branch` to release. Pass the planned full commit through `sha`; staging requires it, while production defaults to the dispatch commit. The workflow verifies checkout identity and selected-branch ancestry. Production accepts only `main` and retains its Render Docker build and `./efbundle` pre-deploy command.
+Run `release.yml` from `main` with an `environment` of `production` or `staging` and a `branch` to release. Pass the planned full commit through `sha`; staging requires it, while production defaults to the dispatch commit. The workflow verifies checkout identity and selected-branch ancestry. Production accepts only `main` and promotes the immutable GHCR digest verified by staging for the selected commit. It does not build another image or run a Render pre-deploy command.
 
 Staging builds `Dockerfile` at the verified selected SHA in GitHub Actions with the `docker` driver, then pushes `ghcr.io/thomasluizon/orbit-api:<sha>` using `GITHUB_TOKEN` with `packages: write`. The image carries that SHA in `RENDER_GIT_COMMIT`, which `/health` reports. The staging job deploys the pushed immutable digest through Render's `POST /v1/services/{serviceId}/deploys` with `imageUrl`. It requires HTTP 201 naming the same `image.ref` and a deploy ID, then polls that deploy to `live`. HTTP 202, a different image, an ambiguous write or a terminal failure stops the release. Inspect service deploys before rerunning an ambiguous request. The digest is recorded in the job summary before deployment, including during initial service setup. The package must be public so Render can pull it without a registry credential; see [staging source setup](infra/README.md#staging-api-image-source).
 
-Both jobs then poll public `/health` until it reports `Healthy` and the exact selected commit. Public verification has one 180-second budget, waits up to five seconds between probes, and caps each request at ten seconds or the remaining budget. Stale commits, unhealthy or invalid responses, and HTTP or network failures retry within that budget. The first match ends polling; the final Render identity check must also pass before recording the deployment: production checks the live commit, staging the live image reference. On exhaustion, the job reports the expected SHA, last valid status and commit, probe count, elapsed time, and a sanitized result category without printing response bodies or credentials. Inspect those identifiers and the Render deploy logs before explicitly rerunning a failed release; verification never rolls back or redeploys automatically.
+After staging health and live-image verification, the staging job records `payload.image_digest`
+on its GitHub deployment for the selected commit, then records success. Production first
+requires staging's public health to report the same commit as `Healthy`, then resolves
+that commit's latest staging deployment record and requires a successful status, the
+Actions bot creator and a valid immutable digest. Missing or legacy records require a new
+staging release; production never resolves a mutable tag. `force_unstaged` is recorded in
+the run summary and bypasses the current public staging health gate. It still requires a
+successful recorded staging image for the selected commit, so it can promote a previously
+verified image while staging is unavailable or serves another commit. Both jobs send
+`imageUrl`, require HTTP 201 naming that image and poll its deploy to `live`.
+
+Production and staging run migrations at startup with `Database__MigrateOnStartup=true`.
+The migration completes before the server starts accepting traffic; failure prevents the
+new instance from becoming healthy. Take a fresh completed Render database export before
+every production release carrying migrations and record it in the release evidence, as
+required by `.claude/specs/orbit-prod-release.md` in `orbit-ui-mobile`. The first production
+image release also requires a fresh export. See the [production image cutover and migration
+limits](infra/README.md#production-api-image-source) before the first image release or any
+long migration.
+
+Both jobs then poll public `/health` until it reports `Healthy` and the exact selected commit. Public verification has one 180-second budget, waits up to five seconds between probes, and caps each request at ten seconds or the remaining budget. Stale commits, unhealthy or invalid responses, and HTTP or network failures retry within that budget. The first match ends polling; the final Render identity check must also pass before recording the deployment: both jobs check the live image reference. On exhaustion, the job reports the expected SHA, last valid status and commit, probe count, elapsed time, and a sanitized result category without printing response bodies or credentials. Inspect those identifiers and the Render deploy logs before explicitly rerunning a failed release; verification never rolls back or redeploys automatically.
 
 Set `RENDER_API_KEY` as an environment secret in each of the `production` and `staging` GitHub environments, and set the repository variables `RENDER_PRODUCTION_SERVICE_ID` and `RENDER_STAGING_SERVICE_ID`. Restrict the `production`, `staging`, and `render-operations` GitHub environments to deployment branch `main`. The staging reseed and Postgres access reconciliation workflows use the `render-operations` environment secret `RENDER_API_KEY` for database and service management. Remove the repository secret `RENDER_API_KEY` after both release paths and the operational workflows succeed.
 

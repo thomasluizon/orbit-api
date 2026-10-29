@@ -10,22 +10,18 @@ resource "render_web_service" "production_api" {
   region                     = "ohio"
   health_check_path          = "/health"
   max_shutdown_delay_seconds = 300
-  pre_deploy_command         = "./efbundle"
   env_vars                   = { ORBIT_TERRAFORM_ENV_GROUP = { value = "production-api" } }
   custom_domains             = [{ name = "api.useorbit.org" }]
 
   lifecycle {
     # The imported service's own variables stay until the linked group is verified live, so the first apply cannot strip production's configuration.
-    ignore_changes = [env_vars]
+    ignore_changes = [env_vars, runtime_source.image.digest]
   }
 
   runtime_source = {
-    docker = {
-      branch          = "main"
-      repo_url        = "https://github.com/thomasluizon/orbit-api"
-      dockerfile_path = "./Dockerfile"
-      context         = "."
-      auto_deploy     = false
+    image = {
+      image_url = "ghcr.io/thomasluizon/orbit-api"
+      digest    = var.production_api_digest
     }
   }
 }

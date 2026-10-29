@@ -136,29 +136,72 @@ jobs:
           fi
           echo "Staging served $COMMIT_SHA with status Healthy" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Resolve verified staging image
+        id: image
+        run: |
+          set -euo pipefail
+          deployment=$(gh api "repos/$GITHUB_REPOSITORY/deployments?sha=$COMMIT_SHA&environment=staging&per_page=1")
+          if ! record=$(jq -ce --arg sha "$COMMIT_SHA" '
+            .[0] | select(.sha == $sha and .environment == "staging")
+            | select(.creator.login == "github-actions[bot]")
+            | select(.id | type == "number")
+            | select(.payload.image_digest | type == "string")
+            | select(.payload.image_digest | length == 71 and test("^sha256:[a-f0-9]{64}$"))
+          ' <<< "$deployment"); then
+            echo '::error::No staging image digest recorded for the selected commit; release that SHA to staging first'
+            exit 1
+          fi
+          deployment_id=$(jq -er '.id' <<< "$record")
+          statuses=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses")
+          if ! jq -e 'any(.[]; .state == "success")' <<< "$statuses" > /dev/null; then
+            echo '::error::The recorded staging image has no successful staging deployment'
+            exit 1
+          fi
+          digest=$(jq -er '.payload.image_digest' <<< "$record")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "Verified staging deployment: $deployment_id"
+            echo "Promoting ghcr.io/thomasluizon/orbit-api@$digest for $COMMIT_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Trigger and monitor Render deploy
         id: render
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_SERVICE_ID"
           source .github/scripts/render-release.sh
-          step_started=$(jq -n 'now')
-          payload=$(jq -cn --arg sha "$COMMIT_SHA" '{commitId: $sha}')
+          image_url="ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST"
+          payload=$(jq -cn --arg image "$image_url" '{imageUrl: $image}')
           response_file=$(mktemp)
           trap 'rm -f "$response_file"' EXIT
-          http_status=$(render_start_deploy "$payload" "$response_file" "$step_started")
+          if ! http_status=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+            --output "$response_file" --write-out '%{http_code}' \
+            --request POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --header "Authorization: Bearer $RENDER_API_KEY" \
+            --header 'Content-Type: application/json' --data "$payload"); then
+            echo "::error::Render deploy acceptance is unknown for $image_url; check service deploys before rerunning"
+            exit 1
+          fi
           case "$http_status" in
-            201) deploy_id=$(jq -er '.id' < "$response_file") ;;
+            201) ;;
             202)
-              # Render queues a request behind a running deploy and returns no deploy, so nothing
-              # identifies which later deploy is this request's. Releases are serialized, so fail closed.
-              echo "::error::Render queued the deploy of $COMMIT_SHA behind another deploy and returned no deploy ID; rerun the release once the service is idle"
+              echo '::error::Render queued the deploy without a deploy ID; rerun once the service is idle'
+              exit 1 ;;
+            400)
+              echo '::error::Render rejected imageUrl. If orbit-api is not image-backed yet, the coordinator must switch its source to the published GHCR image through the Render API, refresh Terraform state, then rerun'
               exit 1 ;;
             *)
-              echo "::error::Render answered HTTP $http_status to the deploy request"
+              echo "::error::Render answered HTTP $http_status; check service deploys before rerunning"
               exit 1 ;;
           esac
+          if ! deploy_id=$(jq -er --arg image "$image_url" \
+            'select(.image.ref == $image) | .id | select(type == "string" and length > 0)' < "$response_file"); then
+            echo '::error::Render HTTP 201 did not identify a deploy of the requested image; check service deploys before rerunning'
+            exit 1
+          fi
           log_url="https://dashboard.render.com/web/$RENDER_SERVICE_ID/deploys/$deploy_id"
           echo "log_url=$log_url" >> "$GITHUB_OUTPUT"
           echo "Render deploy: $log_url"
@@ -187,15 +230,17 @@ jobs:
           node-version: 22
 
       - name: Verify API health and live commit
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
           node tools/verify-release-health.mjs 'https://api.useorbit.org/health'
           source .github/scripts/render-release.sh
           live_commit=$(render_request GET "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" --get \
             --data-urlencode 'status=live' --data-urlencode 'limit=1' |
-            jq -er '.[0].deploy.commit.id')
-          if [ "$live_commit" != "$COMMIT_SHA" ]; then
-            echo "::error::Render now serves $live_commit, not the released $COMMIT_SHA"
+            jq -er '.[0].deploy.image.ref')
+          if [ "$live_commit" != "ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST" ]; then
+            echo "::error::Render now serves $live_commit, not the released image digest $IMAGE_DIGEST"
             exit 1
           fi
 
@@ -214,11 +259,14 @@ jobs:
             --input - <<< "$status"
 
       - name: Summarize release
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
           {
             echo '## API production release'
             echo "Deployed SHA: $COMMIT_SHA"
+            echo "Deployed image: ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST"
           } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
@@ -381,11 +429,12 @@ jobs:
 
       - name: Record deployment
         env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
           RENDER_LOG_URL: ${{ steps.render.outputs.log_url }}
         run: |
           set -euo pipefail
-          deployment=$(jq -cn --arg ref "$COMMIT_SHA" \
-            '{ref: $ref, environment: "staging", auto_merge: false, required_contexts: []}')
+          deployment=$(jq -cn --arg ref "$COMMIT_SHA" --arg digest "$IMAGE_DIGEST" \
+            '{ref: $ref, environment: "staging", auto_merge: false, required_contexts: [], payload: {image_digest: $digest}}')
           deployment_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" \
             --input - --jq '.id' <<< "$deployment")
           status=$(jq -cn --arg log_url "$RENDER_LOG_URL" \
@@ -394,9 +443,12 @@ jobs:
             --input - <<< "$status"
 
       - name: Summarize release
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
           set -euo pipefail
           {
             echo '## API staging release'
             echo "Deployed SHA: $COMMIT_SHA"
+            echo "Deployed image: ghcr.io/thomasluizon/orbit-api@$IMAGE_DIGEST"
           } >> "$GITHUB_STEP_SUMMARY"

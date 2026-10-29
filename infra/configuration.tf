@@ -32,7 +32,7 @@ locals {
     AI__SubTaskModel                    = "gpt-6-luna"
     ASPNETCORE_ENVIRONMENT              = "Production"
     Cors__AllowedOrigins__0             = "https://app.useorbit.org"
-    Database__MigrateOnStartup          = "false"
+    Database__MigrateOnStartup          = "true"
     DesktopAuth__RedirectUri            = "org.useorbit.desktop://auth/callback"
     GooglePlay__MonthlyBasePlanId       = "monthly"
     GooglePlay__PackageName             = "org.useorbit.app"

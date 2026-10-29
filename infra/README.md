@@ -94,8 +94,106 @@ with that image reference, and polls the returned deploy to `live`. Verify the
 Render deploy has no image build, Render can pull the public image, and
 `https://api-staging.useorbit.org/health` reports `status: Healthy` and the planned
 commit. The existing staging `RENDER_API_KEY` environment secret and repository
-variable `RENDER_STAGING_SERVICE_ID` suffice. Production retains its Git-backed
-Docker build and `./efbundle` pre-deploy command.
+variable `RENDER_STAGING_SERVICE_ID` suffice. Production promotes the staging-verified
+image as described below.
+
+## Production API image source
+
+`render_web_service.production_api` keeps the imported service
+`srv-d6tc2isr85hc739bf75g`, `orbit-api`, its `starter` plan, `ohio` region,
+`api.useorbit.org`, environment group link, `/health` and 300-second shutdown delay.
+It pulls the public `ghcr.io/thomasluizon/orbit-api` image. `production_api_digest`
+seeds the image; Terraform ignores later digest changes, so `release.yml` owns
+production releases. There is no Render build or pre-deploy command.
+
+The staging job builds the selected commit once, deploys its digest, verifies
+public health and Render's live image, and records `payload.image_digest` in a
+successful GitHub staging deployment. Production reads that record for its selected
+commit instead of building or resolving the commit tag again. The existing main-only
+selection and healthy staging admission remain. The recorded `force_unstaged`
+override bypasses current staging health only; it still requires a successful
+staging digest record for the selected commit. A legacy record without a digest
+requires staging to release that commit again. No additional registry secret or
+repository variable is required.
+
+The coordinator performs the cutover after merge, with no service replacement:
+
+1. Release the planned API `main` commit to staging through **GitHub > orbit-api >
+   Actions > Release API** with `environment=staging`, `branch=main`, and its full
+   `sha`. Verify the successful GitHub staging deployment has `payload.image_digest`,
+   staging serves that commit healthy, and Render's staging live deploy names the
+   same immutable image.
+2. Start a fresh export of `dpg-dasotg8473hc739a5gpg-a` with the Render API
+   (`POST /v1/postgres/{postgresId}/export`, the same action as **Render > production
+   Postgres > Recovery > Create export**), then poll `GET /v1/postgres/{postgresId}/export`
+   until it lists the new export, before the first production image release. Record its
+   identity and completion in the release evidence. Repeat before every later
+   production release carrying migrations, following
+   `.claude/specs/orbit-prod-release.md` in `orbit-ui-mobile`.
+3. Through `PATCH /v1/services/srv-d6tc2isr85hc739bf75g`, set `image.ownerId` to
+   the service's existing workspace, `image.imagePath` to
+   `ghcr.io/thomasluizon/orbit-api@<staging-verified digest>`,
+   `serviceDetails.runtime` to `image`, and `serviceDetails.preDeployCommand` to
+   the empty string in the same request. Preserve domains, environment groups,
+   plan, region and shutdown delay. Verify **Render > orbit-api > Settings**
+   shows the image source and no pre-deploy command.
+4. Set `production_api_digest` in ignored `infra/local.tfvars` to that digest.
+   Perform a refresh-only apply targeted to `render_web_service.production_api`.
+   Correct only its `runtime_source.image.image_url` state value to the repository
+   `ghcr.io/thomasluizon/orbit-api`, as for the staging source switch. Provider
+   v1.9.1 can retain the digest-qualified image path in that value; preserve the
+   separate digest and all other state, back up state before correction, and use
+   Terraform's state tooling rather than editing remote storage directly.
+5. Save and review a plan targeted only to `render_web_service.production_api`
+   and `render_env_group.production_api`. It must show only the declared source,
+   pre-deploy removal and `Database__MigrateOnStartup=true` changes, with no
+   replacement. Stop if it changes service identity or any unrelated resource.
+   Apply only that reviewed targeted plan. Never run an untargeted apply.
+   Verify **Render > orbit-api > Environment** resolves
+   `Database__MigrateOnStartup=true` from `orbit-production-api`; remove a stale
+   service-level `Database__MigrateOnStartup=false` override if one exists.
+6. Run **GitHub > orbit-api > Actions > Release API** from `main` with
+   `environment=production`, `branch=main`, and the same full `sha`. Require the
+   promoted digest, a `live` deploy with no Render build or pre-deploy task, and
+   `https://api.useorbit.org/health` reporting that commit and `status: Healthy`.
+
+### Startup migrations and long migrations
+
+Both API environment groups set `Database__MigrateOnStartup=true`.
+`ConfigureOrbitPipeline` awaits `Database.MigrateAsync()` before `Program.cs`
+calls `RunAsync()`. A migration error propagates out of startup, so `/health`
+cannot pass on the new instance. Render's [zero-downtime rollout](https://render.com/docs/deploys#zero-downtime-deploys)
+keeps the old instance serving until the replacement is ready. This does not undo
+schema changes already committed; migrations must remain compatible with the old
+instance during overlap.
+
+The installed EF Core 10.0.14 migrator acquires the database migration lock before
+reading applied migrations. Npgsql 10.0.3 uses a transaction-scoped
+`LOCK TABLE ... IN ACCESS EXCLUSIVE MODE` on the migration history table. Another
+starting instance waits for that lock, then reads the updated history instead of
+applying the same transactional migration twice. Sources pinned by the installed
+NuGet package manifests: [EF migrator](https://github.com/dotnet/dotnet/blob/0427b9abbead3fa64c6655eb4290c537397131fa/src/efcore/src/EFCore.Relational/Migrations/Internal/Migrator.cs#L293)
+and [Npgsql history repository](https://github.com/npgsql/efcore.pg/blob/5e912bf071068a44e5abbdab497b313ba99d3ee1/src/EFCore.PG/Migrations/Internal/NpgsqlHistoryRepository.cs#L33).
+Transaction-suppressed operations still need their own idempotency and rolling
+compatibility review.
+
+Render gives new instances [15 minutes to pass health checks](https://render.com/docs/health-checks#handling-failures)
+and cancels the new deploy while keeping existing instances if they do not.
+The API's migration command timeout defaults to 180 seconds per command, not per
+migration or pending batch; lock waits, retries and all pending migrations share
+the startup window. Production-scale migration duration is not established by
+unit tests or staging alone. Review the complete pending batch before release.
+If it cannot fit comfortably in 15 minutes, postpone traffic promotion and split
+schema work into bounded expand-contract migrations and resumable backfills.
+For an already built long batch, run `/app/efbundle` from the exact staging-verified
+image digest on controlled operator compute with production session credentials,
+a fresh completed export and the required database network access, before starting
+the production release. Require exit code zero and verify migration history before
+proceeding. This runs the existing bundle without starting the API server and
+consumes no Render pipeline minutes. Do not substitute a Render one-off job
+without proving it can run the new digest rather than the service's previous
+artifact. Do not increase the workflow polling budget as a workaround for the
+platform's startup limit.
 
 ## Staging lifecycle
 
@@ -315,7 +413,7 @@ After apply, read the `cloudflare_name_servers` output. Run `bash infra/check-dn
 
 Set `RENDER_API_KEY` and `CLOUDFLARE_API_TOKEN` in the shell and provide AWS credentials through the default credential chain. Make a local `infra/local.tfvars` containing the published production and staging image digests and any approved domain settings and database network access settings. This file is ignored; `example.tfvars` shows the shape only. Copy the production Postgres IP allow list from the Render Postgres Networking screen into `production_postgres_ip_allow_list`. The production variable defaults to `[]`, which removes production external access when applied. The staging root uses `staging_postgres_ip_allow_list` only at creation and ignores later allow list changes; use the `operator-mac` command above for local staging access. Check both database resources in every plan before applying; neither database should be replaced, and an existing operator address must not be removed. The requested `database_name` and `database_user` values are creation inputs; Terraform ignores later changes to those fields because Render assigns the live database name with a suffix. Connection strings read the database name from the resource URL.
 
-The `production_web_digest`, `staging_web_digest` and `staging_api_digest` variables seed their respective images. Terraform ignores later digest changes on these image-backed services. Subsequent staging and production web deploys use the manual `release.yml` workflow in `orbit-ui-mobile` with its `environment` input.
+The `production_api_digest`, `production_web_digest`, `staging_web_digest` and `staging_api_digest` variables seed their respective images. Terraform ignores later digest changes on these image-backed services. Subsequent staging and production web deploys use the manual `release.yml` workflow in `orbit-ui-mobile` with its `environment` input.
 
 With Render provider v1.9.1, a refreshed digest image path also populates a computed image tag. On any web service update, the provider sends an image reference built from the planned tag before considering the digest. Ignoring the entire image block retains that computed tag and does not make the update safe. Run `terraform -chdir=infra show -json local.tfplan | node infra/check-web-plan.mjs` on the saved plan before every local apply. The guard blocks an in-place update, replacement, or deletion of either web service and names the changed attributes. Initial creation remains allowed.
 
