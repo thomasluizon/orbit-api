@@ -262,7 +262,7 @@ public partial class ProcessUserChatCommandHandler
                 else
                 {
                     built.Fallback = "missing_capability";
-                    var text = ReadFallback(read.Block, language, context.User?.TimeZone);
+                    var text = ReadFallback(read.Block, language, context.User?.TimeZone, context.UserToday);
                     parts.Add(new ChatTextPart(string.IsNullOrWhiteSpace(text) ? ToolFailureMessage(language) : text));
                 }
             }

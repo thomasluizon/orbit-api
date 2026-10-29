@@ -45,7 +45,7 @@ internal static class ChatResponseNegotiation
     }
 
     public static ChatResponse ForClient(ChatResponse response, AgentClientContext? client, IReadOnlyList<string> flags,
-        string? language = null, string? timeZone = null)
+        string? language = null, string? timeZone = null, DateOnly? userToday = null)
     {
         language = ChatLocale.Resolve(client, language);
         response = ForAllowance(response, client, response.MessageAllowanceConsumed ?? false);
@@ -66,7 +66,7 @@ internal static class ChatResponseNegotiation
             else
             {
                 downgraded = true;
-                var fallback = new ChatTextPart(Fallback(value, language, timeZone));
+                var fallback = new ChatTextPart(Fallback(value, language, timeZone, userToday));
                 negotiated.Add(fallback);
             }
         }
@@ -127,7 +127,7 @@ internal static class ChatResponseNegotiation
         }
     }
 
-    private static string Fallback(object? value, string? language, string? timeZone)
+    private static string Fallback(object? value, string? language, string? timeZone, DateOnly? userToday)
     {
         var text = value switch
         {
@@ -143,7 +143,7 @@ internal static class ChatResponseNegotiation
                         : question.Type == "scale" ? $"\n1: {question.LowLabel}; 5: {question.HighLabel}"
                         : question.Type == "slider" ? FormattableString.Invariant($"\n{question.Min}..{question.Max} ({question.Step} {question.Unit})") : string.Empty)))),
             null => null,
-            _ => ProcessUserChatCommandHandler.ReadFallback(value, language, timeZone)
+            _ => ProcessUserChatCommandHandler.ReadFallback(value, language, timeZone, userToday)
         };
         return string.IsNullOrWhiteSpace(text) ? ErrorCopy.Resolve("chat.read.clientUnavailable", LocaleHelper.IsPortuguese(language)) : text;
     }

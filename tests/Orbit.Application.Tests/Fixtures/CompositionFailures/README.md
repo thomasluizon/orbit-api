@@ -50,3 +50,13 @@ repository ports and approval previews. They also negotiate serialized responses
 The captured feature-help plan runs the real description producer; tests inspect its payload
 at the narrative-model port. Its recorded answer is consumer-rendered evidence and is never
 injected as model text. The stub narrative verifies delivery, not live model compliance.
+
+The `g8r2-` compound capture comes from gate 8's filtered rerun on API `83f0f154`,
+under `eval-gate7-g8r2/evals/astra/reports/attempts/` in the coordinator's read-only
+scratchpad. The case ID, repeat, rendered answer and tool calls are copied unchanged.
+Its daily-summary call remains a daily-summary read in the test. Deterministic query
+ports return the typed summary facts; a synthetic directive-only continuation exercises
+composition because the captured calls do not declare read completion. The rendered
+answer is evidence only. Local replay verifies formatting, synchronous and streamed
+composition, recording and replay; it does not prove a live model now chooses a habit
+listing. The coordinator owns that bilingual gate rerun.

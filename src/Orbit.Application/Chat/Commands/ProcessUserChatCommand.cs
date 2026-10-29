@@ -236,7 +236,7 @@ public partial class ProcessUserChatCommandHandler(
             ChatContext? choiceContext = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
                 execution.PayGateService, execution.OperationExecutor, data.UserRepository, execution.ProductAnalytics,
-                data.FeatureFlagService, execution.PendingOperationStore, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
+                data.FeatureFlagService, execution.PendingOperationStore, execution.UserDateService, logger, execution.PendingOperationPreviewer, execution.BlockAnswerTimeout,
                 prepared =>
                 {
                     recording.UserContent = prepared.Message;
@@ -866,7 +866,7 @@ public partial class ProcessUserChatCommandHandler(
             {
                 if (!ReadEnabled(bound, request.ClientContext, context.EnabledFeatureFlags))
                 {
-                    if (ReadFallback(bound.Block, language, context.User?.TimeZone) is { Length: > 0 } fallback) parts.Add(new ChatTextPart(fallback));
+                    if (ReadFallback(bound.Block, language, context.User?.TimeZone, context.UserToday) is { Length: > 0 } fallback) parts.Add(new ChatTextPart(fallback));
                     continue;
                 }
                 parts.Add(new ChatBlockPart(bound.Kind, ForClient(bound, request.ClientContext, context.EnabledFeatureFlags).Block));
@@ -930,7 +930,7 @@ public partial class ProcessUserChatCommandHandler(
     {
         try
         {
-            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags, context.Language, context.User?.TimeZone);
+            aiMessage = ReplaceUnavailableReadDirectives(aiMessage, executionResults, request.ClientContext, context.EnabledFeatureFlags, context.Language, context.User?.TimeZone, context.UserToday);
             var boundRead = ResolveQueryRead(aiMessage, executionResults);
             if (boundRead is not null && ReadEnabled(boundRead, request.ClientContext, context.EnabledFeatureFlags))
                 return ResponseFromRead(StripAllDirectives(aiMessage), ForClient(boundRead, request.ClientContext, context.EnabledFeatureFlags));

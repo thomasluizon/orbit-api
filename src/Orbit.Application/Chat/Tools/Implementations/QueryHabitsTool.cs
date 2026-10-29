@@ -21,7 +21,8 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read habits, schedules, metrics and checklists. Call before answering habit questions; indexes do not ground replies. "
+        "Read individual habits, schedules, metrics and checklists. Use for habit listings, including compound requests for habits and goals; "
+        + "pair with query_goals for the goals. A daily summary does not replace this listing. Call before answering habit questions; indexes do not ground replies. "
         + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries. "
         + "For a requested skip, call skip_habit or bulk_skip_habits after resolving the target, even when isSkippedOnDate is true; this read does not perform that action. "
         + "For choosing records or resolving a write target, set for_selection=true and orbit_read_complete=false, then call ask. "

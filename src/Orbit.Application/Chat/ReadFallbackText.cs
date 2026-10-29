@@ -5,7 +5,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
-internal sealed class ReadFallbackText(string? language, string? timeZone)
+internal sealed class ReadFallbackText(string? language, string? timeZone, DateOnly? userToday)
 {
     private readonly bool _portuguese = LocaleHelper.IsPortuguese(language);
     private readonly CultureInfo _culture = CultureInfo.GetCultureInfo(LocaleHelper.IsPortuguese(language) ? "pt-BR" : "en-US");
@@ -15,7 +15,9 @@ internal sealed class ReadFallbackText(string? language, string? timeZone)
         ? text : ErrorCopy.Resolve("chat.read.unavailable", _portuguese);
     private string Number(decimal value) => value.ToString("0.##", _culture);
     private string Date(DateOnly date) => date.ToString(_portuguese ? "dd/MM/yyyy" : "MM/dd/yyyy", _culture);
-    private string Range(DateOnly from, DateOnly to) => $"{Date(from)} {Text("to")} {Date(to)}";
+    private string Range(DateOnly from, DateOnly to) => from == to
+        ? from == userToday ? Text("today") : Date(from)
+        : $"{Date(from)} {Text("to")} {Date(to)}";
     private string Window(ReadWindow window) => Range(window.From, window.To);
     private string Total(string metric, decimal value) => $"{Text(metric)}: {Number(value)}";
     private string Unit(string unit) => unit switch
@@ -44,7 +46,7 @@ internal sealed class ReadFallbackText(string? language, string? timeZone)
         MetricsCard card => $"{Text(card.Period)}: {Total("positiveLogRecords", card.TotalCompletions)}",
         GoalListCard card => Lines(new[] { Total("goals", card.Items.Count) }
             .Concat(card.Items.Select(item => $"{item.Title}: {Number(item.Current)}/{Number(item.Target)} {Unit(item.Unit)}"))),
-        DaySummaryCard card => $"{(card.DateTo is { } to ? Range(card.Date, to) : Date(card.Date))}: {Text("dayDone")}: {Number(card.Done)}/{Number(card.Due)}",
+        DaySummaryCard card => $"{Range(card.Date, card.DateTo ?? card.Date)}: {Text("dayDone")}: {Number(card.Done)}/{Number(card.Due)}",
         StreakCard card => $"{Total("streak", card.CurrentStreak)}; {Total("level", card.Level)}; {Total("xp", card.TotalXp)}",
         HabitMonthCard card => Month(card),
         CalendarCard card => Lines(new[] { Total("events", card.Events.Count),

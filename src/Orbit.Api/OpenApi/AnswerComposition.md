@@ -71,6 +71,15 @@ Deterministic fallback text is already grounded by its typed producer.
 Readable capability fallbacks omit list scope and calendar title headings. Counts, item names,
 statuses, goal progress, date windows and calendar log meaning remain grounded facts. This
 formatter serves both current composition and stored blocks downgraded during replay.
+Single-day periods show one localized date. When that date is the account's current day,
+the label is `Today` or `Hoje`, using `IUserDateService.GetUserTodayAsync`. Multi-day periods
+retain both dates. The shared formatter applies this to summaries, totals, comparisons,
+metrics, recaps, habit calendars and history. A stored typed block downgraded on a later day
+uses its absolute date; an already composed text answer retains its original wording.
+Habit listings use `query_habits`, and compound habit-and-goal listings pair it with
+`query_goals`. `get_daily_summary` supplies requested completion totals or a narrative recap;
+it does not replace the habit query. Tool descriptions and read instructions establish this
+distinction without routing messages by keywords or rewriting the model's tool calls.
 Negotiation resolves an explicit client locale before the profile language. A legacy client
 without a locale uses the profile language; no message pattern detects the language. Pending
 preview, empty-answer recovery, tool failure, truncation and habit-selection fallback copy use

@@ -30,7 +30,7 @@ public partial class ProcessUserChatCommandHandler
         var response = ChatResponseNegotiation.ForClient(new ChatResponse(cards.AiMessage, [], results.OperationResults,
             CorrelationId: request.CorrelationId, RelatedSurfaces: results.RelatedSurfaces, Parts: cards.Parts)
         { GroundingFacts = TurnFactSet.FromToolResults(results.ToolResults) }, request.ClientContext,
-            context.EnabledFeatureFlags, context.Language, context.User?.TimeZone);
+            context.EnabledFeatureFlags, context.Language, context.User?.TimeZone, context.UserToday);
         CaptureResponseCardEvents(request, context, cards);
         if (request.StreamSink is { } sink)
         {

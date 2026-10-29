@@ -56,7 +56,7 @@ public class AstraBlockAnswerRecoveryTests
         var users = new GenericRepository<User>(db);
         var quota = new PayGateService(new GenericRepository<Habit>(db), users, config, dates, Substitute.For<IFeatureFlagService>());
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
-            users, Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>());
+            users, Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>(), Substitute.For<IUserDateService>());
         var request = new ProcessUserChatCommand(user.Id, "Evening", BlockAnswer: new(block.Id, ["b"]),
             ClientContext: new(SupportsParts: true));
 
@@ -126,7 +126,7 @@ public class AstraBlockAnswerRecoveryTests
                 SerializeResponse(reply), default)).Should().BeTrue();
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
             users, Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>(),
-            claimLifetime: lifetime);
+            dates, claimLifetime: lifetime);
         var calls = 0;
         Task<Result<ChatResponse>> Produce(PreparedAstraBlockAnswer _)
         {
@@ -211,7 +211,7 @@ public class AstraBlockAnswerRecoveryTests
         var quota = Substitute.For<IPayGateService>();
         var service = new AstraBlockAnswerService(store, new UnitOfWork(db, new DatabaseConnectionSettings()),
             quota, executor, new GenericRepository<User>(db),
-            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending,
+            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending, Substitute.For<IUserDateService>(),
             previewer: refresh == "missing" ? null : replayPreviewer);
 
         var replay = await service.ExecuteAsync(request, _ => throw new InvalidOperationException("No new execution"), default);
@@ -233,7 +233,7 @@ public class AstraBlockAnswerRecoveryTests
             await executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
             service = new AstraBlockAnswerService(store, new UnitOfWork(db, new DatabaseConnectionSettings()),
                 quota, executor, new GenericRepository<User>(db),
-                Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending, previewer: replayPreviewer);
+                Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending, Substitute.For<IUserDateService>(), previewer: replayPreviewer);
             replay = await service.ExecuteAsync(request, _ => throw new InvalidOperationException("No new execution"), default);
         }
 

@@ -157,7 +157,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static string? ReplaceUnavailableReadDirectives(string? message, ToolExecutionAccumulator results,
-        AgentClientContext? client, IReadOnlyList<string> flags, string? language, string? timeZone)
+        AgentClientContext? client, IReadOnlyList<string> flags, string? language, string? timeZone, DateOnly userToday)
     {
         if (message is null) return null;
         return System.Text.RegularExpressions.Regex.Replace(message, @"\[\[orbit:(?:read:[A-Za-z0-9_-]+|[a-z:]+)\]\]", match =>
@@ -165,7 +165,7 @@ public partial class ProcessUserChatCommandHandler
             var candidates = ResolveQueryRead(match.Value, results) is { } bound
                 ? new List<QueryReadBlock> { bound } : ReadCandidates(match.Value, results);
             return candidates.Count > 1 || candidates.Count == 1 && !ReadEnabled(candidates[0], client, flags)
-                ? string.Join("\n\n", candidates.Select(read => ReadFallback(read.Block, language, timeZone))) : match.Value;
+                ? string.Join("\n\n", candidates.Select(read => ReadFallback(read.Block, language, timeZone, userToday))) : match.Value;
         }, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     }
 
@@ -186,8 +186,8 @@ public partial class ProcessUserChatCommandHandler
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client,
             flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst));
 
-    internal static string ReadFallback(object block, string? language, string? timeZone = null) =>
-        new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone).Format(block);
+    internal static string ReadFallback(object block, string? language, string? timeZone = null, DateOnly? userToday = null) =>
+        new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone, userToday).Format(block);
 
     private static ResponseCards RetainCompatibleCards(ResponseCards cards, AgentClientContext? client, string? language, string? timeZone)
     {
@@ -216,7 +216,7 @@ public partial class ProcessUserChatCommandHandler
         var parts = reads.Select(read => request.ClientContext?.SupportsParts == true
                 && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
             ? (ChatResponsePart)new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)
-            : new ChatTextPart(ReadFallback(read.Block, context.Language, context.User?.TimeZone))).ToArray();
+            : new ChatTextPart(ReadFallback(read.Block, context.Language, context.User?.TimeZone, context.UserToday))).ToArray();
         return cards with
         {
             AiMessage = JoinPartText(parts),
@@ -245,7 +245,7 @@ public partial class ProcessUserChatCommandHandler
                     Parts = (cards.Parts ?? []).Append(new ChatBlockPart(read.Kind,
                     ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)).ToArray()
                 };
-            else if (ReadFallback(read.Block, context.Language, context.User?.TimeZone) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
+            else if (ReadFallback(read.Block, context.Language, context.User?.TimeZone, context.UserToday) is { Length: > 0 } text && cards.AiMessage?.Contains(text, StringComparison.Ordinal) != true)
                 cards = cards with
                 {
                     AiMessage = string.Join("\n\n", new[] { cards.AiMessage, text }.Where(value => !string.IsNullOrWhiteSpace(value))),

@@ -1,0 +1,34 @@
+{
+  "caseId": "composition-compound-missing-kind-pt-BR",
+  "repeat": 2,
+  "answer": "29/10/2026 a 29/10/2026: Concluídos / agendados: 0/2\n\nMetas: 1\nHidratação constante: 0/10 sessões",
+  "toolCalls": [
+    {
+      "name": "get_daily_summary",
+      "arguments": {
+        "relative_period": "today",
+        "period_count": null,
+        "generate_narrative": false,
+        "date_from": null,
+        "date_to": null,
+        "language": "pt-BR",
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": null,
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}
