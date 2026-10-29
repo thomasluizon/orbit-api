@@ -89,6 +89,10 @@ public sealed partial class ChatWriteHoldHandlerTests
             .And.Contain("frequency_unit=Day, frequency_quantity=1, due_date=D-1, end_date=D")
             .And.Contain("frequency_unit=OneTime, due_date=D, due_end_time=T")
             .And.Contain("Do not copy a preceding preparation's start date into a deadline-only item");
+        request.SystemPrompt.Should().Contain("each offset governs the action written immediately after it")
+            .And.Contain("up to the next offset or the next action without an offset")
+            .And.Contain("Never make an offset its own item or move it to another action")
+            .And.Contain("Keep the person's own verb, such as stop, don't go, parar com or não ir, rather than a synonym");
         var declarations = request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
             .Where(value => value.GetProperty("name").GetString() is "create_habit" or "bulk_create_habits").ToArray();
         declarations.Should().HaveCount(2);
@@ -96,7 +100,9 @@ public sealed partial class ChatWriteHoldHandlerTests
         {
             declaration.GetProperty("description").GetString().Should()
                 .Contain("A 24-hour restriction is a bounded daily commitment")
-                .And.Contain("frequency_unit=OneTime, due_date=D, due_end_time=T");
+                .And.Contain("frequency_unit=OneTime, due_date=D, due_end_time=T")
+                .And.Contain("each offset governs the action written immediately after it")
+                .And.Contain("Never make an offset its own item or move it to another action");
             var schema = declaration.GetProperty("parameters");
             if (schema.GetProperty("properties").TryGetProperty("habits", out var habits))
                 schema = habits.GetProperty("items");

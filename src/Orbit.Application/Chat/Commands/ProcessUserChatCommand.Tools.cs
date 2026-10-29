@@ -279,6 +279,7 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
         CanCompleteStartingStepRound(response, calls, outcomes)
         || CanCompleteWriteRound(response, calls, outcomes, results)
+        || CanCompleteRevisionRound(response, request, results, calls, outcomes)
         || CanCompleteReadRound(response, request, context, results, iteration, calls, outcomes, toolResults);
 
     private bool CanCompleteReadRound(AiResponse response, ProcessUserChatCommand request, ChatContext context,

@@ -33,3 +33,21 @@ contains no typed preparation-to-event relationship from which to prove a bound.
 Local replay proves argument preservation and the instructions supplied to the
 model. It does not prove live model adherence or pass^3; the coordinator owns the
 real-call rerun.
+
+The `g9i-` projections retain the coordinator's `caseId`, `repeat` and `toolCalls`
+from `run-26-gate7-g9i/reports/attempts`, harness `df6cdae61`, API `29d83553`.
+Portuguese repeats include the correct offsets, swapped offsets with a verb
+substitution, and an extra preparation item made from the first offset. Replays
+keep those arguments unchanged in typed previews and inspect the system and tool
+instructions supplied at the model-service port. They preserve the person's
+unpunctuated message verbatim. They do not establish that the model follows the
+offset guidance; the coordinator owns that live rerun.
+
+The English batch supplies the correction's real pending preview; the correction
+capture contains two identical time edits with completion false then true.
+Replay binds the redacted pending ID to that preview. The unmodified sequence
+stops at the complete second call. A labeled test variant changes only the first
+completion flag to true, proving that one complete revision ends the turn. A
+separate structured replay keeps completion false to retain a requested fresh
+write after the revision. Revision-question tests cover the answer path even
+when the model marks its read complete. No provider response fields are added.
