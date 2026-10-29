@@ -30,7 +30,7 @@ public sealed class IssuedAstraBlock : Entity
             throw new ArgumentException("User id is required.", nameof(userId));
         ArgumentNullException.ThrowIfNull(definition);
         if (definition.Title is null || definition.Form != AstraBlockKinds.Question && string.IsNullOrWhiteSpace(definition.Title))
-            throw new ArgumentException("A question or title is required.", nameof(definition));
+            throw new ArgumentException("question for choice or title for pickList must be nonempty.", nameof(definition));
         ValidateDefinition(definition);
 
         var createdAtUtc = DateTime.UtcNow;
@@ -46,34 +46,51 @@ public sealed class IssuedAstraBlock : Entity
 
     private static void ValidateDefinition(AstraBlockDefinition definition)
     {
-        var valid = definition.Options is not null && definition.Items is not null && (definition.Form switch
-        {
-            AstraBlockKinds.Choice => IsValidChoice(definition),
-            AstraBlockKinds.PickList => IsValidPickList(definition),
-            AstraBlockKinds.Question => AstraQuestionRules.IsValidDefinition(definition),
-            _ => false
-        }) && (definition.Form == AstraBlockKinds.Question
-            || definition.Questions is null && definition.Intro is null && definition.Progress is null);
-        if (!valid)
-            throw new ArgumentException("Invalid block definition.", nameof(definition));
+        var error = DefinitionError(definition);
+        if (error is not null) throw new ArgumentException(error, nameof(definition));
     }
 
-    private static bool IsValidChoice(AstraBlockDefinition definition) =>
-        definition.Title.Length <= 120 && definition.Options.Count is >= 2 and <= 4
-        && definition.Items.Count == 0 && definition.Action is null
-        && definition.Options.All(option => option is not null && !string.IsNullOrWhiteSpace(option.Id)
-            && !string.IsNullOrWhiteSpace(option.Label) && option.Label.Length <= 20
-            && (option.Description is null || option.Description.Length <= 24))
-        && definition.Options.Select(option => option.Id).Distinct(StringComparer.Ordinal).Count() == definition.Options.Count;
+    private static string? DefinitionError(AstraBlockDefinition definition)
+    {
+        if (definition.Options is null || definition.Items is null) return "options and items must be arrays.";
+        if (definition.Form != AstraBlockKinds.Question
+            && (definition.Questions is not null || definition.Intro is not null || definition.Progress is not null))
+            return "questions, intro and progress are only allowed for form question.";
+        return definition.Form switch
+        {
+            AstraBlockKinds.Choice => ChoiceError(definition),
+            AstraBlockKinds.PickList => PickListError(definition),
+            AstraBlockKinds.Question => AstraQuestionRules.DefinitionError(definition),
+            _ => "form must be choice, pickList or question."
+        };
+    }
 
-    private static bool IsValidPickList(AstraBlockDefinition definition) =>
-        definition.Items.Count is >= 1 and <= 10 && definition.Options.Count == 0
-        && definition.Action is "create_habits" or "log_habits" or "skip_habits"
-        && definition.MultiSelect && !definition.AllowFreeText
-        && definition.Items.All(item => item is not null && !string.IsNullOrWhiteSpace(item.Id)
-            && !string.IsNullOrWhiteSpace(item.Label) && item.Arguments.ValueKind == JsonValueKind.Object
-            && (item.Detail is null || item.Detail.Length <= 24))
-        && definition.Items.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() == definition.Items.Count;
+    private static string? ChoiceError(AstraBlockDefinition definition)
+    {
+        if (definition.Title.Length > 120) return "question must have at most 120 characters.";
+        if (definition.Options.Count is < 2 or > 4) return "options must contain 2 to 4 options for choice.";
+        if (definition.Items.Count != 0 || definition.Action is not null) return "items and action must be omitted or null for choice.";
+        if (definition.Options.Any(option => option is null || string.IsNullOrWhiteSpace(option.Id)
+            || string.IsNullOrWhiteSpace(option.Label) || option.Label.Length > 20
+            || option.Description?.Length > 24))
+            return "options require nonempty ids and labels, labels up to 20 characters and descriptions up to 24 characters.";
+        return definition.Options.Select(option => option.Id).Distinct(StringComparer.Ordinal).Count() == definition.Options.Count
+            ? null : "options must have unique ids.";
+    }
+
+    private static string? PickListError(AstraBlockDefinition definition)
+    {
+        if (definition.Items.Count is < 1 or > 10) return "items must contain 1 to 10 items for pickList.";
+        if (definition.Options.Count != 0) return "options must be omitted or null for pickList.";
+        if (definition.Action is not ("create_habits" or "log_habits" or "skip_habits"))
+            return "action must be create_habits, log_habits or skip_habits for pickList.";
+        if (!definition.MultiSelect || definition.AllowFreeText) return "pickList requires multiSelect=true and allowFreeText=false.";
+        if (definition.Items.Any(item => item is null || string.IsNullOrWhiteSpace(item.Id)
+            || string.IsNullOrWhiteSpace(item.Label) || item.Arguments.ValueKind != JsonValueKind.Object || item.Detail?.Length > 24))
+            return "items require nonempty ids and labels, object arguments and details up to 24 characters.";
+        return definition.Items.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() == definition.Items.Count
+            ? null : "items must have unique ids.";
+    }
 
     public void MarkAnswered(DateTime answeredAtUtc)
     {

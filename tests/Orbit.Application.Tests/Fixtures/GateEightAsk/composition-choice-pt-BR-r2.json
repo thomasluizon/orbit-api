@@ -1,0 +1,49 @@
+{
+  "caseId": "composition-choice-pt-BR",
+  "repeat": 2,
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "question",
+        "question": null,
+        "title": null,
+        "multiSelect": null,
+        "allowFreeText": true,
+        "intro": null,
+        "progress": null,
+        "questions": [
+          {
+            "id": "target",
+            "type": "singleChoice",
+            "prompt": "Qual hábito você quer mudar?",
+            "options": [
+              {
+                "id": "water",
+                "label": "Beber água",
+                "recommended": null
+              },
+              {
+                "id": "walk",
+                "label": "Caminhada",
+                "recommended": null
+              }
+            ],
+            "allowFreeText": true,
+            "lowLabel": null,
+            "highLabel": null,
+            "min": null,
+            "max": null,
+            "step": null,
+            "unit": null
+          }
+        ],
+        "options": null,
+        "action": null,
+        "items": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Failed"
+    }
+  ]
+}

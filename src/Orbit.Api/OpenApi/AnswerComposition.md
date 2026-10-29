@@ -38,6 +38,14 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
 | Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
 
+A single record selector uses `choice`, including when the client also supports
+`question`. Question forms collect multiple fields. The server validates the complete
+typed definition before negotiating a renderable single selector to `choice`.
+Per-question free-text settings own question forms; the top-level flag applies to
+choice only. Invalid ask calls return the precise failed constraint to the model
+for one corrected call in the same turn, then prose fallback. No question prepares
+a write. See [ask validation and bilingual copy](AskValidation.md).
+
 Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text
