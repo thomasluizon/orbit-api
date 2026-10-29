@@ -560,6 +560,13 @@ The pt-BR analytics call was model-selected; no handler dependency or forced rou
 requires it. Existing descriptions already exclude analytics from organizing a dump,
 so that read's availability and behavior remain unchanged.
 
+The combined `bulk_create_habits` approval preview is the only write of a brain
+dump turn. No emoji, update, tag, log, skip or reschedule write is authorized for
+reused or new items unless the message explicitly requests that change. A requested
+change to a reused habit belongs in the same preview item with `habit_id` and the
+requested field, rather than a separate write. Organizing the message never
+authorizes an emoji inference follow-up.
+
 The message and `query_habits` supply this proposal's task and reuse facts.
 `suggest_habits` supplies additional ideas only when requested. The prompt and
 tool descriptions exclude calendar, habit-month, profile and analytics reads
