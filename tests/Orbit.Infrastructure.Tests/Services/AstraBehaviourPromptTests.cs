@@ -21,9 +21,10 @@ public class AstraBehaviourPromptTests
             .And.Contain("nothing is saved before approval")
             .And.Contain("at most one short sentence without figures");
         prompt.Should().Contain("Keep every supplied date and time, including past dates")
-            .And.Contain("normalize spelling and casing without changing the action or negation")
-            .And.Contain("Don't take multivitamins must not become Stop taking multivitamins")
-            .And.Contain("não ir pro muay thay becomes Não ir ao Muay Thai");
+            .And.Contain("Normalize spelling and casing without substituting the action or negation")
+            .And.Contain("For medical instruction titles, keep the person's own action wording")
+            .And.Contain("stop multivitamins stays Stop multivitamins")
+            .And.Contain("parar com multivitaminico stays Parar com multivitamínico");
     }
 
     [Fact]
