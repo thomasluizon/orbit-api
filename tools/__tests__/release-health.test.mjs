@@ -213,13 +213,8 @@ test("both jobs load the shared verifier from the workflow commit before final R
     assert.match(source.slice(checkout, setup), /ref: \$\{\{ github.sha \}\}/)
     assert.match(source.slice(checkout, setup), /persist-credentials: false/)
     assert.match(source.slice(setup, verify), /node-version: 22/)
-    if (job === "production") {
-      assert.match(source.slice(live, record), /jq -er '\.\[0\]\.deploy\.commit\.id'/)
-      assert.match(source.slice(live, record), /if \[ "\$live_commit" != "\$COMMIT_SHA" \]; then[\s\S]*exit 1/)
-    } else {
-      assert.match(source.slice(live, record), /jq -er '\.\[0\]\.deploy\.image\.ref'/)
-      assert.match(source.slice(live, record), /if \[ "\$live_commit" != "ghcr.io\/thomasluizon\/orbit-api@\$IMAGE_DIGEST" \]; then[\s\S]*exit 1/)
-    }
+    assert.match(source.slice(live, record), /jq -er '\.\[0\]\.deploy\.image\.ref'/)
+    assert.match(source.slice(live, record), /if \[ "\$live_commit" != "ghcr.io\/thomasluizon\/orbit-api@\$IMAGE_DIGEST" \]; then[\s\S]*exit 1/)
     assert.doesNotMatch(healthScript(steps[job === "production" ? 0 : 1]), /--retry/)
   }
   assert.match(workflow, /group: api-release-\$\{\{ inputs.environment \}\}[\s\S]*cancel-in-progress: false/)

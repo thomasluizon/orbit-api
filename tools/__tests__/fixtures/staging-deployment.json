@@ -1,0 +1,20 @@
+{
+  "deployments": [
+    {
+      "id": 7413456935,
+      "sha": "994b43a2f6b4cc9ee20f6f854cc6fc7acd1a9df3",
+      "environment": "staging",
+      "payload": {},
+      "creator": {
+        "login": "github-actions[bot]"
+      }
+    }
+  ],
+  "statuses": [
+    {
+      "id": 20911869611,
+      "state": "success",
+      "environment": "staging"
+    }
+  ]
+}
