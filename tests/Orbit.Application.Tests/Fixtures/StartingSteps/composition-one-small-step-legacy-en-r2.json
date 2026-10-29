@@ -1,0 +1,26 @@
+{
+  "caseId": "composition-one-small-step-legacy-en",
+  "repeat": 2,
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "en",
+        "title": "Study",
+        "suggested_sub_habits": [
+          {
+            "title": "Open your study materials and read one sentence",
+            "description": null,
+            "frequency_unit": null,
+            "frequency_quantity": null,
+            "days": null
+          }
+        ],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ],
+  "answer": "Open your study materials and read one sentence"
+}
