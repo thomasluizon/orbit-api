@@ -154,7 +154,10 @@ composition and execution preserve the structured arguments rather than rewritin
 
 Write completion covers every requested action, target and occurrence. A target lookup is a
 prerequisite, not a mutation. A rename plus a skip uses both write tools; skipping several
-habits uses `bulk_skip_habits`. The server combines the model's held writes into one preview
+habits uses `bulk_skip_habits`. A lookup showing an already skipped occurrence does not replace
+the requested skip call: the matching write tool validates the current state. The completion
+argument, query description and skip description carry this instruction to the model.
+The server combines the model's held writes into one preview
 and preserves their action labels. It never infers missing writes from the person's wording
 or changes a log call into a skip call.
 
