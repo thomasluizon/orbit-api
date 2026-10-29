@@ -11,6 +11,8 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
+    private static readonly JsonSerializerOptions AskArgumentJsonOptions = new(JsonSerializerDefaults.Web);
+
     private static bool IsAskKind(string kind) => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList or AstraBlockKinds.Question;
 
     private static string AddAskContext(string dynamicContext, ProcessUserChatCommand request, ChatContext context, string[] toolNames)
@@ -119,7 +121,7 @@ public partial class ProcessUserChatCommandHandler
         AskToolArguments? input;
         try
         {
-            input = ask.Args.Deserialize<AskToolArguments>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            input = ask.Args.Deserialize<AskToolArguments>(AskArgumentJsonOptions);
         }
         catch (JsonException)
         {

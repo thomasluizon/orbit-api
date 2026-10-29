@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
@@ -95,6 +96,80 @@ public partial class ProcessUserChatCommandHandlerTests
         choice.Options.Select(option => option.Id).Should().Equal(walks.Select(walk => walk.Id.ToString()));
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+        await _mediator.DidNotReceiveWithAnyArgs().Send(default(DeleteHabitCommand)!, default);
+        habits.Should().OnlyContain(habit => !habit.IsDeleted);
+    }
+
+    [Theory]
+    [InlineData("question-overlap", false)]
+    [InlineData("question-disjoint", true)]
+    [InlineData("unknown-target", false)]
+    [InlineData("unknown-option", false)]
+    [InlineData("null-option", false)]
+    [InlineData("malformed-options", false)]
+    [InlineData("multi-choice-question", false)]
+    public async Task Ask_HabitDeletePreparesBesideAskOnlyWhenEveryCandidateResolvesOutsideItsHierarchy(string shape, bool prepared)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var fitness = CreateHabit("Fitness");
+        var walks = new[] { CreateHabit("Walk"), CreateHabit("Walk") };
+        walks[0].SetParentHabitId(fitness.Id);
+        var music = CreateHabit("Music");
+        Habit[] habits = [fitness, .. walks, music];
+        SetupSelectionHabits(habits);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var delete = new DeleteHabitTool(_mediator, _habitRepo);
+        var handler = CreateHandler(RealAskTool(), query, delete);
+        var held = HoldAskRerunWrites(query, delete);
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { ConversationContext = TestConversationContext, TextMessage = "Which Walk?" }));
+        var targetId = shape switch
+        {
+            "question-overlap" => fitness.Id,
+            "unknown-target" => Guid.NewGuid(),
+            _ => music.Id
+        };
+        object?[] options = shape switch
+        {
+            "unknown-option" => [new { id = walks[0].Id.ToString(), label = "Morning walk" }, new { id = "Swim", label = "Evening swim" }],
+            "null-option" => [new { id = walks[0].Id.ToString(), label = "Morning walk" }, null],
+            _ => walks.Select((walk, index) => (object?)new { id = walk.Id.ToString(), label = index == 0 ? "Morning walk" : "Evening walk" }).ToArray()
+        };
+        object ask = shape switch
+        {
+            "question-overlap" or "question-disjoint" => new
+            {
+                form = "question",
+                questions = new[] { new { id = "walk", type = "singleChoice", prompt = "Which Walk?", options } }
+            },
+            "multi-choice-question" => new
+            {
+                form = "question",
+                questions = new[] { new { id = "walk", type = "multiChoice", prompt = "Which Walk?", options } }
+            },
+            "malformed-options" => new { form = "choice", question = "Which Walk?", options = "Morning walk" },
+            _ => new { form = "choice", question = "Which Walk?", options }
+        };
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls =
+            [
+                new(delete.Name, "delete", JsonSerializer.SerializeToElement(new { habit_id = targetId })),
+                new("ask", "question", JsonSerializer.SerializeToElement(ask))
+            ]
+        });
+
+        var result = await handler.Handle(new(UserId, "Delete the habit and skip Walk today.",
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["choice", "question"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        if (prepared)
+            held.Should().ContainSingle().Which.OperationId.Should().Be(delete.Name);
+        else
+            held.Should().BeEmpty("a write beside a choice is prepared only when every candidate resolves outside its hierarchy");
         await _mediator.DidNotReceiveWithAnyArgs().Send(default(DeleteHabitCommand)!, default);
         habits.Should().OnlyContain(habit => !habit.IsDeleted);
     }
