@@ -191,6 +191,35 @@ Habit listings use `query_habits`, and compound habit-and-goal listings pair it 
 `query_goals`. `get_daily_summary` supplies requested completion totals or a narrative recap;
 it does not replace the habit query. Tool descriptions and read instructions establish this
 distinction without routing messages by keywords or rewriting the model's tool calls.
+
+The Today Astra insight sentence is `DailySummaryResponse.Summary` from
+`HabitsController.GetDailySummary` through `GetDailySummaryQueryHandler` and
+`AiSummaryService`. Web and Android summary cards, chat `get_daily_summary` reads
+that request a narrative, and the MCP tool share this producer. The legacy
+`Insight` field stays empty. Proactive check-ins use
+`AiProactiveCheckinMessageService`; push reminders use `ReminderSchedulerService`
+and do not call this narrative producer.
+
+For the account's local today, the narrative receives the complete paged schedule
+as an ordered pending projection. It includes parent links, start and end times,
+personal position, overdue state and group or quota progress. Completed and
+skipped occurrences and satisfied quotas are excluded from actionable steps;
+clean bad habits remain in the historical context rather than becoming tasks to
+perform. Nested groups retain their progress while their actionable descendants
+remain available. Order uses unresolved occurrence date, start time (or a
+deadline without a start), then the schedule's personal order. Untimed steps
+follow timed steps. Titles never determine order.
+
+The model is instructed to choose the first actionable step, explain its priority
+in one short clause, and only prefer a different group for clear overdue or
+time-bound urgency. It must never skip an earlier pending sibling. The profile
+language governs the entire sentence, including natural references to titles
+stored in another language; persisted names and typed read blocks keep their
+original titles. No title matching selects tools or substitutes an answer.
+Deterministic replay tests verify this producer's actual model input and summary
+mapping; the bilingual live evaluation in the consumer's `evals/astra` harness
+checks whether the model follows those instructions after staging deployment.
+
 Negotiation resolves an explicit client locale before the profile language. A legacy client
 without a locale uses the profile language; no message pattern detects the language. Pending
 preview, empty-answer recovery, tool failure, truncation and habit-selection fallback copy use
