@@ -67,6 +67,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var sent = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments()).OfType<AiToolRequest>().Single();
         sent.SystemPrompt.Should().Contain("Bind each preparation offset to its own activity and referenced event")
             .And.Contain("A fasting deadline stays on the collection date");
+        AssertPreparationGuidance(sent);
         sent.DynamicContext.Should().Contain("For medical instruction titles, keep the person's own action wording");
         foreach (var declaration in sent.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
             .Where(value => value.GetProperty("name").GetString() is "create_habit" or "bulk_create_habits" or "create_sub_habit"))
@@ -80,5 +81,40 @@ public sealed partial class ChatWriteHoldHandlerTests
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _aiIntentService.DidNotReceive().ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    private static void AssertPreparationGuidance(AiToolRequest request)
+    {
+        request.SystemPrompt.Should().Contain("A 24-hour restriction is a bounded daily commitment")
+            .And.Contain("frequency_unit=Day, frequency_quantity=1, due_date=D-1, end_date=D")
+            .And.Contain("frequency_unit=OneTime, due_date=D, due_end_time=T")
+            .And.Contain("Do not copy a preceding preparation's start date into a deadline-only item");
+        var declarations = request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
+            .Where(value => value.GetProperty("name").GetString() is "create_habit" or "bulk_create_habits").ToArray();
+        declarations.Should().HaveCount(2);
+        foreach (var declaration in declarations)
+        {
+            declaration.GetProperty("description").GetString().Should()
+                .Contain("A 24-hour restriction is a bounded daily commitment")
+                .And.Contain("frequency_unit=OneTime, due_date=D, due_end_time=T");
+            var schema = declaration.GetProperty("parameters");
+            if (schema.GetProperty("properties").TryGetProperty("habits", out var habits))
+                schema = habits.GetProperty("items");
+            for (var depth = 0; depth < AppConstants.MaxHabitDepth; depth++)
+            {
+                var fields = schema.GetProperty("properties");
+                fields.GetProperty("frequency_unit").GetProperty("description").GetString().Should()
+                    .Contain("24-hour restriction").And.Contain("frequency_quantity=1");
+                fields.GetProperty("due_date").GetProperty("description").GetString().Should()
+                    .Contain("deadline-only item uses the event date");
+                fields.GetProperty("end_date").GetProperty("description").GetString().Should()
+                    .Contain("24-hour restriction").And.Contain("never null");
+                fields.GetProperty("due_end_time").GetProperty("description").GetString().Should()
+                    .Contain("deadline-only item that ends at an event uses that event's clock time")
+                    .And.Contain("restriction starting before the event keeps its own start due_date");
+                if (depth < AppConstants.MaxHabitDepth - 1)
+                    schema = fields.GetProperty("sub_habits").GetProperty("items");
+            }
+        }
     }
 }
