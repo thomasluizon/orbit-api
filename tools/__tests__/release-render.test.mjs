@@ -102,7 +102,9 @@ fs.writeFileSync(statePath, JSON.stringify(state))
 
 for (const job of ["production", "staging"]) {
 
-test(`${job}: sends only the immutable image and follows its returned deploy`, t => {
+test(job === "production"
+  ? "production: promotes an immutable image instead of requesting a Render build"
+  : "staging: sends only the immutable image and follows its returned deploy", t => {
   const image = "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64)
   const deploy = { id, image: { ref: image, sha: "sha256:" + "a".repeat(64) }, status: "live" }
   const result = replay(t, job, { post: [response(deploy, 201)], poll: [response(deploy)] })
