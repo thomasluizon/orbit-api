@@ -9,8 +9,9 @@ Deploy this producer to staging before the paired consumer updates its pin.
 
 The restricted staging eval pending-operation fixture and independent readback for
 thomasluizon/orbit-tickets#1845 are documented in
-[EvalPendingOperations.md](EvalPendingOperations.md). Deploy the API and obtain
-owner approval for its account allowlist before the paired eval harness uses it.
+[EvalPendingOperations.md](EvalPendingOperations.md). Deploy the API and have the
+coordinator set its account allowlist through SSM parameter
+`/orbit/staging/api/StagingEval__AccountIds` before the paired eval harness uses it.
 
 The negotiated Astra `question` block and structured next-turn answers are
 documented in [QuestionBlocks.md](QuestionBlocks.md). Publish the API contract

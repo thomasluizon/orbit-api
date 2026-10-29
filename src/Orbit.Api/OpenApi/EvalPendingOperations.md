@@ -3,9 +3,10 @@
 Tracks thomasluizon/orbit-tickets#1845. The paired harness work belongs to
 thomasluizon/orbit-tickets#1822; this producer change does not update that repository.
 
-The owner opts disposable accounts into this fixture by setting
-`StagingEval__AccountIds` to comma-separated account UUIDs in the staging API
-service's Render Environment screen. The service is the target selected by
+The coordinator opts disposable accounts into this fixture by setting SSM parameter
+`/orbit/staging/api/StagingEval__AccountIds` to comma-separated account UUIDs,
+applied as `StagingEval__AccountIds` through the staging API environment group.
+The service is the target selected by
 `RENDER_STAGING_SERVICE_ID` in the GitHub `staging` environment. Deploy the API
 through the repository's release workflow with `environment=staging`, and apply
 the environment setting before the harness uses the routes. An absent or empty
@@ -53,8 +54,8 @@ not undo writes already executed before it started.
 
 ## Harness handoff
 
-Deploy the producer and obtain owner approval for the exact disposable account
-before enabling its allowlist entry. Verify access using that account's session
+Deploy the producer and have the coordinator set the exact disposable account's
+allowlist entry through `/orbit/staging/api/StagingEval__AccountIds`. Verify access using that account's session
 against `https://api-staging.useorbit.org`. Confirm an unlisted account and an
 API key cannot use either route. No database migration is required.
 
