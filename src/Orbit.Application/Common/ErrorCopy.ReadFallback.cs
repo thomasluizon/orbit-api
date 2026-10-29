@@ -4,6 +4,12 @@ public static partial class ErrorCopy
 {
     private static (string Code, string En, string PtBr)[] ReadFallback =>
     [
+        ("chat.answer.empty", "I couldn't prepare an answer. Please try again.", "Não consegui preparar uma resposta. Tente novamente."),
+        ("chat.answer.pendingPreview", "Review the proposed changes before approving.", "Revise as alterações propostas antes de aprovar."),
+        ("chat.answer.toolFailure", "I couldn't complete that. Please try again.", "Não consegui concluir isso. Tente novamente."),
+        ("chat.answer.truncated", "This response was cut off before completion, so the result is partial.", "Esta resposta foi interrompida antes do fim e pode estar incompleta."),
+        ("chat.answer.selectHabit", "Which habit would you like to choose?", "Qual hábito você quer escolher?"),
+        ("chat.answer.selectHabitReference", "Which habit would you like to use for “{0}”?", "Qual hábito você quer usar para “{0}”?"),
         ("chat.read.habitsEmpty", "No habits match this request.", "Nenhum hábito encontrado para esta busca."),
         ("chat.read.goalsEmpty", "No goals match this request.", "Nenhuma meta encontrada para esta busca."),
         ("chat.read.recordsEmpty", "No records match this request.", "Nenhum registro encontrado para esta busca."),
@@ -20,9 +26,6 @@ public static partial class ErrorCopy
         ("chat.read.difference", "Difference", "Diferença"),
         ("chat.read.lifetimeCompletions", "Lifetime completions", "Conclusões desde o início"),
         ("chat.read.today", "Today", "Hoje"),
-        ("chat.read.all", "All habits", "Todos os hábitos"),
-        ("chat.read.remaining", "Remaining habits", "Hábitos restantes"),
-        ("chat.read.date", "Habits on this date", "Hábitos nesta data"),
         ("chat.read.overdue", "Overdue", "Atrasado"),
         ("chat.read.general", "General", "Geral"),
         ("chat.read.done", "Completed", "Concluído"),
@@ -88,7 +91,6 @@ public static partial class ErrorCopy
         ("chat.read.pro_days", "Pro days", "Dias de Pro"),
         ("chat.read.notSet", "Not set", "Não definido"),
         ("chat.read.to", "to", "a"),
-        ("chat.read.habitCalendar", "Habit calendar", "Calendário de hábitos"),
         ("chat.read.calendarLogs", "Logs: positive = completion, zero = skipped; for bad habits, positive = slip.", "Registros: positivo = conclusão, zero = pulado; em hábitos ruins, positivo = deslize."),
     ];
 }

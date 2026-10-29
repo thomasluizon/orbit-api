@@ -182,18 +182,20 @@ public sealed class ChatResponseNegotiationTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Replay_PendingPreviewWithoutPartsHasReadableFallback(bool nullParts)
+    [InlineData(false, "en", "Review the proposed changes before approving.")]
+    [InlineData(true, "en", "Review the proposed changes before approving.")]
+    [InlineData(false, "pt-BR", "Revise as alterações propostas antes de aprovar.")]
+    [InlineData(true, "pt-BR", "Revise as alterações propostas antes de aprovar.")]
+    public void Replay_PendingPreviewWithoutPartsHasReadableFallback(bool nullParts, string language, string instruction)
     {
         var pending = new PendingAgentOperation(Guid.NewGuid(), "habits.write", "Create", "create_habit",
             AgentRiskClass.High, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(5),
             Items: [new("item", null, "Reading", [], "state")]);
         var stored = Replay(new(null, [], PendingOperations: [pending], Parts: nullParts ? null : []));
-        var result = ChatResponseNegotiation.ForClient(stored, null, []);
+        var result = ChatResponseNegotiation.ForClient(stored, new(Locale: language), []);
 
         result.Parts.Should().BeNull();
-        result.AiMessage.Should().Contain("Reading").And.Contain("approving").And.NotContain("create_habit");
+        result.AiMessage.Should().Be(instruction + "\n- Reading");
         result.PendingOperations.Should().BeEquivalentTo([pending]);
         ChatResponseNegotiation.ForClient(stored, new(SupportsParts: true), []).AiMessage.Should().BeNullOrEmpty();
     }
