@@ -54,12 +54,46 @@ public sealed partial class PushNotificationServiceTests
         }
         using var web = JsonDocument.Parse(payload);
         using var apple = JsonDocument.Parse(JsonSerializer.Serialize(ApnsPushSender.CreatePayload("Água", "Próximo às 20:00", "/", data)));
+        var aps = apple.RootElement.GetProperty("aps");
+        aps.GetProperty("category").GetString().Should().Be("orbit-repeat-reminder");
+        aps.GetProperty("alert").GetProperty("title").GetString().Should().Be("Água");
+        aps.GetProperty("alert").GetProperty("body").GetString().Should().Be("Próximo às 20:00");
+        aps.GetProperty("sound").GetString().Should().Be("default");
+        apple.RootElement.GetProperty("body").GetProperty("url").GetString().Should().Be("/");
         foreach (var (key, value) in data)
         {
             fcm.Data[key].Should().Be(value);
             web.RootElement.GetProperty(key).GetString().Should().Be(value);
             apple.RootElement.GetProperty("body").GetProperty(key).GetString().Should().Be(value);
         }
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(false, "/")]
+    [InlineData(true, null)]
+    [InlineData(true, "/")]
+    public void CreateApnsPayload_WithoutDoneToken_PreservesOrdinaryPayload(bool includeMetadata, string? url)
+    {
+        var data = includeMetadata
+            ? new Dictionary<string, string> { ["habitId"] = Guid.NewGuid().ToString(), ["tag"] = "orbit-repeat-habit" }
+            : null;
+
+        using var apple = JsonDocument.Parse(JsonSerializer.Serialize(
+            ApnsPushSender.CreatePayload("Água", "Próximo às 20:00", url, data)));
+
+        var aps = apple.RootElement.GetProperty("aps");
+        aps.TryGetProperty("category", out _).Should().BeFalse();
+        aps.EnumerateObject().Should().HaveCount(2);
+        aps.GetProperty("alert").GetProperty("title").GetString().Should().Be("Água");
+        aps.GetProperty("alert").GetProperty("body").GetString().Should().Be("Próximo às 20:00");
+        aps.GetProperty("sound").GetString().Should().Be("default");
+        var custom = apple.RootElement.GetProperty("body");
+        custom.GetProperty("url").GetString().Should().Be(url);
+        custom.EnumerateObject().Should().HaveCount((data?.Count ?? 0) + 1);
+        if (data is not null)
+            foreach (var (key, value) in data)
+                custom.GetProperty(key).GetString().Should().Be(value);
     }
 
     [Fact]
