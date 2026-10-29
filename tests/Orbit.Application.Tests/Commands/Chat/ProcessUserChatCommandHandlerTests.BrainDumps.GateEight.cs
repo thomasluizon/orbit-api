@@ -7,7 +7,9 @@ using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
@@ -82,11 +84,17 @@ public partial class ProcessUserChatCommandHandlerTests
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BrainDumps", "g8-brain-dump-" + name + ".json"))
             .Replace("[redacted]", existingId.ToString()));
 
-    [Fact]
-    public async Task BrainDump_CapturedMixedRoundWaitsForReadsBeforeHoldingAnyPreview()
+    [Theory]
+    [InlineData("empty", false)]
+    [InlineData("empty", true)]
+    [InlineData("no_output", false)]
+    [InlineData("no_output", true)]
+    [InlineData("unavailable", false)]
+    [InlineData("unavailable", true)]
+    public async Task BrainDump_CapturedMixedRoundWaitsForReadsBeforeHoldingAnyPreview(string continuation, bool composition)
     {
         SetupUserAndPayGate();
-        EnableComposition();
+        if (composition) EnableComposition();
         using var fixture = BrainDumpCapture("reuse-pt-BR-r1", Guid.NewGuid());
         var calls = BrainDumpCalls(fixture);
         var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
@@ -101,20 +109,77 @@ public partial class ProcessUserChatCommandHandlerTests
             {
                 held.Should().BeEmpty("the model must see the lookup before preparing the complete preview");
                 forwarded = call.Arg<IReadOnlyList<AiToolCallResult>>();
-                return Orbit.Domain.Common.Result.Success(new AiResponse());
+                return continuation switch
+                {
+                    "no_output" => Result.Failure<AiResponse>(ErrorMessages.AiNoOutput),
+                    "unavailable" => Result.Failure<AiResponse>(ErrorMessages.AiUnavailable),
+                    _ => Result.Success(new AiResponse())
+                };
             });
 
         var result = await handler.Handle(new(UserId, fixture.RootElement.GetProperty("message").GetString()!,
             ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true,
                 SupportsHabitListCard: true, PartKinds: ["habitList"])), default);
 
-        result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        result.IsFailure.Should().BeTrue("supporting reads cannot fulfill the deferred creation");
+        var expected = ErrorMessages.AiUnavailable;
+        result.ErrorCode.Should().Be(expected.Code);
+        result.Error.Should().Be(expected.Message);
+        held.Should().BeEmpty();
+        await _mediator.DidNotReceive().Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>());
         forwarded.Should().ContainSingle(item => item.Name == bulk.Name && item.Success);
         var deferred = JsonSerializer.SerializeToElement(forwarded!.Single(item => item.Name == bulk.Name).Payload,
             JsonSerializerOptions.Web);
         deferred.GetProperty("status").GetString().Should().Be("awaiting_reads");
         deferred.GetProperty("instruction").GetString().Should().Contain("Nothing was previewed or saved");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BrainDump_CapturedMixedRoundResubmissionPreparesOneCombinedPreview(bool composition)
+    {
+        SetupUserAndPayGate();
+        if (composition) EnableComposition();
+        var today = new DateOnly(2026, 10, 28);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        var existing = Habit.Create(new(HabitSchedule.Recurring, UserId, "Beber água", FrequencyUnit.Day, 1, today)).Value;
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { existing }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToArray());
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { existing }.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToArray());
+        using var mixed = BrainDumpCapture("reuse-pt-BR-r1", existing.Id);
+        using var complete = BrainDumpCapture("reuse-pt-BR-r3", existing.Id);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(query, bulk);
+        var held = HoldBrainDumpWithReads(bulk, query);
+        SetupAiResponse(new AiResponse { ToolCalls = BrainDumpCalls(mixed), ConversationContext = new() });
+        var write = BrainDumpCalls(complete).Single(call => call.Name == bulk.Name) with { Id = "resubmitted" };
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                held.Should().BeEmpty("the incomplete mixed-round arguments must never be prepared");
+                call.Arg<IReadOnlyList<AiToolCallResult>>().Should().Contain(item => item.Name == bulk.Name && item.Success);
+                return Result.Success(new AiResponse { ToolCalls = [write], ConversationContext = new() });
+            });
+
+        var result = await handler.Handle(new(UserId, mixed.RootElement.GetProperty("message").GetString()!,
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true,
+                SupportsHabitListCard: true, PartKinds: ["habitList"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle().Which.Arguments.GetProperty("habits").GetArrayLength().Should().Be(3);
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Subject;
+        preview.Items!.Select(item => item.HabitType).Should().Equal("Task", "Habit", "Habit");
+        preview.Items.Should().ContainSingle(item => item.EntityId == existing.Id && item.EntityName == existing.Title);
+        result.Value.Parts.Should().BeEmpty();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+        result.Value.Actions.Should().BeEmpty();
+        await _mediator.DidNotReceive().Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>());
+        await _mediator.DidNotReceive().Send(Arg.Any<UpdateHabitFieldsCommand>(), Arg.Any<CancellationToken>());
     }
 
     private static AiToolCall[] BrainDumpCalls(JsonDocument fixture) => fixture.RootElement.GetProperty("toolCalls")

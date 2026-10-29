@@ -348,7 +348,13 @@ calendars and suggestion cards. The existing server suppression omits redundant
 narrative and follow-ups. A bulk creation submitted in a round with reads is deferred:
 its typed tool result has `status: awaiting_reads`, no preview is held and nothing
 is saved. The model receives those read results before submitting the complete
-bulk creation in a later round. Other write tools retain their existing ordering.
+bulk creation in a later round. The deferred creation remains an outstanding obligation
+until a later `orbit_write_complete` bulk creation yields a nonempty approval preview.
+Supporting reads cannot satisfy it. If continuation ends empty, fails or stops without
+that proposal, the turn returns the existing failure instead of a read-only answer.
+Empty-output failures use `AI_UNAVAILABLE` so generic empty-answer recovery cannot
+turn the unfinished proposal into success. Other provider failures retain their codes.
+Other write tools retain their existing ordering.
 Nothing is saved until approval. Edits use the existing pending-operation revision route;
 reject cancels the whole pending operation. Existing FluentValidation validators
 and domain guards remain authoritative for every create and adjustment.

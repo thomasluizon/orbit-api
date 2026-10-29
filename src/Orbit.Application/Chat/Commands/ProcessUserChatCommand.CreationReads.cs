@@ -15,6 +15,16 @@ public partial class ProcessUserChatCommandHandler
         && results.PendingWriteCalls.TryGetValue(pending.Id, out var held) && held.ToolName == "bulk_create_habits"
         && results.ActionResults.Count == 0 && results.AskBlock is null && SuppressPreviewNarrative(results);
 
+    private static void CompleteCreationProposal(AiResponse response,
+        IReadOnlyDictionary<string, ToolCallOutcome> outcomes, ToolExecutionAccumulator results)
+    {
+        if (TerminalWriteDirective.IsComplete(response)
+            && response.ToolCalls!.Any(call => call.Name == "bulk_create_habits"
+                && outcomes.TryGetValue(call.Id, out var outcome)
+                && outcome.PendingOperation is { ChangeTargetCount: > 0, Items.Count: > 0 }))
+            results.RequiresCreationProposal = false;
+    }
+
     private static ToolCallOutcome AwaitCreationReads(AiToolCall call) => new(
         new AiToolCallResult(call.Name, call.Id, true, null, null, null,
             new CreationReadDependency("awaiting_reads",
