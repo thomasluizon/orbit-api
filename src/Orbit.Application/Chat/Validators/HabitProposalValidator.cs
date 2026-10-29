@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using FluentValidation;
 using FluentValidation.Results;
 using Orbit.Application.Chat.Tools;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Chat.Validators;
@@ -31,6 +32,9 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
         var polarity = HabitSemantics.ValidatePolarity(title, bad);
         if (polarity is not null)
             Reject("is_bad_habit", polarity.Code, polarity.Message);
+        if (bad && JsonArgumentParser.GetOptionalBool(item, "is_general") == true)
+            Reject("is_general", DomainErrors.GeneralHabitIsBadHabit.Code,
+                "An ongoing avoid habit needs recurrence and is_general=false. Use Day/1 unless the person requested another cadence.");
 
         var frequency = JsonArgumentParser.ParseFrequencyUnit(item);
         if (frequency.IsFailure || frequency.Value is null)

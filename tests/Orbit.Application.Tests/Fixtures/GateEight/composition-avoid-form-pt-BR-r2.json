@@ -1,0 +1,42 @@
+{
+  "caseId": "composition-avoid-form-pt-BR",
+  "repeat": 2,
+  "toolCalls": [
+    {
+      "name": "create_habit",
+      "arguments": {
+        "title": "Fumar",
+        "description": null,
+        "emoji": "🚭",
+        "frequency_unit": "Day",
+        "frequency_quantity": 1,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": null,
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_bad_habit": true,
+        "is_general": false,
+        "is_flexible": false,
+        "checklist_items": null,
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": false,
+        "reminder_times": null,
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "repeat_reminder": null,
+        "slip_alert_enabled": false,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": null,
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}
