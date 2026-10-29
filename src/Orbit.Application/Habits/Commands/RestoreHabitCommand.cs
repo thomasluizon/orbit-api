@@ -38,20 +38,39 @@ public class RestoreHabitCommandHandler(
         RestoreHabitCommand request,
         CancellationToken cancellationToken)
     {
-        var userHabits = await habitRepository.FindTrackedIgnoringFiltersAsync(
-            h => h.UserId == request.UserId && h.IsDeleted,
-            query => query.Include(h => h.Goals),
+        var habit = await habitRepository.FindOneTrackedIgnoringFiltersAsync(
+            h => h.Id == request.HabitId && h.UserId == request.UserId && h.IsDeleted,
             cancellationToken);
-
-        var habit = userHabits.FirstOrDefault(h => h.Id == request.HabitId);
-        if (habit is null || !habit.IsDeleted)
+        if (habit is null)
             return Result.Failure<RestoreState>(ErrorMessages.HabitNotFound);
 
-        var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
         var cascadeDeletedAtUtc = habit.DeletedAtUtc;
-        var restoredHabits = HabitHierarchy.SelfAndDescendants(habit, childrenByParentId)
-            .Where(inSubtree => inSubtree.IsDeleted && inSubtree.DeletedAtUtc == cascadeDeletedAtUtc)
-            .ToList();
+        var restoredIds = new HashSet<Guid> { habit.Id };
+        var visitedIds = new HashSet<Guid> { habit.Id };
+        var parentIds = new List<Guid> { habit.Id };
+        while (parentIds.Count > 0)
+        {
+            var children = await habitRepository.FindIgnoringFiltersAsync(
+                h => h.UserId == request.UserId && h.IsDeleted
+                    && h.ParentHabitId.HasValue && parentIds.Contains(h.ParentHabitId.Value),
+                cancellationToken: cancellationToken);
+            var nextParentIds = new List<Guid>();
+            foreach (var child in children)
+            {
+                if (!visitedIds.Add(child.Id))
+                    continue;
+
+                nextParentIds.Add(child.Id);
+                if (child.DeletedAtUtc == cascadeDeletedAtUtc)
+                    restoredIds.Add(child.Id);
+            }
+            parentIds = nextParentIds;
+        }
+
+        var restoredHabits = await habitRepository.FindTrackedIgnoringFiltersAsync(
+            h => h.UserId == request.UserId && h.IsDeleted && restoredIds.Contains(h.Id),
+            query => query.Include(h => h.Goals),
+            cancellationToken);
 
         return Result.Success(new RestoreState(habit, restoredHabits));
     }
