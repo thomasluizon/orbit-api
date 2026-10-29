@@ -1,0 +1,161 @@
+{
+  "caseId": "brain-dump-ideas-en",
+  "repeat": 1,
+  "pass": true,
+  "reason": "All assertions passed",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "suggest_habits",
+      "arguments": {
+        "instruction": "Suggest one simple daily habit idea.",
+        "language": "en",
+        "count": 1,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "bulk_create_habits",
+      "arguments": {
+        "parent_habit_id": null,
+        "habits": [
+          {
+            "title": "Call the dentist",
+            "description": null,
+            "emoji": "🦷",
+            "frequency_unit": "OneTime",
+            "frequency_quantity": null,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": "2026-10-30",
+            "end_date": null,
+            "due_time": null,
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": null,
+            "reminder_times": null,
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          },
+          {
+            "title": "Stretch",
+            "description": null,
+            "emoji": "🤸",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": "2026-10-29",
+            "end_date": null,
+            "due_time": "08:00",
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": "2026-10-29",
+            "placement": null,
+            "reminder_enabled": null,
+            "reminder_times": null,
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          },
+          {
+            "title": "Read one page",
+            "description": null,
+            "emoji": "📖",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": null,
+            "days": [],
+            "due_date": "2026-10-29",
+            "end_date": null,
+            "due_time": "19:00",
+            "due_end_time": "19:10",
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": [],
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": false,
+            "reminder_times": [],
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          }
+        ],
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "suggestionResult": {
+    "language": "en",
+    "drafts": [
+      {
+        "emoji": "📖",
+        "title": "Read one page",
+        "type": "Habit",
+        "frequencyUnit": "Day",
+        "frequencyQuantity": 1,
+        "days": [],
+        "dueDate": "2026-10-29",
+        "dueTime": "19:00:00",
+        "dueEndTime": "19:10:00",
+        "reminderMinutesBefore": null,
+        "checklistItems": [],
+        "reason": "A short reading session is an easy way to build a daily reading routine."
+      }
+    ]
+  }
+}

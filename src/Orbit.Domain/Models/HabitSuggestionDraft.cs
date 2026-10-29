@@ -49,4 +49,13 @@ public sealed record HabitSuggestionsCard(string Language, IReadOnlyList<HabitSu
 
 public sealed record HabitSuggestionRequest(Guid UserId, string Instruction, string Language, int Count,
     DateOnly Today, IReadOnlyList<Habit> Habits, IReadOnlyList<Goal> Goals,
-    HabitSuggestionDraft? Original = null, string? Correction = null, int WeekStartDay = 1);
+    HabitSuggestionDraft? Original = null, string? Correction = null, int WeekStartDay = 1,
+    IReadOnlyList<string>? ExcludedActivities = null)
+{
+    public const int MaxExcludedActivities = 100;
+    public const int MaxExcludedActivityLength = 200;
+
+    public static bool HasValidExclusions(IReadOnlyList<string>? activities) => activities is null
+        || activities.Count <= MaxExcludedActivities && activities.All(title => !string.IsNullOrWhiteSpace(title)
+            && title.Length <= MaxExcludedActivityLength && title.Any(char.IsLetterOrDigit));
+}

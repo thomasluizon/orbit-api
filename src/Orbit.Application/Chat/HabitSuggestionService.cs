@@ -24,13 +24,17 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     IUserDateService dates, IHabitDraftGenerator generator)
 {
     public async Task<Result<HabitSuggestionsCard>> GenerateAsync(Guid userId, string instruction, string language,
-        int count, HabitSuggestionDraft? original, CancellationToken ct)
+        int count, HabitSuggestionDraft? original, CancellationToken ct, IReadOnlyList<string>? excludedActivities = null)
     {
+        if (!HabitSuggestionRequest.HasValidExclusions(excludedActivities))
+            return Result.Failure<HabitSuggestionsCard>(ErrorCopy.Resolve("HABIT_SUGGESTION_INVALID", LocaleHelper.IsPortuguese(language)),
+                "HABIT_SUGGESTION_INVALID");
         var today = await dates.GetUserTodayAsync(userId, ct);
         var active = await habits.FindAsync(habit => habit.UserId == userId && !habit.IsCompleted, ct);
         var activeGoals = await goals.FindAsync(goal => goal.UserId == userId && goal.Status == GoalStatus.Active, ct);
         var weekStart = await dates.GetUserWeekStartDayAsync(userId, ct);
-        var request = new HabitSuggestionRequest(userId, instruction, language, count, today, active, activeGoals, original, WeekStartDay: weekStart);
+        var request = new HabitSuggestionRequest(userId, instruction, language, count, today, active, activeGoals, original,
+            WeekStartDay: weekStart, ExcludedActivities: excludedActivities);
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var generated = await generator.GenerateAsync(request, ct);
@@ -105,6 +109,8 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
                 if (matches is [var match])
                     candidate = candidate with { ExistingHabitId = match.Id, Title = match.Title };
             }
+            if (IsExcluded(candidate, request))
+                return Invalid("Return a new activity outside excludedActivities and the account's existing habits, including synonyms; do not propose an adjustment.");
             if (output.Any(other => SameSuggestion(other, candidate)))
                 return Invalid("Each draft must propose a distinct habit.");
             var entity = candidate.ToHabit(request.UserId);
@@ -138,6 +144,12 @@ public sealed class HabitSuggestionService(IGenericRepository<Habit> habits, IGe
     }
 
     private static Result<HabitSuggestionsCard> Invalid(string reason) => Result.Failure<HabitSuggestionsCard>(reason, "HABIT_SUGGESTION_INVALID");
+    private static bool IsExcluded(HabitSuggestionDraft draft, HabitSuggestionRequest request) =>
+        request.ExcludedActivities is { } excluded && (draft.ExistingHabitId.HasValue
+            || excluded.Concat(request.Habits.Select(habit => habit.Title)).Any(title =>
+                HabitNameMatcher.Matches(draft.Title ?? string.Empty, title)
+                || HabitNameMatcher.Matches(title, draft.Title ?? string.Empty)));
+
     private static bool HasScheduleConflict(Habit entity, HabitSuggestionDraft draft, IEnumerable<Habit> habits, int weekStart)
     {
         var timed = habits.Where(habit => habit.Id != draft.ExistingHabitId && habit.DueTime.HasValue).ToArray();

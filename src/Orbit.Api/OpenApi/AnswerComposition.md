@@ -506,6 +506,30 @@ reminders with an empty offset array; empty days and checklists remain empty arr
 The model must not invent a quantity, rename a draft or replace its activity.
 No message pattern routes or triggers a tool.
 
+For additional ideas, the model supplies optional `suggest_habits.excluded_activities`
+with the titles already planned for the combined preview. The server passes this
+structured list to the generator without parsing the person's message. A supplied
+list, including `[]`, requires new activities outside both the list and the account.
+Omission or null preserves ordinary suggestions and adjustment drafts. The list
+accepts at most 100 titles, each with letters or digits and at most 200 characters;
+FluentValidation and the domain request guard enforce the same bounds. The server
+rejects existingHabitId targets and title matches using the existing accent and
+case normalization and word-prefix matcher in both directions. Generator instructions
+also exclude synonyms and renamed activities; the title matcher is not a semantic
+similarity classifier. Rejected drafts use the existing single correction retry.
+A repeated failure returns the existing typed HABIT_SUGGESTION_UNAVAILABLE result,
+with no duplicate draft or preview. No response field or enum changes.
+
+The g9d captures returned an already planned stretching activity, which the combined
+preview retained. They did not omit a returned draft. The deterministic replay
+adds only the new structured exclusion argument to the captured suggestion call,
+returns the captured duplicate from IHabitDraftGenerator, and uses a same-language
+passing capture for the corrected draft and complete proposal. Both ordinary and
+block-first composition retain the explicit tasks and the new idea in one preview.
+The pt-BR analytics call was model-selected; no handler dependency or forced routing
+requires it. Existing descriptions already exclude analytics from organizing a dump,
+so that read's availability and behavior remain unchanged.
+
 The message and `query_habits` supply this proposal's task and reuse facts.
 `suggest_habits` supplies additional ideas only when requested. The prompt and
 tool descriptions exclude calendar, habit-month, profile and analytics reads

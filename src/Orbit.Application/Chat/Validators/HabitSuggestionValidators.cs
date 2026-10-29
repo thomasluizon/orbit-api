@@ -24,6 +24,7 @@ public sealed class SuggestHabitDraftsQueryValidator : AbstractValidator<Suggest
             .MaximumLength(1000).WithCopy(ValidationErrorCodes.HabitSuggestionInstruction);
         RuleFor(request => request.Language).Must(HabitSuggestionValidation.IsLanguage).WithCopy(ValidationErrorCodes.LanguageSupported);
         RuleFor(request => request.Count).Must(HabitSuggestionsCard.IsValidDraftCount).WithCopy(ValidationErrorCodes.HabitSuggestionCount);
+        RuleFor(request => request.ExcludedActivities).Must(HabitSuggestionRequest.HasValidExclusions).WithCopy("HABIT_SUGGESTION_INVALID");
     }
 }
 
