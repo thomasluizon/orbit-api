@@ -5250,6 +5250,14 @@
             "required": false
           },
           {
+            "name": "excluded_activities",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "instruction",
             "type": "string",
             "required": true

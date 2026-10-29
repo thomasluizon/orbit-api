@@ -7,14 +7,15 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Queries;
 
-public sealed record SuggestHabitDraftsQuery(Guid UserId, string Instruction, string Language = "en", int Count = 3)
+public sealed record SuggestHabitDraftsQuery(Guid UserId, string Instruction, string Language = "en", int Count = 3,
+    IReadOnlyList<string>? ExcludedActivities = null)
     : IRequest<Result<HabitSuggestionsCard>>;
 
 public sealed class SuggestHabitDraftsQueryHandler(HabitSuggestionService suggestions)
     : IRequestHandler<SuggestHabitDraftsQuery, Result<HabitSuggestionsCard>>
 {
     public Task<Result<HabitSuggestionsCard>> Handle(SuggestHabitDraftsQuery request, CancellationToken ct) =>
-        suggestions.GenerateAsync(request.UserId, request.Instruction, request.Language, request.Count, null, ct);
+        suggestions.GenerateAsync(request.UserId, request.Instruction, request.Language, request.Count, null, ct, request.ExcludedActivities);
 }
 
 public sealed record RefineHabitSuggestionRequest(HabitSuggestionDraft Draft, string Instruction, string Language = "en");

@@ -55,7 +55,10 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         checklistItems (short strings or []), reason (one short sentence), existingHabitId (UUID or null).
         Return exactly count drafts. Write titles, checklist items and reasons in the requested language.
         Read every existing habit and goal. Connect drafts to the person's goals and routines when relevant.
-        Never duplicate an existing activity, including synonyms: offer an adjustment using existingHabitId instead.
+        When excludedActivities is not null, propose only new activities outside that list and every existing account habit,
+        including synonyms and renamed variants. Never return those activities as adjustments; existingHabitId must be null.
+        An empty excludedActivities list still excludes existing account habits. A null list keeps the ordinary adjustment rules below.
+        For ordinary suggestions with excludedActivities null, never duplicate an existing activity, including synonyms: offer an adjustment using existingHabitId instead.
         When existingHabitId identifies a supplied habit, keep its stored title verbatim. Put the suggested adjustment in the other draft fields.
         Never change an existing habit just because it shares a theme. New activities have existingHabitId null.
         For new activities, only populate what the person requested plus fields required by the draft contract.
@@ -89,10 +92,12 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
         request.WeekStartDay,
         request.Original,
         request.Correction,
+        request.ExcludedActivities,
         habits = request.Habits.Select(habit => new
         {
             habit.Id,
             habit.Title,
+            habit.IsCompleted,
             habit.Description,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,

@@ -10,7 +10,11 @@ existing application logic (usually a MediatR command/query).
 from an unstructured message in its existing `habits` array. A reused activity carries
 `habit_id` and only requested changes. If additional habit ideas are requested,
 `suggest_habits` provides editable drafts; map `existingHabitId` to `habit_id` when
-preparing the combined preview and retain explicit tasks. Every write uses the
+preparing the combined preview and retain explicit tasks. For additional ideas,
+supply `excluded_activities` with every already planned title. A supplied list,
+including `[]`, excludes those activities and existing account habits. Omission or
+null preserves ordinary adjustment suggestions. The generator receives the list;
+server validation rejects title matches and existing-habit targets and retries once. Every write uses the
 existing command, validation, domain guards and pending approval gateway.
 Use `query_habits` for reuse and `suggest_habits` for requested ideas; organizing
 the message does not need calendar, habit-month, profile or analytics reads.

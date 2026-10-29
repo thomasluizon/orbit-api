@@ -20,13 +20,16 @@ public class AiHabitDraftGeneratorTests
             [], today, new(22, 0), new(22, 15), null, [], "A quiet pause before bed.");
         var habit = draft.ToHabit(userId).Value;
         var goal = Goal.Create(userId, "Read more", 10, "books").Value;
-        var request = new HabitSuggestionRequest(userId, "weekdays at 22:30", language, 1, today, [habit], [goal], draft);
+        var request = new HabitSuggestionRequest(userId, "weekdays at 22:30", language, 1, today, [habit], [goal], draft,
+            ExcludedActivities: ["Stretch", "Alongar"]);
         using var prompt = JsonDocument.Parse(AiHabitDraftGenerator.BuildPrompt(request));
         prompt.RootElement.GetProperty("language").GetString().Should().Be(language);
         prompt.RootElement.GetProperty("count").GetInt32().Should().Be(1);
         prompt.RootElement.GetProperty("original").GetProperty("id").GetGuid().Should().Be(draft.Id);
         prompt.RootElement.GetProperty("habits")[0].GetProperty("id").GetGuid().Should().Be(habit.Id);
         prompt.RootElement.GetProperty("goals")[0].GetProperty("title").GetString().Should().Be(goal.Title);
+        prompt.RootElement.GetProperty("excludedActivities").EnumerateArray().Select(value => value.GetString())
+            .Should().Equal("Stretch", "Alongar");
         AiHabitDraftGenerator.Instructions.Should().Contain("existingHabitId").And.Contain("unoccupied time")
             .And.Contain("untrusted data").And.Contain("Keep fields unrelated")
             .And.Contain("required non-null HH:mm strings for every draft, with end after start");
