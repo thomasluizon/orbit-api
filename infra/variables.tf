@@ -45,6 +45,16 @@ variable "staging_web_digest" {
   }
 }
 
+variable "staging_api_digest" {
+  description = "Published GHCR digest for the staging API image."
+  type        = string
+
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.staging_api_digest))
+    error_message = "staging_api_digest must be a sha256 image digest."
+  }
+}
+
 variable "web_health_check_path" {
   description = "Health endpoint supplied by the web image ticket."
   type        = string

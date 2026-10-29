@@ -104,7 +104,7 @@ fs.writeFileSync(statePath, JSON.stringify(state))
     env: {
       ...process.env, PATH: `${directory}:${process.env.PATH}`, RENDER_API_KEY: "test-key",
       RENDER_SERVICE_ID: fixture.service.id, COMMIT_SHA: sha, RELEASE_BRANCH: "main",
-      GITHUB_OUTPUT: outputPath,
+      GITHUB_OUTPUT: outputPath, IMAGE_DIGEST: "sha256:" + "a".repeat(64),
     },
   })
   assert.ifError(result.error)
@@ -124,7 +124,7 @@ function followed(result, posts = 1) {
   }
 }
 
-for (const job of ["production", "staging"]) {
+for (const job of ["production"]) {
   test(`${job}: a large deploy history completes the baseline and permits one POST`, t => {
     const result = replay(t, job, { baseline: pages(history), post: [created], poll: [live] })
     followed(result)
@@ -360,21 +360,62 @@ for (const job of ["production", "staging"]) {
   })
 }
 
-test("staging: idempotent service PATCH retries a lost connection and 503, but fails on 401", t => {
-  for (const failure of [transient, response({ message: "temporary failure" }, 503)]) {
-    const result = replay(t, "staging", { patch: [failure, response(fixture.service)] }, "Select staging branch")
-    assert.equal(result.status, 0, result.stdout + result.stderr)
-    assert.equal(result.counts.patch, 2)
-  }
-  const denied = replay(t, "staging", { patch: [response({ message: "Unauthorized" }, 401)] }, "Select staging branch")
-  assert.notEqual(denied.status, 0)
-  assert.equal(denied.counts.patch, 1)
+test("staging: sends only the immutable image and follows its returned deploy", t => {
+  const image = "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64)
+  const deploy = { id, image: { ref: image, sha: "sha256:" + "a".repeat(64) }, status: "live" }
+  const result = replay(t, "staging", { post: [response(deploy, 201)], poll: [response(deploy)] })
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  const posts = result.calls.filter(call => call.route === "post")
+  assert.equal(posts.length, 1)
+  assert.deepEqual(JSON.parse(posts[0].args[posts[0].args.indexOf("--data") + 1]), { imageUrl: image })
+  assert.equal(result.counts.poll, 1)
+  assert.equal(result.counts.baseline ?? 0, 0)
 })
 
-test("staging: service PATCH honors Retry-After", t => {
-  const result = replay(t, "staging", { patch: [
-    { ...response({}, 429), retryAfter: "7" }, { ...response(fixture.service), notBefore: 7 },
-  ] }, "Select staging branch")
+
+for (const [name, entry] of [
+  ["queued", response("", 202)],
+  ["Git-backed service", response({ message: "imageUrl is not supported" }, 400)],
+  ["server failure", response({}, 503)],
+  ["lost response", transient],
+  ["wrong image", response({ id, image: { ref: "ghcr.io/thomasluizon/orbit-api:main" } }, 201)],
+  ["missing image", created],
+  ["missing identity", response({ image: { ref: "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64) } }, 201)],
+]) {
+  test(`staging: ${name} stops without another POST or a status poll`, t => {
+    const result = replay(t, "staging", { post: [entry] })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.post, 1)
+    assert.equal(result.counts.poll ?? 0, 0)
+    assert.equal(result.output, "")
+    if (name === "Git-backed service") assert.match(result.stdout, /not image-backed yet.*coordinator.*refresh Terraform state/)
+  })
+}
+
+for (const status of ["build_failed", "pre_deploy_failed", "update_failed", "canceled", "deactivated", "unknown"]) {
+  test(`staging: ${status} never records a successful release`, t => {
+    const image = "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64)
+    const result = replay(t, "staging", {
+      post: [response({ id, image: { ref: image } }, 201)], poll: [response({ id, status })],
+    })
+    assert.notEqual(result.status, 0)
+    assert.equal(result.counts.post, 1)
+    assert.equal(result.counts.poll, 1)
+  })
+}
+
+test("staging: transient polling recovers and the final live image must match", t => {
+  const image = "ghcr.io/thomasluizon/orbit-api@sha256:" + "a".repeat(64)
+  const deploy = { id, image: { ref: image }, status: "live" }
+  const result = replay(t, "staging", {
+    post: [response(deploy, 201)], poll: [transient, response({ ...deploy, status: "update_in_progress" }), response(deploy)],
+  })
   assert.equal(result.status, 0, result.stdout + result.stderr)
-  assert.deepEqual(result.waits, ["7"])
+  assert.equal(result.counts.poll, 3)
+  const name = "Verify staging health and live commit"
+  const recovered = replay(t, "staging", { live: [transient, response([{ deploy }])] }, name)
+  assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr)
+  for (const body of [fixture.recent, [{ deploy: { ...deploy, image: { ref: image + "wrong" } } }]]) {
+    assert.notEqual(replay(t, "staging", { live: [response(body)] }, name).status, 0)
+  }
 })

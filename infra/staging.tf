@@ -8,16 +8,13 @@ resource "render_web_service" "staging_api" {
   custom_domains    = length(var.staging_api_custom_domains) > 0 ? [for domain in var.staging_api_custom_domains : { name = domain }] : null
 
   lifecycle {
-    ignore_changes = [runtime_source.docker.branch]
+    ignore_changes = [runtime_source.image.digest]
   }
 
   runtime_source = {
-    docker = {
-      branch          = "redesign/main"
-      repo_url        = "https://github.com/thomasluizon/orbit-api"
-      dockerfile_path = "./Dockerfile"
-      context         = "."
-      auto_deploy     = false
+    image = {
+      image_url = "ghcr.io/thomasluizon/orbit-api"
+      digest    = var.staging_api_digest
     }
   }
 }
