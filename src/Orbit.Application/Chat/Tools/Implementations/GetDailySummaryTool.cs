@@ -11,7 +11,10 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read a habit summary for a date range, defaulting to today. Pass generate_narrative: true to include its saved narrative when available.";
+        "Read a completion summary with totals and an optional narrative recap for a date range, defaulting to today. "
+        + "Use only when the person asks for completion totals or a recap. Use query_habits for habit listings and schedules; "
+        + "a request for habits and goals needs query_habits and query_goals. "
+        + "Pass generate_narrative: true to include its saved narrative when available.";
 
     public object GetParameterSchema() => new
     {

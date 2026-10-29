@@ -57,8 +57,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value,
             ChatStreamEvent.SerializerOptions), ChatStreamEvent.SerializerOptions)!;
         var summaryText = language == "pt-BR"
-            ? "03/04/2026 a 03/04/2026: Concluídos / agendados: 0/0"
-            : "04/03/2026 to 04/03/2026: Completed / scheduled: 0/0";
+            ? "03/04/2026: Concluídos / agendados: 0/0"
+            : "04/03/2026: Completed / scheduled: 0/0";
         var expected = summaryFirst ? new[] { summaryText, goalsText } : [goalsText, summaryText];
         foreach (var client in new AgentClientContext?[]
         {

@@ -113,7 +113,7 @@ public class AstraPickListPreviewTests
             });
         var quota = Substitute.For<IPayGateService>();
         var service = new AstraBlockAnswerService(store, work, quota, recordingExecutor, new GenericRepository<User>(db),
-            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending);
+            Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(), pending, Substitute.For<IUserDateService>());
         if (failPreviewFirst)
         {
             var failed = await service.PrepareAsync(new(user.Id, "Habit 1, Habit 3", BlockAnswer: new(block.Id, ["3", "1"])), default);
@@ -169,7 +169,7 @@ public class AstraPickListPreviewTests
         var quota = Substitute.For<IPayGateService>();
         var service = new AstraBlockAnswerService(store, new UnitOfWork(db, new DatabaseConnectionSettings()), quota,
             Substitute.For<IAgentOperationExecutor>(), new GenericRepository<User>(db), Substitute.For<IProductAnalytics>(),
-            Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>());
+            Substitute.For<IFeatureFlagService>(), Substitute.For<IPendingAgentOperationStore>(), Substitute.For<IUserDateService>());
         (await service.PrepareAsync(new(user.Id, "Morning", BlockAnswer: new(block.Id, ["a"])), default)).ErrorCode.Should().Be(invalidated ? ErrorCodes.AstraBlockInvalidated : ErrorCodes.AstraBlockExpired);
         (await store.GetAsync(block.Id, user.Id, default))!.AnsweredAtUtc.Should().BeNull();
         await quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
@@ -191,7 +191,7 @@ public class AstraPickListPreviewTests
         quota.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.PayGateFailure("Daily limit"));
         var service = new AstraBlockAnswerService(store, work, quota, Substitute.For<IAgentOperationExecutor>(),
             new GenericRepository<User>(db), Substitute.For<IProductAnalytics>(), Substitute.For<IFeatureFlagService>(),
-            Substitute.For<IPendingAgentOperationStore>());
+            Substitute.For<IPendingAgentOperationStore>(), Substitute.For<IUserDateService>());
         (await service.PrepareAsync(new(user.Id, "Morning", BlockAnswer: new(block.Id, ["a"])), default)).ErrorCode.Should().Be(Result.PayGateErrorCode);
         (await store.GetAsync(block.Id, user.Id, default))!.AnsweredAtUtc.Should().BeNull();
     }

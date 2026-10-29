@@ -87,6 +87,8 @@ public class ChatToolMetadataTests
         AssertTool(deleteHabitTool, "delete_habit", "habit", "habit_id");
         AssertTool(duplicateHabitTool, "duplicate_habit", "duplicate", "habit_id");
         AssertTool(getDailySummaryTool, "get_daily_summary", "summary", "date_from", expectReadOnly: true);
+        getDailySummaryTool.Description.Should().Contain("Use query_habits for habit listings and schedules")
+            .And.Contain("query_habits and query_goals");
         AssertTool(getRetrospectiveTool, "get_retrospective", "retrospective", "period", expectReadOnly: true);
         AssertTool(getHabitMetricsTool, "get_habit_metrics", "metrics", "habit_id", expectReadOnly: true);
         AssertTool(goalReviewTool, "review_goals", "review", "properties", expectReadOnly: true);
@@ -97,6 +99,9 @@ public class ChatToolMetadataTests
         AssertTool(moveHabitTool, "move_habit", "parent", "new_parent_id");
         AssertTool(queryGoalsTool, "query_goals", "goals", "include_linked_habits", expectReadOnly: true);
         AssertTool(queryHabitsTool, "query_habits", "habits", "include_metrics", expectReadOnly: true);
+        queryHabitsTool.Description.Should().Contain("compound requests for habits and goals")
+            .And.Contain("pair with query_goals")
+            .And.Contain("A daily summary does not replace this listing");
         AssertTool(skipHabitTool, "skip_habit", "Skip", "date");
         AssertTool(suggestBreakdownTool, "suggest_breakdown", "Suggest", "suggested_sub_habits");
         AssertTool(updateGoalProgressTool, "update_goal_progress", "goal", "current_value");

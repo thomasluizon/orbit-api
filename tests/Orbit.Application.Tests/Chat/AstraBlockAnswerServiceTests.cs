@@ -21,6 +21,7 @@ public partial class AstraBlockAnswerServiceTests
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
     private readonly IFeatureFlagService _featureFlags = Substitute.For<IFeatureFlagService>();
+    private readonly IUserDateService _dates = Substitute.For<IUserDateService>();
     private static readonly Guid UserId = Guid.NewGuid();
 
     public AstraBlockAnswerServiceTests()
@@ -32,7 +33,7 @@ public partial class AstraBlockAnswerServiceTests
     }
 
     private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags,
-        Substitute.For<IPendingAgentOperationStore>());
+        Substitute.For<IPendingAgentOperationStore>(), _dates);
     private IssuedAstraBlock Choice(bool multi = false, bool free = false)
     {
         var block = IssuedAstraBlock.Create(UserId, new("choice", "Which time?", [new("a", "Morning"), new("b", "Evening")], [], multi, free));
@@ -41,6 +42,32 @@ public partial class AstraBlockAnswerServiceTests
     }
     private static ProcessUserChatCommand Request(Guid id, string[] ids, string? text = null) => new(UserId, "Selection",
         BlockAnswer: new AstraBlockAnswer(id, ids, text));
+
+    [Theory]
+    [InlineData("en", true, "Today")]
+    [InlineData("pt-BR", true, "Hoje")]
+    [InlineData("en", false, "10/29/2026")]
+    [InlineData("pt-BR", false, "29/10/2026")]
+    public async Task Replay_DowngradesSummaryUsingCurrentAccountDate(string language, bool sameDay, string label)
+    {
+        var day = new DateOnly(2026, 10, 29);
+        _dates.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(sameDay ? day : day.AddDays(1));
+        var block = Choice();
+        var answer = new AstraBlockAnswer(block.Id, ["a"]);
+        block.MarkAnswered(block.CreatedAtUtc);
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.AnswerJson))!.SetValue(block, IssuedAstraBlock.SerializeAnswer(answer));
+        typeof(IssuedAstraBlock).GetProperty(nameof(block.ResponseJson))!.SetValue(block,
+            JsonSerializer.Serialize(new ChatResponse(null, [], Parts: [new ChatBlockPart("daySummary",
+                new DaySummaryCard(day, 2, 0, 0, 0, 4, DateTo: day))]), ChatStreamEvent.SerializerOptions));
+
+        var result = await Service.PrepareAsync(Request(block.Id, ["a"]) with
+        { ClientContext = new(SupportsParts: true, PartKinds: [], Locale: language) }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Response!.AiMessage.Should().Be(label + (language == "pt-BR"
+            ? ": Concluídos / agendados: 0/2" : ": Completed / scheduled: 0/2"));
+        await _dates.Received(1).GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
+    }
 
     [Theory]
     [InlineData(false)]
@@ -244,7 +271,7 @@ public partial class AstraBlockAnswerServiceTests
             .Returns(_ => throws ? Task.FromException<Result<PendingOperationChangePreview?>>(new InvalidOperationException("preview failed"))
                 : Task.FromResult(Result.Success<PendingOperationChangePreview?>(null)));
         var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
-            _featureFlags, operations, previewer: previewer);
+            _featureFlags, operations, _dates, previewer: previewer);
 
         var result = await service.PrepareAsync(Request(block.Id, ["a"]), default);
 
@@ -260,7 +287,7 @@ public partial class AstraBlockAnswerServiceTests
         var block = Choice();
         block.MarkAnswered(block.CreatedAtUtc);
         var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
-            _featureFlags, Substitute.For<IPendingAgentOperationStore>(), claimLifetime: TimeSpan.Zero);
+            _featureFlags, Substitute.For<IPendingAgentOperationStore>(), _dates, claimLifetime: TimeSpan.Zero);
 
         var result = await service.PrepareAsync(Request(block.Id, ["a"]), default);
 
@@ -288,7 +315,7 @@ public partial class AstraBlockAnswerServiceTests
         });
         _quota.RefundAiMessage(UserId, reservedDate, _work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var service = new AstraBlockAnswerService(_store, _work, _quota, _executor, _users, _analytics,
-            _featureFlags, Substitute.For<IPendingAgentOperationStore>(), claimLifetime: TimeSpan.Zero);
+            _featureFlags, Substitute.For<IPendingAgentOperationStore>(), _dates, claimLifetime: TimeSpan.Zero);
 
         var result = await service.PrepareAsync(Request(block.Id, ["a"]), default);
 

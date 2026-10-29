@@ -9,6 +9,16 @@ public class AstraBehaviourPromptTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void HabitListings_RequireHabitAndGoalQueriesInsteadOfADailyRecap(bool composition)
+    {
+        Build(composition).Should().Contain("For habit listings, use query_habits; for goals, use query_goals")
+            .And.Contain("A compound request for habits and goals needs both queries")
+            .And.Contain("Reserve get_daily_summary for requested completion totals or a narrative recap");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void BrainDump_UsesExistingCommandsAndOneApprovalForEveryItem(bool composition)
     {
         var prompt = Build(composition);

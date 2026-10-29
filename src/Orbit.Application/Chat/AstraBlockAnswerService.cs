@@ -27,6 +27,7 @@ public sealed class AstraBlockAnswerService(
     IProductAnalytics analytics,
     IFeatureFlagService featureFlags,
     IPendingAgentOperationStore pendingOperations,
+    IUserDateService dates,
     ILogger? logger = null,
     IPendingOperationChangePreviewer? previewer = null,
     TimeSpan? claimLifetime = null,
@@ -278,8 +279,9 @@ public sealed class AstraBlockAnswerService(
         var userId = request.UserId;
         var flags = await featureFlags.GetEnabledKeysForUserAsync(userId, ct);
         var user = await users.GetByIdAsync(userId, ct);
+        var userToday = await dates.GetUserTodayAsync(userId, ct);
         if (stored.PendingOperations is not { Count: > 0 } pending)
-            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags, ChatLocale.Resolve(request.ClientContext, user?.Language), user?.TimeZone);
+            return ChatResponseNegotiation.ForClient(stored, request.ClientContext, flags, ChatLocale.Resolve(request.ClientContext, user?.Language), user?.TimeZone, userToday);
         var current = new List<PendingAgentOperation>();
         foreach (var operation in pending)
         {
@@ -301,7 +303,7 @@ public sealed class AstraBlockAnswerService(
             });
         }
         return ChatResponseNegotiation.ForClient(stored with { PendingOperations = current }, request.ClientContext, flags,
-            ChatLocale.Resolve(request.ClientContext, user?.Language), user?.TimeZone);
+            ChatLocale.Resolve(request.ClientContext, user?.Language), user?.TimeZone, userToday);
     }
 
     private static string BuildMessage(AstraBlockDefinition definition, AstraBlockAnswer answer)

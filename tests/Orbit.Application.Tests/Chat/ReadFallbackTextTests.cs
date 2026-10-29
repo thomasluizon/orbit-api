@@ -90,4 +90,49 @@ public class ReadFallbackTextTests
         ProcessUserChatCommandHandler.ReadFallback(new PeriodTotalCard("completedHabits", "habits", 6, Metrics, new("day", [])), language)
             .Should().Contain(from).And.Contain(to);
     }
+
+    [Theory]
+    [InlineData("en", 26, 26, "Today")]
+    [InlineData("pt-BR", 26, 26, "Hoje")]
+    [InlineData("en", 20, 20, "10/20/2026")]
+    [InlineData("pt-BR", 20, 20, "20/10/2026")]
+    [InlineData("en", 27, 27, "10/27/2026")]
+    [InlineData("pt-BR", 27, 27, "27/10/2026")]
+    [InlineData("en", 20, 26, "10/20/2026 to 10/26/2026")]
+    [InlineData("pt-BR", 20, 26, "20/10/2026 a 26/10/2026")]
+    public void PeriodLabelsUseAccountTodayOrOneDateAndKeepMultiDayRanges(string language, int start, int end, string label)
+    {
+        var from = new DateOnly(2026, 10, start);
+        var to = new DateOnly(2026, 10, end);
+        var metrics = Metrics with { Window = new(from, to) };
+        var history = new ReadBlockMetadata(Guid.NewGuid(), "get_habit_history",
+            JsonSerializer.SerializeToElement(new { date_from = from, date_to = to }), "revision", "complete", "token");
+        object[] blocks =
+        [
+            new DaySummaryCard(from, 10, 6, 60, 0, 2, DateTo: to),
+            new PeriodTotalCard("completedHabits", "habits", 6, metrics, new("day", [])),
+            new PeriodComparisonCard("completedHabits", "habits", metrics, metrics, 6, 3, 3, 1),
+            new MetricsCard("habit", 40, 9, 7, 4, 2, 4, true, "habit", HabitTitle: null, PeriodMetrics: metrics),
+            new PeriodInsightCard("week", from, to, 60, 6, 7, 6, 10, 2, 4, [], [], new("", "", "", ""), null),
+            new HabitMonthCard(from, to, To, 1, new([], [])),
+            new RecordListCard("habitHistory", 0, [], Read: history)
+        ];
+        foreach (var block in blocks)
+        {
+            var text = ProcessUserChatCommandHandler.ReadFallback(block, language, "America/Sao_Paulo", To);
+            text.Split('\n')[0].Should().Contain(label, "{0} must use the shared period label", block.GetType().Name);
+            if (start == end)
+                text.Should().NotContain(" to ").And.NotContain(" a ");
+            var (_, kind, _) = ReadBlockTelemetry.Describe(block);
+            var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(
+                new ChatResponse(null, [], Parts: [new ChatBlockPart(kind, block)]), ChatStreamEvent.SerializerOptions),
+                ChatStreamEvent.SerializerOptions)!;
+            var replay = ChatResponseNegotiation.ForClient(stored, new(SupportsParts: true, PartKinds: []), [],
+                language, "America/Sao_Paulo", To);
+            replay.AiMessage.Should().Be(text);
+        }
+        if (start == end)
+            ProcessUserChatCommandHandler.ReadFallback(new DaySummaryCard(from, 10, 6, 60, 0, 2), language,
+                "America/Sao_Paulo", To).Should().StartWith(label + ":");
+    }
 }
