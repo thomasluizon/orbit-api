@@ -10,10 +10,12 @@ loop sends it back to the model, permits one corrected ask, then asks for prose.
 A question form's top-level `allowFreeText` is ignored; each question's setting
 controls its answer. The optional heading comes from `title`, then `question`.
 A validated single `singleChoice` becomes `choice` when the client supports it
-and the heading, option count and labels fit that contract. A title, introduction or
-progress does not turn one choice into a questionnaire. The choice preserves the
-heading, option ids, labels and free-text setting. Recommendations, several fields
-or longer labels retain `question`.
+and its question text, option count and labels fit that contract. A title, introduction or
+progress does not turn one choice into a questionnaire. The choice asks the top-level
+`question`, then the field's prompt, and uses the `title` heading only when neither
+exists, so a heading never replaces the question being asked. It preserves the option
+ids, labels and free-text setting. Recommendations, several fields or longer labels
+retain `question`.
 If the client cannot render the resulting form, the model receives a capability
 error rather than a stored block. Every path leaves writes behind the existing
 approval flow.
@@ -22,7 +24,7 @@ approval flow.
 
 An id or an exact unique title resolves a habit. Different actions on different
 identified habits do not require choosing between those habits. This instruction
-is shared by the global prompt, dynamic ask context and tool description.
+lives once, in the ask tool description, which is sent whenever ask is offered.
 The validator checks the ask definition, not the person's intent: the captured
 Water/Walk choice is structurally valid and cannot alone prove ambiguity.
 Rejecting every choice among unique titles would also reject an intentional pick.

@@ -20,7 +20,8 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 
 A validated question form containing one single-choice field becomes a `choice`
 when its options fit the existing choice contract and the client supports it.
-The heading, option ids, labels and free-text permission are preserved; a heading,
+It asks the top-level question, then the field's prompt, and uses a heading only when
+neither exists; option ids, labels and free-text permission are preserved. A heading,
 introduction or progress display does not require a questionnaire. Several fields
 retain the question form. See [AskValidation.md](AskValidation.md).
 

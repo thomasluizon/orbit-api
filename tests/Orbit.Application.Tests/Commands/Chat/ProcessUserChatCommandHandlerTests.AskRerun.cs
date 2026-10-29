@@ -34,8 +34,9 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
-        choice.Question.Should().Be(call.Args.GetProperty("title").GetString());
         var question = call.Args.GetProperty("questions")[0];
+        choice.Question.Should().Be(question.GetProperty("prompt").GetString());
+        choice.Question.Should().NotBe(call.Args.GetProperty("title").GetString());
         choice.AllowFreeText.Should().BeTrue();
         choice.Options.Select(option => option.Id).Should().Equal(question.GetProperty("options")
             .EnumerateArray().Select(option => option.GetProperty("id").GetString()));
