@@ -308,7 +308,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 FeatureFlagActions.UnknownAccounts));
         SetupReadToolReply("manage_feature_flags", "Flag updated.");
         SetupAiResponse(ToolResponse("manage_feature_flags", "admin-call",
-            """{"action":"enable_for_accounts","key":"redesign","emails":["other@example.com"]}"""));
+            """{"action":"enable_for_accounts","key":"astra_eval_trace","emails":["other@example.com"]}"""));
 
         var result = await CreateHandler(new ManageFeatureFlagsTool(_mediator)).Handle(new ProcessUserChatCommand(UserId,
             "Update a flag", EvalTraceRequested: true), default);

@@ -53,6 +53,11 @@ public class ConfigControllerTests : IDisposable
     [Fact]
     public async Task GetConfig_ReturnsSeededLimitsWithoutRetiredMemoryLimit()
     {
+        var account = User.Create("Account", "seeded-config@example.com").Value;
+        _dbContext.Users.Add(account);
+        await _dbContext.SaveChangesAsync();
+        _controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString())], "Test"));
         var stored = await _dbContext.AppConfigs.AsNoTracking()
             .ToDictionaryAsync(config => config.Key, config => config.Value);
         stored.Should().NotContainKey("MaxUserFacts");
@@ -66,6 +71,10 @@ public class ConfigControllerTests : IDisposable
         limits.EnumerateObject().Select(property => property.Name)
             .Should().BeEquivalentTo(stored.Keys);
         stored.Should().NotContainKey("MaxUserFacts");
+        var features = payload.GetProperty("features").EnumerateObject()
+            .Select(property => property.Name).ToArray();
+        features.Should().BeEquivalentTo(await _dbContext.AppFeatureFlags.Select(flag => flag.Key).ToArrayAsync());
+        features.Should().NotContain("redesign");
     }
 
     [Fact]
@@ -74,7 +83,7 @@ public class ConfigControllerTests : IDisposable
         var accountA = User.Create("Account A", "a@example.com").Value;
         var accountB = User.Create("Account B", "b@example.com").Value;
         _dbContext.Users.AddRange(accountA, accountB);
-        _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("redesign", accountA.Id));
+        _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("astra_eval_trace", accountA.Id));
         await _dbContext.SaveChangesAsync();
 
         foreach (var account in new[] { accountA, accountB })
@@ -83,7 +92,7 @@ public class ConfigControllerTests : IDisposable
                 [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString())], "Test"));
             var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
             var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            var flag = json.GetProperty("features").GetProperty("redesign");
+            var flag = json.GetProperty("features").GetProperty("astra_eval_trace");
             flag.EnumerateObject().Select(property => property.Name).Should().BeEquivalentTo("enabled", "planRequirement");
             flag.GetProperty("enabled").GetBoolean().Should().Be(account.Id == accountA.Id);
             flag.GetProperty("planRequirement").ValueKind.Should().Be(JsonValueKind.Null);
@@ -96,9 +105,9 @@ public class ConfigControllerTests : IDisposable
         var account = User.Create("Account", "config@example.com").Value;
         _dbContext.Users.Add(account);
         _dbContext.AppFeatureFlags.RemoveRange(_dbContext.AppFeatureFlags
-            .Where(flag => flag.Key != "ai_summary" && flag.Key != "offline_mode" && flag.Key != "redesign"));
+            .Where(flag => flag.Key != "ai_summary" && flag.Key != "offline_mode" && flag.Key != "astra_eval_trace"));
         (await _dbContext.AppFeatureFlags.SingleAsync(flag => flag.Key == "ai_summary")).SetEnabled(false);
-        _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("redesign", account.Id));
+        _dbContext.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("astra_eval_trace", account.Id));
         await _dbContext.SaveChangesAsync();
         _controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString())], "Test"));
@@ -110,7 +119,7 @@ public class ConfigControllerTests : IDisposable
         var result = (OkObjectResult)await _controller.GetConfig(CancellationToken.None);
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, JsonSerializerOptions.Web);
 
-        json.Should().Equal("""{"limits":{"MaxHabits":"5","MinSupportedVersion":"1.4.2"},"features":{"ai_summary":{"enabled":false,"planRequirement":"Pro"},"offline_mode":{"enabled":true,"planRequirement":null},"redesign":{"enabled":true,"planRequirement":null}},"settings":{"syncIntervalSeconds":300,"syncMaxBatchSize":100},"minVersion":"1.4.2"}"""u8.ToArray(), "the serialized response is {0}", System.Text.Encoding.UTF8.GetString(json));
+        json.Should().Equal("""{"limits":{"MaxHabits":"5","MinSupportedVersion":"1.4.2"},"features":{"ai_summary":{"enabled":false,"planRequirement":"Pro"},"astra_eval_trace":{"enabled":true,"planRequirement":null},"offline_mode":{"enabled":true,"planRequirement":null}},"settings":{"syncIntervalSeconds":300,"syncMaxBatchSize":100},"minVersion":"1.4.2"}"""u8.ToArray(), "the serialized response is {0}", System.Text.Encoding.UTF8.GetString(json));
     }
 
     [Fact]

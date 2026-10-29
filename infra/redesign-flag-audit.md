@@ -1,31 +1,9 @@
-# Settled redesign flag and routing
+# Retired build selection and routing
 
 Tracks thomasluizon/orbit-tickets#1626.
 
-The promoted redesign ships from `main` on production web and Android. Client
-build selection was retired in thomasluizon/orbit-tickets#1635. Keep the disabled
-`redesign` seed and account-resolved `features.redesign` response for older
-installed Android builds. Removal belongs only to thomasluizon/orbit-tickets#685
-after its `AppConfig.MinSupportedVersion` raise. This retirement adds no migration
-and changes neither the supported version floor nor the response contract.
-
-## Flag state
-
-These observations were supplied by the coordinator in the work order. They are
-not fresh worker measurements and do not claim a new MCP listing.
-
-| Environment | Evidence source | Global enablement | Plan requirement | Account targets |
-| --- | --- | --- | --- | --- |
-| Production | Admin Orbit MCP `manage_feature_flags` `list` | Off (`EnabledForEveryone: false`) | None | Empty (`Accounts: []`) |
-| Staging | `AppFeatureFlags` row and count of matching `AppFeatureFlagAccounts` | Off (`Enabled=false`) | None | Zero rows |
-
-The production description is "Serve the redesigned web and Android builds to
-this account". Neither environment needs a write. This worker made no flag or
-database changes; there is no worker after listing. The supplied staging row
-observation is not an administrator MCP listing. No admin Orbit MCP connection is
-available to this worker. Fresh before and after MCP listings and owner-account
-and fresh-account production web/Android verification remain coordinator rollout
-evidence. This worker does not open the app or start a server.
+The promoted redesign ships from `main` on production web and Android.
+Client build selection was retired in thomasluizon/orbit-tickets#1635.
 
 ## Retired build selectors
 
@@ -73,17 +51,3 @@ the supplied inventory:
 - `render_web_service.production_redesign_web`
 
 No Terraform apply or live-resource mutation is part of this worker's change.
-
-## Append-only API compatibility
-
-`src/Orbit.Infrastructure/Persistence/OrbitDbContext.cs` continues to seed
-`redesign` with `Enabled = false` and `PlanRequirement = null`. Applied migrations
-and their model snapshots remain intact. `ConfigController.GetConfig` continues
-to publish the generic account-resolved feature map in both API versions, retaining
-`features.redesign` with its `{ enabled, planRequirement }` shape.
-
-Older Android binaries can still parse that key even though current clients no
-longer select builds with it. thomasluizon/orbit-tickets#685 owns the supported
-version raise, fleet prerequisites, and subsequent seed/row/response-key removal.
-Client reader retirement alone does not authorize removing this compatibility
-contract or deleting the flag through a management tool.

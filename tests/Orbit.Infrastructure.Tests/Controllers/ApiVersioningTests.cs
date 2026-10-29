@@ -58,7 +58,7 @@ public sealed class ApiVersioningTests : IAsyncLifetime
 
         var flags = Substitute.For<IFeatureFlagService>();
         flags.ResolveForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new[] { new ResolvedFeatureFlag("redesign", false, null) });
+            .Returns(new[] { new ResolvedFeatureFlag("astra_eval_trace", false, null) });
         builder.Services.AddSingleton(flags);
 
         _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
