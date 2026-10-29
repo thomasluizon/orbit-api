@@ -55,8 +55,13 @@ public sealed partial class ChatWriteHoldHandlerTests
             ToolCalls = [new AiToolCall(call.GetProperty("name").GetString()!, call.GetProperty("id").GetString()!, call.GetProperty("args").Clone())],
             ConversationContext = new() { Messages = new List<object>(), Options = new object() }
         };
+        AiToolRequest? modelRequest = null;
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(Replay(capture.GetProperty("read"))));
+            .Returns(call =>
+            {
+                modelRequest = call.Arg<AiToolRequest>();
+                return Result.Success(Replay(capture.GetProperty("read")));
+            });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call =>
         {
@@ -71,6 +76,13 @@ public sealed partial class ChatWriteHoldHandlerTests
             ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, SupportsHabitListCard: true, Locale: language)), default);
 
         held.IsSuccess.Should().BeTrue(held.Error);
+        var declarations = JsonSerializer.SerializeToElement(modelRequest!.ToolDeclarations).EnumerateArray().ToArray();
+        var restart = declarations.Single(tool => tool.GetProperty("name").GetString() == "bulk_reschedule_habits");
+        restart.GetProperty("description").GetString().Should()
+            .Contain("strictly fewer").And.Contain("exactly").And.Contain("seven days").And.Contain("Never call ask");
+        var read = declarations.Single(tool => tool.GetProperty("name").GetString() == "query_habits");
+        read.GetProperty("parameters").GetProperty("properties").GetProperty("for_selection")
+            .GetProperty("description").GetString().Should().Contain("restart");
         held.Value.AiMessage.Should().BeNullOrEmpty();
         held.Value.Parts.Should().BeNullOrEmpty("the plan is one preview without prerequisite read blocks");
         var pending = held.Value.PendingOperations.Should().ContainSingle().Which;

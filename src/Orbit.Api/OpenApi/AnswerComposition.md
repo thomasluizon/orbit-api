@@ -280,9 +280,17 @@ results, never patterns in the person's message.
 
 Restart requests use the existing `query_habits` read with `date: "today"`,
 `is_completed: false` and `include_overdue: true`. The model gathers any remaining
-pages before proposing a complete plan. The model chooses a smaller set for today
-and later dates for the rest from those results and the person's preferences.
-No message pattern routes this behavior.
+pages before proposing a complete plan, with `for_selection: false` and
+`orbit_read_complete: false`. This read prepares a proposal rather than asking
+the person to select records. A restart request is actionable without `ask`, a
+pick list or a question about count or dates. The preview supplies approval,
+editing and rejection.
+
+The model keeps strictly fewer habits today than the complete missed and due set.
+If the person names a count, it keeps exactly that count. Every other habit gets
+a concrete date after the person's local today and within the next seven days.
+The model checks those constraints before emitting the complete proposal.
+No message pattern routes this behavior or rewrites the model's tool arguments.
 
 `bulk_reschedule_habits` exposes optional `revised_items` for individual dates:
 
@@ -316,10 +324,17 @@ FluentValidation validator and the domain's update guards. It preserves cadence,
 titles, times, reminders, checklists and historical logs. Rescheduling retains the
 app's existing due-date/recurrence semantics; this is not a history rewrite.
 
-The paired web and Android ticket must render all preview item dates, retain the
-existing controls and add real-call en and pt-BR cases in `evals/astra`, including
-approval with independent persisted readback and pass^3. Those consumer evals are
-owned by the coordinator. Local structured model-port replays do not establish
+When the person rejects a plan and requests another, the model proposes different
+per-habit dates in a held preview rather than returning a plain habit list. After
+cancellation it uses `bulk_reschedule_habits` with complete `revised_items` for a
+new preview. Edits to an awaiting preview use `revise_pending_changes`, preserving
+unmentioned items. The cancelled preview cannot be approved.
+
+The paired web and Android ticket thomasluizon/orbit-tickets#1868 renders all
+preview item dates and retains the existing controls. The real-call en and pt-BR
+cases in `evals/astra`, including approval with independent persisted readback and
+pass^3, belong to thomasluizon/orbit-tickets#1869. Those consumer evals are owned by
+the coordinator. Local structured model-port replays do not establish
 real-call pass^3. Deploy the API before the paired consumer. Tracks
 thomasluizon/orbit-tickets#1855.
 
