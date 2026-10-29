@@ -65,6 +65,11 @@ public partial class ProcessUserChatCommandHandlerTests
         stretch.HabitType.Should().Be("Habit");
         stretch.Fields.Should().ContainSingle(field => field.Field == "due_date" && field.NewValue == "2026-10-29");
         stretch.Fields.Should().ContainSingle(field => field.Field == "due_time" && field.NewValue == "08:00");
+        if (stretch.Fields.Any(field => field.Field == "start_date"))
+        {
+            stretch.Fields.Single(field => field.Field == "start_date").IsEditable.Should().BeTrue();
+            stretch.Fields.Single(field => field.Field == "due_date").IsEditable.Should().BeFalse();
+        }
         if (preview.Items.Count == 3)
         {
             var reused = preview.Items[2];

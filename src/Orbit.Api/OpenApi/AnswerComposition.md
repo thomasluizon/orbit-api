@@ -397,6 +397,9 @@ are zero before validation, preview and execution. Nonzero seconds remain invali
 When a new recurring item supplies `start_date` without `due_date`, its preview
 and held execution arguments also carry that first date as `due_date`, retaining
 the recurrence anchor. Both clock bounds and nested items follow this normalization.
+With a supplied recurrence anchor, `start_date` remains editable and `due_date`
+is display-only because creation uses the anchor to compute the first occurrence.
+Revising that anchor updates a matching displayed first date before validation.
 An existing `habit_id` takes precedence over a title match, and reuse binds the
 title field to the stored spelling before holding the proposal.
 

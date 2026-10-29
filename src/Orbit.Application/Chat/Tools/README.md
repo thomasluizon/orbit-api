@@ -16,6 +16,7 @@ Use `query_habits` for reuse and `suggest_habits` for requested ideas; organizin
 the message does not need calendar, habit-month, profile or analytics reads.
 Bulk argument preparation normalizes zero-second suggestion times to `HH:mm`
 and includes a recurring item's supplied start date as `due_date` when omitted.
+With an anchor, edit `start_date`; `due_date` is display-only in the preview.
 The existing ID determines the stored title carried by the reuse preview.
 
 Preview items append optional nullable string `habitType` (`Task`, `Habit`, `General`).

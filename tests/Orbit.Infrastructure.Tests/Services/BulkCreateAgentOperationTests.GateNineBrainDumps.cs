@@ -6,12 +6,48 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Validators;
 using NSubstitute;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public sealed partial class BulkCreateAgentOperationTests
 {
+    [Theory]
+    [InlineData("mixed-en-r3")]
+    [InlineData("mixed-pt-BR-r2")]
+    public async Task BrainDump_GateNineStartDateEditRefreshesDisplayedDateAndPersists(string name)
+    {
+        using var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+            "Fixtures", "BrainDumps", "g9a-brain-dump-" + name + ".json")));
+        var arguments = fixture.RootElement.GetProperty("toolCalls").EnumerateArray()
+            .Single(call => call.GetProperty("name").GetString() == "bulk_create_habits").GetProperty("arguments");
+        arguments = TerminalWriteDirective.ExecutionArguments(arguments);
+        var request = new AgentExecuteOperationRequest(_userId, "bulk_create_habits", arguments,
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: true);
+        var staged = await _executor.ExecuteAsync(request);
+        var pending = staged.PendingOperation!;
+        var revisions = new PendingOperationRevisionService(_pending, _previewer,
+            new RevisePendingOperationRequestValidator(), _registry);
+
+        var revised = await revisions.ReviseAsync(_userId, pending.Id, new(pending.PreviewFingerprint!,
+            pending.Items!.Select((item, index) => new RevisedPendingOperationItem(item.ItemId,
+                index == 1 ? JsonSerializer.SerializeToElement(new { start_date = "2026-10-30" }) : null)).ToArray()), default);
+
+        revised.IsSuccess.Should().BeTrue(revised.Error);
+        revised.Preview!.Items![1].Fields.Single(field => field.Field == "due_date").NewValue.Should().Be("2026-10-30");
+        _factory.Context.Habits.Should().BeEmpty();
+        var confirmation = _pending.Confirm(_userId, pending.Id)!;
+        var execution = _pending.GetExecution(_userId, pending.Id)!;
+        var result = await _executor.ExecuteAsync(request with
+        { Arguments = execution.Arguments, ConfirmationToken = confirmation.ConfirmationToken });
+        result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded, _lastAudit?.Error);
+        using var saved = _factory.CreateContext();
+        var stretchTitle = arguments.GetProperty("habits")[1].GetProperty("title").GetString();
+        saved.Habits.Single(habit => habit.Title == stretchTitle).NextDueDate.Should().Be(new DateOnly(2026, 10, 30));
+    }
+
     [Theory]
     [InlineData("reuse-en-r1", "Water")]
     [InlineData("reuse-en-r2", "Water")]
@@ -31,6 +67,7 @@ public sealed partial class BulkCreateAgentOperationTests
             "Fixtures", "BrainDumps", "g9a-brain-dump-" + name + ".json")).Replace("[redacted]", existing.Id.ToString()));
         var arguments = fixture.RootElement.GetProperty("toolCalls").EnumerateArray()
             .Single(call => call.GetProperty("name").GetString() == "bulk_create_habits").GetProperty("arguments");
+        arguments = TerminalWriteDirective.ExecutionArguments(arguments);
         var request = await ConfirmAsync(arguments);
 
         var response = await _executor.ExecuteAsync(request);
@@ -69,6 +106,7 @@ public sealed partial class BulkCreateAgentOperationTests
             "Fixtures", "BrainDumps", $"g9a-brain-dump-ideas-en-r{repeat}.json")));
         var arguments = fixture.RootElement.GetProperty("toolCalls").EnumerateArray()
             .Single(call => call.GetProperty("name").GetString() == "bulk_create_habits").GetProperty("arguments");
+        arguments = TerminalWriteDirective.ExecutionArguments(arguments);
         var request = await ConfirmAsync(arguments);
         using (var held = _factory.CreateContext())
             held.Habits.ToDictionary(habit => habit.Id, habit => JsonSerializer.Serialize(habit)).Should().BeEquivalentTo(before);
