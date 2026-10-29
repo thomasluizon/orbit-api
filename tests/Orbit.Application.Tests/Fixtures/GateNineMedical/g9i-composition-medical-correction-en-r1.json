@@ -1,0 +1,38 @@
+{
+  "caseId": "composition-medical-correction-en",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "revise_pending_changes",
+      "arguments": {
+        "pending_operation_id": "[redacted]",
+        "answer_question": false,
+        "items": [
+          {
+            "item_id": "0",
+            "edits_json": "{\"due_time\":\"16:00\"}"
+          }
+        ],
+        "remove_item_ids": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "PendingConfirmation"
+    },
+    {
+      "name": "revise_pending_changes",
+      "arguments": {
+        "pending_operation_id": "[redacted]",
+        "answer_question": false,
+        "items": [
+          {
+            "item_id": "0",
+            "edits_json": "{\"due_time\":\"16:00\"}"
+          }
+        ],
+        "remove_item_ids": null,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

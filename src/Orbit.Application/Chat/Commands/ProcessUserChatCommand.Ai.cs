@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -124,7 +125,11 @@ public partial class ProcessUserChatCommandHandler
 
     private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context) =>
         tool.IsReadOnly
-            ? UsesComposition(request, context) ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema()) : tool.GetParameterSchema()
+            ? UsesComposition(request, context)
+                ? tool.Name == "revise_pending_changes"
+                    ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema(), description: RevisePendingChangesTool.CompletionArgumentDescription)
+                    : TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema())
+                : tool.GetParameterSchema()
             : TerminalWriteDirective.WithCompletionArgument(tool.GetParameterSchema());
 
     private static string AppendCardPromptInstructions(

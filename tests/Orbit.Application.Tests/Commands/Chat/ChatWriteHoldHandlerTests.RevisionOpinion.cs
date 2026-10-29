@@ -41,6 +41,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         {
             pending_operation_id = pending.Id,
             items = new[] { new { item_id = pending.Items!.Single().ItemId, edits_json = "{\"due_time\":\"22:00\"}" } },
+            orbit_read_complete = true,
             answer_question = true
         }), "revise_pending_changes");
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),

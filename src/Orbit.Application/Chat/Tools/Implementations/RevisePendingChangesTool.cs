@@ -7,9 +7,11 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiTool
 {
+    public const string CompletionArgumentDescription = "True for a complete pending-preview revision, on the first call; false when a question, read or fresh write still needs another tool call. A successful complete revision ends the turn with the revised preview; never repeat it to signal completion.";
+
     public string Name => "revise_pending_changes";
     public bool IsReadOnly => true;
-    public string Description => "Correct an existing pending preview with only the requested field edits. Keep every unchanged field and item, including when adding an optional field. Only explicitly removed item IDs are removed. Set answer_question to true when the person also asks an opinion, clarification or other question, and answer in one short sentence without figures alongside this call. For a question without edits, pass empty items and omit remove_item_ids. For edits without a question, set answer_question to false and emit no prose. This never applies account changes.";
+    public string Description => "Correct an existing pending preview with only the requested field edits. Keep every unchanged field and item, including when adding an optional field. Only explicitly removed item IDs are removed. Set answer_question to true when the person also asks an opinion, clarification or other question, and answer in one short sentence without figures alongside this call. For a question without edits, pass empty items and omit remove_item_ids. For edits without a question, set answer_question to false and emit no prose. Set orbit_read_complete=true on the first revision call when it covers the entire correction. Set it to false only when another tool call is needed, such as a lookup or fresh write in the same request. After a successful revision, do not repeat the same edit to mark completion. This never applies account changes.";
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
