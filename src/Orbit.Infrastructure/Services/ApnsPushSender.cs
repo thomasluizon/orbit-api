@@ -86,7 +86,14 @@ public sealed class ApnsPushSender : IApnsPushSender, IDisposable
             foreach (var (key, value) in data)
                 custom[key] = value;
         custom["url"] = url;
-        return new { aps = new { alert = new { title, body }, sound = "default" }, body = custom };
+        var aps = new Dictionary<string, object>
+        {
+            ["alert"] = new { title, body },
+            ["sound"] = "default"
+        };
+        if (data is not null && data.ContainsKey("doneToken"))
+            aps["category"] = PushNotificationService.RepeatReminderCategoryId;
+        return new { aps, body = custom };
     }
 
     private string GetProviderToken()
