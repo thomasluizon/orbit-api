@@ -222,7 +222,10 @@ public class GetRecapQueryHandler(
         return isClosedPeriod
             ? await habitRepository.FindIgnoringFiltersAsync(
                 h => h.UserId == request.UserId
-                    && (!h.IsDeleted || !h.DeletedAtUtc.HasValue || h.DeletedAtUtc >= periodStartUtc),
+                    && (!h.IsDeleted || !h.DeletedAtUtc.HasValue || h.DeletedAtUtc >= periodStartUtc
+                        || h.Logs.Any(l => !l.IsDeleted
+                            && l.Date >= request.DateFrom
+                            && l.Date <= request.DateTo)),
                 includePeriodLogs,
                 cancellationToken)
             : await habitRepository.FindAsync(

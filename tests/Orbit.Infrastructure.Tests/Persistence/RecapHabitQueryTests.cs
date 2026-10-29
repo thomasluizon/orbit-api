@@ -64,7 +64,13 @@ public class RecapHabitQueryTests
         var legacy = CreateHabit();
         legacy.SoftDelete(boundaryUtc);
         typeof(Habit).GetProperty(nameof(Habit.DeletedAtUtc))!.SetValue(legacy, null);
-        var included = new[] { live, atBoundary, during, after, legacy };
+        var earlyTask = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user.Id, "Task",
+            null, null, DueDate: dateFrom.AddDays(1),
+            CreatedAtUtc: boundaryUtc.AddDays(-30))).Value;
+        context.Habits.Add(earlyTask);
+        earlyTask.Log(dateFrom.AddDays(1), advanceDueDate: false);
+        earlyTask.SoftDelete(boundaryUtc.AddDays(-1));
+        var included = new[] { live, atBoundary, during, after, legacy, earlyTask };
         var all = included.ToList();
         for (var index = 0; index < 250; index++)
         {
