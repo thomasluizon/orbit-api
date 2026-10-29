@@ -336,7 +336,14 @@ reject actions. No new block kind, endpoint or capability flag is required. Exis
 clients ignore the additional field and keep the ordinary approval preview.
 
 The reply contains at most one short sentence without figures, then the preview.
-The existing server suppression omits redundant narrative and follow-ups. Nothing
+One held `bulk_create_habits` preview suppresses supporting read blocks in both
+ordinary and block-first composition, including empty habit lists, profile rows,
+calendars and suggestion cards. The existing server suppression omits redundant
+narrative and follow-ups. A bulk creation submitted in a round with reads is deferred:
+its typed tool result has `status: awaiting_reads`, no preview is held and nothing
+is saved. The model receives those read results before submitting the complete
+bulk creation in a later round. Other write tools retain their existing ordering.
+Nothing
 is saved until approval. Edits use the existing pending-operation revision route;
 reject cancels the whole pending operation. Existing FluentValidation validators
 and domain guards remain authoritative for every create and adjustment.

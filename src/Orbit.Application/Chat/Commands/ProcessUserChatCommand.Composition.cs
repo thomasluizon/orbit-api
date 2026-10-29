@@ -187,6 +187,11 @@ public partial class ProcessUserChatCommandHandler
                 Parts: request.ClientContext?.SupportsParts == true
                     ? sentence is null ? [] : [new ChatTextPart(sentence)] : null);
         }
+        if (results.PendingOperations is [var pending]
+            && results.PendingWriteCalls.TryGetValue(pending.Id, out var held) && held.ToolName == "bulk_create_habits"
+            && results.ActionResults.Count == 0 && results.AskBlock is null && SuppressPreviewNarrative(results))
+            return new ResponseCards(null, Parts: request.ClientContext?.SupportsParts == true ? [] : null)
+            { ServerComposedText = true };
         if (UsesComposition(request, context))
             return ComposeAnswer(parsed, truncated, language, request, context, results);
         return request.ClientContext?.SupportsParts == true

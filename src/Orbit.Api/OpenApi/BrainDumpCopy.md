@@ -43,3 +43,16 @@ The API emits machine values only. The paired UI owns these proposed localized l
 | General | General | Geral |
 
 The existing approve, edit and reject labels remain unchanged.
+
+## Creation read dependency
+
+The typed `awaiting_reads` result supplies this model instruction when a bulk
+creation arrives alongside reads. It adds no fixed user-facing sentence.
+
+**en**
+
+Nothing was previewed or saved. Read the results from this round first, then call bulk_create_habits once with the complete set. Reuse each existing habit's ID and stored title verbatim. Copy selected suggestion draft fields unchanged, without inventing quantities, times or activities.
+
+**pt-BR**
+
+Nenhuma prévia foi preparada e nada foi salvo. Leia primeiro os resultados desta rodada e depois chame bulk_create_habits uma única vez com todos os itens. Reaproveite o ID de cada hábito existente e mantenha o título exatamente como está salvo. Copie os campos dos rascunhos escolhidos sem alterações, sem inventar quantidades, horários ou atividades.

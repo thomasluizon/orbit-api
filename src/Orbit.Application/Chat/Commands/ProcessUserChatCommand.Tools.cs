@@ -439,6 +439,9 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
+        var deferredCreations = readOnlyCalls.Count > 0
+            ? writeCalls.Where(call => call.Name == "bulk_create_habits").ToArray() : [];
+        writeCalls.RemoveAll(call => deferredCreations.Contains(call));
         if (writeCalls.Count > 0 && !executionResults.HasMutationContext)
         {
             var habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
@@ -456,6 +459,8 @@ public partial class ProcessUserChatCommandHandler
         var readOnlyOutcomes = await Task.WhenAll(readOnlyTasks);
 
         var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
+        foreach (var call in deferredCreations)
+            outcomesByCallId[call.Id] = AwaitCreationReads(call);
         for (var index = 0; index < readOnlyCalls.Count; index++)
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
