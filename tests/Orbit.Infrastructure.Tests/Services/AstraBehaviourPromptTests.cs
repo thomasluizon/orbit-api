@@ -20,6 +20,11 @@ public class AstraBehaviourPromptTests
             .And.Contain("Reuse suggest_habits")
             .And.Contain("nothing is saved before approval")
             .And.Contain("at most one short sentence without figures");
+        prompt.Should().Contain("Finish all account and suggestion reads before calling bulk_create_habits")
+            .And.Contain("Every reused item keeps the stored title verbatim")
+            .And.Contain("copy each chosen draft unchanged")
+            .And.Contain("Keep empty days and checklists as []")
+            .And.Contain("Reads used to build it do not render separate habit lists, calendars, profile rows or suggestion blocks");
         prompt.Should().Contain("Keep every supplied date and time, including past dates")
             .And.Contain("Normalize spelling and casing without substituting the action or negation")
             .And.Contain("For medical instruction titles, keep the person's own action wording")

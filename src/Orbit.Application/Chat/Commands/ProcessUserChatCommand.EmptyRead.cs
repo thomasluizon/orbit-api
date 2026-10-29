@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     private static bool CanRecoverReadAnswer(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
-        request.BlockAnswer is null && results.AskBlock is null
+        request.BlockAnswer is null && results.AskBlock is null && !results.RequiresCreationProposal
         && results.PendingOperations.Count == 0 && results.ActionResults.Count == 0
         && results.OperationResults.Count > 0 && results.OperationResults.All(operation =>
             operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null);

@@ -14,7 +14,7 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
         + "Return habitSuggestions instead of a plain list. Pass the person's request and its language. "
         + "This never creates habits. The person edits a draft and requests its approval preview before saving. "
         + "For an unstructured message that also requests habit ideas, keep its explicit tasks and put the chosen draft fields "
-        + "in one bulk_create_habits approval preview; map existingHabitId to habit_id to reuse the habit.";
+        + "in one bulk_create_habits approval preview; map existingHabitId to habit_id to reuse the habit. Wait for these drafts before preparing that preview, copy their fields unchanged and keep stored titles verbatim. Never invent a quantity, rewrite a draft title or replace its activity. The combined preview replaces the separate suggestion block.";
 
     public object GetParameterSchema() => new
     {

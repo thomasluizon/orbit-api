@@ -146,6 +146,7 @@ public partial class ProcessUserChatCommandHandler
             followUps = null;
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
         }
+        cards = SuppressCreationReadCards(cards, request, executionResults);
         followUps = composition ? ContextualFollowUps(followUps, executionResults) : followUps;
         if (composition)
             AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,
@@ -221,6 +222,7 @@ public partial class ProcessUserChatCommandHandler
     {
         var built = new CompositionParts();
         var parts = built.Parts;
+        if (HasCombinedCreationPreview(results)) return built;
         if (results.AskBlock is { } ask)
         {
             parts.Add(ask);

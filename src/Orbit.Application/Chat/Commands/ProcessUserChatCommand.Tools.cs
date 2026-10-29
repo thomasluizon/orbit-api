@@ -103,7 +103,8 @@ public partial class ProcessUserChatCommandHandler
             aiResponse,
             iteration,
             tokenBudgetExceeded,
-            hadToolFailure);
+            hadToolFailure,
+            executionResults.RequiresCreationProposal ? ErrorMessages.AiUnavailable : null);
     }
 
     private static bool MustFailToolTurn(ProcessUserChatCommand request, ToolLoopResult result) =>
@@ -116,7 +117,7 @@ public partial class ProcessUserChatCommandHandler
     private ToolLoopResult RecoverOutcomeContinuation(ProcessUserChatCommand request,
         ToolExecutionAccumulator results, ToolLoopResult loop, string? language, CancellationToken cancellationToken)
     {
-        if (request.BlockAnswer is not null)
+        if (request.BlockAnswer is not null || results.RequiresCreationProposal)
             return loop;
         if (loop.TokenBudgetExceeded && RecoverBudgetOutcome(request, results, language, cancellationToken) is { } recovery)
             return loop with { FinalResponse = recovery, ProviderError = null };
@@ -136,6 +137,9 @@ public partial class ProcessUserChatCommandHandler
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.Composition);
         ct.ThrowIfCancellationRequested();
+        if (results.RequiresCreationProposal)
+            return Result.Failure<ChatResponse>(loop.ProviderError is { Code: not ErrorCodes.AiEmptyResponse } creationError
+                ? creationError : ErrorMessages.AiUnavailable);
         if (results.PendingSelection is { } selection && results.AskBlock is null)
         {
             var cards = SelectionQuestion(selection, context.Language, request.ClientContext?.SupportsParts == true);
@@ -384,6 +388,8 @@ public partial class ProcessUserChatCommandHandler
                 executionResults.CorrectionOccurrences.Add(new CorrectionOccurrence(call, outcome));
         }
 
+        CompleteCreationProposal(response, outcomesByCallId, executionResults);
+
         return toolResults;
     }
 
@@ -437,6 +443,10 @@ public partial class ProcessUserChatCommandHandler
         var writeCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
             .ToList();
+        var deferredCreations = readOnlyCalls.Count > 0
+            ? writeCalls.Where(call => call.Name == "bulk_create_habits").ToArray() : [];
+        executionResults.RequiresCreationProposal |= deferredCreations.Length > 0;
+        writeCalls.RemoveAll(call => deferredCreations.Contains(call));
         if (writeCalls.Count > 0 && !executionResults.HasMutationContext)
         {
             var habits = await data.HabitRepository.FindAsync(habit => habit.UserId == request.UserId,
@@ -454,6 +464,8 @@ public partial class ProcessUserChatCommandHandler
         var readOnlyOutcomes = await Task.WhenAll(readOnlyTasks);
 
         var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
+        foreach (var call in deferredCreations)
+            outcomesByCallId[call.Id] = AwaitCreationReads(call);
         for (var index = 0; index < readOnlyCalls.Count; index++)
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];

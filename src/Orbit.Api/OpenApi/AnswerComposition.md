@@ -358,7 +358,13 @@ uses the existing `bulk_create_habits` command for one combined pending preview.
 The model resolves existing activities through account reads and supplies `habit_id`
 for reuse, preserving unnamed fields. `suggest_habits` supplies editable drafts when
 the person also requests ideas; their `existingHabitId` maps to `habit_id` in the
-combined proposal. No message pattern routes or triggers a tool.
+combined proposal. Finish account and suggestion reads in earlier rounds before
+submitting the complete proposal. Reused items carry the stored title verbatim.
+Chosen drafts retain their title, emoji, cadence, weekdays, local date and time
+interval, checklist and reminder settings. Null reminder offsets map to disabled
+reminders with an empty offset array; empty days and checklists remain empty arrays.
+The model must not invent a quantity, rename a draft or replace its activity.
+No message pattern routes or triggers a tool.
 
 Bulk creation preview `items` append optional nullable string `habitType`: `Task`
 for one-time items, `Habit` for recurring or flexible items, and `General` for
@@ -381,8 +387,20 @@ reject actions. No new block kind, endpoint or capability flag is required. Exis
 clients ignore the additional field and keep the ordinary approval preview.
 
 The reply contains at most one short sentence without figures, then the preview.
-The existing server suppression omits redundant narrative and follow-ups. Nothing
-is saved until approval. Edits use the existing pending-operation revision route;
+One held `bulk_create_habits` preview suppresses supporting read blocks in both
+ordinary and block-first composition, including empty habit lists, profile rows,
+calendars and suggestion cards. The existing server suppression omits redundant
+narrative and follow-ups. A bulk creation submitted in a round with reads is deferred:
+its typed tool result has `status: awaiting_reads`, no preview is held and nothing
+is saved. The model receives those read results before submitting the complete
+bulk creation in a later round. The deferred creation remains an outstanding obligation
+until a later `orbit_write_complete` bulk creation yields a nonempty approval preview.
+Supporting reads cannot satisfy it. If continuation ends empty, fails or stops without
+that proposal, the turn returns the existing failure instead of a read-only answer.
+Empty-output failures use `AI_UNAVAILABLE` so generic empty-answer recovery cannot
+turn the unfinished proposal into success. Other provider failures retain their codes.
+Other write tools retain their existing ordering.
+Nothing is saved until approval. Edits use the existing pending-operation revision route;
 reject cancels the whole pending operation. Existing FluentValidation validators
 and domain guards remain authoritative for every create and adjustment.
 
