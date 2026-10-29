@@ -123,7 +123,7 @@ The coordinator performs the cutover after merge, with no service replacement:
    `sha`. Verify the successful GitHub staging deployment has `payload.image_digest`,
    staging serves that commit healthy, and Render's staging live deploy names the
    same immutable image.
-2. In **Render > production Postgres > Backups > Exports**, take a fresh export and
+2. In **Render > production Postgres > Recovery > Create export**, take a fresh export and
    wait for completion before the first production image release. Record its
    identity and completion in the release evidence. Repeat before every later
    production release carrying migrations, following
