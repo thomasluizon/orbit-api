@@ -54,7 +54,7 @@ public partial class ProcessUserChatCommandHandler
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
         if (!result.Success || result.Payload is not AstraBlockDefinition definition)
             return Failed(result.Error ?? "Invalid ask arguments.");
-        definition = AskBlockNegotiation.Definition(definition, request.ClientContext);
+        definition = AskBlockNegotiation.Definition(definition, request.ClientContext, call.Args);
         if (request.ClientContext.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("The client does not support this block kind.");
         var block = IssuedAstraBlock.Create(request.UserId, definition);

@@ -10,7 +10,7 @@ loop sends it back to the model, permits one corrected ask, then asks for prose.
 A question form's top-level `allowFreeText` is ignored; each question's setting
 controls its answer. The optional heading comes from `title`, then `question`.
 A validated single `singleChoice` becomes `choice` when the client supports it
-and the heading, option count and labels fit that contract. Forms with an intro,
+and the heading, option count and labels fit that contract. Forms with a title, intro,
 progress, recommendations, several fields or longer labels retain `question`.
 If the client cannot render the resulting form, the model receives a capability
 error rather than a stored block. Every path leaves writes behind the existing
@@ -56,7 +56,7 @@ questions remain unchanged.
 | Required positive slider step dividing max minus min exactly. Omit for other types. | Passo positivo obrigatório para slider, que divida exatamente a diferença entre max e min. Omita para outros tipos. |
 | Required nonempty slider unit in the person's language, at most 24 characters. Omit for other types. | Unidade obrigatória e preenchida para slider, no idioma da pessoa, com até 24 caracteres. Omita para outros tipos. |
 | Nonempty unique option id. | Identificador de opção único e preenchido. |
-| Option label, at most 20 characters. | Rótulo da opção, com até 20 caracteres. |
+| Nonempty option label, at most 20 characters. | Rótulo da opção preenchido, com até 20 caracteres. |
 | Supporting text, at most 24 characters. | Texto de apoio, com até 24 caracteres. |
 | Nonempty unique item id. | Identificador de item único e preenchido. |
 | Nonempty item label. | Rótulo do item preenchido. |

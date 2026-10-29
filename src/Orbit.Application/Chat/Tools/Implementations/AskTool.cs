@@ -96,7 +96,7 @@ public sealed class AskTool(
                         properties = new
                         {
                             id = new { type = "string", description = "Nonempty unique option id." },
-                            label = new { type = "string", maxLength = 20, description = "Option label, at most 20 characters." },
+                            label = new { type = "string", maxLength = 20, description = "Nonempty option label, at most 20 characters." },
                             description = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters." }
                         },
                         required = new[] { "id", "label" }
