@@ -5,6 +5,7 @@ using Orbit.Domain.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -140,7 +141,14 @@ public partial class ProcessUserChatCommandHandler
             if (matches.Length == 0) return false;
             candidates.UnionWith(matches.Select(habit => habit.Id));
         }
-        return !candidates.Contains(targetHabits[0].Id) && !ArgumentEntityIds(call.Args).Any(candidates.Contains);
+        var footprint = HabitHierarchy.SelfAndDescendants(targetHabits[0], habits.ToLookup(habit => habit.ParentHabitId))
+            .Select(habit => habit.Id).ToHashSet();
+        var parentsById = habits.ToDictionary(habit => habit.Id, habit => habit.ParentHabitId);
+        var parentId = targetHabits[0].ParentHabitId;
+        while (parentId is Guid id && footprint.Add(id))
+            parentId = parentsById.GetValueOrDefault(id);
+        footprint.UnionWith(ArgumentEntityIds(call.Args));
+        return !footprint.Overlaps(candidates);
     }
 
     private static bool MatchesAskRecord(string? id, string? label, Habit habit) =>
