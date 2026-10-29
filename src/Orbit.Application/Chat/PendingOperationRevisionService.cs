@@ -380,6 +380,7 @@ public sealed partial class PendingOperationRevisionService(
                 copy[ParentHabitId] = sharedParent.DeepClone();
             if (!ApplyEdits(copy, item.Edits))
                 return false;
+            SyncCreationAnchor(habit, copy, item.Edits);
             ApplyPlacement(copy, item);
             if (item.Edits is { ValueKind: JsonValueKind.Object } edits
                 && edits.TryGetProperty(ParentHabitId, out var parent))
@@ -399,6 +400,14 @@ public sealed partial class PendingOperationRevisionService(
         root["habits"] = revisedHabits;
         if (clearSharedParent) root.Remove(ParentHabitId);
         return true;
+    }
+
+    private static void SyncCreationAnchor(JsonObject original, JsonObject revised, JsonElement? edits)
+    {
+        if (edits is { ValueKind: JsonValueKind.Object } changed
+            && changed.TryGetProperty(StartDate, out _) && !changed.TryGetProperty(DueDate, out _)
+            && original[StartDate] is { } anchor && JsonNode.DeepEquals(original[DueDate], anchor))
+            revised[DueDate] = revised[StartDate]?.DeepClone();
     }
 
     private static void ApplyPlacement(JsonObject target, RevisedPendingOperationItem item)

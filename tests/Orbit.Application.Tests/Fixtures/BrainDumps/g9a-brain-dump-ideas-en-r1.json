@@ -1,0 +1,241 @@
+{
+  "caseId": "brain-dump-ideas-en",
+  "repeat": 1,
+  "message": "My head is all over the place. Need to call the dentist tomorrow, and I want to stretch every morning at eight starting today. Can you organize this? Also suggest one simple daily habit idea and put everything together for me to approve.",
+  "toolCalls": [
+    {
+      "name": "get_calendar_overview",
+      "arguments": {
+        "relative_period": null,
+        "period_count": null,
+        "as_of": null,
+        "calendar_ids": null,
+        "date_from": null,
+        "date_to": null,
+        "window_from_utc": null,
+        "window_to_utc": null,
+        "include_calendars": false,
+        "include_events": true,
+        "include_auto_sync_state": false,
+        "include_suggestions": false,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "suggest_habits",
+      "arguments": {
+        "instruction": "Suggest one simple daily habit idea to include in an approval preview together with explicit tasks and habits: call the dentist tomorrow and stretch every morning at 08:00 starting today. Do not alter or replace those activities.",
+        "language": "en",
+        "count": 1,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "bulk_create_habits",
+      "arguments": {
+        "parent_habit_id": null,
+        "habits": [
+          {
+            "title": "Call the dentist",
+            "description": null,
+            "emoji": "📞",
+            "frequency_unit": "OneTime",
+            "frequency_quantity": null,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": "2026-10-30",
+            "end_date": null,
+            "due_time": null,
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": false,
+            "reminder_times": [],
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": false,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          },
+          {
+            "title": "Stretch",
+            "description": null,
+            "emoji": "🧘",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": "2026-10-29",
+            "end_date": null,
+            "due_time": "08:00",
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": "2026-10-29",
+            "placement": null,
+            "reminder_enabled": false,
+            "reminder_times": [],
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": false,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          },
+          {
+            "title": "Take a few mindful breaths",
+            "description": null,
+            "emoji": "🌿",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": null,
+            "days": [],
+            "due_date": "2026-10-29",
+            "end_date": null,
+            "due_time": "09:00",
+            "due_end_time": "09:05",
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": [],
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": false,
+            "reminder_times": [],
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": false,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null
+          }
+        ],
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "groundingEvidence": {
+    "fixture": {
+      "habits": [
+        {
+          "title": "Water",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-29",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-25T00:10:04.663545Z",
+          "logs": [],
+          "intervalWeeks": null
+        },
+        {
+          "title": "Walk",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-29",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-25T00:10:06.266458Z",
+          "logs": [],
+          "intervalWeeks": null
+        }
+      ],
+      "goals": [],
+      "tags": [],
+      "checklistTemplates": [],
+      "apiKeys": [],
+      "notifications": [],
+      "loggedState": {
+        "fixture": "pro",
+        "date": "2026-10-29",
+        "habits": [
+          {
+            "title": "Water",
+            "completed": false,
+            "skipped": false
+          },
+          {
+            "title": "Walk",
+            "completed": false,
+            "skipped": false
+          }
+        ]
+      }
+    },
+    "successfulTools": [
+      {
+        "name": "get_calendar_overview",
+        "result": {
+          "events": [],
+          "autoSyncState": null,
+          "suggestions": [],
+          "calendars": null,
+          "recovery": "reconnect",
+          "selectionMode": null
+        }
+      },
+      {
+        "name": "suggest_habits",
+        "result": {
+          "language": "en",
+          "drafts": [
+            {
+              "emoji": "🌿",
+              "title": "Take a few mindful breaths",
+              "type": "Habit",
+              "frequencyUnit": "Day",
+              "frequencyQuantity": 1,
+              "days": [],
+              "dueDate": "2026-10-29",
+              "dueTime": "09:00:00",
+              "dueEndTime": "09:05:00",
+              "reminderMinutesBefore": null,
+              "checklistItems": [],
+              "reason": "A brief breathing pause is an easy daily way to reset."
+            }
+          ]
+        }
+      }
+    ],
+    "readScopes": []
+  },
+  "brainDumpReadback": {
+    "pass": false,
+    "score": 0,
+    "reason": "A tool acted outside the allowed set: get_calendar_overview.",
+    "metadata": {}
+  },
+  "answer": "{\"pendingOperations\":[{\"count\":3,\"items\":[{\"title\":\"Call the dentist\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Call the dentist\"},{\"field\":\"due_date\",\"newValue\":\"2026-10-30\"},{\"field\":\"emoji\",\"newValue\":\"📞\"},{\"field\":\"frequency_unit\",\"newValue\":\"OneTime\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"reminder_enabled\",\"newValue\":\"False\"},{\"field\":\"reminder_times\",\"values\":[]},{\"field\":\"slip_alert_enabled\",\"newValue\":\"False\"},{\"field\":\"parent_habit_id\",\"movesToRoot\":true}]},{\"title\":\"Stretch\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Stretch\"},{\"field\":\"due_date\",\"newValue\":\"2026-10-29\"},{\"field\":\"due_time\",\"newValue\":\"08:00\"},{\"field\":\"emoji\",\"newValue\":\"🧘\"},{\"field\":\"frequency_quantity\",\"newValue\":\"1\"},{\"field\":\"frequency_unit\",\"newValue\":\"Day\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"reminder_enabled\",\"newValue\":\"False\"},{\"field\":\"reminder_times\",\"values\":[]},{\"field\":\"slip_alert_enabled\",\"newValue\":\"False\"},{\"field\":\"parent_habit_id\",\"movesToRoot\":true}]},{\"title\":\"Take a few mindful breaths\",\"removesData\":false,\"fields\":[{\"field\":\"title\",\"newValue\":\"Take a few mindful breaths\"},{\"field\":\"checklist_items\",\"values\":[]},{\"field\":\"days\",\"values\":[]},{\"field\":\"due_date\",\"newValue\":\"2026-10-29\"},{\"field\":\"due_end_time\",\"newValue\":\"09:05\"},{\"field\":\"due_time\",\"newValue\":\"09:00\"},{\"field\":\"emoji\",\"newValue\":\"🌿\"},{\"field\":\"frequency_quantity\",\"newValue\":\"1\"},{\"field\":\"frequency_unit\",\"newValue\":\"Day\"},{\"field\":\"is_bad_habit\",\"newValue\":\"False\"},{\"field\":\"is_flexible\",\"newValue\":\"False\"},{\"field\":\"is_general\",\"newValue\":\"False\"},{\"field\":\"reminder_enabled\",\"newValue\":\"False\"},{\"field\":\"reminder_times\",\"values\":[]},{\"field\":\"slip_alert_enabled\",\"newValue\":\"False\"},{\"field\":\"parent_habit_id\",\"movesToRoot\":true}]}]}],\"parts\":[]}"
+}

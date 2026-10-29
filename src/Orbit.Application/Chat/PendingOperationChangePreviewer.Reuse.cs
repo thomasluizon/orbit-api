@@ -52,7 +52,8 @@ public sealed partial class PendingOperationChangePreviewer
         .OrderBy(property => property.Name != "title").ThenBy(property => property.Name, StringComparer.Ordinal)
         .Select(property => new PendingOperationChange(
             Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value),
-            AgentArgumentPreview.ResolveValueType(property.Name, property.Value), property.Value.Clone(), true)).ToList();
+            AgentArgumentPreview.ResolveValueType(property.Name, property.Value), property.Value.Clone(),
+            property.Name != DueDate || !source.TryGetProperty(StartDate, out _))).ToList();
 
     private async Task<bool> BindReuseFieldsAsync(Guid userId, JsonElement source, Habit existing,
         IReadOnlyList<Habit> known, List<PendingOperationChange> fields, CancellationToken ct)

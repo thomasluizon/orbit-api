@@ -96,7 +96,7 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
         }
     }
 
-    public static JsonElement LocalizeTextDates(JsonElement arguments, string? locale, string message = "")
+    public static JsonElement LocalizeTextDates(JsonElement arguments, string? locale, string message = "", bool preserveExistingTitles = false)
     {
         var culture = CultureInfo.GetCultureInfo(string.IsNullOrWhiteSpace(locale) ? "en-US" : locale);
         var node = JsonNode.Parse(arguments.GetRawText());
@@ -113,6 +113,8 @@ public sealed partial class HabitProposalValidator : AbstractValidator<HabitProp
             {
                 if (key is "title" or "description" && value is JsonValue text && text.TryGetValue<string>(out var content))
                 {
+                    if (key == "title" && preserveExistingTitles && Guid.TryParse(obj["habit_id"]?.ToString(), out _))
+                        continue;
                     if (key == "title" && SourceTitle(content, message) is { } original)
                     {
                         obj[key] = original;

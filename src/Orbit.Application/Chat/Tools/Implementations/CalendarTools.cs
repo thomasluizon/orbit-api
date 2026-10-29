@@ -21,7 +21,7 @@ public record CalendarOverviewPayload(
 public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_calendar_overview";
-    public string Description => "Read Google Calendar events or meetings, selected calendars, auto-sync state, and sync suggestions. Use get_habit_month for habit calendar, my month, calendário de hábitos or meu mês.";
+    public string Description => "Read Google Calendar events or meetings, selected calendars, auto-sync state, and sync suggestions. Use get_habit_month for habit calendar, my month, calendário de hábitos or meu mês. Organizing an unstructured message into a task and habit preview needs query_habits for reuse, not a calendar read.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new

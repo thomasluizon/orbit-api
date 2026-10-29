@@ -403,6 +403,21 @@ reminders with an empty offset array; empty days and checklists remain empty arr
 The model must not invent a quantity, rename a draft or replace its activity.
 No message pattern routes or triggers a tool.
 
+The message and `query_habits` supply this proposal's task and reuse facts.
+`suggest_habits` supplies additional ideas only when requested. The prompt and
+tool descriptions exclude calendar, habit-month, profile and analytics reads
+from organizing a message. All tools remain available without keyword gating.
+Bulk items normalize suggestion times such as `08:05:00` to `08:05` when seconds
+are zero before validation, preview and execution. Nonzero seconds remain invalid.
+When a new recurring item supplies `start_date` without `due_date`, its preview
+and held execution arguments also carry that first date as `due_date`, retaining
+the recurrence anchor. Both clock bounds and nested items follow this normalization.
+With a supplied recurrence anchor, `start_date` remains editable and `due_date`
+is display-only because creation uses the anchor to compute the first occurrence.
+Revising that anchor updates a matching displayed first date before validation.
+An existing `habit_id` takes precedence over a title match, and reuse binds the
+title field to the stored spelling before holding the proposal.
+
 Bulk creation preview `items` append optional nullable string `habitType`: `Task`
 for one-time items, `Habit` for recurring or flexible items, and `General` for
 unscheduled general items. The server derives it from structured schedule fields
@@ -447,6 +462,10 @@ contract. Cover en and pt-BR dumps, including an existing habit, with three cons
 real-call successes and persisted readback after approval. The local scripted model
 replays in `tests/Orbit.Application.Tests/Fixtures/BrainDumps` are deterministic
 coverage and do not substitute for that real-call gate.
+The captured reuse r1 already supplies `habit_id`; its typed API preview retains
+both `entityId` and the `habit_id` field's proposed UUID. The paired visible-answer
+projection must retain that identity for evaluation. Dropping identifiers from
+the projection cannot establish that the model omitted reuse.
 The added model instructions and proposed consumer labels are reported in
 [BrainDumpCopy.md](BrainDumpCopy.md) in en and pt-BR for coordinator copy approval.
 
