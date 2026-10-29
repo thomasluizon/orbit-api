@@ -52,7 +52,7 @@ public class FeatureFlagOperationTests
         var account = User.Create("Account", "account@example.com").Value;
         context.Users.AddRange(admin, account);
         await context.SaveChangesAsync();
-        (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().NotContain("redesign");
+        (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().NotContain("astra_eval_trace");
         var services = new ServiceCollection().AddLogging();
         services.AddAuthorization(options => options.AddPolicy(AdminPolicy.Name,
             policy => policy.AddRequirements(new AdminRequirement())));
@@ -88,20 +88,20 @@ public class FeatureFlagOperationTests
         var nonAdmin = await AuthenticateAsync(account.Id, oauthFamily, [AgentScopes.ManageFeatureFlags]);
         await AssertDeniedAsync(nonAdmin, tool, gateway, provider);
         await AssertDiscoveryAsync(principal, tool, provider, true);
-        (await ListAsync(tool, principal)).Single(flag => flag.Key == "redesign").Accounts.Should().BeEmpty();
+        (await ListAsync(tool, principal)).Single(flag => flag.Key == "astra_eval_trace").Accounts.Should().BeEmpty();
 
-        var output = await tool.ManageFeatureFlags(principal, FeatureFlagActions.EnableForAccounts, "redesign", ["ACCOUNT@example.com"]);
+        var output = await tool.ManageFeatureFlags(principal, FeatureFlagActions.EnableForAccounts, "astra_eval_trace", ["ACCOUNT@example.com"]);
 
         output.Should().Contain("account@example.com");
-        (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().Contain("redesign");
-        (await resolver.GetEnabledKeysForUserAsync(admin.Id)).Should().NotContain("redesign");
-        (await ListAsync(tool, principal)).Single(flag => flag.Key == "redesign").Accounts.Should().Equal(account.Email);
+        (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().Contain("astra_eval_trace");
+        (await resolver.GetEnabledKeysForUserAsync(admin.Id)).Should().NotContain("astra_eval_trace");
+        (await ListAsync(tool, principal)).Single(flag => flag.Key == "astra_eval_trace").Accounts.Should().Equal(account.Email);
         (await context.AgentAuditLogs.SingleAsync(log => log.OutcomeStatus == AgentOperationStatus.Succeeded))
             .UserId.Should().Be(admin.Id);
-        await tool.ManageFeatureFlags(principal, FeatureFlagActions.DisableForAccounts, "redesign", ["account@example.com"]);
-        (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().NotContain("redesign");
+        await tool.ManageFeatureFlags(principal, FeatureFlagActions.DisableForAccounts, "astra_eval_trace", ["account@example.com"]);
+        (await resolver.GetEnabledKeysForUserAsync(account.Id)).Should().NotContain("astra_eval_trace");
 
-        (await ListAsync(tool, principal)).Single(flag => flag.Key == "redesign").Accounts.Should().BeEmpty();
+        (await ListAsync(tool, principal)).Single(flag => flag.Key == "astra_eval_trace").Accounts.Should().BeEmpty();
 
         (await tool.ManageFeatureFlags(principal, FeatureFlagActions.Create, "admin_test", description: "Admin test"))
             .Should().Contain("admin_test");
@@ -116,10 +116,10 @@ public class FeatureFlagOperationTests
         var readOnly = await AuthenticateAsync(admin.Id, oauthFamily, isReadOnly: true);
         foreach (var action in FeatureFlagActions.Writes)
         {
-            (await tool.ManageFeatureFlags(readOnly, action, "redesign", [account.Email], "Description"))
+            (await tool.ManageFeatureFlags(readOnly, action, "astra_eval_trace", [account.Email], "Description"))
                 .Should().Be("Error: read_only_credential");
             var denied = await gateway.ExecuteAgentOperation(readOnly, FeatureFlagActions.ToolName,
-                JsonSerializer.SerializeToElement(new { action, key = "redesign", emails = new[] { account.Email }, description = "Description" }));
+                JsonSerializer.SerializeToElement(new { action, key = "astra_eval_trace", emails = new[] { account.Email }, description = "Description" }));
             denied.Operation.PolicyReason.Should().Be("read_only_credential");
         }
         if (!oauthFamily)
@@ -135,7 +135,7 @@ public class FeatureFlagOperationTests
                 .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.IsAdmin, false));
         admin.IsAdmin.Should().BeTrue();
         await AssertDeniedAsync(principal, tool, gateway, provider);
-        (await context.AppFeatureFlags.SingleAsync(flag => flag.Key == "redesign")).Enabled.Should().BeFalse();
+        (await context.AppFeatureFlags.SingleAsync(flag => flag.Key == "astra_eval_trace")).Enabled.Should().BeFalse();
     }
 
     private static async Task<ClaimsPrincipal> AuthenticateAsync(Guid userId, bool oauthFamily,
@@ -157,10 +157,10 @@ public class FeatureFlagOperationTests
         await AssertDiscoveryAsync(principal, tool, provider, false);
         foreach (var action in FeatureFlagActions.Writes.Prepend(FeatureFlagActions.List))
         {
-            var call = () => tool.ManageFeatureFlags(principal, action, "redesign", ["account@example.com"], "Description");
+            var call = () => tool.ManageFeatureFlags(principal, action, "astra_eval_trace", ["account@example.com"], "Description");
             await call.Should().ThrowAsync<McpProtocolException>().WithMessage("Unknown tool: 'manage_feature_flags'");
             var operation = await gateway.ExecuteAgentOperation(principal, FeatureFlagActions.ToolName,
-                JsonSerializer.SerializeToElement(new { action, key = "redesign", emails = new[] { "account@example.com" }, description = "Description" }));
+                JsonSerializer.SerializeToElement(new { action, key = "astra_eval_trace", emails = new[] { "account@example.com" }, description = "Description" }));
             operation.Operation.Status.Should().Be(AgentOperationStatus.Denied);
             operation.Operation.PolicyReason.Should().Be("tool_not_found");
         }

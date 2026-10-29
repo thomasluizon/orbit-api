@@ -209,11 +209,11 @@ public class FeatureFlagAccountsMigrationTests
         var context = factory.Context;
         var user = User.Create("Account", "account@example.com").Value;
         context.Users.Add(user);
-        context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("redesign", user.Id));
+        context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create("astra_eval_trace", user.Id));
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
-        await context.AppFeatureFlags.Where(flag => flag.Key == "redesign").ExecuteDeleteAsync();
+        await context.AppFeatureFlags.Where(flag => flag.Key == "astra_eval_trace").ExecuteDeleteAsync();
 
         (await context.AppFeatureFlagAccounts.CountAsync()).Should().Be(0);
     }

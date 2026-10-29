@@ -460,11 +460,8 @@ Production web serves the promoted `main` build directly through the DNS-only
 Cookie values do not select an origin. The never-applied build-routing Worker and
 separate redesign Render service configuration are retired.
 
-The [settled redesign flag audit](redesign-flag-audit.md) records the production
-and staging flag observations, retired client readers, and compatibility plan.
-The disabled `redesign` seed and `/api/config` response key remain for older
-Android builds until thomasluizon/orbit-tickets#685 raises the supported version
-floor and retires them.
+The [build selection and routing audit](redesign-flag-audit.md) records the
+retired client selectors and infrastructure disposition.
 
 Run `npm test --prefix infra` for the infrastructure tests. They use Node's built-in
 test runner without third-party test dependencies.

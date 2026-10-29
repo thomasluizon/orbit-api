@@ -20,7 +20,7 @@ public class FeatureFlagManagementTests
     [InlineData(FeatureFlagActions.Create)]
     public async Task Validator_AcceptsDocumentedWrites(string action)
     {
-        var request = new ManageFeatureFlagsCommand(AdminId, action, "redesign", ["account@example.com"], "A description");
+        var request = new ManageFeatureFlagsCommand(AdminId, action, "astra_eval_trace", ["account@example.com"], "A description");
         (await new ManageFeatureFlagsCommandValidator().ValidateAsync(request)).IsValid.Should().BeTrue();
     }
 

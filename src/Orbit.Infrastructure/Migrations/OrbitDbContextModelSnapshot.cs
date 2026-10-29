@@ -478,13 +478,6 @@ namespace Orbit.Infrastructure.Migrations
                         },
                         new
                         {
-                            Key = "redesign",
-                            Description = "Serve the redesigned web and Android builds to this account",
-                            Enabled = false,
-                            UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
                             Key = "offline_mode",
                             Description = "Enable offline mode with background sync",
                             Enabled = true,

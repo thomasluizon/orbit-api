@@ -19,11 +19,11 @@ public class AppFeatureFlagTests
     public void AccountTarget_GuardsIdentityAndSetsTimestamp()
     {
         var userId = Guid.NewGuid();
-        var account = AppFeatureFlagAccount.Create("redesign", userId);
-        account.FlagKey.Should().Be("redesign");
+        var account = AppFeatureFlagAccount.Create("astra_eval_trace", userId);
+        account.FlagKey.Should().Be("astra_eval_trace");
         account.UserId.Should().Be(userId);
         account.CreatedAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
-        Action create = () => AppFeatureFlagAccount.Create("redesign", Guid.Empty);
+        Action create = () => AppFeatureFlagAccount.Create("astra_eval_trace", Guid.Empty);
         create.Should().Throw<ArgumentException>();
     }
 
