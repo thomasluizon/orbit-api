@@ -276,19 +276,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private async Task<ChatInputParseResult> ParseChatInputsAsync(
         string message, string? history, IFormFile? image, string? clientContext, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(Request.Headers.AcceptLanguage))
-            ChatErrorLocalization.SetLocale(HttpContext,
-                LocaleHelper.IsPortugueseAcceptLanguage(Request.Headers.AcceptLanguage) ? "pt-BR" : "en");
         var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
         if (clientContextError is not null)
             return ChatInputParseResult.Failed(clientContextError);
 
-        if (string.IsNullOrWhiteSpace(parsedClientContext?.Locale)
-            && !string.IsNullOrWhiteSpace(Request.Headers.AcceptLanguage))
-            parsedClientContext = (parsedClientContext ?? new AgentClientContext()) with
-            {
-                Locale = LocaleHelper.IsPortugueseAcceptLanguage(Request.Headers.AcceptLanguage) ? "pt-BR" : "en"
-            };
         ChatErrorLocalization.SetLocale(HttpContext, parsedClientContext?.Locale);
 
         if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
