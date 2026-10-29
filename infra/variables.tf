@@ -25,6 +25,16 @@ variable "staging_ses_dlq_alert_email" {
   default     = ""
 }
 
+variable "production_api_digest" {
+  description = "Staging-verified GHCR digest for the production API image."
+  type        = string
+
+  validation {
+    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.production_api_digest))
+    error_message = "production_api_digest must be a sha256 image digest."
+  }
+}
+
 variable "production_web_digest" {
   description = "Published GHCR digest for the production web image."
   type        = string
