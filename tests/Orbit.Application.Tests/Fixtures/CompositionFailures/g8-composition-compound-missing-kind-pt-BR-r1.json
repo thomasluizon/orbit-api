@@ -1,0 +1,42 @@
+{
+  "caseId": "composition-compound-missing-kind-pt-BR",
+  "repeat": 1,
+  "answer": "Todos os hábitos\nHábitos: 2\nBeber água (Hoje)\nCaminhada (Hoje)\n\nMetas: 1\nHidratação constante: 0/10 sessões",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": null,
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

@@ -188,10 +188,6 @@ public partial class ProcessUserChatCommandHandler(
 
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
     private const string DescribeFeatureToolName = "describe_feature";
-    private const string EnglishToolFailureMessage = "I couldn't complete that. Please try again.";
-    private const string PortugueseToolFailureMessage = "Não consegui concluir isso. Tente novamente.";
-    private const string EnglishTruncationMessage = "This response was cut off before completion, so the result is partial.";
-    private const string PortugueseTruncationMessage = "Esta resposta foi interrompida antes do fim e pode estar incompleta.";
 
     private const int MaxSupportMessageLength = 5000;
 
@@ -841,9 +837,7 @@ public partial class ProcessUserChatCommandHandler(
 
     private static string AppendTruncationNotice(string? text, string? language)
     {
-        var notice = LocaleHelper.IsPortuguese(language)
-            ? PortugueseTruncationMessage
-            : EnglishTruncationMessage;
+        var notice = ErrorCopy.Resolve("chat.answer.truncated", LocaleHelper.IsPortuguese(language));
         return string.IsNullOrWhiteSpace(text) ? notice : $"{text}\n\n{notice}";
     }
 

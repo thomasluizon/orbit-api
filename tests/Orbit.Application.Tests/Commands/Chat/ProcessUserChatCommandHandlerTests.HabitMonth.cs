@@ -135,7 +135,9 @@ public partial class ProcessUserChatCommandHandlerTests
             .Should().Be(ChatStreamEvent.Final(response).ToJson());
         var legacy = ChatResponseNegotiation.ForClient(replay, null, []);
         legacy.Parts.Should().BeNull();
-        legacy.AiMessage.Should().Contain(language == "en" ? "Habit calendar" : "Calendário de hábitos");
+        legacy.AiMessage.Should().Contain(grandchild.Title)
+            .And.Contain(language == "pt-BR" ? "31/10/2026" : "10/31/2026")
+            .And.NotContain(language == "en" ? "Habit calendar:" : "Calendário de hábitos:");
         var unknown = ChatResponseNegotiation.ForClient(replay, client with { PartKinds = ["calendar"] }, []);
         unknown.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
         unknown.AiMessage.Should().NotBeNullOrWhiteSpace();

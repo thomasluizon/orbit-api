@@ -407,9 +407,7 @@ public partial class ProcessUserChatCommandHandler
     };
 
     private static string ToolFailureMessage(string? language) =>
-        LocaleHelper.IsPortuguese(language)
-            ? PortugueseToolFailureMessage
-            : EnglishToolFailureMessage;
+        ErrorCopy.Resolve("chat.answer.toolFailure", LocaleHelper.IsPortuguese(language));
 
     private static string CommittedWriteMessage(string? language, bool hasSavedActions) =>
         LocaleHelper.IsPortuguese(language)

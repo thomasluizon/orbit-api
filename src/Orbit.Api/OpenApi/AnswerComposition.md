@@ -52,6 +52,23 @@ the read operation and consumes no additional model call or message allowance. H
 `today`, the existing habit screen; `habits` is a data domain rather than a screen ID.
 Partial and recovery states keep their relevant typed blocks. Unknown directives are stripped. Model text and follow-ups retain grounding.
 Deterministic fallback text is already grounded by its typed producer.
+Readable capability fallbacks omit list scope and calendar title headings. Counts, item names,
+statuses, goal progress, date windows and calendar log meaning remain grounded facts. This
+formatter serves both current composition and stored blocks downgraded during replay.
+Negotiation resolves an explicit client locale before the profile language. A legacy client
+without a locale uses the profile language; no message pattern detects the language. Pending
+preview, empty-answer recovery, tool failure, truncation and habit-selection fallback copy use
+the existing `ErrorCopy` catalog in English and Brazilian Portuguese. Pending previews still
+require approval and never claim that a write has executed.
+
+`describe_feature` returns its existing markdown and metadata with an append-only model-facing
+`answer_scope` instruction, also present in the tool description. Only documented mechanics,
+screens, fields and steps support an explanation. `related_surfaces` identifies navigation
+destinations and does not document editing instructions. A missing detail calls for a brief
+acknowledgment in the person's language. This does not fabricate a UI route, execute another
+tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
+The deterministic replay tests verify the tool result supplied to the narrative model and the
+resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without
@@ -497,3 +514,22 @@ prompt convention. Their pt-BR versions below are for copy review.
 | Argument error | one_small_step must be a boolean. | one_small_step deve ser um booleano. |
 | Argument error | Return exactly one nonempty starting action and goal, each at most 200 characters on one line, with language en or pt-BR. | Retorne exatamente uma ação inicial e uma atividade, ambas preenchidas, cada uma em uma única linha com até 200 caracteres, com language en ou pt-BR. |
 | Domain guard | A starting step requires a goal, a single short action and a supported language. | Um passo inicial exige uma atividade, uma única ação curta e um idioma aceito. |
+
+## Capability fallback and feature-help copy review
+
+The following server copy is retained verbatim and moved into the localization catalog.
+The model instruction is shared by the tool description and its result. Its Portuguese
+translation is for copy review; the model receives the English instruction in both locales.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `chat.answer.pendingPreview` | Review the proposed changes before approving. | Revise as alterações propostas antes de aprovar. |
+| `chat.answer.empty` | I couldn't prepare an answer. Please try again. | Não consegui preparar uma resposta. Tente novamente. |
+| `chat.answer.toolFailure` | I couldn't complete that. Please try again. | Não consegui concluir isso. Tente novamente. |
+| `chat.answer.truncated` | This response was cut off before completion, so the result is partial. | Esta resposta foi interrompida antes do fim e pode estar incompleta. |
+| `chat.answer.selectHabit` | Which habit would you like to choose? | Qual hábito você quer escolher? |
+| `chat.answer.selectHabitReference` | Which habit would you like to use for “{0}”? | Qual hábito você quer usar para “{0}”? |
+| Removed scope heading | All habits; Remaining habits; Habits on this date | Todos os hábitos; Hábitos restantes; Hábitos nesta data |
+| Removed calendar title prefix | Habit calendar: | Calendário de hábitos: |
+| `DescribeFeatureTool.Description` | Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math. Use only mechanics, screens, fields and steps explicitly documented in markdown. related_surfaces lists destinations, not editing instructions. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Consulte as regras oficiais antes de explicar sequências, proteções de sequência, frequências, XP e níveis, notificações, limites do plano ou regras de agendamento. Use apenas os mecanismos, telas, campos e passos descritos no markdown. related_surfaces lista destinos, sem explicar como editar. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
+| `describe_feature.answer_scope` | Use only mechanics, screens, fields and steps explicitly documented in markdown. related_surfaces lists destinations, not editing instructions. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Use apenas os mecanismos, telas, campos e passos descritos no markdown. related_surfaces lista destinos, sem explicar como editar. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |

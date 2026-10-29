@@ -5,11 +5,16 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
 {
+    private const string AnswerScope = "Use only mechanics, screens, fields and steps explicitly documented in markdown. "
+        + "related_surfaces lists destinations, not editing instructions. "
+        + "When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. "
+        + "Answer in the person's language.";
+
     public string Name => "describe_feature";
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math.";
+        "Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math. " + AnswerScope;
 
     public object GetParameterSchema() => new
     {
@@ -42,7 +47,8 @@ public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
             display_name = explanation.DisplayName,
             related_capabilities = explanation.RelatedCapabilities,
             related_surfaces = explanation.RelatedSurfaces,
-            markdown = explanation.Body
+            markdown = explanation.Body,
+            answer_scope = AnswerScope
         }));
     }
 }
