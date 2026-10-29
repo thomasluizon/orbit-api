@@ -591,9 +591,10 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             && habit.ReminderTimes.SequenceEqual(new[] { 15 })), Arg.Any<CancellationToken>());
     }
 
-    private ProcessUserChatCommandHandler CreateHandler(IAgentOperationExecutor? executor = null, IPayGateService? payGate = null)
+    private ProcessUserChatCommandHandler CreateHandler(IAgentOperationExecutor? executor = null, IPayGateService? payGate = null,
+        AiToolRegistry? tools = null)
     {
-        var aiDeps = new ChatAiDependencies(_aiIntentService, _toolRegistry,
+        var aiDeps = new ChatAiDependencies(_aiIntentService, tools ?? _toolRegistry,
             _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo,
             _tagRepo, _templateRepo, _featureFlagService);

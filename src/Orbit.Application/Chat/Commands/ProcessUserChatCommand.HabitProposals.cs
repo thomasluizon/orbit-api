@@ -40,7 +40,7 @@ public partial class ProcessUserChatCommandHandler
                 logger.LogWarning("Agent operation {OperationId} rejected with {ReasonCode}", call.Name, validation.Errors[0].ErrorCode);
                 continue;
             }
-            calls[id] = call with { Args = HabitProposalValidator.LocalizeTextDates(arguments, language, request.Message) };
+            calls[id] = call with { Args = HabitProposalValidator.LocalizeTextDates(arguments, language, request.Message, preserveExistingTitles: true) };
         }
         CoalesceCreateCalls(calls, results);
     }

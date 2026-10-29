@@ -21,11 +21,12 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read individual habits, schedules, metrics and checklists. Use for habit listings, including compound requests for habits and goals; "
+        "Read individual habits, schedules, metrics and checklists. For an unstructured task and habit preview, use this lookup for existing IDs and stored titles; no calendar, habit month, profile or analytics read is needed. Use for habit listings, including compound requests for habits and goals; "
         + "pair with query_goals for the goals. A daily summary does not replace this listing. Call before answering habit questions; indexes do not ground replies. "
         + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries. "
         + "For a requested skip, call skip_habit or bulk_skip_habits after resolving the target, even when isSkippedOnDate is true; this read does not perform that action. "
         + "For choosing records or resolving a write target, set for_selection=true and orbit_read_complete=false, then call ask. "
+        + "For a restart proposal, set for_selection=false and orbit_read_complete=false, then prepare the complete bulk_reschedule_habits preview yourself; this account read needs no selection question. "
         + "A selection lookup never finishes the answer or authorizes a write, even with one candidate. Multiple matches require the person's choice.";
 
     public object GetParameterSchema() => new
@@ -33,7 +34,7 @@ public class QueryHabitsTool(
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            for_selection = new { type = JsonSchemaTypes.Boolean, description = "True for a choice or pick list, or to resolve an unclear write target. False only for a read answer. Selection requires ask before any write." },
+            for_selection = new { type = JsonSchemaTypes.Boolean, description = "True when the person must choose records or resolve an unclear write target. False for read answers and account reads used to prepare a resolved proposal, including restart plans. Selection requires ask before any write." },
             relative_period = RelativeReadPeriod.DaySchema(),
             search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
             date = new { type = JsonSchemaTypes.String, description = "Schedule on YYYY-MM-DD or today, including done entries. Null is_completed returns the full schedule." },

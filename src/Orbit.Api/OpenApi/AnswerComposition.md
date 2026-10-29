@@ -229,7 +229,7 @@ person-visible copy is added or changed.
 | frequency_unit description | OneTime for a single dated action or deadline-only item. Ongoing avoid habits default to Day/1 unless another cadence was requested. A restriction starting before an event, including a 24-hour restriction, uses Day with frequency_quantity=1, due_date at its start and inclusive end_date on the event; never OneTime on its first day. | OneTime para uma ação isolada com data ou um item apenas com prazo final. Hábitos contínuos de evitar um comportamento usam Day/1 por padrão, salvo outra frequência solicitada. Uma restrição que começa antes de um evento, inclusive uma restrição de 24 horas, usa Day com frequency_quantity=1, due_date no início e end_date inclusiva no evento; nunca OneTime no primeiro dia. |
 | due_date description | YYYY-MM-DD. For a restriction's start, subtract its own offset from its referenced event's local date and time. A deadline-only item uses the event date with due_end_time at the event, never another preparation's start date. Otherwise defaults to today. | YYYY-MM-DD. Para o início de uma restrição, subtraia seu próprio intervalo da data e hora locais do evento ao qual ela se refere. Um item apenas com prazo final usa a data do evento com due_end_time no evento, nunca a data de início de outra preparação. Nos demais casos, o padrão é hoje. |
 | end_date description | YYYY-MM-DD, inclusive. A restriction starting before an event, including a 24-hour restriction, must end on that event's date with Day/1, never null. Omit or null for OneTime events and deadline-only items. | YYYY-MM-DD, inclusive. Uma restrição que começa antes de um evento, inclusive uma restrição de 24 horas, deve terminar na data desse evento com Day/1, nunca null. Omita ou use null para eventos OneTime e itens apenas com prazo final. |
-| due_end_time description | HH:mm end time or deadline. A deadline-only item that ends at an event uses that event's clock time, with due_date on the event date. A restriction starting before the event keeps its own start due_date and its inclusive end_date on the event. Leave due_time absent or null when no start time was supplied; do not drop a supplied collection deadline. | HH:mm do término ou prazo final. Um item apenas com prazo final que termina em um evento usa o horário desse evento, com due_date na data do evento. Uma restrição que começa antes do evento mantém a própria due_date de início e a end_date inclusiva no evento. Deixe due_time ausente ou null quando nenhum horário de início tiver sido informado; não omita um prazo de coleta informado. |
+| due_end_time description | HH:mm end time or deadline. Suggestion times with zero seconds are accepted as HH:mm:ss. A deadline-only item that ends at an event uses that event's clock time, with due_date on the event date. A restriction starting before the event keeps its own start due_date and its inclusive end_date on the event. Leave due_time absent or null when no start time was supplied; do not drop a supplied collection deadline. | HH:mm do término ou prazo final. Horários das sugestões com segundos iguais a zero também são aceitos no formato HH:mm:ss. Um item apenas com prazo final que termina em um evento usa o horário desse evento, com due_date na data do evento. Uma restrição que começa antes do evento mantém a própria due_date de início e a end_date inclusiva no evento. Deixe due_time ausente ou null quando nenhum horário de início tiver sido informado; não omita um prazo de coleta informado. |
 
 `GateNine_MedicalPreviewAndApprovedCommandPreserveCapturedBounds` replays the real
 gate 9a arguments through the model-service port and checks the held preview and
@@ -313,9 +313,17 @@ results, never patterns in the person's message.
 
 Restart requests use the existing `query_habits` read with `date: "today"`,
 `is_completed: false` and `include_overdue: true`. The model gathers any remaining
-pages before proposing a complete plan. The model chooses a smaller set for today
-and later dates for the rest from those results and the person's preferences.
-No message pattern routes this behavior.
+pages before proposing a complete plan, with `for_selection: false` and
+`orbit_read_complete: false`. This read prepares a proposal rather than asking
+the person to select records. A restart request is actionable without `ask`, a
+pick list or a question about count or dates. The preview supplies approval,
+editing and rejection.
+
+The model keeps strictly fewer habits today than the complete missed and due set.
+If the person names a count, it keeps exactly that count. Every other habit gets
+a concrete date after the person's local today and within the next seven days.
+The model checks those constraints before emitting the complete proposal.
+No message pattern routes this behavior or rewrites the model's tool arguments.
 
 `bulk_reschedule_habits` exposes optional `revised_items` for individual dates:
 
@@ -349,10 +357,17 @@ FluentValidation validator and the domain's update guards. It preserves cadence,
 titles, times, reminders, checklists and historical logs. Rescheduling retains the
 app's existing due-date/recurrence semantics; this is not a history rewrite.
 
-The paired web and Android ticket must render all preview item dates, retain the
-existing controls and add real-call en and pt-BR cases in `evals/astra`, including
-approval with independent persisted readback and pass^3. Those consumer evals are
-owned by the coordinator. Local structured model-port replays do not establish
+When the person rejects a plan and requests another, the model proposes different
+per-habit dates in a held preview rather than returning a plain habit list. After
+cancellation it uses `bulk_reschedule_habits` with complete `revised_items` for a
+new preview. Edits to an awaiting preview use `revise_pending_changes`, preserving
+unmentioned items. The cancelled preview cannot be approved.
+
+The paired web and Android ticket thomasluizon/orbit-tickets#1868 renders all
+preview item dates and retains the existing controls. The real-call en and pt-BR
+cases in `evals/astra`, including approval with independent persisted readback and
+pass^3, belong to thomasluizon/orbit-tickets#1869. Those consumer evals are owned by
+the coordinator. Local structured model-port replays do not establish
 real-call pass^3. Deploy the API before the paired consumer. Tracks
 thomasluizon/orbit-tickets#1855.
 
@@ -421,6 +436,21 @@ reminders with an empty offset array; empty days and checklists remain empty arr
 The model must not invent a quantity, rename a draft or replace its activity.
 No message pattern routes or triggers a tool.
 
+The message and `query_habits` supply this proposal's task and reuse facts.
+`suggest_habits` supplies additional ideas only when requested. The prompt and
+tool descriptions exclude calendar, habit-month, profile and analytics reads
+from organizing a message. All tools remain available without keyword gating.
+Bulk items normalize suggestion times such as `08:05:00` to `08:05` when seconds
+are zero before validation, preview and execution. Nonzero seconds remain invalid.
+When a new recurring item supplies `start_date` without `due_date`, its preview
+and held execution arguments also carry that first date as `due_date`, retaining
+the recurrence anchor. Both clock bounds and nested items follow this normalization.
+With a supplied recurrence anchor, `start_date` remains editable and `due_date`
+is display-only because creation uses the anchor to compute the first occurrence.
+Revising that anchor updates a matching displayed first date before validation.
+An existing `habit_id` takes precedence over a title match, and reuse binds the
+title field to the stored spelling before holding the proposal.
+
 Bulk creation preview `items` append optional nullable string `habitType`: `Task`
 for one-time items, `Habit` for recurring or flexible items, and `General` for
 unscheduled general items. The server derives it from structured schedule fields
@@ -465,6 +495,10 @@ contract. Cover en and pt-BR dumps, including an existing habit, with three cons
 real-call successes and persisted readback after approval. The local scripted model
 replays in `tests/Orbit.Application.Tests/Fixtures/BrainDumps` are deterministic
 coverage and do not substitute for that real-call gate.
+The captured reuse r1 already supplies `habit_id`; its typed API preview retains
+both `entityId` and the `habit_id` field's proposed UUID. The paired visible-answer
+projection must retain that identity for evaluation. Dropping identifiers from
+the projection cannot establish that the model omitted reuse.
 The added model instructions and proposed consumer labels are reported in
 [BrainDumpCopy.md](BrainDumpCopy.md) in en and pt-BR for coordinator copy approval.
 
