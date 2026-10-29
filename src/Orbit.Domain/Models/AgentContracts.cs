@@ -370,7 +370,6 @@ public static class AgentCapabilityIds
     public const string ProfileReadBasic = "profile.read.basic";
     public const string ProfileReadSensitive = "profile.read.sensitive";
     public const string ProfilePreferencesWrite = "profile.preferences.write";
-    public const string ProfilePremiumAppearanceWrite = "profile.premium-appearance.write";
     public const string ProfileAiSettingsWrite = "profile.ai-settings.write";
     public const string ProfileAiSummaryWrite = "profile.ai-summary.write";
     public const string ProfileProactiveAstraWrite = "profile.proactive-astra.write";

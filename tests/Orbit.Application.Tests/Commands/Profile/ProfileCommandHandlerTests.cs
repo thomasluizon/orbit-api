@@ -178,51 +178,6 @@ public class ProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task SetColorScheme_Valid_StoresTheGrantedAccentAndSaves()
-    {
-        var user = CreateTestUser();
-        SetupUserFound(user);
-
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
-        var command = new SetColorSchemeCommand(UserId, "purple");
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        user.ColorScheme.Should().Be(ColorSchemes.Granted);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task SetColorScheme_UserNotFound_ReturnsFailure()
-    {
-        SetupUserNotFound();
-
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
-        var command = new SetColorSchemeCommand(UserId, "purple");
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
-    }
-
-    [Fact]
-    public async Task SetColorScheme_Null_ClearsScheme()
-    {
-        var user = CreateTestUser();
-        SetupUserFound(user);
-
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
-        var command = new SetColorSchemeCommand(UserId, null);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        user.ColorScheme.Should().BeNull();
-    }
-
-    [Fact]
     public async Task SetThemePreference_Valid_UpdatesAndSaves()
     {
         var user = CreateTestUser();

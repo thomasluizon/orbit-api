@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
 using Orbit.Api.Controllers;
@@ -9,22 +8,17 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public class ColorSchemeDeprecationTests
 {
     [Fact]
-    public void RetiringInputs_NameTheOwningTicket()
+    public void RetiredWrite_HasNoControllerRequestCommandOrDomainMutator()
     {
-        const string ticket = "thomasluizon/orbit-tickets#685";
-        MemberInfo[] members =
-        [
-            typeof(ProfileController).GetMethod(nameof(ProfileController.SetColorScheme))!,
-            typeof(ProfileController).GetNestedType("SetColorSchemeRequest")!,
-            typeof(ProfileController.ApplyOnboardingRequest).GetProperty("ColorScheme")!,
-            typeof(ApplyOnboardingCommand).GetProperty("ColorScheme")!
-        ];
-        foreach (var member in members)
-        {
-            var attribute = member.GetCustomAttribute<ObsoleteAttribute>();
-            attribute.Should().NotBeNull();
-            attribute!.Message.Should().Contain(ticket);
-        }
+        typeof(ProfileController).GetMethod("SetColorScheme").Should().BeNull();
+        typeof(ProfileController).GetNestedType("SetColorSchemeRequest").Should().BeNull();
+        typeof(ApplyOnboardingCommand).Assembly.GetType(
+            "Orbit.Application.Profile.Commands.SetColorSchemeCommand").Should().BeNull();
+        typeof(ApplyOnboardingCommand).Assembly.GetType(
+            "Orbit.Application.Profile.Commands.SetColorSchemeCommandHandler").Should().BeNull();
+        typeof(Orbit.Domain.Entities.User).GetMethod("SetColorScheme").Should().BeNull();
+        typeof(ProfileController.ApplyOnboardingRequest).GetProperty("ColorScheme").Should().BeNull();
+        typeof(ApplyOnboardingCommand).GetProperty("ColorScheme").Should().BeNull();
     }
 
     [Theory]
@@ -32,7 +26,7 @@ public class ColorSchemeDeprecationTests
     [InlineData("openapi_v2.json")]
     [InlineData("openapi_v1-r2.json")]
     [InlineData("openapi_v2-r2.json")]
-    public void GeneratedOpenApi_DeprecatesColorSchemeInputsAndPreservesCompatibility(string file)
+    public void GeneratedOpenApi_RemovesColorSchemeInputsAndPreservesReadContracts(string file)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
             "../../../../..", "src/Orbit.Api", file));
@@ -40,11 +34,10 @@ public class ColorSchemeDeprecationTests
         var paths = document.RootElement.GetProperty("paths");
         var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
 
-        paths.GetProperty("/api/Profile/color-scheme").GetProperty("put")
-            .GetProperty("deprecated").GetBoolean().Should().BeTrue();
-        schemas.GetProperty("SetColorSchemeRequest").GetProperty("deprecated").GetBoolean().Should().BeTrue();
+        paths.TryGetProperty("/api/Profile/color-scheme", out _).Should().BeFalse();
+        schemas.TryGetProperty("SetColorSchemeRequest", out _).Should().BeFalse();
         var onboarding = schemas.GetProperty("ApplyOnboardingRequest").GetProperty("properties");
-        onboarding.GetProperty("colorScheme").GetProperty("deprecated").GetBoolean().Should().BeTrue();
+        onboarding.TryGetProperty("colorScheme", out _).Should().BeFalse();
         onboarding.GetProperty("weekStartDay").TryGetProperty("deprecated", out _).Should().BeFalse();
         paths.GetProperty("/api/Profile/onboarding/apply").GetProperty("post")
             .TryGetProperty("deprecated", out _).Should().BeFalse();
@@ -53,7 +46,7 @@ public class ColorSchemeDeprecationTests
 
         var profile = schemas.GetProperty("ProfileResponse");
         profile.GetProperty("required").EnumerateArray().Select(item => item.GetString())
-            .Should().Contain(["aiMemoryEnabled", "adRewardsClaimedToday", "colorScheme"]);
+            .Should().Contain(["aiMemoryEnabled", "adRewardsClaimedToday", "colorScheme", "handle"]);
         profile.GetProperty("properties").TryGetProperty("publicProfile", out _).Should().BeTrue();
     }
 }

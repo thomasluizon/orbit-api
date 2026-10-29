@@ -13582,89 +13582,6 @@
         }
       }
     },
-    "/api/Profile/color-scheme": {
-      "put": {
-        "tags": [
-          "Profile"
-        ],
-        "parameters": [
-          {
-            "name": "api-version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetColorSchemeRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetColorSchemeRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetColorSchemeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "deprecated": true
-      }
-    },
     "/api/Profile/onboarding": {
       "put": {
         "tags": [
@@ -17763,8 +17680,7 @@
           "habits",
           "firstLog",
           "goal",
-          "weekStartDay",
-          "colorScheme"
+          "weekStartDay"
         ],
         "type": "object",
         "properties": {
@@ -17805,13 +17721,6 @@
               "string"
             ],
             "format": "int32"
-          },
-          "colorScheme": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "deprecated": true
           }
         }
       },
@@ -26935,21 +26844,6 @@
             "type": "boolean"
           }
         }
-      },
-      "SetColorSchemeRequest": {
-        "required": [
-          "colorScheme"
-        ],
-        "type": "object",
-        "properties": {
-          "colorScheme": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "deprecated": true
       },
       "SetLanguageRequest": {
         "required": [

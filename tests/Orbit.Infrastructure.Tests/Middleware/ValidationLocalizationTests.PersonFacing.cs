@@ -204,7 +204,7 @@ public partial class ValidationLocalizationTests
                 "UpdateHabit" => Validate(new UpdateHabitCommandValidator(Substitute.For<IGenericRepository<Habit>>()),
                     new UpdateHabitCommand(id, id, "Read", null, null, null, Options: new UpdateHabitCommandOptions(ChecklistItems: items))),
                 "OnboardingHabit" => Validate(new ApplyOnboardingCommandValidator(),
-                    new ApplyOnboardingCommand(id, [new ApplyHabitInput("Read", null, null, null, null, ChecklistItems: items)], null, null, null, null)),
+                    new ApplyOnboardingCommand(id, [new ApplyHabitInput("Read", null, null, null, null, ChecklistItems: items)], null, null, null)),
                 _ => throw new ArgumentOutOfRangeException(nameof(flow))
             };
         }
@@ -256,14 +256,14 @@ public partial class ValidationLocalizationTests
             "CreateHabit" => Validate(new CreateHabitCommandValidator(), new CreateHabitCommand(id, Text("Title", "Read"), Text("Description", "Notes"), unit, frequency, Emoji: Text("Emoji", "📚"))),
             "CreateSubHabit" => Validate(new CreateSubHabitCommandValidator(), new CreateSubHabitCommand(id, id, Text("Title", "Read"), Text("Description", "Notes"), FrequencyQuantity: frequency, Emoji: Text("Emoji", "📚"))),
             "UpdateHabit" or "UpdateSubHabit" => ValidateUpdatedHabitAsync(flow == "UpdateSubHabit", field, value),
-            "OnboardingHabit" => Validate(new ApplyOnboardingCommandValidator(), new ApplyOnboardingCommand(id, [new ApplyHabitInput(Text("Title", "Read"), Text("Description", "Notes"), Text("Emoji", "📚"), unit, frequency)], null, null, null, null)),
+            "OnboardingHabit" => Validate(new ApplyOnboardingCommandValidator(), new ApplyOnboardingCommand(id, [new ApplyHabitInput(Text("Title", "Read"), Text("Description", "Notes"), Text("Emoji", "📚"), unit, frequency)], null, null, null)),
             "BulkHabit" => Validate(new BulkCreateHabitsCommandValidator(), new BulkCreateHabitsCommand(id, [new BulkHabitItem(Text("Title", "Read"), null, unit, frequency, Emoji: Text("Emoji", "📚"), Tags: field == "Tags[0]" ? [value]
                 : field == "TagsCount" ? Enumerable.Repeat("Read", int.Parse(value, CultureInfo.InvariantCulture)).ToArray() : null)])),
             "CreateTag" => Validate(new CreateTagCommandValidator(), new CreateTagCommand(id, Text("Name", "Read"), Text("Color", "#123456"))),
             "UpdateTag" => Validate(new UpdateTagCommandValidator(), new UpdateTagCommand(id, id, Text("Name", "Read"), Text("Color", "#123456"))),
             "CreateGoal" => Validate(new CreateGoalCommandValidator(), new CreateGoalCommand(id, Text("Title", "Read"), Text("Description", "Notes"), target, Text("Unit", "pages"), null)),
             "UpdateGoal" => Validate(new UpdateGoalCommandValidator(), new UpdateGoalCommand(id, id, Text("Title", "Read"), Text("Description", "Notes"), target, Text("Unit", "pages"), null)),
-            "OnboardingGoal" => Validate(new ApplyOnboardingCommandValidator(), new ApplyOnboardingCommand(id, [], null, new ApplyGoalInput(Text("Title", "Read"), Text("Description", "Notes"), target, Text("Unit", "pages")), null, null)),
+            "OnboardingGoal" => Validate(new ApplyOnboardingCommandValidator(), new ApplyOnboardingCommand(id, [], null, new ApplyGoalInput(Text("Title", "Read"), Text("Description", "Notes"), target, Text("Unit", "pages")), null)),
             "GoalProgress" => Validate(new UpdateGoalProgressCommandValidator(), new UpdateGoalProgressCommand(id, id, field == "NewValue" ? decimal.Parse(value, CultureInfo.InvariantCulture) : 0, Text("Note", "Notes"))),
             "Support" => Validate(new SendSupportCommandValidator(), new SendSupportCommand(id, Text("Name", "Reader"), Text("Email", "reader@example.com"), Text("Subject", "Help"), Text("Message", "Help"))),
             "Referral" => Validate(new ProcessReferralCodeCommandValidator(), new ProcessReferralCodeCommand(id, value)),

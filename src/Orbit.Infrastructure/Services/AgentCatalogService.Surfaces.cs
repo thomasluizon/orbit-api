@@ -68,7 +68,7 @@ public partial class AgentCatalogService
                 "Stores identity, timezone, language, light or dark mode, and week-start preferences. Orbit uses one accent.",
                 ["Open Profile.", "Review identity, plan, and settings.", "Update timezone, language, light or dark mode, or week-start preferences."],
                 ["Orbit uses one accent with light or dark mode.", "Preference changes are low-risk writes."],
-                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfilePreferencesWrite, AgentCapabilityIds.ProfilePremiumAppearanceWrite],
+                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfilePreferencesWrite],
                 ["ProfileController.GetProfile", "ProfileController.SetTimezone"]),
 
             new AppSurface(

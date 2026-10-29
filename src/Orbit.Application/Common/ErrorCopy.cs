@@ -300,7 +300,6 @@ public static partial class ErrorCopy
         (DomainErrors.InvalidEmailFormat.Code, "Check the email address. It needs an at sign and a domain.", "Confira o e-mail. Ele precisa de um arroba e um domínio."),
         (DomainErrors.InvalidTimezone.Code, "We do not recognise the timezone {0}. Pick one from the list.", "Não reconhecemos o fuso horário {0}. Escolha um da lista."),
         (DomainErrors.InvalidThemePreference.Code, "Choose the dark or the light theme.", "Escolha o tema escuro ou o claro."),
-        (DomainErrors.InvalidColorScheme.Code, "Choose a colour scheme from the list.", "Escolha um esquema de cores da lista."),
         (DomainErrors.InvalidWeekStartDay.Code, "Choose Sunday or Monday as the first day of the week.", "Escolha domingo ou segunda como primeiro dia da semana."),
     ];
 

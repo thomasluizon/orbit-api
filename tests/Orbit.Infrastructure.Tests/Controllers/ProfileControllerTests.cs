@@ -233,30 +233,6 @@ public class ProfileControllerTests
     }
 
     [Fact]
-    public async Task SetColorScheme_Success_ReturnsNoContent()
-    {
-        _mediator.Send(Arg.Any<SetColorSchemeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-
-        var request = new ProfileController.SetColorSchemeRequest("blue");
-        var result = await _controller.SetColorScheme(request, CancellationToken.None);
-
-        result.Should().BeOfType<NoContentResult>();
-    }
-
-    [Fact]
-    public async Task SetColorScheme_Failure_ReturnsBadRequest()
-    {
-        _mediator.Send(Arg.Any<SetColorSchemeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Error"));
-
-        var request = new ProfileController.SetColorSchemeRequest("invalid");
-        var result = await _controller.SetColorScheme(request, CancellationToken.None);
-
-        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
     public async Task CompleteOnboarding_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<CompleteOnboardingCommand>(), Arg.Any<CancellationToken>())
@@ -285,11 +261,17 @@ public class ProfileControllerTests
         _mediator.Send(Arg.Any<ApplyOnboardingCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
-        var request = new ProfileController.ApplyOnboardingRequest(
-            [new ApplyHabitInput("Drink water", null, null, null, null)], null, null, 1, "purple");
-        var result = await _controller.ApplyOnboarding(request, CancellationToken.None);
+        var request = JsonSerializer.Deserialize<ProfileController.ApplyOnboardingRequest>(
+            """{"habits":[{"title":"Drink water"}],"weekStartDay":1,"colorScheme":"magenta"}""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        request.Should().NotBeNull();
+        var result = await _controller.ApplyOnboarding(request!, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(response);
+        await _mediator.Received(1).Send(
+            Arg.Is<ApplyOnboardingCommand>(command => command.UserId == UserId
+                && command.WeekStartDay == 1 && command.Habits.Count == 1),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -298,7 +280,7 @@ public class ProfileControllerTests
         _mediator.Send(Arg.Any<ApplyOnboardingCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<ApplyOnboardingResponse>("Error"));
 
-        var request = new ProfileController.ApplyOnboardingRequest(null, null, null, null, null);
+        var request = new ProfileController.ApplyOnboardingRequest(null, null, null, null);
         var result = await _controller.ApplyOnboarding(request, CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);

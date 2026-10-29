@@ -24,8 +24,7 @@ public class ApplyOnboardingCommandValidatorTests
         Habits: new[] { ValidHabit() },
         FirstLog: null,
         Goal: ValidGoal(),
-        WeekStartDay: 1,
-        ColorScheme: "purple");
+        WeekStartDay: 1);
 
     [Fact]
     public void Valid_NoErrors() =>

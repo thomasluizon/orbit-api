@@ -523,18 +523,6 @@ public partial class AgentCatalogService
                 ]),
 
             new AgentCapability(
-                AgentCapabilityIds.ProfilePremiumAppearanceWrite,
-                "Legacy Color Scheme Write",
-                "Accepts legacy HTTP color scheme writes. Orbit uses one accent and offers light or dark mode.",
-                ProfileDomain,
-                AgentScopes.WriteProfilePreferences,
-                AgentRiskClass.Low,
-                IsMutation: true,
-                IsPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.None,
-                ControllerActionKeys: ["ProfileController.SetColorScheme"]),
-
-            new AgentCapability(
                 AgentCapabilityIds.ProfileAiSummaryWrite,
                 "Write AI Summary Settings",
                 "Updates AI summary preferences.",
