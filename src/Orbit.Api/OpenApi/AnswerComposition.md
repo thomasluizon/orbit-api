@@ -64,8 +64,21 @@ A single record selector uses `choice`, including when the client also supports
 typed definition before negotiating a renderable single selector to `choice`.
 Per-question free-text settings own question forms; the top-level flag applies to
 choice only. Invalid ask calls return the precise failed constraint to the model
-for one corrected call in the same turn, then prose fallback. No question prepares
-a write. See [ask validation and bilingual copy](AskValidation.md).
+and continue through the normal tool loop within its round and token limits.
+The continuation can read, prepare a write preview, retry a necessary question once,
+or answer in prose. Only a validated, accepted ask ends the reply with a question
+block; an invalid ask never discards recovery tool calls. The ask retry limit applies
+to question attempts, not other tools. No question prepares a write. See
+[ask validation and bilingual copy](AskValidation.md).
+
+The failed-ask recovery path adds the following model-facing diagnostics. These
+are tool feedback, not fixed replies to the person. Existing question retry and
+plain-text fallback instructions remain available.
+
+| en | pt-BR |
+| --- | --- |
+| The ask retry limit has been reached. | O limite de tentativas de ask foi atingido. |
+| A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request. | A chamada de ask que falhou não emitiu uma pergunta. Continue o pedido original com as ferramentas adequadas quando as informações estiverem claras; um pedido que já pode ser atendido não precisa de ask. |
 
 Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain

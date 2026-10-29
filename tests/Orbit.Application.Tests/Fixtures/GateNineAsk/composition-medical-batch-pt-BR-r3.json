@@ -1,0 +1,24 @@
+{
+  "caseId": "composition-medical-batch-pt-BR",
+  "repeat": 3,
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "question",
+        "question": null,
+        "title": null,
+        "multiSelect": false,
+        "allowFreeText": false,
+        "intro": null,
+        "progress": null,
+        "questions": null,
+        "options": null,
+        "action": null,
+        "items": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Failed"
+    }
+  ]
+}

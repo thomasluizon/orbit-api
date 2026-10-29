@@ -52,6 +52,8 @@ public partial class ProcessUserChatCommandHandler
             || flags.Contains(FeatureFlagKeys.AstraPartsDisabled)
             || request.ClientContext?.SupportsParts != true || results.AskBlock is not null)
             return Failed("Interactive questions are unavailable.");
+        if (results.AskAttempts >= 2)
+            return Failed("The ask retry limit has been reached.");
         results.AskAttempts++;
         results.CanRetryAsk = results.AskAttempts < 2 && request.ClientContext.PartKinds?.Any(IsAskKind) == true;
         if (!CanAttemptAsk(call.Args, request.ClientContext))
@@ -108,9 +110,6 @@ public partial class ProcessUserChatCommandHandler
         return (ordered.Select(NormalizeExecutionArguments).ToList(), defer);
     }
 
-    private static AiResponse AskContinuation(AiResponse response, AiResponse previous, bool deferAsk, ToolExecutionAccumulator results) =>
-        !deferAsk && previous.ToolCalls!.Any(call => call.Name == "ask") ? LimitAskContinuation(response, results) : response;
-
     private static bool CanPrepareBesideAsk(AiToolCall call, AiToolCall ask, IReadOnlyList<Habit> habits)
     {
         if (ask.Args.ValueKind != JsonValueKind.Object || call.Args.ValueKind != JsonValueKind.Object
@@ -158,13 +157,10 @@ public partial class ProcessUserChatCommandHandler
         || string.Equals(HabitNameMatcher.Normalize(id ?? string.Empty), HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal)
         || label is not null && string.Equals(HabitNameMatcher.Normalize(label), HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal);
 
-    private static AiResponse LimitAskContinuation(AiResponse response, ToolExecutionAccumulator results) =>
-        results.CanRetryAsk && response.ToolCalls is [{ Name: "ask" }]
-            ? response : response with { ToolCalls = null };
-
     private static string AskRecoveryInstruction(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
-        results.CanRetryAsk
+        " A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request."
+        + (results.CanRetryAsk
             ? " Retry ask once with valid arguments and a supported form: " + string.Join(", ", request.ClientContext?.PartKinds?.Where(IsAskKind) ?? [])
                 + ". choice requires question and options; pickList requires title, action and items; question requires questions."
-            : " Ask in plain text instead.";
+            : " Ask in plain text instead.");
 }
