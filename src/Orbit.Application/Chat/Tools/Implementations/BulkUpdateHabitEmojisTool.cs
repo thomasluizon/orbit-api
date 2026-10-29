@@ -22,7 +22,8 @@ public sealed partial class BulkUpdateHabitEmojisTool(
     public string Name => "bulk_update_habit_emojis";
 
     public string Description =>
-        "Infer habit emojis, set a requested emoji, or clear icons for all matches. For without an icon / sem ícone, use filter.has_emoji=false. Inference preserves existing icons unless the user asks to replace them; then set replace_existing=true.";
+        "Infer habit emojis, set a requested emoji, or clear icons for all matches. For without an icon / sem ícone, use filter.has_emoji=false. Inference preserves existing icons unless the user asks to replace them; then set replace_existing=true. "
+        + "Use this tool only when the person requests an emoji change. Never infer emojis as a follow-up to a brain dump preview; put a requested emoji change to a reused habit in its bulk_create_habits item with habit_id instead.";
 
     public object GetParameterSchema() => new
     {

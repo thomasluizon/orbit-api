@@ -25,6 +25,9 @@ public class AstraBehaviourPromptTests
 
         prompt.Should().Contain(Orbit.Application.Chat.HabitModelInstructions.BrainDump);
         prompt.Should().Contain("one combined approval preview with bulk_create_habits")
+            .And.Contain("Every creation and every requested configuration change to a reused habit belongs in that one preview, the reused item carrying its habit_id and only the requested fields; never split such a change into a separate write.")
+            .And.Contain("Add no write the message did not request, such as inferred emojis, tags or updates.")
+            .And.Contain("When the message explicitly asks to log or skip an occurrence, which bulk_create_habits cannot carry, call log_habit, skip_habit or their bulk tools in the same round as the preview.")
             .And.Contain("Keep every actionable item")
             .And.Contain("habit_id on reused items")
             .And.Contain("Reuse suggest_habits")

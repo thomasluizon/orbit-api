@@ -76,6 +76,8 @@ public class ChatToolMetadataTests
         AssertTool(getReferralCodeTool, "get_referral_code", "referral", "type");
         AssertTool(new SetProactiveAstraTool(mediator), "set_proactive_astra", "proactive", "enabled");
         AssertTool(bulkUpdateHabitEmojisTool, "bulk_update_habit_emojis", "emojis", "infer_from_title");
+        bulkUpdateHabitEmojisTool.Description.Should().Contain("Use this tool only when the person requests an emoji change.")
+            .And.Contain("Never infer emojis as a follow-up to a brain dump preview; put a requested emoji change to a reused habit in its bulk_create_habits item with habit_id instead.");
         AssertTool(bulkUpdateHabitsTool, "bulk_update_habits", "complete", "updates");
         AssertTool(bulkRescheduleHabitsTool, "bulk_reschedule_habits", "reschedule", "due_date");
         AssertTool(bulkLogHabitsTool, "bulk_log_habits", "matching", "habit_ids");
