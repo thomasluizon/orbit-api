@@ -18,6 +18,40 @@ If the client cannot render the resulting form, the model receives a capability
 error rather than a stored block. Every path leaves writes behind the existing
 approval flow.
 
+## Resolved targets and compound requests
+
+An id or an exact unique title resolves a habit. Different actions on different
+identified habits do not require choosing between those habits. This instruction
+is shared by the global prompt, dynamic ask context and tool description.
+The validator checks the ask definition, not the person's intent: the captured
+Water/Walk choice is structurally valid and cannot alone prove ambiguity.
+Rejecting every choice among unique titles would also reject an intentional pick.
+No server path reads message patterns to infer that intent.
+
+If the model emits a read after ask, the read runs and the premature ask returns a
+typed failure without issuing a block. Ordinary continuation reassesses the original
+request from the read result, within the existing turn limits. It can call the write
+tools for resolved changes instead of being restricted to another ask. The replay
+uses the failing capture followed by the successful captured rename and skip calls.
+
+For a genuine choice, an existing habit write can reach the ordinary approval
+pipeline only when its target resolves uniquely and is outside every candidate
+identified by the question's option ids or exact titles. Unrecognized candidates,
+unspecified targets and writes touching a candidate remain withheld. Independent
+previews appear beside the question, whether the model puts the write before or
+after ask. No missing write call is invented. All approvals still use the existing
+pending-operation policy and combined account preview.
+
+## Additional copy for coordinator approval
+
+These additions are model-facing English at runtime. Portuguese is the review
+translation. There is no new fixed end-user answer.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| Shared target-resolution instruction | A habit identified by id or by an exact unique title is resolved. Different actions on different identified habits are not ambiguous. Ask only for input that is still missing after reading account data. In a compound request, call the independent write tools before ask so their approval preview appears beside the question; withhold only changes that depend on the answer. Never ask the person to choose again between already identified targets. A single pick uses choice even when it has a heading; use question for two or more fields. | Um hábito identificado pelo id ou por um título exato e único já está definido. Ações diferentes em hábitos já identificados não geram ambiguidade. Pergunte apenas o que ainda faltar depois de consultar os dados da conta. Em um pedido com várias ações, chame as ferramentas das alterações independentes antes de ask para que a prévia de aprovação apareça ao lado da pergunta; deixe para depois apenas as alterações que dependem da resposta. Nunca peça que a pessoa escolha de novo entre hábitos que ela já identificou. Uma única escolha usa choice, mesmo com título; use question para dois ou mais campos. |
+| Premature ask result | Account reads were still pending after ask. Reassess the original request using their results. Prepare every resolved change with its write tool; ask only for input that remains missing, after all other calls. | Ainda havia consultas à conta pendentes depois de ask. Reavalie o pedido original com os resultados dessas consultas. Prepare cada alteração já definida com a ferramenta correspondente; pergunte apenas o que ainda faltar, depois de todas as outras chamadas. |
+
 The following copy is submitted for coordinator approval. Runtime tool
 instructions and validation diagnostics are English, following the existing
 model-facing convention. The pt-BR column is their review translation. No fixed

@@ -1,0 +1,56 @@
+{
+  "caseId": "compound-update-skip-en",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "choice",
+        "question": "Which habit do you want renamed to Drink water?",
+        "title": null,
+        "multiSelect": false,
+        "allowFreeText": false,
+        "intro": null,
+        "progress": null,
+        "questions": null,
+        "options": [
+          {
+            "id": "water",
+            "label": "Water",
+            "description": null
+          },
+          {
+            "id": "walk",
+            "label": "Walk",
+            "description": null
+          }
+        ],
+        "action": null,
+        "items": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": "Walk",
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "NotExecuted"
+    }
+  ]
+}

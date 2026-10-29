@@ -187,18 +187,9 @@ public partial class ProcessUserChatCommandHandler
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
-        var askCall = aiResponse.ToolCalls!.FirstOrDefault(call => call.Name == "ask");
-        var orderedCalls = aiResponse.ToolCalls!
-            .TakeWhile(call => call.Name != "ask")
-            .Where(call => askCall is null || ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
-            .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
-            .ToList();
-
-        if (askCall is not null)
-            orderedCalls.Add(askCall);
-        orderedCalls = orderedCalls.Select(NormalizeExecutionArguments).ToList();
+        var (orderedCalls, deferAsk) = OrderCallsForAsk(aiResponse.ToolCalls!, context.UserHabits);
         var outcomesByCallId = correction is null
-            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
+            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken, deferAsk)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
@@ -252,7 +243,7 @@ public partial class ProcessUserChatCommandHandler
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
         }
 
-        return new ToolRoundResult(askCall is not null ? LimitAskContinuation(continueResult.Value, executionResults) : continueResult.Value,
+        return new ToolRoundResult(AskContinuation(continueResult.Value, aiResponse, deferAsk, executionResults),
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
     }
@@ -436,7 +427,8 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         string? language,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool deferAsk = false)
     {
         var readOnlyCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
@@ -525,7 +517,7 @@ public partial class ProcessUserChatCommandHandler
         }
 
         if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
-            outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken);
+            outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken, deferAsk);
         return outcomesByCallId;
     }
 

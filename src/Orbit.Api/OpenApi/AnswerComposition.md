@@ -24,6 +24,12 @@ The heading, option ids, labels and free-text permission are preserved; a headin
 introduction or progress display does not require a questionnaire. Several fields
 retain the question form. See [AskValidation.md](AskValidation.md).
 
+An ask cannot end a round with unfinished account reads. Those reads run, and
+the model receives a typed failure for the premature question so it can finish
+resolved actions through normal continuation. A genuine question can accompany
+an independent write preview. Candidate ids and exact account titles protect
+the unresolved targets; the server does not derive intent from message patterns.
+
 | Family | Leading surface | Named consumer |
 | --- | --- | --- |
 | Habits and schedules | Query-bound `habitList` or `daySummary` | #1619 |
