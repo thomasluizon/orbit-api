@@ -3,12 +3,16 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 
 namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
+    private static readonly JsonSerializerOptions AskArgumentJsonOptions = new(JsonSerializerDefaults.Web);
+
     private static bool IsAskKind(string kind) => kind is AstraBlockKinds.Choice or AstraBlockKinds.PickList or AstraBlockKinds.Question;
 
     private static string AddAskContext(string dynamicContext, ProcessUserChatCommand request, ChatContext context, string[] toolNames)
@@ -33,10 +37,14 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private async Task<ToolCallOutcome> ExecuteAskCallAsync(AiToolCall call, ProcessUserChatCommand request,
-        ToolExecutionAccumulator results, CancellationToken ct)
+        ToolExecutionAccumulator results, CancellationToken ct, bool deferAsk = false)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         results.CanRetryAsk = false;
+        if (deferAsk)
+            return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
+                "Account reads were still pending after ask. Reassess the original request using their results. Prepare every resolved change with its write tool; ask only for input that remains missing, after all other calls."),
+                null, null, null, null);
         ToolCallOutcome Failed(string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
             error + AskRecoveryInstruction(request, results)), null, null, null, null);
         var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
@@ -86,6 +94,69 @@ public partial class ProcessUserChatCommandHandler
         && form.ValueKind == JsonValueKind.String && client.PartKinds is { } kinds
         && (kinds.Contains(form.GetString()!, StringComparer.Ordinal)
             || form.GetString() == AstraBlockKinds.Question && kinds.Contains(AstraBlockKinds.Choice));
+
+    private (List<AiToolCall> Calls, bool DeferAsk) OrderCallsForAsk(IReadOnlyList<AiToolCall> calls, IReadOnlyList<Habit> habits)
+    {
+        var ask = calls.FirstOrDefault(call => call.Name == "ask");
+        var defer = ask is not null && calls.SkipWhile(call => call.Id != ask.Id).Skip(1)
+            .Any(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true);
+        var ordered = calls.Where(call => call.Name != "ask")
+            .Where(call => ask is null || ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true
+                || CanPrepareBesideAsk(call, ask, habits))
+            .OrderBy(call => ai.ToolRegistry.GetTool(call.Name)?.Order ?? int.MaxValue).ToList();
+        if (ask is not null) ordered.Add(ask);
+        return (ordered.Select(NormalizeExecutionArguments).ToList(), defer);
+    }
+
+    private static AiResponse AskContinuation(AiResponse response, AiResponse previous, bool deferAsk, ToolExecutionAccumulator results) =>
+        !deferAsk && previous.ToolCalls!.Any(call => call.Name == "ask") ? LimitAskContinuation(response, results) : response;
+
+    private static bool CanPrepareBesideAsk(AiToolCall call, AiToolCall ask, IReadOnlyList<Habit> habits)
+    {
+        if (ask.Args.ValueKind != JsonValueKind.Object || call.Args.ValueKind != JsonValueKind.Object
+            || !call.Args.TryGetProperty("habit_id", out var target) || target.ValueKind != JsonValueKind.String)
+            return false;
+        var targetHabits = habits.Where(habit => MatchesAskRecord(target.GetString(), null, habit)).ToArray();
+        if (targetHabits.Length != 1) return false;
+        AskToolArguments? input;
+        try
+        {
+            input = ask.Args.Deserialize<AskToolArguments>(AskArgumentJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        IReadOnlyList<AstraBlockOption> options = input switch
+        {
+            { Form: AstraBlockKinds.Choice, Options: { Count: > 0 } choices } => choices,
+            { Form: AstraBlockKinds.Question, Questions: [var question] } when question is { Type: "singleChoice", Options: { Count: > 0 } choices }
+                && choices.All(option => option is not null) => choices.Select(option => new AstraBlockOption(option.Id, option.Label)).ToArray(),
+            _ => []
+        };
+        if (options.Count == 0) return false;
+        var candidates = new HashSet<Guid>();
+        foreach (var option in options)
+        {
+            if (option is null) return false;
+            var matches = habits.Where(habit => MatchesAskRecord(option.Id, option.Label, habit)).ToArray();
+            if (matches.Length == 0) return false;
+            candidates.UnionWith(matches.Select(habit => habit.Id));
+        }
+        var footprint = HabitHierarchy.SelfAndDescendants(targetHabits[0], habits.ToLookup(habit => habit.ParentHabitId))
+            .Select(habit => habit.Id).ToHashSet();
+        var parentsById = habits.ToDictionary(habit => habit.Id, habit => habit.ParentHabitId);
+        var parentId = targetHabits[0].ParentHabitId;
+        while (parentId is Guid id && footprint.Add(id))
+            parentId = parentsById.GetValueOrDefault(id);
+        footprint.UnionWith(ArgumentEntityIds(call.Args));
+        return !footprint.Overlaps(candidates);
+    }
+
+    private static bool MatchesAskRecord(string? id, string? label, Habit habit) =>
+        Guid.TryParse(id, out var parsed) && parsed == habit.Id
+        || string.Equals(HabitNameMatcher.Normalize(id ?? string.Empty), HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal)
+        || label is not null && string.Equals(HabitNameMatcher.Normalize(label), HabitNameMatcher.Normalize(habit.Title), StringComparison.Ordinal);
 
     private static AiResponse LimitAskContinuation(AiResponse response, ToolExecutionAccumulator results) =>
         results.CanRetryAsk && response.ToolCalls is [{ Name: "ask" }]

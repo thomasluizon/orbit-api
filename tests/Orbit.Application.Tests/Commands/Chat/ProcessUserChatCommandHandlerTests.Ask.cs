@@ -28,26 +28,25 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(0, "Choose a time.")]
     [InlineData(AppConstants.MaxAiRequestTotalTokens / 2 + 1, null)]
-    public async Task Ask_EmitsNegotiatedPartAndStopsBeforeLaterTools(int tokenCount, string? text)
+    public async Task Ask_EmitsNegotiatedPartAndIgnoresRepeatedAsk(int tokenCount, string? text)
     {
         SetupUserAndPayGate();
-        var laterTool = ReadTool("query_habits", new ToolResult(true));
         SetupAiResponse(new AiResponse
         {
             TextMessage = text,
             ReportedTokenCount = tokenCount,
             ConversationContext = TestConversationContext,
-            ToolCalls = [new("ask", "ask1", ParseArguments(ChoiceArguments)), new("query_habits", "later", ParseArguments("{}")),
+            ToolCalls = [new("ask", "ask1", ParseArguments(ChoiceArguments)),
                 new("ask", "ask2", ParseArguments(ChoiceArguments))]
         });
-        var response = await CreateHandler(RealAskTool(), laterTool).Handle(new(UserId, "Help me plan a walk",
+        var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
         response.IsSuccess.Should().BeTrue();
         var block = response.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Subject;
         block.Kind.Should().Be("choice");
         block.Block.Should().BeOfType<AstraChoiceBlock>().Which.Options.Should().HaveCount(2);
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
-        await laterTool.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
+        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_block_issued", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
     }

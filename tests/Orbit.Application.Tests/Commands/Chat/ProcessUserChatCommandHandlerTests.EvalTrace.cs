@@ -222,7 +222,7 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_EvalTrace_ListsCallsAfterAskAsNotExecuted()
+    public async Task Handle_EvalTrace_RecordsPrematureAskFailureAndCompletedRead()
     {
         SetupUserAndPayGate();
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
@@ -234,6 +234,9 @@ public partial class ProcessUserChatCommandHandlerTests
                 new("query_habits", "skipped", ParseArguments("{}"))],
             ConversationContext = TestConversationContext
         });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Which time works for you?" }));
 
         var result = await CreateHandler(RealAskTool(), later).Handle(new ProcessUserChatCommand(UserId,
             "Help me plan a walk", ClientContext: new(SupportsParts: true, PartKinds: ["choice"]),
@@ -242,9 +245,14 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         var calls = result.Value.EvalTrace!.ToolCalls;
         calls.Select(call => call.Id).Should().Equal("question", "skipped");
-        calls.Select(call => call.Status).Should().Equal("Succeeded", "NotExecuted");
-        calls[1].Result.Should().BeNull();
-        await later.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
+        calls.Select(call => call.Status).Should().Equal("Failed", "Succeeded");
+        calls.Should().OnlyContain(call => call.Result != null);
+        await later.Received(1).ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>());
+        await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(TestConversationContext,
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Any(call => call.Name == "ask" && !call.Success)
+                && results.Any(call => call.Name == "query_habits" && call.Success)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
