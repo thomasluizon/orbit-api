@@ -10,7 +10,7 @@ using Orbit.Domain.ValueObjects;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class BulkCreateHabitsTool(
-    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool
+    IMediator mediator) : IAiTool, IArgumentCheckTool, ITransactionalAiTool, IHabitCreationCapacityTool
 {
     private const string TitleProperty = "title";
 
@@ -53,9 +53,16 @@ public class BulkCreateHabitsTool(
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ExecuteCoreAsync(args, userId, ct, checkOnly: false);
 
-    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public Task<Orbit.Domain.Common.Result> CheckCreationCapacityAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        return args.TryGetProperty(ToolArgumentNames.Habits, out var habits) && habits.ValueKind == JsonValueKind.Array
+            ? HabitCreationCapacity.CheckAsync(mediator, userId, habits.EnumerateArray(), args.TryGetProperty(ParentHabitId, out _), ct)
+            : Task.FromResult(Orbit.Domain.Common.Result.Success());
+    }
+
+    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
         var schemaArguments = JsonNode.Parse(args.GetRawText());
         if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits)
             foreach (var habit in habits.OfType<JsonObject>())
@@ -65,10 +72,8 @@ public class BulkCreateHabitsTool(
                 habit.Remove(HabitHeadingParents.SuggestedParentField);
                 habit.Remove(HabitHeadingParents.ExistingCandidatesField);
             }
-        var result = await ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
+        return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
             () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
-        return result.IsFailure ? result : await HabitCreationCapacity.CheckAsync(mediator, userId,
-            args.GetProperty(ToolArgumentNames.Habits).EnumerateArray(), args.TryGetProperty(ParentHabitId, out _), ct);
     }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)

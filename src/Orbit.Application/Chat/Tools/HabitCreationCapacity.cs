@@ -1,12 +1,14 @@
 using System.Text.Json;
 using MediatR;
-using Orbit.Application.Common;
 using Orbit.Domain.Common;
-using Orbit.Domain.Entities;
-using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools;
+
+public interface IHabitCreationCapacityTool
+{
+    Task<Result> CheckCreationCapacityAsync(JsonElement args, Guid userId, CancellationToken ct);
+}
 
 internal static class HabitCreationCapacity
 {
@@ -15,11 +17,13 @@ internal static class HabitCreationCapacity
     {
         var count = items.Sum(item => CountNewRoots(item, hasSharedParent, true));
         return count == 0 ? Task.FromResult(Result.Success())
-            : mediator.Send(new CheckHabitCreationCapacityQuery(userId, count), ct);
+            : mediator.Send(new CheckChatCommandQuery(new HabitCreationCapacityRequest(userId, count)), ct);
     }
 
     private static int CountNewRoots(JsonElement item, bool hasParent, bool topLevel)
     {
+        if (item.ValueKind != JsonValueKind.Object)
+            return 0;
         if (topLevel && item.TryGetProperty(ToolArgumentNames.ParentHabitId, out var parent)
             && parent.ValueKind == JsonValueKind.String)
             hasParent = true;
@@ -32,18 +36,4 @@ internal static class HabitCreationCapacity
     }
 }
 
-public sealed record CheckHabitCreationCapacityQuery(Guid UserId, int RootCount) : IRequest<Result>;
-
-public sealed class CheckHabitCreationCapacityQueryHandler(IPayGateService payGate, IGenericRepository<User> users)
-    : IRequestHandler<CheckHabitCreationCapacityQuery, Result>
-{
-    public async Task<Result> Handle(CheckHabitCreationCapacityQuery request, CancellationToken ct)
-    {
-        var result = await payGate.CanCreateHabits(request.UserId, request.RootCount, ct);
-        if (result.IsSuccess)
-            return result;
-        var user = await users.GetByIdAsync(request.UserId, ct);
-        return ErrorCopy.TryResolve(result.ErrorCode, LocaleHelper.IsPortuguese(user?.Language), result.ErrorArgs, out var message)
-            ? Result.Failure(message, result.ErrorCode, result.ErrorArgs) : result;
-    }
-}
+internal sealed record HabitCreationCapacityRequest(Guid UserId, int RootCount);

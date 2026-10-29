@@ -356,6 +356,14 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         policyState.Decision = null;
+        if (execution.Request.Surface == AgentExecutionSurface.Chat && tool is IHabitCreationCapacityTool creation)
+        {
+            var capacity = await creation.CheckCreationCapacityAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+            if (capacity.IsFailure)
+                return await BuildToolOutcomeResponseAsync(execution,
+                    new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, execution.Capability),
+                    ToolResult.FromFailure(capacity), cancellationToken);
+        }
         PreparedToolIntent? preparedIntent = null;
         if (execution.Request.Surface == AgentExecutionSurface.Chat && execution.Operation.IsMutation
             && execution.Request.ConfirmationToken is null
@@ -386,10 +394,6 @@ public partial class AgentOperationExecutor(
         if (!argumentsChecked && RequiresArgumentCheck(execution.Operation.Id, execution.Arguments) && tool is IArgumentCheckTool check)
         {
             var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
-            if (validation.ErrorCode == Orbit.Application.Common.ErrorCodes.HabitLimitReached)
-                return await BuildToolOutcomeResponseAsync(execution,
-                    new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, execution.Capability),
-                    ToolResult.FromFailure(validation), cancellationToken);
             if (validation.IsFailure)
                 return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
                     AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error), cancellationToken);
@@ -472,7 +476,6 @@ public partial class AgentOperationExecutor(
                 ? value.GetString() : null;
         return operationId switch
         {
-            "create_habit" or "bulk_create_habits" => true,
             "bulk_reschedule_habits" => arguments.TryGetProperty("revised_items", out _),
             "update_checklist_template" => true,
             "update_profile_preferences" => action == "set_name",

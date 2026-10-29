@@ -29,6 +29,7 @@ public partial class AgentChatWriteHoldTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(today);
         var mediator = Substitute.For<IMediator>();
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Orbit.Domain.Common.Result.Success());
         var habits = new GenericRepository<Habit>(_dbContext);
         var goals = new GenericRepository<Goal>(_dbContext);
         var registry = new AiToolRegistry([new CreateHabitTool(dates, mediator), new UpdateHabitTool(habits, dates, mediator)]);
@@ -44,6 +45,6 @@ public partial class AgentChatWriteHoldTests
         result.Value.PendingOperation!.PreviewFingerprint.Should().NotBeNullOrEmpty();
         result.Value.PendingOperation.Items.Should().ContainSingle();
         _dbContext.Habits.Count().Should().Be(existing ? 1 : 0);
-        mediator.ReceivedCalls().Should().BeEmpty();
+        mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);
     }
 }

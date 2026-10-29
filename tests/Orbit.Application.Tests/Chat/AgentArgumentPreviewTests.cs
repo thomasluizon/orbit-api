@@ -29,6 +29,7 @@ public sealed class AgentArgumentPreviewTests
     public AgentArgumentPreviewTests()
     {
         var payGate = Substitute.For<IPayGateService>();
+        payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         var unitOfWork = Substitute.For<IUnitOfWork>();
         _tools = new AiToolRegistry([
             new CreateHabitTool(_dateService, Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habits, _tags, _goals, _dateService, payGate, unitOfWork)),

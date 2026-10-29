@@ -133,7 +133,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var args = single ? JsonSerializer.SerializeToElement(node)
             : JsonSerializer.SerializeToElement(new { habits = new[] { node } });
 
-        (await ((IArgumentCheckTool)tool).CheckArgumentsAsync(args, UserId, default)).IsSuccess.Should().BeTrue();
+        (await ((IHabitCreationCapacityTool)tool).CheckCreationCapacityAsync(args, UserId, default)).IsSuccess.Should().BeTrue();
 
         await _payGate.DidNotReceive().CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
