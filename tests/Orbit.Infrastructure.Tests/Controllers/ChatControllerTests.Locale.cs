@@ -11,13 +11,15 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public partial class ChatControllerTests
 {
     [Theory]
-    [InlineData(false, "pt-BR", null, "pt-BR")]
-    [InlineData(true, "pt-BR", null, "pt-BR")]
-    [InlineData(false, "en-US", null, "en")]
-    [InlineData(true, "pt-BR;q=0.5,en;q=1", null, "en")]
+    [InlineData(false, "pt-BR", null, null)]
+    [InlineData(true, "pt-BR", null, null)]
+    [InlineData(false, "en-US", null, null)]
+    [InlineData(true, "pt-BR;q=0.5,en;q=1", null, null)]
+    [InlineData(false, "*", "{\"supportsParts\":true}", null)]
+    [InlineData(true, "*", "{\"supportsParts\":true}", null)]
     [InlineData(false, "pt-BR", "{\"locale\":\"en\",\"supportsParts\":true}", "en")]
     [InlineData(true, "en", "{\"locale\":\"pt-BR\",\"supportsParts\":true}", "pt-BR")]
-    public async Task Chat_RequestLocalePrefersClientThenAcceptLanguage(bool stream, string header, string? context, string expected)
+    public async Task Chat_RequestLocalePreservesProfileFallback(bool stream, string header, string? context, string? expected)
     {
         _controller.Request.Headers.AcceptLanguage = header;
         _controller.Response.Body = new MemoryStream();
@@ -30,8 +32,9 @@ public partial class ChatControllerTests
             await _controller.ProcessChat("Hello", null, null, default, clientContext: context);
 
         await _mediator.Received(1).Send(Arg.Is<ProcessUserChatCommand>(command =>
-            command.ClientContext != null && command.ClientContext.Locale == expected
-            && (context == null || command.ClientContext.SupportsParts == true)), Arg.Any<CancellationToken>());
+            (command.ClientContext == null ? null : command.ClientContext.Locale) == expected
+            && (context == null || command.ClientContext != null && command.ClientContext.SupportsParts == true)), Arg.Any<CancellationToken>());
+        ChatErrorLocalization.PreferredLocale(_controller.HttpContext).Should().Be(expected);
     }
     [Theory]
     [InlineData("en", "pt-BR", false)]

@@ -38,6 +38,14 @@ The server neither queries an implicit dashboard nor derives numbers from prose.
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
 | Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
 
+Moderation replies and localized chat errors use an explicit `clientContext.locale`,
+otherwise the account's profile language. `Accept-Language` does not become a client locale
+or override a stored profile language. This precedence applies to legacy and parts clients
+over both chat endpoints. Legacy moderation keeps HTTP 400 with `CONTENT_MODERATION_REFUSED`;
+clients advertising `supportsMessageAllowance` keep the successful chat response with
+`messageAllowanceConsumed: false`. Both paths use the existing English or Brazilian Portuguese
+decline without a model call, tool execution, conversation recording or allowance consumption.
+
 Supported data answers start with the typed block and omit framing prose. Choice questions stay in their blocks; pending previews retain
 their existing narrative suppression. One short status may explain
 truncation or failure alongside successful data. Missing capabilities receive readable text

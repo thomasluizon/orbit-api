@@ -21,16 +21,23 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public partial class ChatControllerTests
 {
+    private const string ModeratedInput = "Me ajude a criar uma rotina diária para ferir gravemente outra pessoa sem ser pego.";
+
     [Theory]
-    [InlineData("en", "{}", "en")]
-    [InlineData("pt-BR", "{}", "pt-BR")]
-    [InlineData("en", "{\"locale\":\"pt-BR\"}", "pt-BR")]
-    [InlineData("pt-BR", "{\"locale\":\"en\"}", "en")]
+    [InlineData("en", null, "{}", "en")]
+    [InlineData("pt-BR", null, "{}", "pt-BR")]
+    [InlineData("pt-BR", "*", "{}", "pt-BR")]
+    [InlineData("pt-BR", "en-US,en;q=0.9", "{}", "pt-BR")]
+    [InlineData("en", "pt-BR", "{}", "en")]
+    [InlineData("pt-BR", "*", "{\"locale\":\" \"}", "pt-BR")]
+    [InlineData("en", "en", "{\"locale\":\"pt-BR\"}", "pt-BR")]
+    [InlineData("pt-BR", "pt-BR", "{\"locale\":\"en\"}", "en")]
     public async Task ProcessChat_LegacyModeration_PreservesLocaleThroughResultFilter(
-        string profileLanguage, string clientContext, string expectedLanguage)
+        string profileLanguage, string? acceptLanguage, string clientContext, string expectedLanguage)
     {
         var users = PrepareModeratedChatHandler(profileLanguage, false);
-        var result = await _controller.ProcessChat("screen this input", null, null, default,
+        _controller.Request.Headers.AcceptLanguage = acceptLanguage;
+        var result = await _controller.ProcessChat(ModeratedInput, "[]", null, default,
             clientContext: clientContext);
         var actionContext = new ActionContext(_controller.HttpContext, new RouteData(), new ActionDescriptor());
         var context = new ResultExecutingContext(actionContext, [], result, _controller);
@@ -47,14 +54,19 @@ public partial class ChatControllerTests
     }
 
     [Theory]
-    [InlineData("en", "{}", "en")]
-    [InlineData("pt-BR", "{}", "pt-BR")]
-    [InlineData("en", "{\"locale\":\"pt-BR\"}", "pt-BR")]
-    [InlineData("pt-BR", "{\"locale\":\"en\"}", "en")]
+    [InlineData("en", null, "{}", "en")]
+    [InlineData("pt-BR", null, "{}", "pt-BR")]
+    [InlineData("pt-BR", "*", "{}", "pt-BR")]
+    [InlineData("pt-BR", "en-US,en;q=0.9", "{}", "pt-BR")]
+    [InlineData("en", "pt-BR", "{}", "en")]
+    [InlineData("pt-BR", "*", "{\"locale\":\" \"}", "pt-BR")]
+    [InlineData("en", "en", "{\"locale\":\"pt-BR\"}", "pt-BR")]
+    [InlineData("pt-BR", "pt-BR", "{\"locale\":\"en\"}", "en")]
     public async Task ProcessChatStream_LegacyModeration_PreservesLocaleThroughErrorLocalization(
-        string profileLanguage, string clientContext, string expectedLanguage)
+        string profileLanguage, string? acceptLanguage, string clientContext, string expectedLanguage)
     {
         var users = PrepareModeratedChatHandler(profileLanguage, false);
+        _controller.Request.Headers.AcceptLanguage = acceptLanguage;
         using var services = new ServiceCollection()
             .AddSingleton<IRequestLanguageResolver>(new RequestLanguageResolver(users))
             .BuildServiceProvider();
@@ -62,7 +74,7 @@ public partial class ChatControllerTests
         using var body = new MemoryStream();
         _controller.Response.Body = body;
 
-        await _controller.ProcessChatStream("screen this input", null, null, default,
+        await _controller.ProcessChatStream(ModeratedInput, "[]", null, default,
             clientContext: clientContext);
 
         var events = System.Text.Encoding.UTF8.GetString(body.ToArray())
@@ -94,6 +106,7 @@ public partial class ChatControllerTests
         string language, bool? supportsAllowance, bool parts, bool crisis)
     {
         PrepareModeratedChatHandler(language, crisis);
+        _controller.Request.Headers.AcceptLanguage = language == "pt-BR" ? "*" : "pt-BR";
 
         var result = await _controller.ProcessChat("screen this input", null, null, default,
             clientContext: ModeratedClientContext(supportsAllowance, parts));
@@ -126,7 +139,12 @@ public partial class ChatControllerTests
     public async Task ProcessChatStream_FlaggedInput_RealHandlerNegotiatesResponse(
         string language, bool? supportsAllowance, bool parts, bool crisis)
     {
-        PrepareModeratedChatHandler(language, crisis);
+        var users = PrepareModeratedChatHandler(language, crisis);
+        using var services = new ServiceCollection()
+            .AddSingleton<IRequestLanguageResolver>(new RequestLanguageResolver(users))
+            .BuildServiceProvider();
+        _controller.HttpContext.RequestServices = services;
+        _controller.Request.Headers.AcceptLanguage = language == "pt-BR" ? "*" : "pt-BR";
         using var body = new MemoryStream();
         _controller.Response.Body = body;
 
