@@ -97,7 +97,12 @@ public sealed partial class ChatWriteHoldHandlerTests
             "Fixtures", "StartingSteps", "composition-one-small-step-en-r1.json")));
         var args = capture.RootElement.GetProperty("toolCalls")[0].GetProperty("arguments");
         ScriptToolCall(args.GetRawText(), "suggest_breakdown");
-        var create = new AiToolCall("create_habit", "write", JsonSerializer.SerializeToElement(new { title = "Unrequested task" }));
+        var create = new AiToolCall("create_habit", "write", JsonSerializer.SerializeToElement(new
+        {
+            title = "Unrequested task",
+            frequency_unit = "OneTime",
+            due_date = Today.ToString("yyyy-MM-dd")
+        }));
         var calls = continuation switch
         {
             "write" => new[] { create },
@@ -119,6 +124,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         (result.Value.Parts ?? []).OfType<ChatBlockPart>().Should().BeEmpty();
         result.Value.Operations.Should().NotContain(operation => operation.Status == AgentOperationStatus.Succeeded);
+        result.Value.Operations.Should().OnlyContain(operation => operation.OperationId == "suggest_breakdown");
         await _aiIntentService.ReceivedWithAnyArgs(1).ContinueWithToolResultsAsync(default!, default!, default, default);
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
