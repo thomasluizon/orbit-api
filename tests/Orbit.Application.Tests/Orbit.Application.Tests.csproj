@@ -36,6 +36,7 @@
     <None Update="Fixtures/RestartPlans/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/BrainDumps/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/StartingSteps/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/ChecklistSaves/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

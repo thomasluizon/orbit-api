@@ -28,7 +28,7 @@ public class UpdateChecklistToolTests
     public void Metadata_IsExposed()
     {
         _tool.Name.Should().Be("update_checklist");
-        _tool.Description.Should().Contain("When adding an item, include every existing item in the full list you send.");
+        _tool.Description.Should().Contain("send only item_to_add");
         _tool.GetParameterSchema().Should().NotBeNull();
     }
 
@@ -138,6 +138,76 @@ public class UpdateChecklistToolTests
 
         result.EntityName.Should().BeNull();
         result.Success.Should().BeFalse();
+        await _mediator.DidNotReceive().Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("overLimit")]
+    public async Task Append_InvalidTextCannotDispatch(string text)
+    {
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Water");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
+        if (text == "overLimit") text = new string('a', AppConstants.MaxChecklistItemTextLength + 1);
+
+        var result = await Execute(JsonSerializer.Serialize(new { habit_id = habit.Id, item_to_add = text }));
+
+        result.Success.Should().BeFalse();
+        await _mediator.DidNotReceive().Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Append_RejectsFullChecklistAndForeignTarget()
+    {
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Water");
+        habit.UpdateChecklist(Enumerable.Range(0, AppConstants.MaxChecklistItems)
+            .Select(index => new Orbit.Domain.ValueObjects.ChecklistItem($"Item {index}", index == 0)).ToArray());
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
+        (await Execute(JsonSerializer.Serialize(new { habit_id = habit.Id, item_to_add = "Get a glass" }))).Success.Should().BeFalse();
+
+        var foreign = HabitToolTestFactory.CreateHabit(Guid.NewGuid(), "Private title");
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, foreign);
+        var result = await Execute(JsonSerializer.Serialize(new { habit_id = foreign.Id, item_to_add = "Get a glass" }));
+
+        result.Success.Should().BeFalse();
+        result.EntityName.Should().BeNull();
+        await _mediator.DidNotReceive().Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("\"Get a glass\",\"checklist_items\":[]")]
+    [InlineData("null")]
+    [InlineData("42")]
+    public async Task Append_RejectsConflictingOrMalformedArguments(string value)
+    {
+        var result = await Execute($$"""{"habit_id":"{{Guid.NewGuid()}}","item_to_add":{{value}}}""");
+
+        result.Success.Should().BeFalse();
+        await _mediator.DidNotReceive().Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("order")]
+    [InlineData("checked")]
+    public async Task FullListAddition_RejectsChangesToStoredPrefix(string change)
+    {
+        var habit = HabitToolTestFactory.CreateHabit(UserId, "Water");
+        habit.UpdateChecklist([new("Get a glass", true), new("Fill the glass", false)]);
+        HabitToolTestFactory.SetupHabitFound(_habitRepo, habit);
+        var items = habit.ChecklistItems.ToArray();
+        if (change == "order") Array.Reverse(items);
+        else items[0] = new(change == "text" ? "Changed text" : items[0].Text, false);
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            habit_id = habit.Id,
+            checklist_items = items.Append(new("Touch the glass", false)).Select(item => new { text = item.Text, is_checked = item.IsChecked })
+        });
+
+        (await _tool.CheckArgumentsAsync(args, UserId, default)).IsFailure.Should().BeTrue();
+        (await _tool.ExecuteAsync(args, UserId, default)).Success.Should().BeFalse();
+        habit.ChecklistItems.Should().Equal(new Orbit.Domain.ValueObjects.ChecklistItem("Get a glass", true), new("Fill the glass", false));
         await _mediator.DidNotReceive().Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>());
     }
 
