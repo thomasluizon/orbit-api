@@ -170,49 +170,27 @@ jobs:
         env:
           STAGING_RESEED_STEP: Deploy the staging API and wait for that deploy
         run: |
-          commit_id="$(curl --fail --silent --show-error --max-time 30 \
+          image_url="$(curl --fail --silent --show-error --max-time 30 \
             --header "Authorization: Bearer ${RENDER_API_KEY}" \
             --get --data-urlencode 'status=live' --data-urlencode 'limit=1' \
             "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys" \
-            | jq --exit-status --raw-output '.[0].deploy.commit.id | select(type == "string" and length > 0)')"
-          payload="$(jq --null-input --compact-output --arg commit "$commit_id" '{commitId: $commit}')"
-          triggered_after="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
+            | jq --exit-status --raw-output '.[0].deploy.image.ref | select(type == "string" and length > 0)')"
+          if [[ ! "$image_url" =~ ^ghcr\.io/thomasluizon/orbit-api@sha256:[a-f0-9]{64}$ ]]; then
+            echo 'Staging reseed requires a live API image pinned by digest' >&2
+            exit 1
+          fi
+          payload="$(jq --null-input --compact-output --arg image "$image_url" '{imageUrl: $image}')"
           response="$(mktemp)"
           status="$(curl --silent --show-error --max-time 30 --output "$response" --write-out '%{http_code}' \
             --request POST --header "Authorization: Bearer ${RENDER_API_KEY}" \
             --header 'Content-Type: application/json' --data "$payload" \
             "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys")"
-          if [[ "$status" == 201 ]]; then
-            deploy_id="$(jq --exit-status --raw-output '.id | select(type == "string" and length > 0)' "$response")"
-          elif [[ "$status" == 202 ]]; then
-            deploy_id=''
-            for ((attempt=1; attempt<=30; attempt++)); do
-              candidates="$(curl --fail --silent --show-error --max-time 30 \
-                --header "Authorization: Bearer ${RENDER_API_KEY}" \
-                --get --data-urlencode "createdAfter=${triggered_after}" \
-                --data-urlencode 'limit=100' \
-                "https://api.render.com/v1/services/${TF_VAR_staging_api_service_id}/deploys" \
-                | jq --compact-output --arg commit "$commit_id" \
-                  '[.[] | select(.deploy.commit.id == $commit) | .deploy.id]')"
-              candidate_count="$(jq 'length' <<< "$candidates")"
-              if ((candidate_count > 1)); then
-                echo "Multiple deploys of ${commit_id} appeared after the trigger; cannot identify the requested deploy" >&2
-                exit 1
-              fi
-              if ((candidate_count == 1)); then
-                deploy_id="$(jq --raw-output '.[0]' <<< "$candidates")"
-                break
-              fi
-              sleep 10
-            done
-            if [[ -z "$deploy_id" ]]; then
-              echo "Render queued a deploy of ${commit_id} but did not list it" >&2
-              exit 1
-            fi
-          else
-            echo "Render deploy request failed with HTTP ${status}" >&2
+          if [[ "$status" != 201 ]]; then
+            echo "Render image deploy request answered HTTP ${status}; check service deploys before rerunning" >&2
             exit 1
           fi
+          deploy_id="$(jq --exit-status --raw-output --arg image "$image_url" \
+            'select(.image.ref == $image) | .id | select(type == "string" and length > 0)' "$response")"
           for ((attempt=1; attempt<=90; attempt++)); do
             deploy_status="$(curl --fail --silent --show-error --max-time 30 \
               --header "Authorization: Bearer ${RENDER_API_KEY}" \
@@ -224,6 +202,10 @@ jobs:
                 echo "Render deploy ${deploy_id} ended with status ${deploy_status}" >&2
                 exit 1
                 ;;
+              created|queued|build_in_progress|pre_deploy_in_progress|update_in_progress) ;;
+              *)
+                echo "Render deploy ${deploy_id} returned unknown status ${deploy_status}" >&2
+                exit 1 ;;
             esac
             sleep 20
           done
