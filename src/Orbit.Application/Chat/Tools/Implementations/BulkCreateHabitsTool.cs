@@ -242,7 +242,10 @@ public partial class BulkCreateHabitsTool(
     private static IRequest<Orbit.Domain.Common.Result<Guid>> CreateTreeCommand(JsonElement source, BulkHabitItem item,
         Guid userId, Guid? parentId)
     {
-        var options = new HabitCommandOptions(item.Days ?? (item.DueDate.HasValue ? [] : null), item.DueTime, item.DueEndTime,
+        var days = item.Days ?? (source.TryGetProperty("days", out var suppliedDays)
+            && suppliedDays.ValueKind == JsonValueKind.Array
+            || item.DueDate.HasValue && !item.StartDate.HasValue ? [] : null);
+        var options = new HabitCommandOptions(days, item.DueTime, item.DueEndTime,
             item.ReminderEnabled, item.ReminderTimes, item.SlipAlertEnabled, item.ChecklistItems,
             item.ScheduledReminders, item.EndDate, item.IsFlexible, item.RelativeReminders, item.RepeatReminder);
         return parentId is { } parent

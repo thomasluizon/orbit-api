@@ -477,7 +477,7 @@ public partial class AgentOperationExecutor(
         return operationId switch
         {
             "bulk_reschedule_habits" => arguments.TryGetProperty("revised_items", out _),
-            "update_checklist_template" => true,
+            "update_checklist" or "update_checklist_template" => true,
             "update_profile_preferences" => action == "set_name",
             "manage_calendar_sync" => action == "set_selected_calendars",
             _ => false

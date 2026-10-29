@@ -562,15 +562,28 @@ so the model can return an easier action even with incomplete history. Titles in
 action messages are JSON-quoted as untrusted data.
 The save request uses the existing `create_habit` tool for a one-time task or
 `update_checklist` for an owned habit. A checklist target must be resolved first,
-asking which habit when unclear, and the replacement list preserves existing items.
+asking which habit when unclear. For an addition, send `habit_id` and
+`item_to_add` containing only the step, without `checklist_items`. The server
+previews the stored list plus that unchecked item and stores only the append
+intent. Approval uses the existing `AppendChecklistItemCommand`, validator and
+domain guard, preserving stored text, order and checked state. The derived full
+list is not editable in this preview; ordinary full-list replacements retain their
+existing editing support. A stale preview still requires a fresh approval.
+
+`checklist_items` remains available for full replacements. If the supplied list
+grows, its existing prefix must match the stored list exactly. The argument check
+runs before policy can hold a preview and again in tool execution. The captured
+pt-BR r3 addition that unchecked a stored item is rejected without a pending
+operation. Adding items and changing existing ones require separate operations.
+No message pattern selects a tool, rewrites its arguments or supplies an answer.
 The existing pending-operation preview supports approval, editing and rejection;
 no suggestion or action click alone writes a record. All ordinary ownership,
 validation, policy and preview checks still run. Internal risk labels are absent
 from the step block.
 
 Deploy the API before the paired web and Android clients advertise this kind.
-The coordinator files that consumer ticket and its en and pt-BR real-call
-`evals/astra` cases in orbit-ui-mobile. Required live evidence is three consecutive
+The paired consumer is thomasluizon/orbit-tickets#1866; en and pt-BR real-call
+`evals/astra` cases are tracked in thomasluizon/orbit-tickets#1867. Required live evidence is three consecutive
 passes per case and saved-step readback. Local structured-output replay is not
 real-call pass^3 evidence.
 
@@ -593,14 +606,26 @@ prompt convention. Their pt-BR versions below are for copy review.
 
 | Source | en | pt-BR |
 | --- | --- | --- |
-| GlobalRulesSection | STARTING AN ACTIVITY: When the person cannot get started, use suggest_breakdown with one_small_step=true and language en or pt-BR. Return exactly one concrete, immediately doable action in suggested_sub_habits, not a plan. If they ask for something smaller, reduce the previous step's effort while keeping the same activity. The server supplies the oneSmallStep block and smaller/save actions; emit no prose. Do not call ask or propose a write unless they explicitly request saving. Save as a task through create_habit, or resolve the owned habit and use update_checklist with all existing items plus the new step. Every save uses the existing approval preview. | COMEÇAR UMA ATIVIDADE: Quando a pessoa não conseguir começar, use suggest_breakdown com one_small_step=true e language en ou pt-BR. Retorne exatamente uma ação concreta que ela possa realizar agora em suggested_sub_habits, sem montar um plano. Se ela pedir algo menor, reduza o esforço do passo anterior e mantenha a mesma atividade. O servidor fornece o bloco oneSmallStep e as ações de diminuir e salvar; não acrescente texto. Não chame ask nem proponha alterações sem um pedido explícito para salvar. Para salvar como tarefa, use create_habit. Para uma checklist, identifique o hábito da pessoa e use update_checklist com todos os itens existentes e o novo passo. Todo salvamento passa pela prévia de aprovação existente. |
-| SuggestBreakdownTool.Description | Suggest sub-habits without creating them. When the person is stuck starting an activity, set one_small_step=true, language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, preserving existing checklist items and resolving the owned habit first. Both require the existing approval preview. | Sugira sub-hábitos sem criá-los. Quando a pessoa travar ao começar uma atividade, defina one_small_step=true, language como en ou pt-BR conforme a mensagem, title como a atividade e suggested_sub_habits com exatamente uma ação concreta para começar. Nunca retorne uma lista vazia. Se ela pedir um passo menor, retorne uma ação mais fácil, que exija menos esforço que a anterior, mantendo a mesma atividade. O servidor retorna oneSmallStep com ações para diminuir e salvar. Não acrescente texto nem listas. Sugestões não salvam nada. Somente um pedido explícito para salvar usa create_habit para uma tarefa ou update_checklist, preservando os itens existentes e identificando primeiro o hábito da pessoa. Ambos exigem a prévia de aprovação existente. |
+| GlobalRulesSection | STARTING AN ACTIVITY: When the person cannot get started, use suggest_breakdown with one_small_step=true and language en or pt-BR. Return exactly one concrete, immediately doable action in suggested_sub_habits, not a plan. If they ask for something smaller, reduce the previous step's effort while keeping the same activity. The server supplies the oneSmallStep block and smaller/save actions; emit no prose. Do not call ask or propose a write unless they explicitly request saving. Save as a task through create_habit, or resolve the owned habit and use update_checklist with item_to_add containing only the new step; the server preserves all stored checklist items. Every save uses the existing approval preview. | COMEÇAR UMA ATIVIDADE: Quando a pessoa não conseguir começar, use suggest_breakdown com one_small_step=true e language en ou pt-BR. Retorne exatamente uma ação concreta que ela possa realizar agora em suggested_sub_habits, sem montar um plano. Se ela pedir algo menor, reduza o esforço do passo anterior e mantenha a mesma atividade. O servidor fornece o bloco oneSmallStep e as ações de diminuir e salvar; não acrescente texto. Não chame ask nem proponha alterações sem um pedido explícito para salvar. Para salvar como tarefa, use create_habit. Para uma checklist, identifique o hábito da pessoa e use update_checklist com item_to_add contendo apenas o novo passo; o servidor preserva todos os itens salvos. Todo salvamento passa pela prévia de aprovação existente. |
+| SuggestBreakdownTool.Description | Suggest sub-habits without creating them. When the person cannot get themselves to do an activity, is stuck starting it, or asks for one concrete first step, call suggest_breakdown with one_small_step=true even if they do not say start. Set language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, with item_to_add containing only the step, resolving the owned habit first. The server preserves all stored checklist items. Both require the existing approval preview. | Sugira sub-hábitos sem criá-los. Quando a pessoa não conseguir se animar a fazer uma atividade, travar na hora de começar ou pedir um primeiro passo concreto, chame suggest_breakdown com one_small_step=true, mesmo que ela não use a palavra começar. Defina language como en ou pt-BR conforme a mensagem, title como a atividade e suggested_sub_habits com exatamente uma ação concreta para começar. Nunca retorne uma lista vazia. Se ela pedir um passo menor, retorne uma ação mais fácil, que exija menos esforço que a anterior, mantendo a mesma atividade. O servidor retorna oneSmallStep com ações para diminuir e salvar. Não acrescente texto nem listas. Sugestões não salvam nada. Somente um pedido explícito para salvar usa create_habit para uma tarefa ou update_checklist, com item_to_add contendo apenas o passo, identificando primeiro o hábito da pessoa. O servidor preserva todos os itens salvos do checklist. Ambos exigem a prévia de aprovação existente. |
 | SuggestHabitsTool.Description change | Help starting an activity uses suggest_breakdown with one_small_step=true instead. | A ajuda para começar uma atividade usa suggest_breakdown com one_small_step=true. |
 | one_small_step schema description | Return exactly one starting step, or a smaller refinement, as a oneSmallStep block. Default false. | Retorne exatamente um passo para começar, ou uma versão menor, em um bloco oneSmallStep. O padrão é false. |
 | language schema description | Required with one_small_step=true; the person's message language. | Obrigatório com one_small_step=true; idioma da mensagem da pessoa. |
 | Argument error | one_small_step must be a boolean. | one_small_step deve ser um booleano. |
 | Argument error | Return exactly one nonempty starting action and goal, each at most 200 characters on one line, with language en or pt-BR. | Retorne exatamente uma ação inicial e uma atividade, ambas preenchidas, cada uma em uma única linha com até 200 caracteres, com language en ou pt-BR. |
 | Domain guard | A starting step requires a goal, a single short action and a supported language. | Um passo inicial exige uma atividade, uma única ação curta e um idioma aceito. |
+
+The checklist append changes add the following model-facing copy. Runtime
+instructions remain English; pt-BR translations are supplied for copy approval.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| UpdateChecklistTool.Description | Update an owned habit's checklist. To add a starting step or another item, send only item_to_add; the server appends it unchecked and preserves every stored item, its text, order and checked state. Use checklist_items for a full replacement instead. A full list that adds items must preserve the existing list as an unchanged prefix. Never send both fields. | Atualize o checklist de um hábito da pessoa. Para adicionar um passo inicial ou outro item, envie apenas item_to_add; o servidor o acrescenta desmarcado e preserva todos os itens salvos, com o mesmo texto, ordem e estado de marcação. Para substituir a lista inteira, use checklist_items. Ao adicionar itens por uma lista completa, mantenha todos os itens existentes no início, sem alterações. Nunca envie os dois campos. |
+| item_to_add description | One item to append unchecked. Omit checklist_items; the server keeps all stored items unchanged. | Um item para acrescentar desmarcado. Omita checklist_items; o servidor mantém todos os itens salvos sem alterações. |
+| checklist_items description | Full desired list for replacement. If adding items, preserve all existing items unchanged and in order. Omit when using item_to_add. | Lista completa para substituição. Ao adicionar itens, preserve todos os itens existentes sem alterações e na mesma ordem. Omita ao usar item_to_add. |
+| Argument error | Send item_to_add or checklist_items, never both. | Envie item_to_add ou checklist_items, nunca os dois. |
+| Argument error | item_to_add must be a string. | item_to_add deve ser um texto. |
+| Addition guard | Adding checklist items must preserve every stored item's text, order and checked state. Send only item_to_add to append one item safely. | Ao adicionar itens ao checklist, preserve o texto, a ordem e o estado de marcação de todos os itens salvos. Envie apenas item_to_add para acrescentar um item com segurança. |
 
 ## Capability fallback and feature-help copy review
 

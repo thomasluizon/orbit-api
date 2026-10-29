@@ -1,0 +1,140 @@
+{
+  "caseId": "composition-one-small-step-save-checklist-pt-BR",
+  "repeat": 3,
+  "reason": "O preview altera o item existente \"Pegar um copo\" de marcado para desmarcado, violando a exigência de preservar os estados existentes.",
+  "groundingEvidence": {
+    "fixture": {
+      "habits": [
+        {
+          "title": "Caminhada",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-29",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-25T00:10:06.266458Z",
+          "logs": [],
+          "intervalWeeks": null
+        },
+        {
+          "title": "Beber água",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-29",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [
+            {
+              "text": "Pegar um copo",
+              "isChecked": true
+            },
+            {
+              "text": "Encher o copo",
+              "isChecked": false
+            }
+          ],
+          "createdAtUtc": "2026-10-25T00:10:04.663545Z",
+          "logs": [],
+          "intervalWeeks": null
+        }
+      ],
+      "goals": [],
+      "tags": [],
+      "checklistTemplates": [],
+      "apiKeys": [],
+      "notifications": [],
+      "loggedState": {
+        "fixture": "starting-step-checklist",
+        "date": "2026-10-29",
+        "habits": [
+          {
+            "title": "Caminhada",
+            "completed": false,
+            "skipped": false
+          },
+          {
+            "title": "Beber água",
+            "completed": false,
+            "skipped": false
+          }
+        ]
+      }
+    },
+    "successfulTools": [
+      {
+        "name": "query_habits",
+        "result": {
+          "scope": "all",
+          "items": [
+            {
+              "title": "Beber água",
+              "emoji": null,
+              "depth": 0,
+              "isBadHabit": false,
+              "status": "today",
+              "startDate": "2026-10-19",
+              "parentTitle": null,
+              "tags": []
+            }
+          ],
+          "totalCount": 1
+        }
+      }
+    ],
+    "readScopes": []
+  },
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": "Beber água",
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "update_checklist",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "checklist_items": [
+          {
+            "text": "Pegar um copo",
+            "is_checked": false
+          },
+          {
+            "text": "Encher o copo",
+            "is_checked": false
+          },
+          {
+            "text": "Pegar um copo",
+            "is_checked": false
+          }
+        ],
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

@@ -159,13 +159,15 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Theory]
-    [InlineData("en", "Open the book")]
-    [InlineData("pt-BR", "Abrir o livro")]
-    public async Task OneSmallStep_ChecklistSavePreservesExistingItemsAndWaitsForApproval(string language, string step)
+    [InlineData("en", "Open the book", false)]
+    [InlineData("pt-BR", "Abrir o livro", false)]
+    [InlineData("en", "Open the book", true)]
+    [InlineData("pt-BR", "Abrir o livro", true)]
+    public async Task OneSmallStep_ChecklistSavePreservesExistingItemsAndWaitsForApproval(string language, string step, bool append)
     {
         _user.SetLanguage(language);
         var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Study", FrequencyUnit.Day, 1, Today,
-            ChecklistItems: [new ChecklistItem("Existing item", true)])).Value;
+            ChecklistItems: [new ChecklistItem("Existing item", true), new ChecklistItem("Unchecked item", false)])).Value;
         _dbContext.Habits.Add(parent);
         await _dbContext.SaveChangesAsync();
         var repository = new GenericRepository<Habit>(_dbContext);
@@ -185,18 +187,21 @@ public sealed partial class ChatWriteHoldHandlerTests
         var update = new UpdateChecklistCommandHandler(repository, _unitOfWork);
         _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
             update.Handle(call.Arg<UpdateChecklistCommand>(), call.Arg<CancellationToken>()));
+        var appendHandler = new AppendChecklistItemCommandHandler(repository, _unitOfWork, _flagCache, _userDateService);
+        _mediator.Send(Arg.Any<AppendChecklistItemCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            appendHandler.Handle(call.Arg<AppendChecklistItemCommand>(), call.Arg<CancellationToken>()));
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => _dbContext.SaveChangesAsync(call.Arg<CancellationToken>()));
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsPendingOperationChanges: true);
         var card = StartingStepCard(await ReplayStartingStep("Help me begin", "Study", step, language, client));
         card.Actions[2].Message.Should().Be(language == "pt-BR"
             ? $"Quero adicionar {JsonSerializer.Serialize(step)} ao checklist de um hábito."
             : $"Add {JsonSerializer.Serialize(step)} to a habit's checklist.");
-        ScriptToolCall(JsonSerializer.Serialize(new
+        ScriptToolCall(append ? JsonSerializer.Serialize(new { habit_id = parent.Id, item_to_add = step }) : JsonSerializer.Serialize(new
         {
             habit_id = parent.Id,
             checklist_items = new[]
         {
-            new { text = "Existing item", is_checked = true }, new { text = step, is_checked = false }
+            new { text = "Existing item", is_checked = true }, new { text = "Unchecked item", is_checked = false }, new { text = step, is_checked = false }
         }
         }), "update_checklist");
         var preview = await CreateHandler().Handle(new(_userId, card.Actions[2].Message, ClientContext: client), default);
@@ -205,19 +210,28 @@ public sealed partial class ChatWriteHoldHandlerTests
             Arg.Is<AiToolRequest>(request => request.UserMessage == card.Actions[2].Message),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         var pending = preview.Value.PendingOperations.Should().ContainSingle().Which;
-        parent.ChecklistItems.Should().ContainSingle();
+        parent.ChecklistItems.Should().HaveCount(2);
         var checklistPreview = pending.Items.Should().ContainSingle().Which.Fields
             .Should().ContainSingle(field => field.Field == "checklist_items").Which.ProposedValue!.Value;
         checklistPreview.EnumerateArray().Select(item => item.GetProperty("text").GetString())
-            .Should().Equal("Existing item", step);
+            .Should().Equal("Existing item", "Unchecked item", step);
         checklistPreview.EnumerateArray().Select(item => item.GetProperty("is_checked").GetBoolean())
-            .Should().Equal(true, false);
+            .Should().Equal(true, false, false);
         var beforeApproval = await _dbContext.Habits.AsNoTracking().SingleAsync();
-        beforeApproval.ChecklistItems.Should().ContainSingle().Which.Text.Should().Be("Existing item");
+        beforeApproval.ChecklistItems.Select(item => item.Text).Should().Equal("Existing item", "Unchecked item");
         var stored = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
-        var proposedItems = stored.Arguments.GetProperty("checklist_items").EnumerateArray().ToArray();
-        proposedItems.Select(item => item.GetProperty("text").GetString()).Should().Equal("Existing item", step);
-        proposedItems.Select(item => item.GetProperty("is_checked").GetBoolean()).Should().Equal(true, false);
+        if (append)
+        {
+            stored.Arguments.GetProperty("item_to_add").GetString().Should().Be(step);
+            stored.Arguments.TryGetProperty("checklist_items", out _).Should().BeFalse();
+            pending.Items.Single().Fields.Should().OnlyContain(field => !field.IsEditable);
+        }
+        else
+        {
+            var proposedItems = stored.Arguments.GetProperty("checklist_items").EnumerateArray().ToArray();
+            proposedItems.Select(item => item.GetProperty("text").GetString()).Should().Equal("Existing item", "Unchecked item", step);
+            proposedItems.Select(item => item.GetProperty("is_checked").GetBoolean()).Should().Equal(true, false, false);
+        }
         var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
         var approved = await _executor.ExecuteAsync(new(_userId, stored.OperationId, stored.Arguments,
             stored.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
@@ -225,8 +239,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         _dbContext.ChangeTracker.Clear();
         var read = await new GetHabitByIdQueryHandler(repository, new GenericRepository<HabitLog>(_dbContext), _userDateService, repeatReminderReader: Substitute.For<IRepeatReminderReader>())
             .Handle(new(_userId, parent.Id), default);
-        read.Value.ChecklistItems.Select(item => item.Text).Should().Equal("Existing item", step);
-        read.Value.ChecklistItems[0].IsChecked.Should().BeTrue();
+        read.Value.ChecklistItems.Select(item => item.Text).Should().Equal("Existing item", "Unchecked item", step);
+        read.Value.ChecklistItems.Select(item => item.IsChecked).Should().Equal(true, false, false);
     }
 
     private async Task<ChatResponse> ReplayStartingStep(string message, string goal, string step, string language,

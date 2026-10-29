@@ -259,6 +259,8 @@ public sealed partial class PendingOperationChangePreviewer(
     {
         if (destructivePreviewer is not null && destructivePreviewer.Handles(operationId))
             return await destructivePreviewer.PreviewAsync(userId, operationId, arguments, ct);
+        if (operationId == "update_checklist" && arguments.TryGetProperty("item_to_add", out _))
+            return await PreviewChecklistAppendAsync(userId, arguments, ct);
         if (operationId == "assign_tags" && arguments.TryGetProperty("habit_ids", out _))
         {
             var singles = AssignTagsTool.SingleHabitArguments(arguments);

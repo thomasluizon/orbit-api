@@ -9,12 +9,12 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
     public string Name => "suggest_breakdown";
 
     public string Description =>
-        "Suggest sub-habits without creating them. When the person is stuck starting an activity, set one_small_step=true, "
-        + "language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. "
+        "Suggest sub-habits without creating them. When the person cannot get themselves to do an activity, is stuck starting it, or asks for one concrete first step, call suggest_breakdown with one_small_step=true even if they do not say start. "
+        + "Set language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. "
         + "For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. "
         + "The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. "
         + "Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, "
-        + "preserving existing checklist items and resolving the owned habit first. Both require the existing approval preview.";
+        + "with item_to_add containing only the step, resolving the owned habit first. The server preserves all stored checklist items. Both require the existing approval preview.";
 
     public object GetParameterSchema() => new
     {

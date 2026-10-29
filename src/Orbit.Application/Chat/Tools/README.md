@@ -364,7 +364,10 @@ this tool in both languages, independently of message patterns.
 The server composes the negotiated `oneSmallStep` block without a continuation.
 Its smaller and save actions submit ordinary chat requests. Save requests reuse
 `create_habit` or `update_checklist`, with the existing approval preview and owned
-checklist target resolution. Suggestions write nothing.
+checklist target resolution. Checklist saves send only `item_to_add`; the server
+previews the full stored list plus the unchecked step, then appends on approval.
+Full-list additions through `checklist_items` must retain the stored prefix without
+changing text, order or checked state. Suggestions write nothing.
 
 The exact wire contract, capability negotiation, bilingual copy inventory and
 paired-consumer eval requirements are in
