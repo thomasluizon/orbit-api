@@ -132,10 +132,12 @@ public partial class ProcessUserChatCommandHandler
         IReadOnlyCollection<string> activeToolNames)
     {
         var client = request.ClientContext;
+        var composition = UsesComposition(request, context);
         prompt = string.Join(Environment.NewLine, prompt, RelativeReadPeriod.Instruction);
         if (activeToolNames.Contains("get_habit_month"))
             prompt = string.Join(Environment.NewLine, prompt,
-                "get_habit_month returns habitMonth. For a supported habitMonth kind, use its exact readDirective; the server preserves the complete Calendário data. Write at most one short sentence without figures, then its block. For unsupported clients, use only its returned habit facts in text.");
+                "get_habit_month returns habitMonth. For a supported habitMonth kind, use its exact readDirective; the server preserves the complete Calendário data. Write at most one short sentence without figures, then its block."
+                + (composition ? "" : " For unsupported clients, use only its returned habit facts in text."));
         if (activeToolNames.Contains("get_period_analytics"))
             prompt = string.Join(Environment.NewLine, prompt,
                 "For how many habits did I complete this week or quantos hábitos concluí esta semana, call get_period_analytics with metric completedHabits. "
@@ -144,7 +146,7 @@ public partial class ProcessUserChatCommandHandler
                 + "For a supported periodTotal or periodComparison block, write at most one short sentence in the person's language without figures, then the block. "
                 + "Period blocks with metric completedHabits and unit habits also require supportsCompletedHabitsMetric, in addition to supportsParts and their advertised kind. "
                 + $"Completed habits metric supported: {client?.SupportsCompletedHabitsMetric == true}. "
-                + "For an unsupported metric, answer from the queried facts in text.");
+                + (composition ? "" : "For an unsupported metric, answer from the queried facts in text."));
         if (client?.SupportsParts == true && client.PartKinds is { Count: > 0 })
             prompt = string.Join(Environment.NewLine, prompt,
                 "When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. "
@@ -157,11 +159,12 @@ public partial class ProcessUserChatCommandHandler
             + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "
             + $"Dated habit lists supported: {client?.SupportsDatedHabitListCard == true}. Habit history supported: {client?.SupportsHabitHistoryCard == true}. "
             + $"Skipped habit rows supported: {client?.SupportsSkippedHabitRows == true}. "
-            + "For an unsupported subtype, answer from the queried facts in text.");
-        if (UsesComposition(request, context))
+            + (composition ? "" : "For an unsupported subtype, answer from the queried facts in text."));
+        if (composition)
             prompt = string.Join(Environment.NewLine, prompt,
                 "The server composes the leading answer blocks from successful typed reads without framing prose. Call only the reads needed for the request. Additional blocks require explicitly requested distinct subjects. Put clarification in ask and every write in its existing approval preview. Do not repeat block facts in prose.",
-                TerminalReadDirective.Instruction);
+                TerminalReadDirective.Instruction,
+                TerminalReadDirective.ReadableFallbackInstruction);
         else if (client?.SupportsParts == true)
             prompt = string.Join(Environment.NewLine, prompt,
                 "Write the reply in reading order, placing each card directive on its own line where its block belongs. Use at most three directives and never repeat a block's figures in the text.");

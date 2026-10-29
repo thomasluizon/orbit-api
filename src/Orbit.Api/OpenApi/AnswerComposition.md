@@ -4,8 +4,37 @@ Tracks thomasluizon/orbit-tickets#1617. The API owns composition; #1620 owns the
 and #26 owns real-call bilingual assertions in `evals/astra/`. No second eval harness applies.
 
 The database flag `astra_block_first` is seeded off. Composition requires `supportsParts`
-after kill flags, advertised `partKinds`, and existing card/subtype capabilities. Disabling
-the flag restores negotiated directive assembly. Legacy clients keep FORMAT and all fields.
+after kill flags. Advertised `partKinds` and existing card/subtype capabilities select
+blocks or readable text from the same typed results; an empty `partKinds` list still
+uses server composition. Disabling the flag restores negotiated directive assembly.
+Legacy clients keep FORMAT and all fields.
+
+Tracks thomasluizon/orbit-tickets#1756. A complete read round sets
+`orbit_read_complete=true` on every read, including independent compound reads.
+When every call succeeds with a typed projection, the server composes the answer
+without another model call. Missing rendering capabilities do not make the read
+plan incomplete. For example, `query_habits` and `query_goals` together produce the
+existing readable habit and goal lists when the client advertises no part kinds.
+The model receives no instruction to write fallback prose in this mode. A false
+completion signal, failed read or missing projection retains normal continuation.
+No message pattern changes the tools, their arguments or the answer.
+
+The following model-facing copy is English at runtime in both locales; pt-BR is
+supplied for coordinator review. Person-visible fallback strings are unchanged.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `TerminalReadDirective.Instruction` compound guidance | For a compound habits-and-goals read, call query_habits and query_goals together and set orbit_read_complete=true on both when they fully answer the request. | Para uma consulta conjunta de hábitos e metas, chame query_habits e query_goals na mesma rodada e defina orbit_read_complete=true nas duas chamadas quando elas responderem completamente ao pedido. |
+| `TerminalReadDirective.ReadableFallbackInstruction` | The server renders unsupported read blocks and subtypes as readable text from the same typed results. Rendering capabilities do not change read-plan completeness. Do not write a fallback answer or leave a complete read plan open because a block kind, subtype or metric is unsupported. | O servidor apresenta os blocos de consulta e subtipos sem suporte como texto legível a partir dos mesmos resultados tipados. Os recursos de exibição não mudam se o plano de consulta está completo. Não escreva uma resposta alternativa nem deixe um plano de consulta completo em aberto por falta de suporte a um tipo de bloco, subtipo ou métrica. |
+| `orbit_read_complete` schema description | True when all reads in this round fully answer the request, including compound reads and readable fallback text; false for prerequisite lookups or any remaining read or write. | true quando todas as consultas desta rodada responderem completamente ao pedido, incluindo consultas conjuntas e respostas alternativas em texto legível; false para consultas preliminares ou quando ainda faltar alguma consulta ou alteração. |
+
+Outside server composition, the model retains these existing instructions:
+
+| en | pt-BR |
+| --- | --- |
+| For unsupported clients, use only its returned habit facts in text. | Para clientes sem suporte, use no texto apenas os fatos sobre hábitos retornados pela ferramenta. |
+| For an unsupported metric, answer from the queried facts in text. | Para uma métrica sem suporte, responda em texto com base nos fatos consultados. |
+| For an unsupported subtype, answer from the queried facts in text. | Para um subtipo sem suporte, responda em texto com base nos fatos consultados. |
 
 Successful typed results supply blocks and query identities. Directives cannot establish
 success or determine the leading position. Tool-call structure selects answers without request
