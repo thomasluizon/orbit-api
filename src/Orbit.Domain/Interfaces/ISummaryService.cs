@@ -23,7 +23,23 @@ public record DailySummaryContext(
     IReadOnlyDictionary<Guid, DateOnly> LastBadHabitSlipDates,
     int WeekStartDay = 1,
     IReadOnlySet<Guid>? ResolvedDueDateHabitIds = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    IReadOnlyList<DailySummaryPendingHabit>? PendingHabits = null);
+
+public record DailySummaryPendingHabit(
+    Guid Id,
+    string Title,
+    Guid? ParentId,
+    string? ParentTitle,
+    DateOnly DueDate,
+    TimeOnly? DueTime,
+    TimeOnly? DueEndTime,
+    int? Position,
+    int DayOrder,
+    bool IsOverdue,
+    bool HasPendingChildren,
+    int CompletedCount,
+    int TotalCount);
 
 public interface ISummaryService
 {

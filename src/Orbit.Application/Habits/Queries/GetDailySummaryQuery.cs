@@ -143,7 +143,8 @@ public class GetDailySummaryQueryHandler(
                 lastBadHabitSlipDates,
                 user.WeekStartDay,
                 dueDateResolution,
-                UserId: request.UserId),
+                UserId: request.UserId,
+                PendingHabits: PendingHabitsForToday(request, scheduleItems, userToday)),
             cancellationToken);
 
         if (summaryResult.IsFailure)
@@ -165,6 +166,12 @@ public class GetDailySummaryQueryHandler(
     }
 
     private sealed record ScopedSummary(DateOnly From, DateOnly To, DailySummaryContent Content);
+
+    private static IReadOnlyList<DailySummaryPendingHabit>? PendingHabitsForToday(
+        GetDailySummaryQuery request, IReadOnlyList<HabitScheduleItem> scheduleItems, DateOnly today) =>
+        request.DateFrom == today && request.DateTo == today
+            ? DailySummaryPendingProjection.Project(scheduleItems, today)
+            : null;
 
     private static IReadOnlyList<HabitSummaryLogWindow> BuildLogWindows(
         IEnumerable<Habit> habits, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday, int weekStartDay)

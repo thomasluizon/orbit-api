@@ -27,7 +27,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// structured-output mapping of GenerateSummaryAsync (summary parsing, with Insight always
 /// returned empty) against a stubbed chat transport.
 /// </summary>
-public class AiSummaryServiceTests
+public partial class AiSummaryServiceTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2025, 4, 1);
