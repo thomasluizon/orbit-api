@@ -12,6 +12,11 @@ from an unstructured message in its existing `habits` array. A reused activity c
 `suggest_habits` provides editable drafts; map `existingHabitId` to `habit_id` when
 preparing the combined preview and retain explicit tasks. Every write uses the
 existing command, validation, domain guards and pending approval gateway.
+Use `query_habits` for reuse and `suggest_habits` for requested ideas; organizing
+the message does not need calendar, habit-month, profile or analytics reads.
+Bulk argument preparation normalizes zero-second suggestion times to `HH:mm`
+and includes a recurring item's supplied start date as `due_date` when omitted.
+The existing ID determines the stored title carried by the reuse preview.
 
 Preview items append optional nullable string `habitType` (`Task`, `Habit`, `General`).
 It is derived from structured schedule fields, retaining a reused item's stored cadence

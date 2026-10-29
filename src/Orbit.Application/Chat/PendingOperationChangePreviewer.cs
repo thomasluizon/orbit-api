@@ -61,7 +61,9 @@ public sealed partial class PendingOperationChangePreviewer(
         if (operationId == AccountChangeSet.OperationName)
             return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken, clientContext));
         if (!arguments.TryGetProperty("revised_items", out _) && toolRegistry.GetTool(operationId) is { } tool)
-            arguments = OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
+            arguments = tool is BulkCreateHabitsTool bulk
+                ? bulk.PrepareArguments(arguments)
+                : OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema());
         if (await HasMissingSearchAsync(userId, operationId, arguments, cancellationToken))
             return Result.Success<PendingOperationChangePreview?>(null);
         if (RequiresEmojiInference(operationId, arguments))

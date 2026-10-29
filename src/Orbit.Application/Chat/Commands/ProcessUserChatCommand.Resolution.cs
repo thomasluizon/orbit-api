@@ -276,6 +276,12 @@ public partial class ProcessUserChatCommandHandler
 
     private static void BindExistingHabit(JsonObject item, string name, Guid? parentId, ToolExecutionAccumulator results)
     {
+        if (Guid.TryParse(item[HabitId]?.ToString(), out var suppliedId))
+        {
+            if (results.AllHabits.FirstOrDefault(habit => habit.Id == suppliedId) is { } target)
+                item["title"] = target.Title;
+            return;
+        }
         var matches = results.Habits.Where(habit => HabitNameMatcher.Normalize(habit.Title) == HabitNameMatcher.Normalize(name)
             && (parentId is null || habit.ParentHabitId == parentId)).ToArray();
         if (matches.Length > 1)
@@ -286,6 +292,7 @@ public partial class ProcessUserChatCommandHandler
         if (matches.Length != 1) return;
         var existing = matches[0];
         item[HabitId] = existing.Id.ToString();
+        item["title"] = existing.Title;
         if (item[ParentHabitId] is null && existing.ParentHabitId is { } existingParent)
             item[ParentHabitId] = existingParent.ToString();
     }
