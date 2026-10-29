@@ -67,7 +67,8 @@ public class CreateHabitTool(IUserDateService userDateService, IMediator mediato
             return parent;
 
         var children = BuildChildHabits(subHabits, userId, parent.Value, parent.Value.NextDueDate);
-        return children.IsFailure ? children : Domain.Common.Result.Success();
+        return children.IsFailure ? children
+            : await HabitCreationCapacity.CheckAsync(mediator, userId, [args], false, ct);
     }
 
     public async Task<PreparedToolIntent?> PrepareIntentAsync(JsonElement args, Guid userId, CancellationToken ct)

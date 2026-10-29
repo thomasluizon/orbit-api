@@ -198,7 +198,8 @@ public partial class ProcessUserChatCommandHandler
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
-        var hadToolFailure = outcomesByCallId.Values.Any(outcome => outcome.OperationResult?.Status == AgentOperationStatus.Failed);
+        var hadToolFailure = outcomesByCallId.Values.Any(outcome => outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation
+            && operation.ErrorCode != ErrorCodes.HabitLimitReached);
 
         if (correction is not null)
             return correction.HasUnresolvedFailures

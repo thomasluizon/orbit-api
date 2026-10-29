@@ -53,8 +53,9 @@ public class BulkCreateHabitsTool(
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ExecuteCoreAsync(args, userId, ct, checkOnly: false);
 
-    public Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
+    public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
         var schemaArguments = JsonNode.Parse(args.GetRawText());
         if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits)
             foreach (var habit in habits.OfType<JsonObject>())
@@ -64,8 +65,10 @@ public class BulkCreateHabitsTool(
                 habit.Remove(HabitHeadingParents.SuggestedParentField);
                 habit.Remove(HabitHeadingParents.ExistingCandidatesField);
             }
-        return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
+        var result = await ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
             () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
+        return result.IsFailure ? result : await HabitCreationCapacity.CheckAsync(mediator, userId,
+            args.GetProperty(ToolArgumentNames.Habits).EnumerateArray(), args.TryGetProperty(ParentHabitId, out _), ct);
     }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)

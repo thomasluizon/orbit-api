@@ -5,7 +5,7 @@ namespace Orbit.Application.Chat.Grounding;
 
 public sealed record GroundingFact(string Kind, string Value, string ToolName, string ToolCallId);
 
-/// <summary>Facts returned by successful tools in one turn, with provenance for evaluations.</summary>
+/// <summary>Tool facts and typed capacity refusals in one turn, with provenance for evaluations.</summary>
 public sealed record TurnFactSet(IReadOnlyList<GroundingFact> Facts)
 {
     public static TurnFactSet Empty { get; } = new(Array.Empty<GroundingFact>());
@@ -13,8 +13,14 @@ public sealed record TurnFactSet(IReadOnlyList<GroundingFact> Facts)
     public static TurnFactSet FromToolResults(IEnumerable<AiToolCallResult> results)
     {
         var facts = new HashSet<GroundingFact>();
-        foreach (var result in results.Where(result => result.Success))
+        foreach (var result in results)
         {
+            if (!result.Success)
+            {
+                if (result.Payload is Models.HabitCapacityFailure refusal)
+                    ReadPayload(JsonSerializer.SerializeToElement(refusal), null, result, facts);
+                continue;
+            }
             AddText(result.EntityName, result.EntityId is not null, result, facts);
             if (result.Payload is not null)
                 ReadPayload(JsonSerializer.SerializeToElement(result.Payload), null, result, facts);

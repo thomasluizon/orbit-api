@@ -75,5 +75,7 @@ public record ToolResult(
     string? ErrorCode = null)
 {
     public static ToolResult FromFailure(Result result, string? entityId = null) =>
-        new(false, EntityId: entityId, Error: result.Error, ErrorCode: result.ErrorCode);
+        new(false, EntityId: entityId, Error: result.Error, ErrorCode: result.ErrorCode,
+            Payload: result.ErrorCode == Common.ErrorCodes.HabitLimitReached
+                ? new Models.HabitCapacityFailure(result.Error, result.ErrorArgs) : null);
 }
