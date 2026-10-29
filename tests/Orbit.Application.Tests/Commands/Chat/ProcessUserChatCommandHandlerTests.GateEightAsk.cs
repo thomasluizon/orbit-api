@@ -131,9 +131,6 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("multiple")]
     [InlineData("longLabel")]
     [InlineData("recommended")]
-    [InlineData("title")]
-    [InlineData("intro")]
-    [InlineData("progress")]
     public async Task GateEightAsk_RetainsQuestionFieldsThatChoiceCannotRender(string field)
     {
         SetupUserAndPayGate();
@@ -149,9 +146,6 @@ public partial class ProcessUserChatCommandHandlerTests
                 break;
             case "longLabel": questions[0]!["options"]![0]!["label"] = new string('a', 21); break;
             case "recommended": questions[0]!["options"]![0]!["recommended"] = true; break;
-            case "title": args["title"] = "Choose a habit."; break;
-            case "intro": args["intro"] = "Choose a habit."; break;
-            case "progress": args["progress"] = JsonSerializer.SerializeToNode(new { current = 0, total = 1 }); break;
         }
         SetupAiResponse(new AiResponse
         {
@@ -168,9 +162,6 @@ public partial class ProcessUserChatCommandHandlerTests
         block.Questions.Should().HaveCount(field == "multiple" ? 2 : 1);
         if (field == "longLabel") block.Questions[0].Options![0].Label.Should().HaveLength(21);
         if (field == "recommended") block.Questions[0].Options![0].Recommended.Should().BeTrue();
-        if (field == "title") block.Title.Should().Be("Choose a habit.");
-        if (field == "intro") block.Intro.Should().Be("Choose a habit.");
-        if (field == "progress") block.Progress.Should().Be(new AstraQuestionProgress(0, 1));
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 

@@ -10,8 +10,10 @@ loop sends it back to the model, permits one corrected ask, then asks for prose.
 A question form's top-level `allowFreeText` is ignored; each question's setting
 controls its answer. The optional heading comes from `title`, then `question`.
 A validated single `singleChoice` becomes `choice` when the client supports it
-and the heading, option count and labels fit that contract. Forms with a title, intro,
-progress, recommendations, several fields or longer labels retain `question`.
+and the heading, option count and labels fit that contract. A title, introduction or
+progress does not turn one choice into a questionnaire. The choice preserves the
+heading, option ids, labels and free-text setting. Recommendations, several fields
+or longer labels retain `question`.
 If the client cannot render the resulting form, the model receives a capability
 error rather than a stored block. Every path leaves writes behind the existing
 approval flow.

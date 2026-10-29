@@ -18,6 +18,12 @@ their produced position. Only equivalent query families, kinds and canonical sco
 different entity IDs, date windows and metrics remain distinct, including history scopes.
 The server neither queries an implicit dashboard nor derives numbers from prose.
 
+A validated question form containing one single-choice field becomes a `choice`
+when its options fit the existing choice contract and the client supports it.
+The heading, option ids, labels and free-text permission are preserved; a heading,
+introduction or progress display does not require a questionnaire. Several fields
+retain the question form. See [AskValidation.md](AskValidation.md).
+
 | Family | Leading surface | Named consumer |
 | --- | --- | --- |
 | Habits and schedules | Query-bound `habitList` or `daySummary` | #1619 |
