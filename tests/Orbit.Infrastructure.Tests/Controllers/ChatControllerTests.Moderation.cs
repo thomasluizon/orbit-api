@@ -1,6 +1,9 @@
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -18,6 +21,59 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public partial class ChatControllerTests
 {
+    [Theory]
+    [InlineData("en", "{}", "en")]
+    [InlineData("pt-BR", "{}", "pt-BR")]
+    [InlineData("en", "{\"locale\":\"pt-BR\"}", "pt-BR")]
+    [InlineData("pt-BR", "{\"locale\":\"en\"}", "en")]
+    public async Task ProcessChat_LegacyModeration_PreservesLocaleThroughResultFilter(
+        string profileLanguage, string clientContext, string expectedLanguage)
+    {
+        var users = PrepareModeratedChatHandler(profileLanguage, false);
+        var result = await _controller.ProcessChat("screen this input", null, null, default,
+            clientContext: clientContext);
+        var actionContext = new ActionContext(_controller.HttpContext, new RouteData(), new ActionDescriptor());
+        var context = new ResultExecutingContext(actionContext, [], result, _controller);
+
+        await new LocalizedErrorResultFilter(new RequestLanguageResolver(users))
+            .OnResultExecutionAsync(context, () => Task.FromResult(
+                new ResultExecutedContext(context, context.Filters, context.Result, _controller)));
+
+        var error = context.Result.Should().BeOfType<ObjectResult>().Subject;
+        error.StatusCode.Should().Be(400);
+        var body = error.Value.Should().BeOfType<ErrorResponse>().Subject;
+        body.ErrorCode.Should().Be(ErrorCodes.ContentModerationRefused);
+        body.Error.Should().Be(ModeratedReply(expectedLanguage, false));
+    }
+
+    [Theory]
+    [InlineData("en", "{}", "en")]
+    [InlineData("pt-BR", "{}", "pt-BR")]
+    [InlineData("en", "{\"locale\":\"pt-BR\"}", "pt-BR")]
+    [InlineData("pt-BR", "{\"locale\":\"en\"}", "en")]
+    public async Task ProcessChatStream_LegacyModeration_PreservesLocaleThroughErrorLocalization(
+        string profileLanguage, string clientContext, string expectedLanguage)
+    {
+        var users = PrepareModeratedChatHandler(profileLanguage, false);
+        using var services = new ServiceCollection()
+            .AddSingleton<IRequestLanguageResolver>(new RequestLanguageResolver(users))
+            .BuildServiceProvider();
+        _controller.HttpContext.RequestServices = services;
+        using var body = new MemoryStream();
+        _controller.Response.Body = body;
+
+        await _controller.ProcessChatStream("screen this input", null, null, default,
+            clientContext: clientContext);
+
+        var events = System.Text.Encoding.UTF8.GetString(body.ToArray())
+            .Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => JsonSerializer.Deserialize<JsonElement>(line["data: ".Length..])).ToArray();
+        events.Select(item => item.GetProperty("type").GetString()).Should().Equal("started", "error");
+        events[1].GetProperty("status").GetInt32().Should().Be(400);
+        events[1].GetProperty("code").GetString().Should().Be(ErrorCodes.ContentModerationRefused);
+        events[1].GetProperty("error").GetString().Should().Be(ModeratedReply(expectedLanguage, false));
+    }
+
     public static TheoryData<string, bool?, bool, bool> ModeratedClientCases
     {
         get
@@ -118,7 +174,7 @@ public partial class ChatControllerTests
         return CrisisSupportGuard.EnsureResources(CrisisSupportGuard.FallbackMessage(locales), locales, null);
     }
 
-    private void PrepareModeratedChatHandler(string language, bool crisis)
+    private IGenericRepository<User> PrepareModeratedChatHandler(string language, bool crisis)
     {
         var user = User.Create("Person", "moderation@example.com").Value;
         user.SetLanguage(language);
@@ -142,5 +198,6 @@ public partial class ChatControllerTests
             NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), moderation);
         _mediator.Send(Arg.Any<ProcessUserChatCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<ProcessUserChatCommand>(), call.Arg<CancellationToken>()));
+        return users;
     }
 }
