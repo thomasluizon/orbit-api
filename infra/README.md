@@ -64,6 +64,8 @@ unaffected.
 
 ## Staging API image source
 
+The eval account allow-list lives in SSM parameter `/orbit/staging/api/StagingEval__AccountIds` and reaches the API as `StagingEval__AccountIds` through the `orbit-staging-api` environment group. The coordinator creates the parameter with comma-separated account UUIDs, reviews and applies a plan targeted to `render_env_group.staging_api`, then removes the service-level `StagingEval__AccountIds` override through the Render API. A subsequent plan targeted to `render_web_service.staging_api` must show no change.
+
 `render_web_service.staging_api` declares the public
 `ghcr.io/thomasluizon/orbit-api` image with `staging_api_digest` as its initial
 digest. Like the staging web service, it ignores later digest changes so
