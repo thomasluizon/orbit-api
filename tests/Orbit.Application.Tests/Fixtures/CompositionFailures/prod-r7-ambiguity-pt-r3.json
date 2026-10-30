@@ -1,0 +1,195 @@
+{
+  "caseId": "ambiguity-pt",
+  "repeat": 3,
+  "reason": "A tool was called outside the allowed set: bulk_log_habits (Failed).",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"choice\",\"block\":{\"title\":\"Qual Caminhada você quer marcar como feita?\",\"options\":[{\"label\":\"Caminhada\",\"description\":\"Parece igual\"},{\"label\":\"Caminhada\",\"description\":\"Parece igual\"}],\"freeText\":null,\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "bulk_log_habits",
+      "arguments": {
+        "filter": null,
+        "habit_ids": [
+          "[redacted]",
+          "[redacted]"
+        ],
+        "date": null,
+        "dates": null,
+        "orbit_write_complete": true
+      },
+      "resultStatus": "Failed",
+      "result": {
+        "success": false,
+        "error": "Several targets share a title and have not been read in this turn. Call query_habits to resolve the requested scope. A singular name requires for_selection=true and ask with the returned IDs; do not pass every matching ID to a bulk write. An explicit request for the full set uses for_selection=false without a name search.",
+        "payload": null
+      }
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": true,
+        "relative_period": "today",
+        "search": "Caminhada",
+        "date": null,
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": false,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    },
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Qual Caminhada você quer marcar como feita?",
+          "options": [
+            {
+              "id": "[redacted]",
+              "label": "Caminhada 1",
+              "description": "Uma das duas"
+            },
+            {
+              "id": "[redacted]",
+              "label": "Caminhada 2",
+              "description": "Uma das duas"
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": false,
+          "proposed_habit_title": null
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 15411.786815,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 277.11923199999995,
+        "elapsedMilliseconds": 289.48606
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 12.366828,
+        "elapsedMilliseconds": 24.733656
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.520408,
+        "elapsedMilliseconds": 0.520408
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 13.33028,
+        "elapsedMilliseconds": 13.33028
+      },
+      {
+        "name": "budget",
+        "milliseconds": 11.558315,
+        "elapsedMilliseconds": 11.558315
+      },
+      {
+        "name": "budget",
+        "milliseconds": 17.233966,
+        "elapsedMilliseconds": 17.233966
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4462.504661,
+        "elapsedMilliseconds": 4462.504661
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.702971,
+        "elapsedMilliseconds": 4.702971
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.94907,
+        "elapsedMilliseconds": 3.94907
+      },
+      {
+        "name": "budget",
+        "milliseconds": 16.482627,
+        "elapsedMilliseconds": 16.482627
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4246.464727,
+        "elapsedMilliseconds": 4246.464727
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.578884,
+        "elapsedMilliseconds": 4.578884
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 137.712946,
+        "elapsedMilliseconds": 137.712946
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.600882,
+        "elapsedMilliseconds": 3.600882
+      },
+      {
+        "name": "budget",
+        "milliseconds": 51.679579,
+        "elapsedMilliseconds": 51.679579
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 6061.579435,
+        "elapsedMilliseconds": 6061.579435
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.365355,
+        "elapsedMilliseconds": 5.365355
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 6.617962,
+        "elapsedMilliseconds": 6.617962
+      },
+      {
+        "name": "save",
+        "milliseconds": 9.060262,
+        "elapsedMilliseconds": 9.060262
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.695197,
+        "elapsedMilliseconds": 0.695197
+      },
+      {
+        "name": "other",
+        "milliseconds": 64.663228,
+        "elapsedMilliseconds": 64.663228
+      }
+    ]
+  }
+}

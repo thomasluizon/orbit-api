@@ -86,7 +86,11 @@ public sealed partial class AiIntentService(
         foreach (var update in BuildToolCatalog(conversationContext.ToolDeclarationUpdates))
         {
             var existing = options.Tools.OfType<FunctionTool>().SingleOrDefault(tool => tool.FunctionName == update.Key);
-            if (existing is null) continue;
+            if (existing is null)
+            {
+                if (update.Key == "ask") options.Tools.Add(update.Value);
+                continue;
+            }
             var index = options.Tools.IndexOf(existing);
             options.Tools[index] = update.Value;
         }

@@ -1,0 +1,101 @@
+{
+  "caseId": "composition-coaching-advice-pt-BR",
+  "repeat": 1,
+  "reason": "No-data answer must contain one to three short lines without headings, lists or paragraphs.",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"question\",\"block\":{\"title\":\"Você quer que eu sugira um primeiro passo bem pequeno para começar amanhã?\",\"progress\":\"0 de 1 pergunta respondida\",\"questions\":[{\"options\":[{\"label\":\"Sim\"},{\"label\":\"Não\"}]}],\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "question",
+          "missing_input": "habit_setup",
+          "questions": [
+            {
+              "type": "yesNo",
+              "id": "walking_entry",
+              "prompt": "Você quer que eu sugira um primeiro passo bem pequeno para começar amanhã?",
+              "allowFreeText": false
+            }
+          ],
+          "title": null,
+          "intro": null,
+          "progress": null,
+          "proposed_habit_title": "Caminhada"
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 4785.983249,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 225.382709,
+        "elapsedMilliseconds": 234.480823
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 9.098114,
+        "elapsedMilliseconds": 18.196228
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.108476,
+        "elapsedMilliseconds": 0.108476
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 6.813032,
+        "elapsedMilliseconds": 6.813032
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.105772,
+        "elapsedMilliseconds": 5.105772
+      },
+      {
+        "name": "budget",
+        "milliseconds": 27.254069,
+        "elapsedMilliseconds": 27.254069
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4449.443207,
+        "elapsedMilliseconds": 4449.443207
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.961657,
+        "elapsedMilliseconds": 5.961657
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 8.489172,
+        "elapsedMilliseconds": 8.489172
+      },
+      {
+        "name": "save",
+        "milliseconds": 15.052931,
+        "elapsedMilliseconds": 15.052931
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.203761,
+        "elapsedMilliseconds": 0.203761
+      },
+      {
+        "name": "other",
+        "milliseconds": 33.070349,
+        "elapsedMilliseconds": 33.070349
+      }
+    ]
+  }
+}

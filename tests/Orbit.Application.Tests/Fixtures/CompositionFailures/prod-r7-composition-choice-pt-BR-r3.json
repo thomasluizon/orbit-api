@@ -1,0 +1,131 @@
+{
+  "caseId": "composition-choice-pt-BR",
+  "repeat": 3,
+  "reason": "Block kind outside the expected set: question.",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"question\",\"block\":{\"title\":\"Qual hábito você quer mudar?\",\"progress\":\"0 de 2 perguntas respondidas\",\"questions\":[{\"options\":[{\"label\":\"Beber água\"},{\"label\":\"Caminhada\"}],\"freeText\":\"Sua resposta\"},{\"prompt\":\"O que você quer mudar nele?\",\"options\":[{\"label\":\"Horário\"},{\"label\":\"Frequência\"}],\"freeText\":\"Sua resposta\"}],\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "question",
+          "missing_input": "habit_setup",
+          "questions": [
+            {
+              "type": "singleChoice",
+              "id": "habit",
+              "prompt": "Qual hábito você quer mudar?",
+              "options": [
+                {
+                  "id": "beber-agua",
+                  "label": "Beber água",
+                  "recommended": false
+                },
+                {
+                  "id": "caminhada",
+                  "label": "Caminhada",
+                  "recommended": false
+                }
+              ],
+              "allowFreeText": true
+            },
+            {
+              "type": "singleChoice",
+              "id": "change",
+              "prompt": "O que você quer mudar nele?",
+              "options": [
+                {
+                  "id": "horario",
+                  "label": "Horário",
+                  "recommended": false
+                },
+                {
+                  "id": "frequencia",
+                  "label": "Frequência",
+                  "recommended": false
+                }
+              ],
+              "allowFreeText": true
+            }
+          ],
+          "title": null,
+          "intro": null,
+          "progress": null,
+          "proposed_habit_title": "Mudar hábito"
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 6508.021848,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 125.839399,
+        "elapsedMilliseconds": 157.179291
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 31.339892,
+        "elapsedMilliseconds": 62.679784
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.034912,
+        "elapsedMilliseconds": 0.034912
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 5.803769,
+        "elapsedMilliseconds": 5.803769
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.347878,
+        "elapsedMilliseconds": 3.347878
+      },
+      {
+        "name": "budget",
+        "milliseconds": 15.571368,
+        "elapsedMilliseconds": 15.571368
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 6263.162252,
+        "elapsedMilliseconds": 6263.162252
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.431256,
+        "elapsedMilliseconds": 4.431256
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 6.617462,
+        "elapsedMilliseconds": 6.617462
+      },
+      {
+        "name": "save",
+        "milliseconds": 13.383662,
+        "elapsedMilliseconds": 13.383662
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.19337,
+        "elapsedMilliseconds": 0.19337
+      },
+      {
+        "name": "other",
+        "milliseconds": 38.296628,
+        "elapsedMilliseconds": 38.296628
+      }
+    ]
+  }
+}

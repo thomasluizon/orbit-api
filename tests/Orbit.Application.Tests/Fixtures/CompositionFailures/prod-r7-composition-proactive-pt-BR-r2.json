@@ -1,0 +1,101 @@
+{
+  "caseId": "composition-proactive-pt-BR",
+  "repeat": 2,
+  "reason": "Block kind outside the expected set: question.",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"question\",\"block\":{\"title\":\"Você confirma que quer ver o que falta para hoje?\",\"progress\":\"0 de 1 pergunta respondida\",\"questions\":[{\"options\":[{\"label\":\"Sim\"},{\"label\":\"Não\"}]}],\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "question",
+          "missing_input": "habit_setup",
+          "questions": [
+            {
+              "type": "yesNo",
+              "id": "ok",
+              "prompt": "Você confirma que quer ver o que falta para hoje?",
+              "allowFreeText": false
+            }
+          ],
+          "title": null,
+          "intro": null,
+          "progress": null,
+          "proposed_habit_title": "Ver o que falta para hoje"
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 5407.712584,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 261.678839,
+        "elapsedMilliseconds": 268.722364
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 7.043525,
+        "elapsedMilliseconds": 14.08705
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.036162,
+        "elapsedMilliseconds": 0.036162
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 5.049889,
+        "elapsedMilliseconds": 5.049889
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.517357,
+        "elapsedMilliseconds": 3.517357
+      },
+      {
+        "name": "budget",
+        "milliseconds": 22.93421,
+        "elapsedMilliseconds": 22.93421
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 5045.702288,
+        "elapsedMilliseconds": 5045.702288
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.206064,
+        "elapsedMilliseconds": 4.206064
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 9.767569,
+        "elapsedMilliseconds": 9.767569
+      },
+      {
+        "name": "save",
+        "milliseconds": 9.523896,
+        "elapsedMilliseconds": 9.523896
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.265134,
+        "elapsedMilliseconds": 0.265134
+      },
+      {
+        "name": "other",
+        "milliseconds": 37.98765099999999,
+        "elapsedMilliseconds": 37.98765099999999
+      }
+    ]
+  }
+}

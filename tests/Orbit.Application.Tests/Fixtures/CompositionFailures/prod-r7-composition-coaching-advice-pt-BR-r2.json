@@ -1,0 +1,101 @@
+{
+  "caseId": "composition-coaching-advice-pt-BR",
+  "repeat": 2,
+  "reason": "No-data answer must contain one to three short lines without headings, lists or paragraphs.",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"question\",\"block\":{\"title\":\"Você quer salvar esse primeiro passo em um hábito existente?\",\"progress\":\"0 de 1 pergunta respondida\",\"questions\":[{\"options\":[{\"label\":\"Sim\"},{\"label\":\"Não\"}]}],\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "question",
+          "missing_input": "habit_setup",
+          "questions": [
+            {
+              "type": "yesNo",
+              "id": "trying",
+              "prompt": "Você quer salvar esse primeiro passo em um hábito existente?",
+              "allowFreeText": false
+            }
+          ],
+          "title": null,
+          "intro": null,
+          "progress": null,
+          "proposed_habit_title": "Caminhada"
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 5903.601418,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 101.6887335,
+        "elapsedMilliseconds": 114.95904
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 13.2703065,
+        "elapsedMilliseconds": 26.540613
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.041172,
+        "elapsedMilliseconds": 0.041172
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 15.76599,
+        "elapsedMilliseconds": 15.76599
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.825017,
+        "elapsedMilliseconds": 4.825017
+      },
+      {
+        "name": "budget",
+        "milliseconds": 55.527706,
+        "elapsedMilliseconds": 55.527706
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 5648.975102,
+        "elapsedMilliseconds": 5648.975102
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.081837,
+        "elapsedMilliseconds": 4.081837
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 4.908732,
+        "elapsedMilliseconds": 4.908732
+      },
+      {
+        "name": "save",
+        "milliseconds": 11.527864,
+        "elapsedMilliseconds": 11.527864
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.193321,
+        "elapsedMilliseconds": 0.193321
+      },
+      {
+        "name": "other",
+        "milliseconds": 42.79563699999999,
+        "elapsedMilliseconds": 42.79563699999999
+      }
+    ]
+  }
+}

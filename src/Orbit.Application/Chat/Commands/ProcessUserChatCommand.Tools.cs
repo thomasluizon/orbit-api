@@ -523,6 +523,7 @@ public partial class ProcessUserChatCommandHandler
                 ? await ExecuteBlockWriteAsync(resolved, request, executionResults, claim, cancellationToken)
                 : await ExecuteSingleToolCallAsync(
                     resolved, request, executionResults, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+            outcome = RecordHabitSetupDraft(call, outcome, executionResults);
             if (outcome.ToolResult.Success)
                 executionResults.PreviousWriteCalls.Add(call);
             else

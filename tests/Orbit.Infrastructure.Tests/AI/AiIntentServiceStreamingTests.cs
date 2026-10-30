@@ -148,7 +148,7 @@ public class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ContinueWithToolResultsAsync_RefreshesAskSchemaWithoutChangingTheToolSet(bool streaming)
+    public async Task ContinueWithToolResultsAsync_DeclaresDeferredAskAfterTypedRead(bool streaming)
     {
         var tools = StrictChatToolSchemaTests.AllTools();
         var ask = tools.Single(tool => tool.Name == "ask").Should()
@@ -163,7 +163,7 @@ public class AiIntentServiceStreamingTests
         var (service, sink) = BuildService(handler);
         var streamSink = streaming ? sink.Handle : (Func<AiStreamEvent, Task>?)null;
         var first = await service.SendWithToolsAsync(new AiToolRequest("Continue.", "system",
-            [Declaration(false), new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
+            [new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
         first.IsSuccess.Should().BeTrue(first.Error);
         first.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true), new { name = "unadvertised_tool" }];
 
@@ -176,15 +176,15 @@ public class AiIntentServiceStreamingTests
         {
             using var document = JsonDocument.Parse(handler.RequestBodies[index]);
             var declarations = document.RootElement.GetProperty("tools").EnumerateArray().ToArray();
-            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal("ask", "query_habits");
-            var declaration = declarations[0];
+            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal(index == 0 ? ["query_habits"] : new[] { "query_habits", "ask" });
+            if (index == 0) continue;
+            var declaration = declarations[1];
             declaration.GetProperty("strict").GetBoolean().Should().BeTrue();
             StrictChatToolSchemaTests.AssertStrict(declaration.GetProperty("parameters"));
             var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
             foreach (var form in forms.EnumerateArray())
                 form.GetProperty("properties").GetProperty("missing_input").GetProperty("enum").EnumerateArray()
-                    .Select(value => value.GetString()).Should().BeEquivalentTo(index == 0
-                        ? ["habit_setup"] : new[] { "habit_setup", "preference", "check_in", "record_selection", "bulk_selection" });
+                    .Select(value => value.GetString()).Should().BeEquivalentTo("habit_setup", "preference", "check_in", "record_selection", "bulk_selection");
         }
     }
 

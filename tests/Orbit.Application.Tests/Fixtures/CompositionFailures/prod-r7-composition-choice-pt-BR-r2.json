@@ -1,0 +1,67 @@
+{
+  "caseId": "composition-choice-pt-BR",
+  "repeat": 2,
+  "reason": "O campo answer contém apenas uma ressalva sobre interrupção, sem falha correspondente nas evidências. A rubrica não permite esse aviso genérico.",
+  "answer": "Esta resposta foi interrompida antes do fim e pode estar incompleta.",
+  "toolCalls": [],
+  "timing": {
+    "totalMilliseconds": 66886.088474,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 1043.8122475,
+        "elapsedMilliseconds": 1080.163881
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 36.3516335,
+        "elapsedMilliseconds": 72.703267
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.042012,
+        "elapsedMilliseconds": 0.042012
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 5.764987,
+        "elapsedMilliseconds": 5.764987
+      },
+      {
+        "name": "budget",
+        "milliseconds": 2.391347,
+        "elapsedMilliseconds": 2.391347
+      },
+      {
+        "name": "budget",
+        "milliseconds": 14.807288,
+        "elapsedMilliseconds": 14.807288
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 65660.862266,
+        "elapsedMilliseconds": 65660.862266
+      },
+      {
+        "name": "budget",
+        "milliseconds": 7.810466,
+        "elapsedMilliseconds": 7.810466
+      },
+      {
+        "name": "save",
+        "milliseconds": 11.900453,
+        "elapsedMilliseconds": 11.900453
+      },
+      {
+        "name": "composition",
+        "milliseconds": 4.589394,
+        "elapsedMilliseconds": 4.589394
+      },
+      {
+        "name": "other",
+        "milliseconds": 97.75638,
+        "elapsedMilliseconds": 97.75638
+      }
+    ]
+  }
+}
