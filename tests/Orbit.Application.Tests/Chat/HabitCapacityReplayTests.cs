@@ -99,8 +99,11 @@ public partial class ProcessUserChatCommandHandlerTests
             failure.Arguments.Should().Equal(limit);
             operation.PendingOperationId.Should().BeNull();
             result.Value.PendingOperations.Should().BeNullOrEmpty();
-            result.Value.AiMessage.Should().Be(expected);
-            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(expected);
+            var nextStep = language == "pt-BR"
+                ? "Você pode adicionar um sub-hábito a um hábito existente."
+                : "You can add a sub-habit to an existing habit.";
+            result.Value.AiMessage.Should().Be(expected + " " + nextStep);
+            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(result.Value.AiMessage);
             policy.DidNotReceive().Evaluate(Arg.Any<AgentPolicyEvaluationContext>());
             _pendingOperationStore.DidNotReceiveWithAnyArgs().Create(default, default!, default!, default!, default!, default!, default);
             await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),

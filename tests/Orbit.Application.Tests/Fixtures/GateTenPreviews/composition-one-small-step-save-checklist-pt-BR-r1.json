@@ -1,0 +1,18 @@
+{
+  "caseId": "composition-one-small-step-save-checklist-pt-BR",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "update_checklist",
+      "arguments": {
+        "habit_id": "[redacted]",
+        "item_to_add": "Pegar um copo",
+        "checklist_items": null,
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ],
+  "successfulTools": [],
+  "source": "Production gate 10, API 728b1ea5, harness 029de9342; captured calls and successful tool projections. IDs are redacted by the producer."
+}

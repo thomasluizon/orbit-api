@@ -922,18 +922,72 @@ Existing activities and children do not consume new root slots. Save commands
 retain their locked capacity checks to handle changes after preview preparation.
 
 `HABIT_LIMIT_REACHED` returns the existing localized error and its formatting
-arguments as a typed failure. The model explains it through ordinary continuation;
-the failure cannot offer approval or become a generic retry message. Grounding
+arguments as a typed failure. The server composes the localized limit and the
+available next step from that typed failure, even when prerequisite lookups are
+empty or the model's continuation omits the reason. The next step is adding a
+sub-habit to an existing habit, which does not consume a root slot. The refusal
+cannot offer approval or become a generic retry message. Grounding
 accepts the returned capacity as a refusal fact without treating it as a saved
 habit. No message keywords route this behavior.
 
 | Source | en | pt-BR |
 | --- | --- | --- |
 | Existing `HABIT_LIMIT_REACHED` copy, reused | You've reached the {0} habit limit. | Você chegou ao limite de {0} hábitos. |
+| `chat.answer.habitCapacityNextStep` | You can add a sub-habit to an existing habit. | Você pode adicionar um sub-hábito a um hábito existente. |
 | `TerminalWriteDirective` addition | If a write returns HABIT_LIMIT_REACHED, explain the returned limit in the person's language. It applies to every plan; do not propose upgrading, deleting data or bypassing it. | Se uma alteração retornar HABIT_LIMIT_REACHED, explique o limite retornado no idioma da pessoa. Ele vale para todos os planos; não proponha mudar de plano, excluir dados ou contornar o limite. |
 
 The instruction is English at runtime; its Portuguese version is for copy review.
-The error copy is unchanged in both languages. No fixed answer text is added.
+The limit copy is unchanged in both languages. The added next step is composed
+only from a typed capacity refusal, never from the person's message.
+
+A mixed read and refused creation retains every successful nonempty read block
+beside one text part containing the localized limit and next step. Duplicate read
+scopes still produce one block. Client capability negotiation keeps the same reads
+as readable fallback text for clients without parts or the corresponding block.
+Empty prerequisite habit, goal and record lookups are omitted; when those are the
+only reads, the capacity explanation is the entire answer. The refused creation
+produces no approval preview, even if the model continuation omits the reason.
+
+An answer with a held write preview omits empty habit, goal and record lists,
+including lists returned by duplicate lookups. This applies to typed parts and
+legacy card properties. Nonempty read results remain eligible for composition;
+the combined creation preview continues to suppress all prerequisite read cards.
+
+## Write completion guidance and copy review
+
+A singular habit reference with duplicate titles requires a fresh selection
+lookup and one choice block before any write. Passing all matching IDs to a
+bulk tool does not resolve that reference. An explicitly identified target or
+an explicitly requested set still uses the corresponding write tools.
+
+Saving a starting step to a checklist requires `update_checklist`, even when
+the target lookup returns an identical checked item. The append preserves that
+item and adds the requested step unchecked. A lookup never completes the save.
+
+Brain dumps that request ideas and one approval keep `orbit_read_complete=false`
+on both lookup and suggestion calls. The model then submits one
+`bulk_create_habits` call containing the explicit tasks, habits and chosen draft
+fields. Suggestion-only requests continue to return their draft cards.
+
+Fresh restart proposals read all remaining due and overdue habits in the current
+turn before preparing `revised_items`. The account index supplies identity, not
+current occurrence state. Existing pending-plan corrections still use
+`revise_pending_changes`.
+
+These rules guide the model's emitted structure. No message pattern selects,
+renames or adds a tool call. Captured structured plans run at the model-service
+port; exact guidance assertions protect prompt changes. Model reliability is
+measured separately by the coordinator's real-call gate.
+
+The runtime model instructions are English. Their pt-BR translations are for
+copy approval.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `GlobalRulesSection`, duplicate targets | Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write. | Alvos duplicados: Um nome no singular que corresponde a títulos duplicados continua sem resolução mesmo quando o índice da conta contém todos os IDs correspondentes. Chame query_habits com search e for_selection=true e depois ask com form choice; nunca passe todos os IDs correspondentes para bulk_log_habits ou qualquer outra alteração em lote. |
+| `GlobalRulesSection`, checklist saves | Checklist saves: For a request to save a starting step in a checklist, query_habits only resolves the target; set orbit_read_complete=false, then call update_checklist with item_to_add containing the previous step verbatim and orbit_write_complete=true. Preserve an identical stored item, even if checked, and append the requested step unchecked. A habit list never fulfills this save request. | Salvar no checklist: Em um pedido para salvar um passo inicial em um checklist, query_habits apenas identifica o hábito; defina orbit_read_complete=false e depois chame update_checklist com item_to_add contendo o passo anterior sem alterações e orbit_write_complete=true. Preserve um item idêntico já salvo, mesmo se estiver marcado, e acrescente o passo solicitado desmarcado. Uma lista de hábitos nunca conclui esse pedido de salvamento. |
+| `HabitModelInstructions.BrainDumpCompletion`, also in `SuggestHabitsTool.Description` | For a combined approval request, set orbit_read_complete=false on query_habits and suggest_habits, then call bulk_create_habits with every explicit item and chosen idea. A suggestion result alone never completes that request. | Em um pedido de aprovação conjunta, defina orbit_read_complete=false em query_habits e suggest_habits e depois chame bulk_create_habits com todos os itens explícitos e a ideia escolhida. Um resultado de sugestão sozinho nunca conclui esse pedido. |
+| `RestartPlanInstructions.FreshLookup`, in `BulkRescheduleHabitsTool.Description` | Before every fresh restart proposal, call query_habits in this turn even when the account index already contains the habit IDs. The index does not establish which occurrences remain due or overdue; build revised_items only from the complete fresh query result. | Antes de cada nova proposta de recomeço, chame query_habits neste turno mesmo quando o índice da conta já contém os IDs dos hábitos. O índice não informa quais ocorrências ainda estão pendentes ou atrasadas; monte revised_items apenas a partir do resultado completo da consulta atual. |
 
 The following server copy is retained verbatim and moved into the localization catalog.
 The model instruction is shared by the tool description and its result. Its Portuguese

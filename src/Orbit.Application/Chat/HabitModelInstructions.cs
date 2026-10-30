@@ -2,6 +2,8 @@ namespace Orbit.Application.Chat;
 
 public static class HabitModelInstructions
 {
+    public const string BrainDumpCompletion = "For a combined approval request, set orbit_read_complete=false on query_habits and suggest_habits, then call bulk_create_habits with every explicit item and chosen idea. A suggestion result alone never completes that request.";
+
     public const string WriteIntent = "Create or change account records only when the person requests that action. Coaching alone does not authorize a write. For a requested adjustment to an activity already tracked, use its existing habit ID instead of creating a duplicate of its purpose.";
 
     public const string Coaching = "For advice about making an activity easier, give one to three short practical lines without a preview or draft. A date or a possible checklist is context, not a request to change records. " + WriteIntent;
@@ -27,5 +29,5 @@ public static class HabitModelInstructions
 
     public const string Routine = "Recommend routine structure from the destination's checklist and sub-habits, then the account's structure pattern. Honor an explicit placement choice. For an addition to an existing routine, keep parent_habit_id and omit placement for the server recommendation; the preview offers checklist_item, sub_habit and new_parent with a reason. A brand-new routine on an account with no structure defaults to one parent with sub_habits. A morning or evening routine implies Day/1 unless another cadence was requested; weekday wording uses Day/1 with the requested days. Keep the parent's requested time and each child's own time, including lights out by 11 in an evening routine as 23:00. Durations belong to their activities. A missing hour does not block a preview: omit due_time when no hour was given. Propose the inferred cadence in the approval preview so the person can edit it. Only ask when no usable preview can be proposed. These rules apply equally to rotina da manhã, rotina da noite and dias úteis.";
 
-    public static string All => string.Join("\n\n", Coaching, Schedule, Polarity, Correction, Titles, DisplayDates, Batch, BrainDump, Routine);
+    public static string All => string.Join("\n\n", Coaching, Schedule, Polarity, Correction, Titles, DisplayDates, Batch, BrainDump, BrainDumpCompletion, Routine);
 }
