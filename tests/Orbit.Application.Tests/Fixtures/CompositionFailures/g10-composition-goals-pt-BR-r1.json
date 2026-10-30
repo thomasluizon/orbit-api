@@ -1,0 +1,28 @@
+{
+  "caseId": "composition-goals-pt-BR",
+  "repeat": 1,
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"goalList\",\"block\":{\"title\":\"Suas metas\",\"items\":[{\"title\":\"Hidratação constante\",\"progress\":\"0 / 10 sessões\"}],\"window\":\"30 de out. de 2026\"}},{\"type\":\"block\",\"kind\":\"goalList\",\"block\":{\"title\":\"Suas metas\",\"items\":[{\"title\":\"Hidratação constante\",\"progress\":\"0 / 10 sessões\"}],\"window\":\"30 de out. de 2026\"}}]}",
+  "toolCalls": [
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": null,
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "review_goals",
+      "arguments": {
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

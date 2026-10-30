@@ -204,15 +204,18 @@ public partial class ProcessUserChatCommandHandler
     private static bool ShouldComposeReadFallbacks(ProcessUserChatCommand request, ChatContext context,
         ToolExecutionAccumulator results) => results.AskBlock is null && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
-        && results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags));
+        && (request.ClientContext?.SupportsParts != true
+            || results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)));
 
     private static ResponseCards ComposeUnavailableReads(ResponseCards cards, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results)
     {
         if (!ShouldComposeReadFallbacks(request, context, results)) return cards;
         var reads = SelectCompositionReads(results.QueryReads.Values.ToList(), results)
-            .Where(read => request.ClientContext?.SupportsParts == true || !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
-            .DistinctBy(read => read.Read.QueryId);
+            .DistinctBy(read => read.Read.QueryId).ToArray();
+        if (request.ClientContext?.SupportsParts != true && reads.Length > 1
+            && reads.Any(read => !IsCompleteEmptyList(read)))
+            reads = reads.Where(read => !IsCompleteEmptyList(read)).ToArray();
         var parts = reads.Select(read => request.ClientContext?.SupportsParts == true
                 && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
             ? (ChatResponsePart)new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block)

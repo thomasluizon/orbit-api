@@ -1,0 +1,40 @@
+{
+  "caseId": "composition-compound-legacy-pt-BR",
+  "repeat": 2,
+  "answer": "Aqui estão seus hábitos e metas:\n\n**Hábitos**\n\n\n**Metas**",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": "Active",
+        "include_completed": false,
+        "include_descriptions": false,
+        "include_linked_habits": false,
+        "offset": 0,
+        "limit": 50
+      },
+      "resultStatus": "Succeeded"
+    }
+  ]
+}

@@ -244,7 +244,8 @@ public partial class ProcessUserChatCommandHandler
             }
             else if (operation.ReadBlock is { } read && selected.Contains(read.Read.QueryId))
             {
-                var scope = read.Kind + ":" + AgentOperationFingerprint.Compute(read.Read.QueryFamily, read.Read.Scope.GetRawText());
+                var scope = read.Kind == "goalList" ? read.Kind
+                    : read.Kind + ":" + AgentOperationFingerprint.Compute(read.Read.QueryFamily, read.Read.Scope.GetRawText());
                 if (!seenScopes.Add(scope))
                 {
                     built.Duplicates++;
