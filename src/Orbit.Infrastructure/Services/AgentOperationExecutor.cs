@@ -37,7 +37,7 @@ public partial class AgentOperationExecutor(
 
         var operation = catalogService.GetOperation(request.OperationId);
         if (operation is null)
-            return await DenyUnknownOperationAsync(request, arguments, cancellationToken);
+            return await DenyUnknownOperationAsync(request, arguments);
 
         var declaredCapability = catalogService.GetCapability(operation.CapabilityId)
             ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
@@ -68,7 +68,7 @@ public partial class AgentOperationExecutor(
             escalatedRequirement);
 
         if (!operation.IsAgentExecutable)
-            return await DenyDirectUserFlowAsync(execution, cancellationToken);
+            return await DenyDirectUserFlowAsync(execution);
 
         var ownershipDenialReason = await targetOwnershipService.GetDenialReasonAsync(
             operation.Id,
@@ -77,11 +77,11 @@ public partial class AgentOperationExecutor(
             cancellationToken);
 
         if (ownershipDenialReason is not null)
-            return await DenyOwnershipAsync(execution, ownershipDenialReason, cancellationToken);
+            return await DenyOwnershipAsync(execution, ownershipDenialReason);
 
         if (operation.IsMutation && HasUnsupportedPlacementApproval(request, arguments))
             return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                AgentPolicyDecisionStatus.Denied, capability, "placement_not_supported"), cancellationToken);
+                AgentPolicyDecisionStatus.Denied, capability, "placement_not_supported"));
 
         if (operation.IsMutation && request.ConfirmationToken is { } token)
         {
@@ -89,7 +89,7 @@ public partial class AgentOperationExecutor(
                 AgentOperationFingerprint.Compute(operation.Id, arguments.GetRawText()), token);
             if (confirmed?.RequiresReproposal == true)
                 return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.Denied, capability, "pending_operation_schema_changed"), cancellationToken);
+                    AgentPolicyDecisionStatus.Denied, capability, "pending_operation_schema_changed"));
             if (confirmed is not null && request.Surface == AgentExecutionSurface.Chat)
             {
                 var current = await changePreviewer.TryPreviewAsync(request.UserId, operation.Id,
@@ -98,7 +98,7 @@ public partial class AgentOperationExecutor(
                     || current.Value?.Items is not { Count: > 0 }
                     || current.Value.PreviewFingerprint != confirmed.PreviewFingerprint)
                     return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                        AgentPolicyDecisionStatus.Denied, capability, "stale_preview"), cancellationToken);
+                        AgentPolicyDecisionStatus.Denied, capability, "stale_preview"));
             }
         }
         return await ExecuteWithPolicyAsync(execution, cancellationToken);
@@ -114,8 +114,7 @@ public partial class AgentOperationExecutor(
 
     private async Task<AgentExecuteOperationResponse> DenyUnknownOperationAsync(
         AgentExecuteOperationRequest request,
-        JsonElement arguments,
-        CancellationToken cancellationToken)
+        JsonElement arguments)
     {
         await TryAuditAsync(
             new AuditContext(
@@ -126,8 +125,7 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.UnsupportedByPolicy,
                 $"Unknown operation '{request.OperationId}' requested via {request.Surface}",
                 RedactArguments(arguments),
-                Error: "unsupported_by_policy"),
-            cancellationToken);
+                Error: "unsupported_by_policy"));
 
         var tool = toolRegistry.GetTool(request.OperationId);
         var capability = catalogService.GetCapabilityByChatTool(request.OperationId);
@@ -137,8 +135,7 @@ public partial class AgentOperationExecutor(
     }
 
     private async Task<AgentExecuteOperationResponse> DenyDirectUserFlowAsync(
-        OperationExecutionContext execution,
-        CancellationToken cancellationToken)
+        OperationExecutionContext execution)
     {
         var summary = $"{execution.Operation.DisplayName} requires a direct client flow.";
 
@@ -151,16 +148,14 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.Denied,
                 summary,
                 RedactArguments(execution.Arguments),
-                Error: "direct_user_flow_required"),
-            cancellationToken);
+                Error: "direct_user_flow_required"));
 
         return DeniedResponse(execution, summary, "direct_user_flow_required", "direct_user_flow_required");
     }
 
     private async Task<AgentExecuteOperationResponse> DenyOwnershipAsync(
         OperationExecutionContext execution,
-        string denialReason,
-        CancellationToken cancellationToken)
+        string denialReason)
     {
         await TryAuditAsync(
             new AuditContext(
@@ -171,8 +166,7 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.Denied,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                Error: denialReason),
-            cancellationToken);
+                Error: denialReason));
 
         return DeniedResponse(execution, execution.Summary, denialReason, denialReason);
     }
@@ -202,8 +196,7 @@ public partial class AgentOperationExecutor(
 
     private async Task<AgentExecuteOperationResponse> DenyByPolicyAsync(
         OperationExecutionContext execution,
-        AgentPolicyDecision policyDecision,
-        CancellationToken cancellationToken)
+        AgentPolicyDecision policyDecision)
     {
         await TryAuditAsync(
             new AuditContext(
@@ -216,8 +209,7 @@ public partial class AgentOperationExecutor(
                 RedactArguments(execution.Arguments),
                 Error: policyDecision.Reason,
                 ShadowPolicyDecision: policyDecision.ShadowStatus,
-                ShadowReason: policyDecision.ShadowReason),
-            cancellationToken);
+                ShadowReason: policyDecision.ShadowReason));
 
         return DeniedResponse(execution, execution.Summary, policyDecision.Reason, policyDecision.Reason ?? "denied");
     }
@@ -238,8 +230,7 @@ public partial class AgentOperationExecutor(
                 RedactArguments(execution.Arguments),
                 Error: policyDecision.Reason,
                 ShadowPolicyDecision: policyDecision.ShadowStatus,
-                ShadowReason: policyDecision.ShadowReason),
-            cancellationToken);
+                ShadowReason: policyDecision.ShadowReason));
 
         var pending = policyDecision.PendingOperation;
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
@@ -338,14 +329,14 @@ public partial class AgentOperationExecutor(
         {
             return await BuildToolOutcomeResponseAsync(execution, ex.Decision, ex.Result, cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested
-            && policyState.Decision?.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            await AuditFailureAsync(execution, "caller_canceled", policyState.Decision);
             throw;
         }
         catch (Exception ex)
         {
-            return await FailOperationAsync(execution, ex, policyState.Decision, cancellationToken);
+            return await FailOperationAsync(execution, ex, policyState.Decision);
         }
     }
 
@@ -396,7 +387,7 @@ public partial class AgentOperationExecutor(
             var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
             if (validation.IsFailure)
                 return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error), cancellationToken);
+                    AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error));
         }
 
         IReadOnlyList<OperationExecutionContext>? changeSetMembers = null;
@@ -404,7 +395,7 @@ public partial class AgentOperationExecutor(
         {
             var prepared = await PrepareChangeSetAsync(execution, cancellationToken);
             if (prepared.Error is { } error)
-                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, execution.Capability, error), cancellationToken);
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, execution.Capability, error));
             changeSetMembers = prepared.Members;
         }
 
@@ -412,19 +403,19 @@ public partial class AgentOperationExecutor(
         policyState.Decision = policyDecision;
 
         if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)
-            return await DenyByPolicyAsync(execution, policyDecision, cancellationToken);
+            return await DenyByPolicyAsync(execution, policyDecision);
 
         if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
             return await RequireConfirmationAsync(execution, policyDecision, cancellationToken);
 
         if (execution.Request.PreviewOnly)
             return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"), cancellationToken);
+                AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"));
 
         if (changeSetMembers is not null)
         {
             if (!policyDecision.ConsumedConfirmation)
-                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"), cancellationToken);
+                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, execution.Capability, "preview_required"));
             var applied = await ExecuteChangeSetAsync(execution, changeSetMembers, cancellationToken);
             if (!applied.Success) throw new ToolOutcomeRollbackException(policyDecision, applied);
             return await BuildToolOutcomeResponseAsync(execution, policyDecision, applied, cancellationToken);
@@ -487,26 +478,13 @@ public partial class AgentOperationExecutor(
     private async Task<AgentExecuteOperationResponse> FailOperationAsync(
         OperationExecutionContext execution,
         Exception failure,
-        AgentPolicyDecision? policyDecision,
-        CancellationToken cancellationToken)
+        AgentPolicyDecision? policyDecision)
     {
         LogOperationFailed(logger,
             new RedactedOperationException(failure.GetType().FullName ?? failure.GetType().Name, failure.StackTrace),
             execution.Operation.Id, execution.Request.CorrelationId);
 
-        await TryAuditAsync(
-            new AuditContext(
-                execution.Request,
-                execution.Capability.Id,
-                execution.Capability.RiskClass,
-                AgentPolicyDecisionStatus.Allowed,
-                AgentOperationStatus.Failed,
-                execution.Summary,
-                RedactArguments(execution.Arguments),
-                Error: failure.Message,
-                ShadowPolicyDecision: policyDecision?.ShadowStatus,
-                ShadowReason: policyDecision?.ShadowReason),
-            cancellationToken);
+        await AuditFailureAsync(execution, failure.Message, policyDecision);
 
         return AgentOperationResponseFactory.Failed(
             execution.Operation.Id,
@@ -515,6 +493,21 @@ public partial class AgentOperationExecutor(
             execution.Capability.ConfirmationRequirement,
             execution.Summary);
     }
+
+    private Task AuditFailureAsync(OperationExecutionContext execution, string error,
+        AgentPolicyDecision? policyDecision) =>
+        TryAuditAsync(
+            new AuditContext(
+                execution.Request,
+                execution.Capability.Id,
+                execution.Capability.RiskClass,
+                AgentPolicyDecisionStatus.Allowed,
+                AgentOperationStatus.Failed,
+                execution.Summary,
+                RedactArguments(execution.Arguments),
+                Error: error,
+                ShadowPolicyDecision: policyDecision?.ShadowStatus,
+                ShadowReason: policyDecision?.ShadowReason));
 
     private async Task<ToolResult> ExecuteToolWithConcurrencyRetryAsync(
         IAiTool tool,
@@ -574,8 +567,7 @@ public partial class AgentOperationExecutor(
                 result.EntityName,
                 result.Error,
                 policyDecision.ShadowStatus,
-                policyDecision.ShadowReason),
-            cancellationToken);
+                policyDecision.ShadowReason));
 
         var response = AgentOperationResponseFactory.ToolOutcome(
             execution.Operation.Id,
@@ -647,9 +639,9 @@ public partial class AgentOperationExecutor(
     }
 
     private async Task TryAuditAsync(
-        AuditContext context,
-        CancellationToken cancellationToken)
+        AuditContext context)
     {
+        using var auditTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {
             await auditService.RecordAsync(new AgentAuditEntry(
@@ -668,7 +660,7 @@ public partial class AgentOperationExecutor(
                 context.RedactedArguments,
                 context.Error,
                 context.ShadowPolicyDecision,
-                context.ShadowReason), cancellationToken);
+                context.ShadowReason), auditTimeout.Token);
         }
         catch (Exception ex)
         {

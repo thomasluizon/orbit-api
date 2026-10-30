@@ -388,7 +388,7 @@ public partial class AgentExecutionAndSanitizerTests
         var executor = CreateExecutor(catalog, policyEvaluator: policy,
             toolRegistry: new AiToolRegistry([tool]));
 
-        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+        var execute = () => executor.ExecuteAsync(new AgentExecuteOperationRequest(
             UserId, operation.Id, Parse("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt,
             OnExecutionStarted: () =>
             {
@@ -396,9 +396,9 @@ public partial class AgentExecutionAndSanitizerTests
                 throw new IOException("Stream disconnected");
             }), cancellation.Token);
 
+        await execute.Should().ThrowAsync<OperationCanceledException>();
         tokenWasCancelled.Should().BeTrue();
         mutationCompleted.Should().BeFalse();
-        response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
     }
 
     [Fact]
