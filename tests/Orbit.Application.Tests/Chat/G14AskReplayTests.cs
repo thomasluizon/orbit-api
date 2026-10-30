@@ -45,11 +45,15 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", false)]
-    [InlineData("pt-BR", false)]
-    [InlineData("en", true)]
-    [InlineData("pt-BR", true)]
-    public async Task G14_CompletedReadValidatesSameResponseAskInEitherOrder(string language, bool askFirst)
+    [InlineData("en", false, false)]
+    [InlineData("pt-BR", false, false)]
+    [InlineData("en", true, false)]
+    [InlineData("pt-BR", true, false)]
+    [InlineData("en", false, true)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, true)]
+    public async Task G14_CompletedReadValidatesSameResponseAskInEitherOrder(string language, bool askFirst, bool foldedQuestion)
     {
         SetupExistingParents(language);
         EnableComposition();
@@ -63,6 +67,17 @@ public partial class ProcessUserChatCommandHandlerTests
         var args = JsonNode.Parse(captured.ToolCalls![1].Args.GetRawText())!.AsObject();
         args["input"]!["options"]![0]!["id"] = first.Id.ToString();
         args["input"]!["options"]![1]!["id"] = second.Id.ToString();
+        if (foldedQuestion)
+            args["input"] = JsonSerializer.SerializeToNode(new
+            {
+                form = "question",
+                missing_input = "record_selection",
+                questions = new[]
+                {
+                    new { id = "target", type = "singleChoice", prompt = "Which habit?",
+                        options = new[] { new { id = first.Id.ToString(), label = "Primeira hoje" }, new { id = second.Id.ToString(), label = "Segunda hoje" } } }
+                }
+            });
         var ask = captured.ToolCalls[1] with { Args = JsonSerializer.SerializeToElement(args) };
         SetupAiResponse(captured with { ToolCalls = askFirst ? [ask, captured.ToolCalls[0]] : [captured.ToolCalls[0], ask] });
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "choice"], SupportsHabitListCard: true, Locale: language);

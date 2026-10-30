@@ -66,8 +66,8 @@ public partial class ProcessUserChatCommandHandler
         if (AskMissingInputError(call.Args, definition, results) is { } missingInputError)
             return Failed(missingInputError);
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
-        definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext, call.Args);
+        definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
         if (request.ClientContext.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("The client does not support this block kind.");
         var block = IssuedAstraBlock.Create(request.UserId, definition);
