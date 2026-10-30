@@ -1335,6 +1335,16 @@ removed this way. Removal omits the proposed write and restores the previous
 configuration. It never translates rejection into a null clear. Fingerprints,
 validation, item selection and confirmation remain authoritative.
 
+Nested draft objects carry their own `suggested_fields`. Their editable/removable
+preview rows use slash-separated paths such as `sub_habits/0/repeat_reminder` in
+`field`, grouped `removal.fields`, revision edits and removal requests. Schema and
+command validation apply at that path. The containing field's displayed JSON omits
+internal offer metadata. Removing a child proposal preserves its siblings and
+inherited cadence; requested parent membership takes priority over optional parent
+suggestions. Bulk schemas expose suggestions on each item or `updates`, not on the
+bulk container. Refresh merges proposed collection additions against current stored
+contents and does not regenerate removed nested proposals.
+
 After composing supported successful read blocks, an enabled turn may make one
 additional tool-free model call. The same configured chat model, effort, usage
 recording and budget apply. Its cancellation deadline is three seconds. Input is

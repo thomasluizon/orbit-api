@@ -72,6 +72,7 @@ public partial class AgentCatalogService
                     "ChatController.ProcessChat",
                     "ChatController.ProcessChatStream",
                     "ChatController.RefreshReadBlock",
+                    "ChatController.DismissOffers",
                     "ChatController.RefineHabitSuggestion",
                     "ChatController.PreviewHabitSuggestion",
                     "ChatController.PreviewAllHabitSuggestions",

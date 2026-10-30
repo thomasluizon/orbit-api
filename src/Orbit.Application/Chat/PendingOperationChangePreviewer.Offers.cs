@@ -34,6 +34,16 @@ public sealed partial class PendingOperationChangePreviewer
         var effective = preview.ExecutionArguments ?? bound;
         root = JsonNode.Parse(effective.GetRawText())!.AsObject();
         var updated = items.Select(item => Annotate(item, ProactiveProposal.Source(root, operationId, item.ItemId), operationId)).ToArray();
+        if (updated.Any(item => item.Fields.Any(field => field.Field.EndsWith("/repeat_reminder", StringComparison.Ordinal))))
+        {
+            var zone = await userDateService.GetUserTimeZoneAsync(userId, cancellationToken);
+            updated = updated.Select(item => item with
+            {
+                Fields = item.Fields.Select(field =>
+                field.Field.EndsWith("/repeat_reminder", StringComparison.Ordinal)
+                    ? field with { NewValue = RepeatReminderPreview.Format(field.NewValue, clientContext, zone) } : field).ToArray()
+            }).ToArray();
+        }
         var changes = preview.Changes.Select(field => updated.SelectMany(item => item.Fields)
             .FirstOrDefault(candidate => candidate.EntityId == field.EntityId && candidate.Field == field.Field
                 && candidate.EntityName == field.EntityName) ?? field).ToArray();
@@ -52,12 +62,18 @@ public sealed partial class PendingOperationChangePreviewer
         if (operation == "bulk_create_habits" && root["habits"] is JsonArray habits)
         {
             var itemSchema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
+            if (root.ContainsKey(ProactiveProposal.Argument)) return false;
             foreach (var habit in habits.OfType<JsonObject>())
+            {
+                if (root.ContainsKey("parent_habit_id") && habit[ProactiveProposal.Argument] is JsonObject suggestions)
+                    suggestions.Remove("parent_habit_id");
                 if (!await PrepareOfferNodeAsync(habit, itemSchema, userId, operation, client, ct)) return false;
+            }
             return true;
         }
         if (operation == "bulk_update_habits")
         {
+            if (root.ContainsKey(ProactiveProposal.Argument)) return false;
             var itemSchema = schema.GetProperty("properties").GetProperty("updates");
             if (root["revised_items"] is not JsonArray items && root["updates"] is JsonObject updates
                 && updates.ContainsKey(ProactiveProposal.Argument))
@@ -83,38 +99,96 @@ public sealed partial class PendingOperationChangePreviewer
     }
 
     private async Task<bool> PrepareOfferNodeAsync(JsonObject source, JsonElement schema, Guid userId,
-        string operation, AgentClientContext client, CancellationToken ct, string? targetId = null)
+        string operation, AgentClientContext client, CancellationToken ct, string? targetId = null, string path = "",
+        Dictionary<string, JsonNode?>? inherited = null)
     {
+        var existing = await ExistingOfferValuesAsync(source, targetId, userId, ct);
+        if (inherited is null && source["parent_habit_id"] is { } parent)
+            inherited = await ExistingOfferValuesAsync(new JsonObject { ["habit_id"] = parent.DeepClone() }, null, userId, ct);
         if (source.Remove(ProactiveProposal.Argument, out var proposed))
         {
             if (proposed is not JsonObject suggestions || source.ContainsKey(ProactiveProposal.Metadata)) return false;
-            var existing = await ExistingOfferValuesAsync(source, targetId, userId, ct);
+            var schedule = OfferSchedule(source, suggestions, existing, inherited);
             var accepted = new JsonObject();
+            var values = new JsonObject();
+            var proposalSchema = JsonSerializer.SerializeToElement(ProactiveProposal.Schema(schema));
             var keySource = (JsonObject)source.DeepClone();
             if (targetId is not null) keySource["habit_id"] = targetId;
             foreach (var suggestion in suggestions)
             {
-                if (suggestion.Value is null || ExcludedSuggestion(suggestion.Key, source, suggestions, existing)) continue;
-                var key = ProactiveProposal.Key(operation, keySource, suggestion.Key);
+                if (suggestion.Value is null || ExcludedSuggestion(suggestion.Key, source, suggestions, schedule)) continue;
+                var key = ProactiveProposal.Key(operation, keySource, path + suggestion.Key);
                 if (source.ContainsKey(suggestion.Key) || IsExplicitlyCleared(source, suggestion.Key)
                     || client.DismissedOfferKeys?.Contains(key, StringComparer.Ordinal) == true) continue;
-                if (!ProactiveProposal.Eligible(suggestion.Key) || !AgentArgumentSchema.Accepts(schema, suggestion.Key,
+                if (!ProactiveProposal.Eligible(suggestion.Key) || !AgentArgumentSchema.Accepts(proposalSchema, suggestion.Key,
                     JsonSerializer.SerializeToElement(suggestion.Value))) return false;
                 var value = suggestion.Value.DeepClone();
                 value = MergeStoredSuggestion(suggestion.Key, value, existing.GetValueOrDefault(suggestion.Key));
                 if (value is null) continue;
                 accepted[suggestion.Key] = key;
+                values[suggestion.Key] = suggestion.Value.DeepClone();
                 source[suggestion.Key] = value;
             }
             source[ProactiveProposal.Metadata] = new JsonObject
             {
                 ["fields"] = accepted,
+                ["values"] = values,
                 ["conversation_id"] = client.ConversationId!.Value.ToString()
             };
         }
-        if (source[ProactiveProposal.Metadata] is JsonObject metadata
-            && (metadata["conversation_id"]?.ToString() != client.ConversationId?.ToString()
-                || metadata["fields"] is not JsonObject)) return false;
+        if (!await RefreshOfferNodeAsync(source, targetId, userId, client, ct)) return false;
+        return await PrepareNestedOfferNodesAsync(source, schema, userId, operation, client, ct, path,
+            OfferSchedule(source, new JsonObject(), existing, inherited));
+    }
+
+    private static Dictionary<string, JsonNode?> OfferSchedule(JsonObject source, JsonObject suggestions,
+        Dictionary<string, JsonNode?> stored, Dictionary<string, JsonNode?>? inherited)
+    {
+        var result = new Dictionary<string, JsonNode?>(stored);
+        foreach (var field in new[] { "is_general", "is_flexible", "frequency_unit", "frequency_quantity", "interval_weeks", "days" })
+            result[field] = source[field] ?? suggestions[field] ?? stored.GetValueOrDefault(field) ?? inherited?.GetValueOrDefault(field);
+        if (source["frequency_unit"] is not null && source["frequency_quantity"] is null && suggestions["frequency_quantity"] is null)
+            result["frequency_quantity"] = JsonValue.Create(1);
+        if (inherited is not null && source["due_date"] is not null && source["start_date"] is null && source["days"] is null)
+            result["days"] = new JsonArray();
+        return result;
+    }
+
+    private async Task<bool> PrepareNestedOfferNodesAsync(JsonObject source, JsonElement schema, Guid userId,
+        string operation, AgentClientContext client, CancellationToken ct, string path, Dictionary<string, JsonNode?> schedule)
+    {
+        if (source["sub_habits"] is JsonArray children
+            && schema.TryGetProperty("properties", out var properties) && properties.TryGetProperty("sub_habits", out var childSchema)
+            && childSchema.TryGetProperty("items", out var itemSchema))
+            for (var index = 0; index < children.Count; index++)
+            {
+                if (children[index] is not JsonObject child) return false;
+                if (child[ProactiveProposal.Argument] is JsonObject suggestions) suggestions.Remove("parent_habit_id");
+                if (!await PrepareOfferNodeAsync(child, itemSchema, userId, operation, client, ct,
+                    path: path + "sub_habits/" + index + "/", inherited: schedule)) return false;
+            }
+        return true;
+    }
+
+    private async Task<bool> RefreshOfferNodeAsync(JsonObject source, string? targetId, Guid userId, AgentClientContext client, CancellationToken ct)
+    {
+        if (source[ProactiveProposal.Metadata] is not JsonObject metadata) return true;
+        if (metadata["conversation_id"]?.ToString() != client.ConversationId?.ToString()
+            || metadata["fields"] is not JsonObject fields) return false;
+        if (metadata["values"] is not JsonObject values) return true;
+        var stored = await ExistingOfferValuesAsync(source, targetId, userId, ct);
+        foreach (var field in fields.ToArray())
+        {
+            if (values[field.Key] is not { } proposed || !stored.TryGetValue(field.Key, out var previous)) continue;
+            var merged = MergeStoredSuggestion(field.Key, proposed.DeepClone(), previous);
+            if (merged is null)
+            {
+                source.Remove(field.Key);
+                fields.Remove(field.Key);
+                values.Remove(field.Key);
+            }
+            else source[field.Key] = merged;
+        }
         return true;
     }
 
@@ -209,12 +283,34 @@ public sealed partial class PendingOperationChangePreviewer
     private static PendingOperationItem Annotate(PendingOperationItem item, JsonObject? source, string operation)
     {
         var suggestions = source?[ProactiveProposal.Metadata]?["fields"] as JsonObject;
-        return item with
+        var fields = item.Fields.Where(field => field.Field != ProactiveProposal.Metadata).Select(field =>
+            suggestions?[field.Field]?.ToString() is { } key
+                ? field with { Provenance = "suggested", IsEditable = true, Removal = new(key, field.Field, ProactiveProposal.RemovalFields(suggestions!, field.Field)) }
+                : field with { Provenance = source?.ContainsKey(field.Field) == true ? "requested" : "stored" }).ToList();
+        if (source is not null) AddNestedOfferFields(fields, source, "");
+        return item with { Fields = fields };
+    }
+
+    private static void AddNestedOfferFields(List<PendingOperationChange> fields, JsonObject source, string prefix)
+    {
+        if (source["sub_habits"] is not JsonArray children) return;
+        for (var index = 0; index < children.Count; index++)
         {
-            Fields = item.Fields.Where(field => field.Field != ProactiveProposal.Metadata).Select(field =>
-                suggestions?[field.Field]?.ToString() is { } key
-                    ? field with { Provenance = "suggested", IsEditable = true, Removal = new(key, field.Field, ProactiveProposal.RemovalFields(suggestions!, field.Field)) }
-                    : field with { Provenance = source?.ContainsKey(field.Field) == true ? "requested" : "stored" }).ToArray()
-        };
+            if (children[index] is not JsonObject child) continue;
+            var path = prefix + "sub_habits/" + index + "/";
+            if (child[ProactiveProposal.Metadata]?["fields"] is JsonObject suggestions)
+                foreach (var suggestion in suggestions)
+                {
+                    if (child[suggestion.Key] is not { } proposed) continue;
+                    var clean = ProactiveProposal.StripMetadata(JsonSerializer.SerializeToElement(proposed));
+                    var id = Guid.TryParse(child["habit_id"]?.ToString(), out var entity) ? entity : Guid.Empty;
+                    fields.Add(new(id, child["title"]?.ToString() ?? "", path + suggestion.Key, null,
+                        AgentArgumentPreview.FormatValue(clean), AgentArgumentPreview.ResolveValueType(suggestion.Key, clean), clean,
+                        IsEditable: true, EntityEmoji: child["emoji"]?.ToString(), Provenance: "suggested",
+                        Removal: new(suggestion.Value!.ToString(), path + suggestion.Key,
+                            ProactiveProposal.RemovalFields(suggestions, suggestion.Key).Select(field => path + field).ToArray())));
+                }
+            AddNestedOfferFields(fields, child, path);
+        }
     }
 }

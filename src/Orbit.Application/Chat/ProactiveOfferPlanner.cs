@@ -172,6 +172,8 @@ public static class ProactiveOfferPlanner
                 "Me ajude a transformar o objetivo que acabamos de discutir em uma prévia editável de meta depois de conferir minhas metas existentes.", kind: "continueChat");
             var surface = read.Block switch
             {
+                GoalListCard => "goals",
+                MetricsCard or PeriodInsightCard or PeriodTotalCard or PeriodComparisonCard or StreakCard or GamificationCard => "progress",
                 RecordListCard { Kind: "tags" or "templates" } => "today",
                 RecordListCard { Kind: "keys" } => "advanced-api",
                 RecordListCard { Kind: "notifications" } => "notifications",

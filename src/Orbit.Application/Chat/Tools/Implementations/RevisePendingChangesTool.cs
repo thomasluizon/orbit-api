@@ -25,7 +25,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
-                    properties = new { remove_suggested_fields = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, description = "Suggested field names to remove while preserving stored and requested values. Use only fields with removal metadata." }, item_id = new { type = JsonSchemaTypes.String, description = "Exact item_id from the pending preview for the entity being edited. It may differ from entity_id." }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
+                    properties = new { remove_suggested_fields = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, description = "Suggested field names or slash-separated paths to remove while preserving stored and requested values. Use only fields with removal metadata." }, item_id = new { type = JsonSchemaTypes.String, description = "Exact item_id from the pending preview for the entity being edited. It may differ from entity_id." }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
                     required = new[] { "item_id", "edits_json" }
                 }
             },

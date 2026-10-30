@@ -51,8 +51,8 @@ public sealed partial class PendingOperationChangePreviewer
         .Where(property => CreateFields.Contains(property.Name))
         .OrderBy(property => property.Name != "title").ThenBy(property => property.Name, StringComparer.Ordinal)
         .Select(property => new PendingOperationChange(
-            Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(property.Value),
-            AgentArgumentPreview.ResolveValueType(property.Name, property.Value), property.Value.Clone(),
+            Guid.Empty, name, property.Name, null, AgentArgumentPreview.FormatValue(ProactiveProposal.StripMetadata(property.Value)),
+            AgentArgumentPreview.ResolveValueType(property.Name, property.Value), ProactiveProposal.StripMetadata(property.Value),
             property.Name != DueDate || !source.TryGetProperty(StartDate, out _))).ToList();
 
     private async Task<bool> BindReuseFieldsAsync(Guid userId, JsonElement source, Habit existing,

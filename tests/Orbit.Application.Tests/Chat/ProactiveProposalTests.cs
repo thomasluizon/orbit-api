@@ -122,6 +122,62 @@ public sealed class ProactiveProposalTests
     }
 
     [Fact]
+    public async Task NestedSuggestionsCanBeEditedAndRemovedWithoutChangingSiblingDrafts()
+    {
+        var args = Parse("""{"habits":[{"title":"Daily routine","frequency_unit":"Day","frequency_quantity":1,"sub_habits":[{"title":"Stretch","suggested_fields":{"repeat_reminder":{"interval_minutes":120},"reminder_enabled":true,"emoji":"🌱"}},{"title":"Read","due_time":"20:00"}]}]}""");
+        var preview = (await previewer.PreviewAsync(user, "bulk_create_habits", args, clientContext: client)).Value!;
+        var row = preview.Items!.Single().Fields.Single(field => field.Field == "sub_habits/0/repeat_reminder");
+        row.NewValue.Should().Be("Every 2 hours");
+        row.Removal!.Fields.Should().BeEquivalentTo("sub_habits/0/repeat_reminder", "sub_habits/0/reminder_enabled");
+        preview.Items![0].Fields.Single(field => field.Field == "sub_habits").ProposedValue!.Value.GetRawText()
+            .Should().NotContain("orbit_offer_metadata");
+        var store = Substitute.For<IPendingAgentOperationStore>();
+        var pending = Guid.NewGuid();
+        var execution = preview.ExecutionArguments!.Value;
+        store.GetExecution(user, pending).Returns(_ => new PendingAgentOperationExecution(pending, "habits.write", "bulk_create_habits",
+            execution, AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(call => { execution = Parse(call.ArgAt<string>(3)); return true; });
+        var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), tools);
+        var edited = await service.ReviseAsync(user, pending, new(preview.PreviewFingerprint!,
+            [new(preview.Items[0].ItemId, Parse("""{"sub_habits/0/repeat_reminder":{"interval_minutes":180}}"""))], client), default);
+        edited.IsSuccess.Should().BeTrue(edited.Error);
+        execution.GetProperty("habits")[0].GetProperty("sub_habits")[0].GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(180);
+        var removed = await service.ReviseAsync(user, pending, new(edited.Preview!.PreviewFingerprint!,
+            [new(edited.Preview.Items![0].ItemId, RemoveSuggestedFields: [row.Field])], client), default);
+        removed.IsSuccess.Should().BeTrue(removed.Error);
+        var root = execution.GetProperty("habits")[0];
+        root.GetProperty("frequency_unit").GetString().Should().Be("Day");
+        var children = root.GetProperty("sub_habits");
+        children[0].TryGetProperty("repeat_reminder", out _).Should().BeFalse();
+        children[0].TryGetProperty("reminder_enabled", out _).Should().BeFalse();
+        children[0].GetProperty("emoji").GetString().Should().Be("🌱");
+        children[1].GetProperty("title").GetString().Should().Be("Read");
+        children[1].GetProperty("due_time").GetString().Should().Be("20:00");
+        var refreshed = (await previewer.PreviewAsync(user, "bulk_create_habits", execution, clientContext: client)).Value!;
+        refreshed.Items![0].Fields.Should().NotContain(field => field.Field == row.Field);
+    }
+
+    [Fact]
+    public async Task ExplicitSharedParentWinsOverAnOptionalItemParent()
+    {
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Routine", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 10, 30))).Value;
+        habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            parent_habit_id = parent.Id,
+            habits = new[]
+        { new { title = "Stretch", frequency_unit = "Day", frequency_quantity = 1, suggested_fields = new { parent_habit_id = Guid.NewGuid() } } }
+        });
+        var result = await previewer.PreviewAsync(user, "bulk_create_habits", args, clientContext: client);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.ExecutionArguments!.Value.GetProperty("habits")[0].TryGetProperty("parent_habit_id", out var itemParent)
+            .Should().BeFalse(itemParent.ToString());
+        result.Value.Items![0].Fields.Should().NotContain(field => field.Field == "parent_habit_id" && field.Provenance == "suggested");
+    }
+
+    [Fact]
     public void GuidancePinsSemanticChoicesAndPreservation()
     {
         ProactiveProposal.Instruction.Should().Contain("Keep doctor-prescribed fixed times in scheduled_reminders;")

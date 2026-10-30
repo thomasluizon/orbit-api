@@ -164,6 +164,8 @@ public partial class ProcessUserChatCommandHandler
         var schema = tool is AskTool ask ? ask.GetParameterSchema(hasAccountRead, drafts) : tool.GetParameterSchema();
         if (ProactiveProposal.Enabled(request.ClientContext) && ProactiveProposal.Supports(tool.Name))
             schema = ProactiveProposal.Schema(schema);
+        if (tool.Name == "revise_pending_changes")
+            schema = ProactiveProposal.RevisionSchema(schema, ProactiveProposal.Enabled(request.ClientContext));
         return tool.IsReadOnly
             ? UsesComposition(request, context)
                 ? tool.Name == "revise_pending_changes"

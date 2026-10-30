@@ -254,14 +254,14 @@ public sealed partial class PendingOperationRevisionService(
         if (operationId == BulkCreateHabits)
         {
             var itemSchema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
-            return edits.All(edit => AgentArgumentSchema.Accepts(itemSchema, edit.Name, edit.Value))
+            return edits.All(edit => ProactiveProposal.AcceptsEdit(itemSchema, edit.Name, edit.Value))
                 && tool is IArgumentCheckTool createCheck
                 && (await createCheck.CheckArgumentsAsync(revised, userId, cancellationToken)).IsSuccess;
         }
         if (operationId == "bulk_update_habits")
             schema = schema.GetProperty("properties").GetProperty("updates");
         return tool is IArgumentCheckTool check
-            && edits.All(edit => AgentArgumentSchema.Accepts(schema, edit.Name, edit.Value))
+            && edits.All(edit => ProactiveProposal.AcceptsEdit(schema, edit.Name, edit.Value))
             && (await check.CheckArgumentsAsync(revised, userId, cancellationToken)).IsSuccess;
     }
 
@@ -525,6 +525,13 @@ public sealed partial class PendingOperationRevisionService(
             return true;
         foreach (var field in fields.EnumerateObject())
         {
+            if (field.Name.Contains('/', StringComparison.Ordinal))
+            {
+                if (!ProactiveProposal.SetPath(target, field.Name, field.Value)) return false;
+                continue;
+            }
+            if (target[ProactiveProposal.Metadata]?["values"] is JsonObject suggestions && suggestions.ContainsKey(field.Name))
+                suggestions[field.Name] = JsonNode.Parse(field.Value.GetRawText());
             if (OptionalToolArguments.ClearableFields(operationId ?? string.Empty).Contains(field.Name))
                 ReviseClearField(target, field);
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());

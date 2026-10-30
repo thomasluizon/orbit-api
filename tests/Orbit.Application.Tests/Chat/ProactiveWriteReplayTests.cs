@@ -28,7 +28,8 @@ public partial class ProcessUserChatCommandHandlerTests
             new CreateHabitTool(_userDateService, _mediator), new CreateSubHabitTool(_mediator), new BulkCreateHabitsTool(_mediator),
             new UpdateHabitTool(_habitRepo, _userDateService, _mediator), new BulkUpdateHabitsTool(_mediator),
             new CreateGoalTool(_mediator), new UpdateGoalTool(_goalRepo, _mediator),
-            new CreateChecklistTemplateTool(_mediator), new UpdateChecklistTemplateTool(_mediator)
+            new CreateChecklistTemplateTool(_mediator), new UpdateChecklistTemplateTool(_mediator),
+            new RevisePendingChangesTool(Substitute.For<IServiceProvider>())
         };
         _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AstraOfferFact>());
         SetupAiResponse(new AiResponse { TextMessage = "Ready." });
@@ -40,9 +41,21 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             var name = declaration.GetProperty("name").GetString();
             var schema = declaration.GetProperty("parameters");
-            if (name == "bulk_create_habits") schema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
-            if (name == "bulk_update_habits") schema = schema.GetProperty("properties").GetProperty("updates");
+            if (name == "revise_pending_changes")
+            {
+                schema.GetProperty("properties").GetProperty("items").GetProperty("items").GetProperty("properties")
+                    .TryGetProperty("remove_suggested_fields", out _).Should().Be(supports);
+                continue;
+            }
+            if (name is "bulk_create_habits" or "bulk_update_habits")
+            {
+                schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeFalse();
+                schema = name == "bulk_create_habits" ? schema.GetProperty("properties").GetProperty("habits").GetProperty("items")
+                    : schema.GetProperty("properties").GetProperty("updates");
+            }
             schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
+            if (schema.GetProperty("properties").TryGetProperty("sub_habits", out var children))
+                children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
             declaration.GetProperty("description").GetString()!.Contains(ProactiveProposal.Instruction, StringComparison.Ordinal).Should().Be(supports, name);
         }
     }

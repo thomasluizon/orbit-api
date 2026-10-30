@@ -9,7 +9,7 @@ public static class ProactiveProposal
 {
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
-    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in suggested_fields, separately from requested fields. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
+    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in suggested_fields, separately from requested fields. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
 
     public static bool Enabled(AgentClientContext? client) => client is
     {
@@ -32,6 +32,14 @@ public static class ProactiveProposal
 
     internal static bool Eligible(string field) => Fields.Contains(field);
 
+    public static object RevisionSchema(object schema, bool enabled)
+    {
+        if (enabled) return schema;
+        var root = JsonSerializer.SerializeToNode(schema)!.AsObject();
+        (root["properties"]?["items"]?["items"]?["properties"] as JsonObject)?.Remove("remove_suggested_fields");
+        return root;
+    }
+
     public static object Schema(object schema)
     {
         var root = JsonSerializer.SerializeToNode(schema)!.AsObject();
@@ -42,9 +50,10 @@ public static class ProactiveProposal
     private static void AddSchema(JsonObject schema)
     {
         if (schema["properties"] is not JsonObject properties) return;
-        foreach (var name in new[] { "habits" })
+        foreach (var name in new[] { "habits", "sub_habits" })
             if (properties[name]?["items"] is JsonObject item) AddSchema(item);
         if (properties["updates"] is JsonObject updates) AddSchema(updates);
+        if (properties.ContainsKey("habits") || properties.ContainsKey("updates")) return;
         var suggested = new JsonObject();
         foreach (var property in properties.ToArray())
             if (Fields.Contains(property.Key)) suggested[property.Key] = property.Value?.DeepClone();
@@ -115,16 +124,60 @@ public static class ProactiveProposal
 
     private static readonly string[] ReminderFields = ["reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder"];
 
+    internal static JsonObject? AtPath(JsonObject root, string path, out string field)
+    {
+        var segments = path.Split('/');
+        field = segments[^1];
+        JsonNode? node = root;
+        for (var index = 0; index < segments.Length - 1; index++)
+        {
+            node = node is JsonObject obj ? obj[segments[index]]
+                : node is JsonArray array && int.TryParse(segments[index], out var number) && number >= 0 && number < array.Count
+                    ? array[number] : null;
+            if (node is null) return null;
+        }
+        return node as JsonObject;
+    }
+
+    internal static bool AcceptsEdit(JsonElement schema, string path, JsonElement value)
+    {
+        var segments = path.Split('/');
+        for (var index = 0; index < segments.Length - 1; index++)
+        {
+            if (schema.TryGetProperty("properties", out var properties) && properties.TryGetProperty(segments[index], out var property))
+                schema = property;
+            else if (schema.TryGetProperty("items", out var item) && int.TryParse(segments[index], out var number) && number >= 0)
+                schema = item;
+            else return false;
+        }
+        return AgentArgumentSchema.Accepts(schema, segments[^1], value);
+    }
+
+    internal static bool SetPath(JsonObject root, string path, JsonElement value)
+    {
+        var target = AtPath(root, path, out var field);
+        if (target is null) return false;
+        target[field] = JsonNode.Parse(value.GetRawText());
+        if (target[Metadata]?["values"] is JsonObject suggestions && suggestions.ContainsKey(field))
+            suggestions[field] = JsonNode.Parse(value.GetRawText());
+        return true;
+    }
+
     internal static bool Remove(JsonObject source, IReadOnlyList<string>? fields)
     {
         if (fields is null || fields.Count == 0) return true;
-        if (source[Metadata]?["fields"] is not JsonObject suggestions) return false;
-        if (fields.Any(field => !suggestions.ContainsKey(field))) return false;
-        var removed = fields.SelectMany(field => RemovalFields(suggestions, field)).Distinct(StringComparer.Ordinal).ToArray();
-        foreach (var field in removed)
+        var removals = new List<(JsonObject Node, string Field)>();
+        foreach (var path in fields)
         {
-            source.Remove(field);
-            suggestions.Remove(field);
+            var node = AtPath(source, path, out var field);
+            if (node?[Metadata]?["fields"] is not JsonObject suggestions || !suggestions.ContainsKey(field)) return false;
+            removals.AddRange(RemovalFields(suggestions, field).Select(name => (node, name)));
+        }
+        foreach (var (node, field) in removals)
+        {
+            node.Remove(field);
+            (node[Metadata]?["fields"] as JsonObject)?.Remove(field);
+            (node[Metadata]?["values"] as JsonObject)?.Remove(field);
         }
         return true;
     }
