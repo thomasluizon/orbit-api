@@ -186,7 +186,7 @@ public partial class ProcessUserChatCommandHandlerTests
         .EnumerateArray().Select((call, index) => new AiToolCall(call.GetProperty("name").GetString()!,
             "capture-" + index, call.GetProperty("arguments").Clone())).ToArray();
 
-    private List<AgentExecuteOperationRequest> HoldBrainDumpWithReads(BulkCreateHabitsTool bulk, params IAiTool[] reads)
+    private List<AgentExecuteOperationRequest> HoldBrainDumpWithReads(IAiTool bulk, params IAiTool[] reads)
     {
         var blocks = UseProductionReadExecutor(reads);
         var executors = reads.ToDictionary(tool => tool.Name,

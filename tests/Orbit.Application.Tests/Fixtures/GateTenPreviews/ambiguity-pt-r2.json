@@ -1,0 +1,95 @@
+{
+  "caseId": "ambiguity-pt",
+  "repeat": 2,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": "Caminhada",
+        "date": "today",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    },
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "choice",
+        "question": "Qual das duas caminhadas você quer marcar como feita?",
+        "title": null,
+        "multiSelect": false,
+        "allowFreeText": false,
+        "intro": null,
+        "progress": null,
+        "questions": null,
+        "options": [
+          {
+            "id": "[redacted]",
+            "label": "Caminhada 1",
+            "description": "Uma das duas"
+          },
+          {
+            "id": "[redacted]",
+            "label": "Caminhada 2",
+            "description": "Uma das duas"
+          }
+        ],
+        "action": null,
+        "items": null,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ],
+  "successfulTools": [
+    {
+      "name": "query_habits",
+      "result": {
+        "scope": "today",
+        "items": [
+          {
+            "title": "Caminhada",
+            "emoji": null,
+            "depth": 0,
+            "isBadHabit": false,
+            "status": "today",
+            "startDate": "2026-10-23",
+            "parentTitle": null,
+            "tags": [],
+            "isSkippedOnDate": false
+          },
+          {
+            "title": "Caminhada",
+            "emoji": null,
+            "depth": 0,
+            "isBadHabit": false,
+            "status": "today",
+            "startDate": "2026-10-23",
+            "parentTitle": null,
+            "tags": [],
+            "isSkippedOnDate": false
+          }
+        ],
+        "date": "2026-10-29",
+        "totalCount": 2
+      }
+    },
+    {
+      "name": "ask",
+      "result": null
+    }
+  ],
+  "source": "Production gate 10, API 728b1ea5, harness 029de9342; captured calls and successful tool projections. IDs are redacted by the producer."
+}

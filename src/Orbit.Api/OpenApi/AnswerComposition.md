@@ -906,6 +906,42 @@ including lists returned by duplicate lookups. This applies to typed parts and
 legacy card properties. Nonempty read results remain eligible for composition;
 the combined creation preview continues to suppress all prerequisite read cards.
 
+## Write completion guidance and copy review
+
+A singular habit reference with duplicate titles requires a fresh selection
+lookup and one choice block before any write. Passing all matching IDs to a
+bulk tool does not resolve that reference. An explicitly identified target or
+an explicitly requested set still uses the corresponding write tools.
+
+Saving a starting step to a checklist requires `update_checklist`, even when
+the target lookup returns an identical checked item. The append preserves that
+item and adds the requested step unchecked. A lookup never completes the save.
+
+Brain dumps that request ideas and one approval keep `orbit_read_complete=false`
+on both lookup and suggestion calls. The model then submits one
+`bulk_create_habits` call containing the explicit tasks, habits and chosen draft
+fields. Suggestion-only requests continue to return their draft cards.
+
+Fresh restart proposals read all remaining due and overdue habits in the current
+turn before preparing `revised_items`. The account index supplies identity, not
+current occurrence state. Existing pending-plan corrections still use
+`revise_pending_changes`.
+
+These rules guide the model's emitted structure. No message pattern selects,
+renames or adds a tool call. Captured structured plans run at the model-service
+port; exact guidance assertions protect prompt changes. Model reliability is
+measured separately by the coordinator's real-call gate.
+
+The runtime model instructions are English. Their pt-BR translations are for
+copy approval.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `GlobalRulesSection`, duplicate targets | DUPLICATE TARGETS: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write. | ALVOS DUPLICADOS: Um nome no singular que corresponde a títulos duplicados continua sem resolução mesmo quando o índice da conta contém todos os IDs correspondentes. Chame query_habits com search e for_selection=true e depois ask com form choice; nunca passe todos os IDs correspondentes para bulk_log_habits ou qualquer outra alteração em lote. |
+| `GlobalRulesSection`, checklist saves | CHECKLIST SAVES: For a request to save a starting step in a checklist, query_habits only resolves the target; set orbit_read_complete=false, then call update_checklist with item_to_add containing the previous step verbatim and orbit_write_complete=true. Preserve an identical stored item, even if checked, and append the requested step unchecked. A habit list never fulfills this save request. | SALVAR NO CHECKLIST: Em um pedido para salvar um passo inicial em um checklist, query_habits apenas identifica o hábito; defina orbit_read_complete=false e depois chame update_checklist com item_to_add contendo o passo anterior sem alterações e orbit_write_complete=true. Preserve um item idêntico já salvo, mesmo se estiver marcado, e acrescente o passo solicitado desmarcado. Uma lista de hábitos nunca conclui esse pedido de salvamento. |
+| `HabitModelInstructions.BrainDumpCompletion`, also in `SuggestHabitsTool.Description` | For a combined approval request, set orbit_read_complete=false on query_habits and suggest_habits, then call bulk_create_habits with every explicit item and chosen idea. A suggestion result alone never completes that request. | Em um pedido de aprovação conjunta, defina orbit_read_complete=false em query_habits e suggest_habits e depois chame bulk_create_habits com todos os itens explícitos e a ideia escolhida. Um resultado de sugestão sozinho nunca conclui esse pedido. |
+| `RestartPlanInstructions.FreshLookup`, in `BulkRescheduleHabitsTool.Description` | Before every fresh restart proposal, call query_habits in this turn even when the account index already contains the habit IDs. The index does not establish which occurrences remain due or overdue; build revised_items only from the complete fresh query result. | Antes de cada nova proposta de recomeço, chame query_habits neste turno mesmo quando o índice da conta já contém os IDs dos hábitos. O índice não informa quais ocorrências ainda estão pendentes ou atrasadas; monte revised_items apenas a partir do resultado completo da consulta atual. |
+
 The following server copy is retained verbatim and moved into the localization catalog.
 The model instruction is shared by the tool description and its result. Its Portuguese
 translation is for copy review; the model receives the English instruction in both locales.

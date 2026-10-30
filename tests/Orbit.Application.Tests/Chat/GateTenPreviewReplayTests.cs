@@ -1,15 +1,21 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Chat.Queries;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
@@ -79,4 +85,193 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private static JsonDocument GateTenPreviewCapture(string name) => JsonDocument.Parse(File.ReadAllText(
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "GateTenPreviews", name + ".json")));
+
+    [Fact]
+    public async Task G10_DuplicateTargetProducesOneChoiceAndNoWrite()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var habits = new[] { CreateHabit("Caminhada"), CreateHabit("Caminhada") };
+        SetupSelectionHabits(habits);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(query, RealAskTool());
+        UseProductionReadExecutor(query);
+        using var capture = GateTenPreviewCapture("ambiguity-pt-r2");
+        var calls = BrainDumpCalls(capture);
+        var ask = JsonNode.Parse(calls[1].Args.GetRawText())!.AsObject();
+        for (var index = 0; index < habits.Length; index++)
+            ask["options"]![index]!["id"] = habits[index].Id.ToString();
+        SetupAiResponse(new AiResponse { ToolCalls = [calls[0]], ConversationContext = TestConversationContext });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ToolCalls = [calls[1] with { Args = JsonSerializer.SerializeToElement(ask) }],
+                ConversationContext = TestConversationContext
+            }));
+
+        var result = await handler.Handle(new(UserId, "Marca a caminhada como feita.",
+            ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
+            .Which.Kind.Should().Be("choice");
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        result.Value.Actions.Should().BeEmpty();
+        await _operationExecutor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(call =>
+            call.OperationId == "query_habits"), Arg.Any<CancellationToken>());
+        await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(call =>
+            call.OperationId != "query_habits"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task G10_ChecklistLookupContinuesToAppendTheSameStepUnchecked()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        using var failed = GateTenPreviewCapture("composition-one-small-step-save-checklist-pt-BR-r3");
+        using var passed = GateTenPreviewCapture("composition-one-small-step-save-checklist-pt-BR-r1");
+        var fixture = failed.RootElement.GetProperty("fixtureHabits")[0];
+        var habit = CreateHabit(fixture.GetProperty("title").GetString()!);
+        var existing = fixture.GetProperty("checklistItems").EnumerateArray()
+            .Select(item => new ChecklistItem(item.GetProperty("text").GetString()!, item.GetProperty("isChecked").GetBoolean())).ToArray();
+        habit.UpdateChecklist(existing);
+        SetupGateTenHabits(habit);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var write = new UpdateChecklistTool(_mediator, _habitRepo);
+        var handler = CreateHandler(query, write);
+        var held = HoldBrainDumpWithReads(write, query);
+        var lookup = BrainDumpCalls(failed).Single();
+        var append = BrainDumpCalls(passed).Single();
+        append = append with
+        {
+            Args = JsonSerializer.Deserialize<JsonElement>(append.Args.GetRawText()
+            .Replace("[redacted]", habit.Id.ToString(), StringComparison.Ordinal))
+        };
+        SetupGateTenRounds(lookup, append);
+
+        var result = await handler.Handle(new(UserId, "Quero adicionar Pegar um copo ao checklist de Beber água.",
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, PartKinds: ["oneSmallStep"])), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle();
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
+        var items = preview.Items.Should().ContainSingle().Which.Fields
+            .Should().ContainSingle(field => field.Field == "checklist_items").Which.ProposedValue!.Value;
+        items.EnumerateArray().Select(item => new ChecklistItem(item.GetProperty("text").GetString()!,
+                item.GetProperty("is_checked").GetBoolean()))
+            .Should().Equal(existing.Append(new ChecklistItem("Pegar um copo", false)));
+        habit.ChecklistItems.Should().Equal(existing);
+        result.Value.Parts.Should().BeEmpty();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task G10_BrainDumpKeepsExplicitTasksAndTheReturnedIdeaInOnePreview()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 10, 30));
+        using var capture = GateTenPreviewCapture("brain-dump-ideas-pt-BR-r1");
+        var suggestion = capture.RootElement.GetProperty("successfulTools").EnumerateArray()
+            .Single(tool => tool.GetProperty("name").GetString() == "suggest_habits")
+            .GetProperty("result").GetProperty("drafts")[0];
+        var draft = suggestion.Deserialize<HabitSuggestionDraft>(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        { Converters = { new JsonStringEnumConverter() } })! with
+        { Id = Guid.NewGuid() };
+        var generator = Substitute.For<IHabitDraftGenerator>();
+        generator.GenerateAsync(Arg.Any<HabitSuggestionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success<IReadOnlyList<HabitSuggestionDraft>>([draft]));
+        var suggestions = new SuggestHabitDraftsQueryHandler(new HabitSuggestionService(_habitRepo, _goalRepo, _userDateService, generator));
+        _mediator.Send(Arg.Any<SuggestHabitDraftsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => suggestions.Handle(call.Arg<SuggestHabitDraftsQuery>(), call.Arg<CancellationToken>()));
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var suggest = new SuggestHabitsTool(_mediator);
+        var bulk = new BulkCreateHabitsTool(_mediator);
+        var handler = CreateHandler(query, suggest, bulk);
+        var held = HoldBrainDumpWithReads(bulk, query, suggest);
+        SetupGateTenRounds(BrainDumpCalls(capture));
+
+        var result = await handler.Handle(new(UserId, "Organiza minhas tarefas e a ideia em uma prévia para aprovar.",
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, Locale: "pt-BR")), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle();
+        var items = result.Value.PendingOperations.Should().ContainSingle().Which.Items!;
+        items.Select(item => item.HabitType).Should().Equal("Task", "Habit", "Habit");
+        items[0].EntityName.Should().Contain("dentista");
+        items[0].Fields.Should().Contain(field => field.Field == "due_date" && field.NewValue == "2026-10-31");
+        items[1].EntityName.Should().Be("Alongar");
+        items[1].Fields.Should().Contain(field => field.Field == "due_time" && field.NewValue == "08:00");
+        items[2].EntityName.Should().Be(draft.Title);
+        items[2].Fields.Should().Contain(field => field.Field == "due_time" && field.NewValue == draft.DueTime.ToString("HH:mm"));
+        result.Value.Parts.Should().BeEmpty();
+        result.Value.AiMessage.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task G10_RestartReadsAllSixTargetsBeforePreparingTheirDates()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var today = new DateOnly(2026, 10, 30);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(today);
+        using var capture = GateTenPreviewCapture("composition-restart-approve-pt-BR-r2");
+        var source = capture.RootElement.GetProperty("successfulTools")[0].GetProperty("result").GetProperty("items");
+        var habits = source.EnumerateArray().Select((item, index) => Habit.Create(new HabitCreateParams(
+            HabitSchedule.Recurring, UserId, item.GetProperty("title").GetString()!, FrequencyUnit.Day, 1,
+            index < 4 ? today.AddDays(-2) : today)).Value).ToArray();
+        SetupGateTenHabits(habits);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var write = new BulkRescheduleHabitsTool(_mediator);
+        var handler = CreateHandler(query, write);
+        var held = HoldBrainDumpWithReads(write, query);
+        var calls = BrainDumpCalls(capture);
+        var plan = JsonNode.Parse(calls[1].Args.GetRawText())!.AsObject();
+        for (var index = 0; index < habits.Length; index++)
+            plan["revised_items"]![index]!["habit_id"] = habits[index].Id.ToString();
+        SetupAiResponse(new AiResponse { ToolCalls = [calls[0]], ConversationContext = TestConversationContext });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var rows = call.Arg<IReadOnlyList<AiToolCallResult>>().Single().Payload.Should().BeOfType<HabitListCard>().Subject;
+                rows.Items.Select(item => item.Id).Should().BeEquivalentTo(habits.Select(habit => habit.Id.ToString()));
+                held.Should().BeEmpty();
+                return Result.Success(new AiResponse
+                {
+                    ToolCalls = [calls[1] with { Args = JsonSerializer.SerializeToElement(plan) }],
+                    ConversationContext = TestConversationContext
+                });
+            });
+
+        var result = await handler.Handle(new(UserId, "Me ajude a recomeçar.",
+            ClientContext: new(SupportsParts: true, SupportsPendingOperationChanges: true, SupportsHabitListCard: true)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        held.Should().ContainSingle();
+        var items = result.Value.PendingOperations.Should().ContainSingle().Which.Items!;
+        items.Select(item => item.EntityId).Should().BeEquivalentTo(habits.Select(habit => (Guid?)habit.Id));
+        var dates = items.Select(item => DateOnly.Parse(item.Fields.Single(field => field.Field == "due_date").NewValue!)).ToArray();
+        dates.Count(date => date == today).Should().BeInRange(1, habits.Length - 1);
+        dates.Should().OnlyContain(date => date >= today && date <= today.AddDays(7));
+        result.Value.Parts.Should().BeEmpty();
+        habits.Take(4).Should().OnlyContain(habit => habit.NextDueDate == today.AddDays(-2));
+    }
+
+    private void SetupGateTenRounds(params AiToolCall[] calls)
+    {
+        SetupAiResponse(new AiResponse { ToolCalls = [calls[0]], ConversationContext = TestConversationContext });
+        var remaining = new Queue<AiToolCall>(calls.Skip(1));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Result.Success(new AiResponse { ToolCalls = [remaining.Dequeue()], ConversationContext = TestConversationContext }));
+    }
+
+    private void SetupGateTenHabits(params Habit[] habits)
+    {
+        SetupSelectionHabits(habits);
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToArray());
+    }
 }

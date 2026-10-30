@@ -1,0 +1,71 @@
+{
+  "caseId": "composition-one-small-step-save-checklist-pt-BR",
+  "repeat": 3,
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": "Beber água",
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded"
+    }
+  ],
+  "fixtureHabits": [
+    {
+      "title": "Beber água",
+      "description": null,
+      "emoji": null,
+      "isBadHabit": false,
+      "isGeneral": false,
+      "dueDate": "2026-10-30",
+      "endDate": null,
+      "frequencyUnit": "Day",
+      "frequencyQuantity": 1,
+      "days": [],
+      "checklistItems": [
+        {
+          "text": "Pegar um copo",
+          "isChecked": true
+        },
+        {
+          "text": "Encher o copo",
+          "isChecked": false
+        }
+      ],
+      "createdAtUtc": "2026-10-29T23:46:06.428181Z",
+      "logs": [],
+      "intervalWeeks": null
+    },
+    {
+      "title": "Caminhada",
+      "description": null,
+      "emoji": null,
+      "isBadHabit": false,
+      "isGeneral": false,
+      "dueDate": "2026-10-30",
+      "endDate": null,
+      "frequencyUnit": "Day",
+      "frequencyQuantity": 1,
+      "days": [],
+      "checklistItems": [],
+      "createdAtUtc": "2026-10-29T23:46:07.305995Z",
+      "logs": [],
+      "intervalWeeks": null
+    }
+  ],
+  "source": "Production gate 10, API 728b1ea5, harness 029de9342; captured calls and account fixture. IDs are redacted by the producer."
+}

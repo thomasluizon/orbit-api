@@ -16,7 +16,8 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
         + "This never creates habits. The person edits a draft and requests its approval preview before saving. "
         + "For additional ideas in a combined preview, supply excluded_activities with every activity already planned, using stored titles for reused habits. An empty list still requests new activities only. Omit it for ordinary suggestions that may adjust existing habits. "
         + "For an unstructured message that also requests habit ideas, keep its explicit tasks and put the chosen draft fields "
-        + "in one bulk_create_habits approval preview; map existingHabitId to habit_id to reuse the habit. Wait for these drafts before preparing that preview, copy their fields unchanged and keep stored titles verbatim. Never invent a quantity, rewrite a draft title or replace its activity. The combined preview replaces the separate suggestion block.";
+        + "in one bulk_create_habits approval preview; map existingHabitId to habit_id to reuse the habit. Wait for these drafts before preparing that preview, copy their fields unchanged and keep stored titles verbatim. Never invent a quantity, rewrite a draft title or replace its activity. The combined preview replaces the separate suggestion block. "
+        + HabitModelInstructions.BrainDumpCompletion;
 
     public object GetParameterSchema() => new
     {

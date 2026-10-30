@@ -44,6 +44,7 @@ public class AstraBehaviourPromptTests
             .And.Contain("For medical instruction titles, keep the person's own action wording")
             .And.Contain("stop multivitamins stays Stop multivitamins")
             .And.Contain("parar com multivitaminico stays Parar com multivitamínico");
+        prompt.Should().Contain("For a combined approval request, set orbit_read_complete=false on query_habits and suggest_habits, then call bulk_create_habits with every explicit item and chosen idea. A suggestion result alone never completes that request.");
     }
 
     [Fact]
@@ -124,9 +125,25 @@ public class AstraBehaviourPromptTests
         prompt.Should().Contain("When more than one existing record matches and the intended target is unclear");
         prompt.Should().Contain("prepare no write or preview until the person answers");
         prompt.Should().Contain("Use ask with form choice for existing-record selection");
+        prompt.Should().Contain("A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.");
         prompt.Should().NotContain("Ambiguous matches are choices inside the preview");
         prompt.Should().NotContain("Resolve all choices in the preview");
         prompt.Should().NotContain("ask one short question only when no usable preview can be proposed");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ChecklistSave_RequiresAnAppendAfterTargetLookup(bool composition)
+    {
+        Build(composition).Should().Contain("For a request to save a starting step in a checklist, query_habits only resolves the target; set orbit_read_complete=false, then call update_checklist with item_to_add containing the previous step verbatim and orbit_write_complete=true. Preserve an identical stored item, even if checked, and append the requested step unchecked. A habit list never fulfills this save request.");
+    }
+
+    [Fact]
+    public void RestartPreview_RequiresFreshDueStateEvenWithACompleteAccountIndex()
+    {
+        new Orbit.Application.Chat.Tools.Implementations.BulkRescheduleHabitsTool(NSubstitute.Substitute.For<MediatR.IMediator>())
+            .Description.Should().Contain("Before every fresh restart proposal, call query_habits in this turn even when the account index already contains the habit IDs. The index does not establish which occurrences remain due or overdue; build revised_items only from the complete fresh query result.");
     }
 
     [Theory]
