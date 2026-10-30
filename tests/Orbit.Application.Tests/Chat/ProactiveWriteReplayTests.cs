@@ -143,8 +143,17 @@ public partial class ProcessUserChatCommandHandlerTests
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items!.Single().Fields.Should().Contain(field => field.Field == (calendar ? "emoji" : "repeat_reminder")
             && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
-        if (mode == "calendar") preview.NextAction!.Surface.Should().Be("calendar-sync");
-        if (mode == "goal") preview.NextAction!.Kind.Should().Be("continueChat");
+        if (mode == "calendar")
+        {
+            preview.NextAction!.Surface.Should().Be("calendar-sync");
+            preview.NextAction.Label.Should().Be(locale == "en" ? "Connect Google Calendar" : "Conectar Google Agenda");
+        }
+        if (mode == "goal")
+        {
+            preview.NextAction!.Kind.Should().Be("continueChat");
+            preview.NextAction.Prompt.Should().Be(locale == "en" ? "Suggest a goal for what is in this preview."
+                : "Sugira uma meta para o que está nesta prévia.");
+        }
         if (mode is "repeat" or "calendar-disabled") preview.NextAction.Should().BeNull();
         result.Value.Parts.Should().BeEmpty();
         result.Value.AiMessage.Should().BeNullOrEmpty();

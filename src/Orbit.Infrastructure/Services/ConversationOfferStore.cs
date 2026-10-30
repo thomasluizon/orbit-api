@@ -15,6 +15,14 @@ public sealed class ConversationOfferStore(OrbitDbContext db, IEncryptionService
             .OrderBy(offer => offer.Id).Take(100).Select(offer => offer.DefinitionJson).ToListAsync(ct))
             .Select(json => JsonSerializer.Deserialize<AstraOfferFact>(json)).OfType<AstraOfferFact>().ToArray();
 
+    public async Task<AstraOfferFact?> FindIssuedAsync(Guid userId, Guid conversationId, string key, CancellationToken ct)
+    {
+        var json = await db.ConversationOffers.AsNoTracking().Where(offer => offer.UserId == userId
+            && offer.ConversationId == conversationId && offer.OfferKey == key && !offer.Dismissed)
+            .Select(offer => offer.DefinitionJson).SingleOrDefaultAsync(ct);
+        return json is null ? null : JsonSerializer.Deserialize<AstraOfferFact>(json);
+    }
+
     public async Task<IReadOnlySet<string>> DismissedAsync(Guid userId, Guid conversationId, CancellationToken ct) =>
         (await db.ConversationOffers.AsNoTracking().Where(offer => offer.UserId == userId
             && offer.ConversationId == conversationId && offer.Dismissed)

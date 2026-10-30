@@ -30,11 +30,16 @@ public sealed class ConversationOfferStoreTests
         await store.IssueAsync(user.Id, conversation, fact, default);
         (await store.IssuedAsync(user.Id, conversation, default)).Should().ContainSingle()
             .Which.Action.OfferKey.Should().Be(key);
+        (await store.FindIssuedAsync(user.Id, conversation, key, default)).Should().Be(fact);
+        (await store.FindIssuedAsync(other.Id, conversation, key, default)).Should().BeNull();
+        (await store.FindIssuedAsync(user.Id, Guid.NewGuid(), key, default)).Should().BeNull();
+        (await store.FindIssuedAsync(user.Id, conversation, "unknown", default)).Should().BeNull();
         await store.DismissAsync(user.Id, conversation, [key], default);
         using var fresh = factory.CreateContext();
         var reloaded = new ConversationOfferStore(fresh, encryption);
         await reloaded.IssueAsync(user.Id, conversation, fact, default);
         (await reloaded.IssuedAsync(user.Id, conversation, default)).Should().BeEmpty();
+        (await reloaded.FindIssuedAsync(user.Id, conversation, key, default)).Should().BeNull();
         (await reloaded.DismissedAsync(user.Id, conversation, default)).Should().ContainSingle().Which.Should().Be(key);
         (await reloaded.DismissedAsync(other.Id, conversation, default)).Should().BeEmpty();
         (await reloaded.DismissedAsync(user.Id, Guid.NewGuid(), default)).Should().BeEmpty();

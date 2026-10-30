@@ -71,27 +71,27 @@ public static class ProactiveOfferPlanner
                 if (item.Status == "today" && !resolved.Contains(account.Today)
                     && HabitScheduleService.WasScheduledOnDate(habit, account.Today, account.WeekStartDay))
                     Add("log", "A positive scheduled occurrence is due today and unresolved.", "Log this habit", "Registrar hábito",
-                        $"Prepare a log preview for {habit.Title} on {account.Today.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}.",
-                        $"Prepare uma prévia para registrar {habit.Title} em {account.Today.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}.", id, date: account.Today);
+                        $"Log {habit.Title} for {account.Today.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}.",
+                        $"Registre {habit.Title} em {account.Today.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}.", id, date: account.Today);
                 if (read.Block is MetricsCard or PeriodInsightCard)
                     Add("reviewHabit", "A successful habit-specific metrics or attention result identifies this owned habit.",
                         "Review this habit", "Rever este hábito",
-                        $"Read the current configuration of {habit.Title} and propose a useful adjustment while preserving requested and stored fields.",
-                        $"Leia a configuração atual de {habit.Title} e sugira um ajuste útil, preservando os campos solicitados e salvos.", id, kind: "continueChat");
+                        $"Suggest one useful change to {habit.Title} and keep the rest as it is.",
+                        $"Sugira um ajuste útil em {habit.Title} e mantenha o resto como está.", id, kind: "continueChat");
                 var missed = MissedDates(habit, account.Today, account.WeekStartDay, days);
                 if (item.Status == "overdue" && (habit.Schedule == HabitSchedule.OneTime && habit.NextDueDate < account.Today
                     || HabitScheduleService.HasMissedPastOccurrence(habit, account.Today, account.WeekStartDay, resolvedDates: resolved)))
                 {
                     Add("restart", "An owned overdue or missed occurrence is unresolved.", "Restart gently", "Retomar aos poucos",
-                        "Prepare a smaller restart plan from my current overdue habits, keeping only a small set today and giving deferred items concrete dates.",
-                        "Prepare uma retomada menor com meus hábitos atrasados, mantendo poucos itens hoje e dando datas concretas aos demais.", id, date: account.Today);
+                        "Help me restart my overdue habits: just a few today and new dates for the rest.",
+                        "Me ajude a retomar meus hábitos atrasados: só alguns hoje e novas datas para o resto.", id, date: account.Today);
                     AddSkipOffer(habit, id, missed);
                 }
                 if (missed.Count >= 3 && !habit.ReminderEnabled)
                     Add("reminder", "Reminders are off and at least three scheduled occurrences were missed in the last fourteen local days.",
                         "Add a reminder", "Adicionar lembrete",
-                        $"Prepare a reminder proposal for {habit.Title}; keep all its other settings.",
-                        $"Prepare uma sugestão de lembrete para {habit.Title}; preserve as outras configurações.", id);
+                        $"Suggest a reminder for {habit.Title} without changing anything else.",
+                        $"Sugira um lembrete para {habit.Title} sem mudar o resto.", id);
             }
         }
 
@@ -99,12 +99,12 @@ public static class ProactiveOfferPlanner
         {
             DateOnly? date = habit.Schedule == HabitSchedule.OneTime ? habit.NextDueDate : missed.Count > 0 ? missed[0] : null;
             var en = date is { } day
-                ? $"Prepare a skip preview for {habit.Title} on {day.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}."
-                : $"Read the current schedule and prepare a skip preview for an unresolved missed occurrence of {habit.Title}; keep its original occurrence date.";
+                ? $"Skip {habit.Title} on {day.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}."
+                : $"Skip the day I missed {habit.Title}.";
             var br = date is { } local
-                ? $"Prepare uma prévia para pular {habit.Title} em {local.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}."
-                : $"Leia a agenda atual e prepare uma prévia para pular uma ocorrência perdida e não resolvida de {habit.Title}; preserve a data original da ocorrência.";
-            Add("skip", "An owned overdue or missed occurrence is unresolved.", "Skip this occurrence", "Pular ocorrência", en, br, id, date: date);
+                ? $"Pule {habit.Title} em {local.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}."
+                : $"Pule o dia em que perdi {habit.Title}.";
+            Add("skip", "An owned overdue or missed occurrence is unresolved.", "Skip", "Pular", en, br, id, date: date);
         }
 
         private void GoalOffers()
@@ -115,11 +115,11 @@ public static class ProactiveOfferPlanner
                         && (goal.TrackingStatus is "behind" or "at_risk" || goals.OfferTracking?.GetValueOrDefault(id) is "behind" or "at_risk"))
                     {
                         Add("goalLink", "An active goal is behind or at risk with grounded progress and links.", "Link a habit", "Vincular hábito",
-                            $"Read my current habits and propose a suitable link to goal {goal.Title}, preserving its existing links.",
-                            $"Leia meus hábitos atuais e sugira um vínculo com a meta {goal.Title}, preservando os vínculos existentes.", id);
-                        Add("goalTarget", "An active goal is behind or at risk with grounded progress and target.", "Adjust the target", "Ajustar objetivo",
-                            $"Prepare an editable target adjustment for goal {goal.Title}; preserve the other fields.",
-                            $"Prepare um ajuste editável do objetivo da meta {goal.Title}; preserve os outros campos.", id);
+                            $"Suggest a habit to link to my goal {goal.Title}.",
+                            $"Sugira um hábito para vincular à minha meta {goal.Title}.", id);
+                        Add("goalTarget", "An active goal is behind or at risk with grounded progress and target.", "Adjust the target", "Ajustar a meta",
+                            $"Suggest a new target for my goal {goal.Title}.",
+                            $"Sugira um novo valor para a minha meta {goal.Title}.", id);
                     }
         }
 
@@ -145,16 +145,18 @@ public static class ProactiveOfferPlanner
                 if (!Guid.TryParse(record.Id, out var id)) continue;
                 if (records.Kind == "notionTasks" && records.Connection is { Connected: true, Status: nameof(NotionConnectionStatus.Idle) })
                     Add("notion", "A stored Notion task and connection read grounds this page id.", "Plan in Orbit", "Planejar no Orbit",
-                        $"Read my stored Notion tasks and prepare an editable Orbit task or habit from {record.Title}. Preserve its stated date and propose recurrence only if it fits.",
-                        $"Leia minhas tarefas salvas do Notion e prepare uma tarefa ou hábito editável no Orbit com a tarefa {record.Title}. Preserve a data e sugira recorrência só se fizer sentido.", id, kind: "continueChat");
+                        $"Turn my Notion task {record.Title} into an Orbit task or habit.",
+                        $"Transforme minha tarefa do Notion {record.Title} em uma tarefa ou hábito no Orbit.", id, kind: "continueChat");
                 if (records.Kind == "notifications" && record.IsRead == false)
-                    Add("notification", "This owned notification is unread.", "Mark as read", "Marcar como lida",
-                        $"Prepare a preview to mark notification {record.Title} as read.", $"Prepare uma prévia para marcar a notificação {record.Title} como lida.", id);
+                    Add("notification", "This owned notification is unread.", "Mark as read", "Marcar como lido",
+                        $"Mark the alert {record.Title} as read.", $"Marque o aviso {record.Title} como lido.", id);
                 if (records.Kind is "tags" or "templates")
                     Add("reuse", "A stored tag or template can be applied only after resolving an owned habit and full template contents.",
                         "Use with a habit", "Usar em um hábito",
-                        $"Read the full {(records.Kind == "tags" ? "tag" : "checklist template")} {record.Title} and my habits, then propose a suitable use in one editable preview.",
-                        $"Leia o registro completo de {(records.Kind == "tags" ? "etiquetas" : "modelos de checklist")} {record.Title} e meus hábitos, depois sugira uma aplicação adequada em uma prévia editável.", id, kind: "continueChat");
+                        records.Kind == "tags" ? $"Suggest a habit to use my tag {record.Title} with."
+                            : $"Suggest a habit to use my checklist template {record.Title} with.",
+                        records.Kind == "tags" ? $"Sugira um hábito para usar a etiqueta {record.Title}."
+                            : $"Sugira um hábito para usar o modelo de checklist {record.Title}.", id, kind: "continueChat");
             }
         }
 
@@ -166,10 +168,10 @@ public static class ProactiveOfferPlanner
                     "", "", kind: "openSurface", surface: "ai-settings");
             if (account.CalendarAvailable && !account.CalendarConnected)
                 Add("calendar", "Google Calendar is available and disconnected; requires dated_event interpretation.",
-                    "Connect Google Calendar", "Conectar Google Calendar", "", "", kind: "openSurface", surface: "calendar-sync");
+                    "Connect Google Calendar", "Conectar Google Agenda", "", "", kind: "openSurface", surface: "calendar-sync");
             Add("aim", $"A complete account snapshot with {account.Goals.Count} active goals is provided; requires aim interpretation and no equivalent goal.",
-                "Plan this goal", "Planejar esta meta", "Help me turn the aim we just discussed into an editable goal preview after checking my existing goals.",
-                "Me ajude a transformar o objetivo que acabamos de discutir em uma prévia editável de meta depois de conferir minhas metas existentes.", kind: "continueChat");
+                "Plan this goal", "Planejar esta meta", "Turn what we just talked about into a goal.",
+                "Transforme o que acabamos de conversar em uma meta.", kind: "continueChat");
             var surface = read.Block switch
             {
                 GoalListCard => "goals",

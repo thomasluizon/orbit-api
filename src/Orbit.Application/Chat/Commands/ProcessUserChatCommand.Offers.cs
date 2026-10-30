@@ -27,8 +27,7 @@ public partial class ProcessUserChatCommandHandler
         if (!ProactiveProposal.Enabled(request.ClientContext) || offerStore is null)
             return Result.Failure<ProcessUserChatCommand>("offers_not_supported");
         var conversation = request.ClientContext.ConversationId!.Value;
-        var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
-        var selected = issued.SingleOrDefault(offer => offer.Action.OfferKey == key);
+        var selected = await offerStore.FindIssuedAsync(request.UserId, conversation, key, ct);
         var today = await execution.UserDateService.GetUserTodayAsync(request.UserId, ct);
         if (selected is null || selected.LocalDate != today
             || selected.Action.Kind is not ("preparePreview" or "continueChat") || selected.Action.Prompt is null
@@ -57,6 +56,25 @@ public partial class ProcessUserChatCommandHandler
             HabitMonthOnly: selected.SourceKind == "habitMonth"), ct);
         return fresh.IsSuccess && fresh.Value.Read.Revision == selected.Revision;
     }
+
+    private static string? SelectedOfferScope(AstraOfferFact selected) => (selected.Action.Kind, selected.Family) switch
+    {
+        ("preparePreview", "log") => "Prepare a log preview for the typed habit on its supplied local date.",
+        ("continueChat", "reviewHabit") => "Read the typed habit's current configuration and propose one useful adjustment.",
+        ("preparePreview", "restart") => "Call query_habits for the complete current due and overdue set. Prepare a smaller restart plan with only a small set today and a concrete local date for every deferred item.",
+        ("preparePreview", "skip") => "Read the current schedule and resolve an unresolved missed occurrence of the typed habit. Use the supplied date when present; otherwise keep the missed occurrence's original local date. Never replace it with today.",
+        ("preparePreview", "reminder") => "Read the typed habit's current reminder configuration and propose a reminder without changing any other setting.",
+        ("preparePreview", "goalLink") => "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.",
+        ("preparePreview", "goalTarget") => "Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field.",
+        ("continueChat", "smallStep") => "Help the person choose one small step for their local today.",
+        ("continueChat", "notion") => "Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits.",
+        ("preparePreview", "notification") => "Prepare a preview to mark the typed unread alert as read.",
+        ("continueChat", "reuse") when selected.Source?.QueryFamily == "list_tags" => "Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags.",
+        ("continueChat", "reuse") when selected.Source?.QueryFamily == "get_checklist_templates" => "Read the full stored checklist template identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing checklist entries.",
+        ("continueChat", "aim") when selected.PendingOperationId.HasValue => "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in the pending preview, preserving all pending work.",
+        ("continueChat", "aim") => "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.",
+        _ => null
+    };
 
     private async Task<(ResponseCards Cards, bool Offered)> ComposeOfferAsync(ProcessUserChatCommand request,
         ChatContext context, ResponseCards cards, ToolExecutionAccumulator results, CancellationToken ct)

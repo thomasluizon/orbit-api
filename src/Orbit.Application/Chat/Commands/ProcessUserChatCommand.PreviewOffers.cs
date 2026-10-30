@@ -47,13 +47,13 @@ public partial class ProcessUserChatCommandHandler
         if (context.HasProAccess && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.CalendarIntegration)
             && context.User?.GoogleAccessToken is null && hasDate)
             offers.Add(Offer("calendar:calendar-sync", "calendar", "An editable dated draft and an available disconnected Google Calendar connection; requires dated_event interpretation.",
-                new("calendar:calendar-sync", "openSurface", pt ? "Conectar Google Calendar" : "Connect Google Calendar", Surface: "calendar-sync")));
+                new("calendar:calendar-sync", "openSurface", pt ? "Conectar Google Agenda" : "Connect Google Calendar", Surface: "calendar-sync")));
         if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite
             && !preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "target_value" or "goal_type"))
             offers.Add(Offer("aim:account", "aim", "The editable draft and complete active-goal snapshot support a goal only for an expressed aim with no equivalent active goal.",
             new("aim:account", "continueChat", pt ? "Planejar esta meta" : "Plan this goal", Prompt: pt
-                ? "Confira minhas metas e sugira uma meta para o objetivo desta prévia, preservando o trabalho pendente."
-                : "Check my goals and propose a goal for the aim in this preview, preserving the pending work.")));
+                ? "Sugira uma meta para o que está nesta prévia."
+                : "Suggest a goal for what is in this preview.")));
         return offers;
     }
 }
