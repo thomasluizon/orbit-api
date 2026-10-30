@@ -32,7 +32,131 @@ public sealed class AskTool(
 
     public object GetParameterSchema()
     {
-        var fields = JsonSerializer.SerializeToNode(GetFieldsSchema())!["properties"]!.AsObject();
+        var createSchema = JsonSerializer.SerializeToElement(createTool.GetParameterSchema());
+        var schema = new
+        {
+            type = "object",
+            properties = new
+            {
+                input = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        form = new { type = "string", @enum = new[] { "choice", "pickList", "question" }, description = "choice requires a nonempty question and 2 to 4 options; omit items, action, questions and progress. pickList requires nonempty title, action and 1 to 10 items; omit options, questions and progress, and set allowFreeText=false. question requires 1 to 10 questions; omit top-level options, items and action and set multiSelect=false. A single record selection uses choice; reserve question for multiple fields. Use only a supported form." },
+                        question = new { type = "string", maxLength = 120, description = "Required nonempty question for choice, at most 120 characters. Use null for other forms." },
+                        title = new { type = "string", description = "Required nonempty heading for pickList; optional heading of at most 120 characters for question. Null means absent." },
+                        multiSelect = new { type = "boolean", description = "For choice only; null means false. pickList always selects multiple items; question requires false or null." },
+                        allowFreeText = new { type = "boolean", description = "For choice only; null means false. Must be false for pickList. In form question, each questions entry controls its own allowFreeText; this top-level value is ignored." },
+                        intro = new { type = "string", maxLength = 500, description = "Optional nonempty introduction of at most 500 characters for question only. Use null for choice and pickList." },
+                        progress = new
+                        {
+                            type = "object",
+                            description = "For question only. Requires 0 <= current <= total and total >= 1. Null means absent.",
+                            properties = new { current = new { type = "integer", minimum = 0 }, total = new { type = "integer", minimum = 1 } },
+                            required = new[] { "current", "total" }
+                        },
+                        questions = new
+                        {
+                            type = "array",
+                            description = "Required for question only. Use unique nonempty question ids. singleChoice and multipleChoice require 2 to 10 options even with allowFreeText=true. scale requires lowLabel and highLabel. slider requires min, max, step and unit. yesNo has no options. Null means absent and is allowed only for other forms. Use null for fields belonging to another question type.",
+                            minItems = 1,
+                            maxItems = 10,
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    id = new { type = "string", maxLength = 80, description = "Nonempty unique question id, at most 80 characters." },
+                                    type = new { type = "string", @enum = new[] { "singleChoice", "multipleChoice", "scale", "slider", "yesNo" } },
+                                    prompt = new { type = "string", maxLength = 500, description = "Nonempty prompt, at most 500 characters." },
+                                    options = new
+                                    {
+                                        type = "array",
+                                        description = "Required for singleChoice and multipleChoice. Null means absent for scale, slider and yesNo. Option ids must be unique within the question.",
+                                        minItems = 2,
+                                        maxItems = 10,
+                                        items = new
+                                        {
+                                            type = "object",
+                                            properties = new
+                                            {
+                                                id = new { type = "string", maxLength = 80, description = "Nonempty option id, at most 80 characters." },
+                                                label = new { type = "string", maxLength = 120, description = "Nonempty label, at most 120 characters." },
+                                                recommended = new { type = "boolean", description = "At most one recommended option, only for singleChoice. Null means false." }
+                                            },
+                                            required = new[] { "id", "label" }
+                                        }
+                                    },
+                                    allowFreeText = new { type = "boolean", description = "Allow a custom answer for singleChoice, multipleChoice, or yesNo. Null means false; must be false or null for scale and slider." },
+                                    lowLabel = new { type = "string", maxLength = 120, description = "Required nonempty label for 1 on a scale, at most 120 characters. Use null for other types." },
+                                    highLabel = new { type = "string", maxLength = 120, description = "Required nonempty label for 5 on a scale, at most 120 characters. Use null for other types." },
+                                    min = new { type = "number", minimum = -1000000000, maximum = 1000000000, description = "Required slider lower bound. Use null for other types." },
+                                    max = new { type = "number", minimum = -1000000000, maximum = 1000000000, description = "Required slider upper bound, greater than min. Use null for other types." },
+                                    step = new { type = "number", description = "Required positive slider step dividing max minus min exactly. Use null for other types." },
+                                    unit = new { type = "string", maxLength = 24, description = "Required nonempty slider unit in the person's language, at most 24 characters. Use null for other types." }
+                                },
+                                required = new[] { "id", "type", "prompt" }
+                            }
+                        },
+                        options = new
+                        {
+                            type = "array",
+                            description = "Required for choice. Null means absent for other forms.",
+                            minItems = 2,
+                            maxItems = 4,
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    id = new { type = "string", description = "Nonempty unique option id." },
+                                    label = new { type = "string", maxLength = 20, description = "Nonempty option label, at most 20 characters." },
+                                    description = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." }
+                                },
+                                required = new[] { "id", "label" }
+                            }
+                        },
+                        action = new { type = "string", @enum = new[] { "create_habits", "log_habits", "skip_habits" }, description = "Required bulk action for pickList. Null means absent for other forms." },
+                        items = new
+                        {
+                            type = "array",
+                            description = "Required for pickList. Null means absent for other forms.",
+                            minItems = 1,
+                            maxItems = 10,
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    id = new { type = "string", description = "Nonempty unique item id." },
+                                    label = new { type = "string", description = "Nonempty item label." },
+                                    detail = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." },
+                                    arguments = new
+                                    {
+                                        description = "One bulk item: a habit definition for create_habits, or {habit_id, date} for log_habits/skip_habits. Dates use YYYY-MM-DD.",
+                                        anyOf = new object[]
+                                        {
+                                            createSchema.GetProperty("properties").GetProperty("habits").GetProperty("items"),
+                                            new { type = "object", properties = new { habit_id = new { type = "string" }, date = new { type = "string" } }, required = new[] { "habit_id", "date" } }
+                                        }
+                                    }
+                                },
+                                required = new[] { "id", "label", "arguments" }
+                            }
+                        }
+                    },
+                    required = new[] { "form" }
+                }
+            },
+            required = new[] { "input" }
+        };
+        return BuildFormSchema(JsonSerializer.SerializeToNode(schema)!.AsObject());
+    }
+
+    private static JsonObject BuildFormSchema(JsonObject schema)
+    {
+        var fields = schema["properties"]!["input"]!["properties"]!.AsObject();
         var questionFields = fields["questions"]!["items"]!["properties"]!.AsObject();
         fields["questions"]!["items"] = new JsonObject
         {
@@ -86,124 +210,9 @@ public sealed class AskTool(
     internal static JsonElement ExecutionArguments(JsonElement args) =>
         args.ValueKind == JsonValueKind.Object && args.TryGetProperty("input", out var input) ? input : args;
 
-    private object GetFieldsSchema()
-    {
-        var createSchema = JsonSerializer.SerializeToElement(createTool.GetParameterSchema());
-        return new
-        {
-            type = "object",
-            properties = new
-            {
-                form = new { type = "string", @enum = new[] { "choice", "pickList", "question" }, description = "choice requires a nonempty question and 2 to 4 options; omit items, action, questions and progress. pickList requires nonempty title, action and 1 to 10 items; omit options, questions and progress, and set allowFreeText=false. question requires 1 to 10 questions; omit top-level options, items and action and set multiSelect=false. A single record selection uses choice; reserve question for multiple fields. Use only a supported form." },
-                question = new { type = "string", maxLength = 120, description = "Required nonempty question for choice, at most 120 characters. Use null for other forms." },
-                title = new { type = "string", description = "Required nonempty heading for pickList; optional heading of at most 120 characters for question. Null means absent." },
-                multiSelect = new { type = "boolean", description = "For choice only; null means false. pickList always selects multiple items; question requires false or null." },
-                allowFreeText = new { type = "boolean", description = "For choice only; null means false. Must be false for pickList. In form question, each questions entry controls its own allowFreeText; this top-level value is ignored." },
-                intro = new { type = "string", maxLength = 500, description = "Optional nonempty introduction of at most 500 characters for question only. Use null for choice and pickList." },
-                progress = new
-                {
-                    type = "object",
-                    description = "For question only. Requires 0 <= current <= total and total >= 1. Null means absent.",
-                    properties = new { current = new { type = "integer", minimum = 0 }, total = new { type = "integer", minimum = 1 } },
-                    required = new[] { "current", "total" }
-                },
-                questions = new
-                {
-                    type = "array",
-                    description = "Required for question only. Use unique nonempty question ids. singleChoice and multipleChoice require 2 to 10 options even with allowFreeText=true. scale requires lowLabel and highLabel. slider requires min, max, step and unit. yesNo has no options. Null means absent and is allowed only for other forms. Use null for fields belonging to another question type.",
-                    minItems = 1,
-                    maxItems = 10,
-                    items = new
-                    {
-                        type = "object",
-                        properties = new
-                        {
-                            id = new { type = "string", maxLength = 80, description = "Nonempty unique question id, at most 80 characters." },
-                            type = new { type = "string", @enum = new[] { "singleChoice", "multipleChoice", "scale", "slider", "yesNo" } },
-                            prompt = new { type = "string", maxLength = 500, description = "Nonempty prompt, at most 500 characters." },
-                            options = new
-                            {
-                                type = "array",
-                                description = "Required for singleChoice and multipleChoice. Null means absent for scale, slider and yesNo. Option ids must be unique within the question.",
-                                minItems = 2,
-                                maxItems = 10,
-                                items = new
-                                {
-                                    type = "object",
-                                    properties = new
-                                    {
-                                        id = new { type = "string", maxLength = 80, description = "Nonempty option id, at most 80 characters." },
-                                        label = new { type = "string", maxLength = 120, description = "Nonempty label, at most 120 characters." },
-                                        recommended = new { type = "boolean", description = "At most one recommended option, only for singleChoice. Null means false." }
-                                    },
-                                    required = new[] { "id", "label" }
-                                }
-                            },
-                            allowFreeText = new { type = "boolean", description = "Allow a custom answer for singleChoice, multipleChoice, or yesNo. Null means false; must be false or null for scale and slider." },
-                            lowLabel = new { type = "string", maxLength = 120, description = "Required nonempty label for 1 on a scale, at most 120 characters. Use null for other types." },
-                            highLabel = new { type = "string", maxLength = 120, description = "Required nonempty label for 5 on a scale, at most 120 characters. Use null for other types." },
-                            min = new { type = "number", minimum = -1000000000, maximum = 1000000000, description = "Required slider lower bound. Use null for other types." },
-                            max = new { type = "number", minimum = -1000000000, maximum = 1000000000, description = "Required slider upper bound, greater than min. Use null for other types." },
-                            step = new { type = "number", description = "Required positive slider step dividing max minus min exactly. Use null for other types." },
-                            unit = new { type = "string", maxLength = 24, description = "Required nonempty slider unit in the person's language, at most 24 characters. Use null for other types." }
-                        },
-                        required = new[] { "id", "type", "prompt" }
-                    }
-                },
-                options = new
-                {
-                    type = "array",
-                    description = "Required for choice. Null means absent for other forms.",
-                    minItems = 2,
-                    maxItems = 4,
-                    items = new
-                    {
-                        type = "object",
-                        properties = new
-                        {
-                            id = new { type = "string", description = "Nonempty unique option id." },
-                            label = new { type = "string", maxLength = 20, description = "Nonempty option label, at most 20 characters." },
-                            description = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." }
-                        },
-                        required = new[] { "id", "label" }
-                    }
-                },
-                action = new { type = "string", @enum = new[] { "create_habits", "log_habits", "skip_habits" }, description = "Required bulk action for pickList. Null means absent for other forms." },
-                items = new
-                {
-                    type = "array",
-                    description = "Required for pickList. Null means absent for other forms.",
-                    minItems = 1,
-                    maxItems = 10,
-                    items = new
-                    {
-                        type = "object",
-                        properties = new
-                        {
-                            id = new { type = "string", description = "Nonempty unique item id." },
-                            label = new { type = "string", description = "Nonempty item label." },
-                            detail = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." },
-                            arguments = new
-                            {
-                                description = "One bulk item: a habit definition for create_habits, or {habit_id, date} for log_habits/skip_habits. Dates use YYYY-MM-DD.",
-                                anyOf = new object[]
-                                {
-                                    createSchema.GetProperty("properties").GetProperty("habits").GetProperty("items"),
-                                    new { type = "object", properties = new { habit_id = new { type = "string" }, date = new { type = "string" } }, required = new[] { "habit_id", "date" } }
-                                }
-                            }
-                        },
-                        required = new[] { "id", "label", "arguments" }
-                    }
-                }
-            },
-            required = new[] { "form" }
-        };
-    }
-
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        args = OptionalToolArguments.OmitOptionalNulls(ExecutionArguments(args), GetFieldsSchema());
+        args = OptionalToolArguments.OmitNulls(ExecutionArguments(args));
         AskToolArguments? input;
         try
         {
