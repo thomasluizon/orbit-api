@@ -13,6 +13,7 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
     public string Description => "Suggest personal, editable habit drafts from current habits, goals and free schedule time. "
         + "Use when the person asks for habit ideas or editable habit drafts. Help starting an activity uses suggest_breakdown with one_small_step=true instead. "
         + "Return habitSuggestions instead of a plain list. Pass the person's request and its language. "
+        + "Keep the person's requested topics in instruction; never put those topics in excluded_activities for ordinary suggestions. "
         + "This never creates habits. The person edits a draft and requests its approval preview before saving. "
         + "For additional ideas in a combined preview, supply excluded_activities with every activity already planned, using stored titles for reused habits. An empty list still requests new activities only. Omit it for ordinary suggestions that may adjust existing habits. "
         + "For an unstructured message that also requests habit ideas, keep its explicit tasks and put the chosen draft fields "
@@ -30,7 +31,7 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
             excluded_activities = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Activities already planned for the combined preview. Return new activities outside this list and the account's existing habits, including synonyms; never offer those activities as adjustments.",
+                description = "Activities already planned for the combined preview. Return new activities outside this list and the account's existing habits, including synonyms; never offer those activities as adjustments. For ordinary suggestions, omit this field or use null; requested topics are not exclusions.",
                 maxItems = HabitSuggestionRequest.MaxExcludedActivities,
                 items = new { type = JsonSchemaTypes.String, minLength = 1, maxLength = HabitSuggestionRequest.MaxExcludedActivityLength }
             }

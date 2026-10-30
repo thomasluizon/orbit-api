@@ -198,7 +198,33 @@ public sealed partial class AstraApprovalPathTests : IDisposable
         return habit;
     }
 
-    private (AgentOperationExecutor, PendingAgentOperationStore, PendingOperationRevisionService) Build(IAiTool tool)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task G10_ApiKeys_RealPolicyReturnsVerificationBeforeReadingKeys(bool changes)
+    {
+        var mediator = Substitute.For<IMediator>();
+        var tool = new GetApiKeysTool(mediator);
+        var config = Substitute.For<IAppConfigService>();
+        config.GetAsync(AppConfigKeys.RequireApiKeyCreationStepUp, false, Arg.Any<CancellationToken>()).Returns(true);
+        var authorization = new Orbit.Application.ApiKeys.Services.ApiKeyManagementAuthorization(config,
+            new Orbit.Application.Auth.Services.EmailChallengeService(_cache, TimeProvider.System));
+        var (executor, store, _) = Build(tool, authorization);
+
+        var result = await executor.ExecuteAsync(new(_userId, tool.Name, JsonSerializer.SerializeToElement(new { }),
+            AgentExecutionSurface.Chat, AgentAuthMethod.Jwt, IncludeChangePreview: changes));
+
+        result.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        result.Operation.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.StepUp);
+        result.PendingOperation.Should().NotBeNull();
+        result.PendingOperation!.ActionKey.Should().Be(PendingOperationActionKeys.GetRequired(tool.Name, "{}"));
+        store.IsAwaitingConfirmation(_userId, result.PendingOperation.Id).Should().BeTrue();
+        authorization.HasGrant(_userId).Should().BeFalse();
+        await mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.ApiKeys.Queries.GetApiKeysQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    private (AgentOperationExecutor, PendingAgentOperationStore, PendingOperationRevisionService) Build(IAiTool tool,
+        IAgentStepUpAuthorizationBridge? authorization = null)
     {
         var registry = new AiToolRegistry([tool]);
         var catalog = new AgentCatalogService([tool]);
@@ -207,8 +233,9 @@ public sealed partial class AstraApprovalPathTests : IDisposable
         _db.SaveChanges();
         var settings = Options.Create(new AgentPlatformSettings());
         var store = new PendingAgentOperationStore(_db, settings);
-        var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
-        bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
+        var bridge = authorization ?? Substitute.For<IAgentStepUpAuthorizationBridge>();
+        if (authorization is null)
+            bridge.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
         var policy = new AgentPolicyEvaluator(_db, catalog, store, bridge, settings, new FeatureFlagService(_db, _cache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build()));

@@ -73,12 +73,19 @@ public partial class ProcessUserChatCommandHandlerTests
             else if (mode == "legacy")
             {
                 result.Value.Parts.Should().BeNull();
-                if (kind == "daySummary")
-                    result.Value.AiMessage.Should().Be("Here is what you finished and what is left for today.");
-                else if (kind is "periodTotal" or "periodComparison")
-                    result.Value.AiMessage.Should().Contain("Completions: 3").And.NotContain("Model prose");
-                else
-                    result.Value.AiMessage.Should().Contain("Model prose");
+                var fact = toolName switch
+                {
+                    "get_habit_metrics" or "get_period_analytics" => "Completions: 3",
+                    "get_habit_history" => "Habit history: 1",
+                    "get_daily_summary" or "get_retrospective" => "Completed / scheduled:",
+                    "get_gamification_overview" => "Current streak: 7",
+                    "get_calendar_overview" => "Events: 0",
+                    "get_api_keys" or "get_profile" => "Reader",
+                    "get_subscription_overview" => "Plan: Pro",
+                    "get_referral_overview" => "Successful referrals: 1",
+                    _ => "Reading"
+                };
+                result.Value.AiMessage.Should().Contain(fact).And.NotContain("Model prose");
             }
             else
             {

@@ -43,9 +43,42 @@ and supply arguments to later tool rounds. Calls in the same round cannot consum
 results. The model selects requested subjects through its tool calls and arguments;
 the server never filters reads by words in the person's message. Successful reads render in recorded operation order, including independent reads
 alongside a pending preview or write outcome. Rankings use the complete count result and retain
-their produced position. Only equivalent query families, kinds and canonical scopes deduplicate;
+their produced position. Goal lists render once per answer, including when both `query_goals`
+and `review_goals` succeed; the first selected typed goal result supplies the block and refresh
+identity. Other reads deduplicate equivalent query families, kinds and canonical scopes;
 different entity IDs, date windows and metrics remain distinct, including history scopes.
 The server neither queries an implicit dashboard nor derives numbers from prose.
+
+For clients without parts, successful typed read results supply the readable lists even when
+legacy card flags are present. Every returned item appears in its section. A complete empty
+section is omitted beside a populated result; an entirely empty answer retains its truthful
+empty state. Model headings and directives cannot replace these facts. Streaming final output,
+recording and history use that same response.
+
+`get_api_keys` remains a read with a runtime emailed-code requirement. The
+`RequireApiKeyCreationStepUp` setting raises `api-keys.read` through
+`ApiKeyManagementAuthorization`, then the policy creates a `PendingConfirmation` operation
+with `StepUp` confirmation and action key `viewApiKeys`. Chat ends with the existing pending
+operation verification surface, which requests and accepts the emailed code. It emits no
+successful `recordList` before verification. A read has no mutation preview to build, even
+when the client supports change previews. Legacy clients receive the existing localized
+emailed-code instruction. No narrative call is needed to describe that pending state.
+Revocation and creation keep their existing approval and verification requirements.
+
+The model owns read planning. Reminders about remaining habits read today's habits without
+asking for a reminder selection. Advice about starting an identified activity uses
+`suggest_breakdown` without inventing another account habit. Requested suggestion topics stay
+in `instruction`, outside ordinary suggestion exclusions. Named-habit completion questions
+resolve the ID before `get_habit_metrics`; a metrics-enabled lookup is not the completion
+answer. A single discrete selection uses `ask` form `choice`, including target selection
+with a free-text change. These rules do not route tools or rewrite arguments from message text.
+
+The streak producer supplies aggregate streak and freeze facts, not a daily missed-day
+timeline. Guidance forbids inferring missed days from a current streak or before a habit's
+creation. The consumer's `buildStreakWeekDays` helper currently defaults earlier days to
+`missed`; #1620 and #26 must align that rendering with the available evidence. API prompt
+guidance cannot change a client-derived label, and this contract does not fabricate daily
+history to satisfy it.
 
 A validated question form containing one single-choice field becomes a `choice`
 when its options fit the existing choice contract and the client supports it.
@@ -206,7 +239,11 @@ For a chat read with `generate_narrative: true`, composition retains the success
 typed `DailySummaryResponse.Summary` as one text part beside its `daySummary` block.
 It does not replace that recommendation with a generic day intro or ask the chat
 model to paraphrase it. Clients without the block receive the same sentence with
-the readable summary facts. Stored-turn negotiation keeps the sentence once.
+the readable summary facts. For clients without parts, `aiMessage` keeps the sentence
+once followed by the grounded `Completed / scheduled:` totals, even when the client
+advertises the legacy day-summary card. That legacy field retains its typed rows.
+Streamed text, recorded responses and stored replay retain the same sentence and facts;
+model prose never replaces them. Stored-turn negotiation keeps the sentence once.
 Facts-only reads and exact refreshes retain their existing behavior. No new client
 field is required, and composition never infers this intent from message text.
 
@@ -237,8 +274,11 @@ the existing `ErrorCopy` catalog in English and Brazilian Portuguese. Pending pr
 require approval and never claim that a write has executed.
 
 `describe_feature` returns its existing markdown and metadata with an append-only model-facing
-`answer_scope` instruction, also present in the tool description. Only documented mechanics,
-screens, fields and steps support an explanation. `related_surfaces` identifies navigation
+`answer_scope` instruction, also present in the tool description. Its narrative tool result
+also includes `app_surfaces` for the related destination IDs, sourced from the same catalog
+as `list_app_surfaces_v2`. This supplies actual navigation steps without another model call
+or a second catalog. Only documented mechanics, screens, fields and steps support an explanation.
+`related_surfaces` identifies navigation
 destinations and does not document editing instructions. A missing detail calls for a brief
 acknowledgment in the person's language. This does not fabricate a UI route, execute another
 tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
@@ -1003,5 +1043,32 @@ translation is for copy review; the model receives the English instruction in bo
 | `chat.answer.selectHabitReference` | Which habit would you like to use for “{0}”? | Qual hábito você quer usar para “{0}”? |
 | Removed scope heading | All habits; Remaining habits; Habits on this date | Todos os hábitos; Hábitos restantes; Hábitos nesta data |
 | Removed calendar title prefix | Habit calendar: | Calendário de hábitos: |
-| `DescribeFeatureTool.Description` | Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math. Use only mechanics, screens, fields and steps explicitly documented in markdown. related_surfaces lists destinations, not editing instructions. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Consulte as regras oficiais antes de explicar sequências, proteções de sequência, frequências, XP e níveis, notificações, limites do plano ou regras de agendamento. Use apenas os mecanismos, telas, campos e passos descritos no markdown. related_surfaces lista destinos, sem explicar como editar. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
-| `describe_feature.answer_scope` | Use only mechanics, screens, fields and steps explicitly documented in markdown. related_surfaces lists destinations, not editing instructions. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Use apenas os mecanismos, telas, campos e passos descritos no markdown. related_surfaces lista destinos, sem explicar como editar. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
+| `DescribeFeatureTool.Description` | Read authoritative rules before explaining streaks, freezes, frequencies, XP/levels, notifications, paygate or schedule math. Use only mechanics, screens, fields and steps explicitly documented in markdown or app_surfaces. related_surfaces lists destinations, not editing instructions. app_surfaces comes from the same catalog as list_app_surfaces_v2; use only its documented destinations and steps. Never infer a habit edit screen or creation workflow from a related destination. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Consulte as regras oficiais antes de explicar sequências, proteções de sequência, frequências, XP e níveis, notificações, limites do plano ou regras de agendamento. Use apenas os mecanismos, telas, campos e passos descritos no markdown ou em app_surfaces. related_surfaces lista destinos, sem explicar como editar. app_surfaces vem do mesmo catálogo de list_app_surfaces_v2; use apenas os destinos e passos documentados. Nunca deduza uma tela de edição de hábito nem um fluxo de criação a partir de um destino relacionado. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
+| `describe_feature.answer_scope` | Use only mechanics, screens, fields and steps explicitly documented in markdown or app_surfaces. related_surfaces lists destinations, not editing instructions. app_surfaces comes from the same catalog as list_app_surfaces_v2; use only its documented destinations and steps. Never infer a habit edit screen or creation workflow from a related destination. When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. Answer in the person's language. | Use apenas os mecanismos, telas, campos e passos descritos no markdown ou em app_surfaces. related_surfaces lista destinos, sem explicar como editar. app_surfaces vem do mesmo catálogo de list_app_surfaces_v2; use apenas os destinos e passos documentados. Nunca deduza uma tela de edição de hábito nem um fluxo de criação a partir de um destino relacionado. Se o detalhe pedido não estiver no conteúdo, diga que a explicação não cobre esse ponto. Não invente caminhos de navegação nem configurações. Responda no idioma da pessoa. |
+
+## Composition planning copy
+
+Model instructions are English at runtime; Portuguese is supplied for copy approval. The
+related catalog records keep their existing names, descriptions and technical identifiers.
+Their existing steps and notes are forwarded without rewriting. No new person-visible copy
+is introduced; the API-key text already belongs to the localization catalog.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| Read planning: reminders | A reminder asking what remains today uses query_habits with date=today and is_completed=false; it does not require choosing a reminder or a habit. | Um lembrete que pede o que falta para hoje usa query_habits com date=today e is_completed=false; não exige escolher um lembrete nem um hábito. |
+| Read planning: coaching | An identified activity that the person wants to make easier to start uses suggest_breakdown with one_small_step=true, without asking them to select an existing habit. Account resolution is needed only for a requested save. | Uma atividade identificada que a pessoa quer começar com mais facilidade usa suggest_breakdown com one_small_step=true, sem pedir que ela selecione um hábito existente. Só é necessário localizar o registro da conta quando a pessoa pede para salvar. |
+| Read planning: account options | Every option presented as an existing account record must come from the account index or a successful read; never invent an alternative record. | Toda opção apresentada como um registro existente da conta deve vir do índice da conta ou de uma consulta bem-sucedida; nunca invente um registro alternativo. |
+| Read planning: completion metrics | For a named habit's completion rate or completion total, resolve its ID with query_habits and orbit_read_complete=false, then call get_habit_metrics. include_metrics on query_habits does not replace get_habit_metrics for a completion question. | Para a taxa ou o total de conclusões de um hábito nomeado, localize seu ID com query_habits e orbit_read_complete=false e depois chame get_habit_metrics. include_metrics em query_habits não substitui get_habit_metrics em uma pergunta sobre conclusões. |
+| Read planning: discrete choice | A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields. | Uma única seleção entre opções sempre usa ask com form choice, question e options no nível principal, inclusive quando a pergunta também pede uma alteração em texto livre. Reserve form question para vários campos de entrada separados. |
+| Read planning: streak history | A current streak total does not establish historical missed days. Never label days before a habit's creation as not logged or missed, or infer those states from a current streak alone. | O total da sequência atual não comprova dias perdidos no histórico. Nunca marque dias anteriores à criação de um hábito como não registrados ou perdidos, nem deduza esses estados apenas a partir da sequência atual. |
+| Suggestion description addition | Keep the person's requested topics in instruction; never put those topics in excluded_activities for ordinary suggestions. | Mantenha os temas pedidos pela pessoa em instruction; nunca coloque esses temas em excluded_activities para sugestões comuns. |
+| Suggestion exclusion schema | Activities already planned for the combined preview. Return new activities outside this list and the account's existing habits, including synonyms; never offer those activities as adjustments. For ordinary suggestions, omit this field or use null; requested topics are not exclusions. | Atividades já planejadas para a prévia conjunta. Retorne atividades novas fora desta lista e dos hábitos existentes da conta, incluindo sinônimos; nunca ofereça essas atividades como ajustes. Para sugestões comuns, omita este campo ou use null; os temas pedidos não são exclusões. |
+| Existing API-key verification fallback, reused | Confirm the emailed code before managing API keys. | Confirme o código enviado por e-mail antes de gerenciar chaves de API. |
+| Today catalog steps, forwarded verbatim | Open Today. Review scheduled habits and overdue items. Log, skip, or inspect the day's tasks. | Abra Hoje. Confira os hábitos agendados e os itens atrasados. Registre, pule ou consulte as tarefas do dia. |
+| Today catalog notes, forwarded verbatim | Uses timezone-aware dates from the backend. General habits can be hidden locally on some clients. | Usa datas calculadas pelo servidor com o fuso horário da pessoa. Alguns clientes permitem ocultar hábitos gerais localmente. |
+| Notifications catalog steps, forwarded verbatim | Open Notifications. Mark items read or manage subscriptions. Delete individual items only after confirmation. | Abra Notificações. Marque itens como lidos ou gerencie assinaturas de notificações. Exclua itens individuais somente após confirmação. |
+| Notifications catalog notes, forwarded verbatim | Push subscription cryptographic material is never AI-readable. Deletion requires confirmation. | O material criptográfico das assinaturas de notificações push nunca é legível pela IA. A exclusão exige confirmação. |
+| Gamification catalog steps, forwarded verbatim | Open streak profile or achievements. Review freeze availability. Activate a freeze when needed. | Abra o perfil de sequência ou as conquistas. Confira as proteções de sequência disponíveis. Ative uma proteção quando necessário. |
+| Gamification catalog notes, forwarded verbatim | Freeze activation is a mutation. Level and XP are derived state. | Ativar uma proteção de sequência é uma alteração. Nível e XP são dados calculados. |
+| Subscriptions catalog steps, forwarded verbatim | Read plan and billing state. Open checkout or portal only after explicit confirmation and step-up authorization. | Consulte o plano e a situação de cobrança. Abra o pagamento ou o portal somente após confirmação explícita e verificação adicional. |
+| Subscriptions catalog notes, forwarded verbatim | Billing mutations require step-up authorization. Internal Stripe identifiers are never exposed to AI. | Alterações de cobrança exigem verificação adicional. Identificadores internos do Stripe nunca são expostos à IA. |

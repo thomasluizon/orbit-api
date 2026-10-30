@@ -8,13 +8,13 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     private static ResponseCards WithDaySummaryIntro(ResponseCards cards, string? language, ChatContext context,
-        AiResponse response, ToolExecutionAccumulator results) =>
+        AiResponse response, ToolExecutionAccumulator results, AgentClientContext? client) =>
         response.IsTruncated || results.HasBudgetRecovery || HasPendingWritePreview(results)
             || results.OperationResults.Any(operation => operation.Status != AgentOperationStatus.Succeeded)
-            ? cards : WithDaySummaryIntro(cards, language, context.UserToday, results);
+            ? cards : WithDaySummaryIntro(cards, language, context.UserToday, results, client?.SupportsParts == true);
 
     private static ResponseCards WithDaySummaryIntro(ResponseCards cards, string? language, DateOnly today,
-        ToolExecutionAccumulator results)
+        ToolExecutionAccumulator results, bool supportsParts)
     {
         if (results.OperationResults.Any(operation => operation.OperationId != "get_daily_summary"))
             return cards;
@@ -23,8 +23,8 @@ public partial class ProcessUserChatCommandHandler
             ? block : cards.Parts is null ? cards.DaySummary : null;
         var operation = results.LastSuccessfulOperation("get_daily_summary");
         var narrative = operation is not null ? RequestedDaySummaryNarrative(operation) : null;
-        var readableFallback = day is null && narrative is not null;
-        if (readableFallback) day = operation?.ReadBlock?.Block as DaySummaryCard;
+        var readableFallback = day is not null && !supportsParts || day is null && narrative is not null;
+        if (readableFallback) day ??= operation?.ReadBlock?.Block as DaySummaryCard;
         if (day is null || day.Date != today || day.DateTo is { } to && to != day.Date)
             return cards;
         var intro = narrative ?? (LocaleHelper.IsPortuguese(language)

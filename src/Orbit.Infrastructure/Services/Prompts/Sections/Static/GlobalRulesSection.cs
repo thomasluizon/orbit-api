@@ -1,4 +1,5 @@
 using System.Text;
+using Orbit.Application.Chat;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Static;
 
@@ -17,6 +18,7 @@ public class GlobalRulesSection : IPromptSection
     public string Build(PromptContext context)
     {
         var sb = new StringBuilder();
+        sb.AppendLine(AnswerCompositionInstructions.ReadPlanning);
 
         sb.AppendLine("""
             ## Core Rules

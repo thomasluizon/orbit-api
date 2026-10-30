@@ -278,6 +278,7 @@ public partial class ProcessUserChatCommandHandler
         ToolExecutionAccumulator results, int iteration, IReadOnlyList<AiToolCall> calls,
         IReadOnlyDictionary<string, ToolCallOutcome> outcomes, IReadOnlyList<AiToolCallResult> toolResults) =>
         CanCompleteStartingStepRound(response, calls, outcomes)
+        || CanCompleteVerificationRound(request, calls, outcomes)
         || CanCompleteWriteRound(response, calls, outcomes, results)
         || CanCompleteRevisionRound(response, request, results, calls, outcomes)
         || CanCompleteReadRound(response, request, context, results, iteration, calls, outcomes, toolResults);

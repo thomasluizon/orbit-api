@@ -26,8 +26,13 @@ including after a blank narrative or preview recovery. Supported parts clients r
 preview without repeated prose. Compare the final stream event with recorded history.
 Check both English and Brazilian Portuguese through client locale and, for legacy clients
 without a locale, profile language. Missing-kind compound reads retain their facts without
-habit-list or calendar title headings, including stored replay. Feature help must use only
-the returned markdown; a related screen does not establish editing steps. These fallback and
+habit-list or calendar title headings, including stored replay. Legacy compound lists include
+the returned items and omit complete empty sections beside populated results. Goal reads
+render one goal block even when both query and review tools succeed. Verify API-key reads
+return the existing emailed-code verification surface before any key list, including clients
+that support change previews; no narrative call is needed for that pending state.
+Feature help must use only the returned markdown and related `app_surfaces` catalog steps;
+a related screen does not establish editing steps. These fallback and
 feature-help corrections apply independently of `astra_block_first`. #26 owns their live gate.
 
 Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,

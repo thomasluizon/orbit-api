@@ -121,7 +121,7 @@ public partial class ProcessUserChatCommandHandler
         {
             cards = ComposePeriodAnalytics(cards, request, context, executionResults);
             cards = ComposeUnavailableReads(cards, request, context, executionResults);
-            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
+            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults, request.ClientContext);
         }
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition && !executionResults.IsPreviewDiscussion ? request with { StreamSink = null } : request,
@@ -155,6 +155,7 @@ public partial class ProcessUserChatCommandHandler
             AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,
                 context.User?.Plan.ToString(), "astra_composition_follow_ups", new Dictionary<string, object>
                 { ["count"] = followUps?.Count ?? 0 });
+        await StreamReadFallbackAsync(request, context, executionResults, cards);
         return (cards, followUps, groundedReply.Facts);
     }
 
@@ -248,7 +249,8 @@ public partial class ProcessUserChatCommandHandler
             }
             else if (operation.ReadBlock is { } read && selected.Contains(read.Read.QueryId))
             {
-                var scope = read.Kind + ":" + AgentOperationFingerprint.Compute(read.Read.QueryFamily, read.Read.Scope.GetRawText());
+                var scope = read.Kind == "goalList" ? read.Kind
+                    : read.Kind + ":" + AgentOperationFingerprint.Compute(read.Read.QueryFamily, read.Read.Scope.GetRawText());
                 if (!seenScopes.Add(scope))
                 {
                     built.Duplicates++;
