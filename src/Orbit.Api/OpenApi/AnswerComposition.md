@@ -202,6 +202,14 @@ that request a narrative, and the MCP tool share this producer. The legacy
 `AiProactiveCheckinMessageService`; push reminders use `ReminderSchedulerService`
 and do not call this narrative producer.
 
+For a chat read with `generate_narrative: true`, composition retains the successful
+typed `DailySummaryResponse.Summary` as one text part beside its `daySummary` block.
+It does not replace that recommendation with a generic day intro or ask the chat
+model to paraphrase it. Clients without the block receive the same sentence with
+the readable summary facts. Stored-turn negotiation keeps the sentence once.
+Facts-only reads and exact refreshes retain their existing behavior. No new client
+field is required, and composition never infers this intent from message text.
+
 For the account's local today, the narrative receives the complete paged schedule
 as an ordered pending projection. It includes parent links, start and end times,
 personal position, overdue state and group or quota progress. Completed and
