@@ -102,7 +102,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.AiMessage.Should().Be(language == "pt-BR"
-            ? "Não consegui concluir isso. Tente novamente." : "I couldn't complete that. Please try again.");
+            ? "Não consegui preparar uma resposta. Tente novamente." : "I couldn't prepare an answer. Please try again.");
         result.Value.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(result.Value.AiMessage));
         AssertStoredComposition(result.Value, client, language);
     }
