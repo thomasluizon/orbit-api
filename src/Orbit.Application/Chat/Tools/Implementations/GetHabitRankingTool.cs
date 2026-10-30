@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediatR;
 using Orbit.Application.Habits.Queries;
+using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
@@ -76,9 +77,13 @@ public sealed class GetHabitRankingTool(IMediator mediator) : IAiTool
         }
         if (parsed is null)
             return new ToolResult(false, Error: "Habit ranking arguments are required.", ErrorCode: "HABIT_RANKING_INVALID");
-        var result = await mediator.Send(new GetHabitRankingQuery(userId, parsed.DateFrom, parsed.DateToExclusive,
+        var query = new GetHabitRankingQuery(userId, parsed.DateFrom, parsed.DateToExclusive,
             parsed.Window, parsed.Months, parsed.Metric, parsed.HabitIds, parsed.PageSize,
-            parsed.QueryToken, parsed.Cursor, parsed.Refresh == true), ct);
+            parsed.QueryToken, parsed.Cursor, parsed.Refresh == true);
+        var validation = await new GetHabitRankingQueryValidator().ValidateAsync(query, ct);
+        if (!validation.IsValid)
+            return new ToolResult(false, Error: "Invalid habit ranking query.", ErrorCode: "HABIT_RANKING_INVALID");
+        var result = await mediator.Send(query, ct);
         return result.IsSuccess ? new ToolResult(true, Payload: result.Value) : ToolResult.FromFailure(result);
     }
 }

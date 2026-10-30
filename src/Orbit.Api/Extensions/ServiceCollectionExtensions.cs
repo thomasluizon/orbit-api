@@ -450,6 +450,9 @@ public static partial class ServiceCollectionExtensions
         {
             options.Dsn = sentrySettings.Dsn;
             options.Environment = sentrySettings.Environment;
+            var commit = builder.Configuration["RENDER_GIT_COMMIT"];
+            if (!string.IsNullOrWhiteSpace(commit))
+                options.Release = $"Orbit.Api@{commit}";
             options.TracesSampleRate = sentrySettings.TracesSampleRate;
             options.EnableLogs = sentrySettings.EnableLogs;
             options.SendDefaultPii = false;

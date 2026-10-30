@@ -39,7 +39,7 @@ internal static class VerifiedTransaction
     }
 
     public static async Task<T> ExecuteAsync<T>(OrbitDbContext db, Func<CancellationToken, Task<T>> operation,
-        Action discardAttempt, CancellationToken cancellationToken, bool verifyCommit = true)
+        Action discardAttempt, CancellationToken cancellationToken, CancellationToken completionToken, bool verifyCommit = true)
     {
         var id = Guid.NewGuid();
         var candidate = new ExecutionResult<T>(false, default!);
@@ -52,8 +52,9 @@ internal static class VerifiedTransaction
                 if (retry) discardAttempt();
                 retry = true;
                 candidate = new(false, default!);
-                await using var transaction = await db.Database.BeginTransactionAsync(token);
-                var result = await execute(token);
+                cancellationToken.ThrowIfCancellationRequested();
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                var result = await execute(cancellationToken);
                 if (verifyCommit && strategy.RetriesOnFailure)
                 {
                     var nowAtUtc = DateTime.UtcNow;
@@ -70,7 +71,7 @@ internal static class VerifiedTransaction
                 return result;
             }, async (_, _, token) => new ExecutionResult<T>(verifyCommit && candidate.IsSuccessful
                 && await db.Set<TransactionCommit>().AsNoTracking().AnyAsync(commit => commit.Id == id, token), candidate.Result),
-                cancellationToken);
+                completionToken);
         }
         catch
         {

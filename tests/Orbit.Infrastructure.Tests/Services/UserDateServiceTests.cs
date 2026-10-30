@@ -19,14 +19,14 @@ public class UserDateServiceTests
 
     public UserDateServiceTests()
     {
-        _sut = new UserDateService(_userRepo, _cache, TimeProvider.System);
+        _sut = new UserDateService(_userRepo, _cache, TimeProvider.System, Substitute.For<IUnitOfWork>());
     }
 
     [Fact]
     public async Task GetUserTodayAsync_AucklandAndSaoPauloRollOverIndependently()
     {
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 23, 12, 30, 0, TimeSpan.Zero));
-        var service = new UserDateService(_userRepo, _cache, clock);
+        var service = new UserDateService(_userRepo, _cache, clock, Substitute.For<IUnitOfWork>());
 
         var aucklandToday = await service.GetUserTodayAsync("Pacific/Auckland", Guid.NewGuid());
         var saoPauloToday = await service.GetUserTodayAsync("America/Sao_Paulo", Guid.NewGuid());
@@ -39,7 +39,7 @@ public class UserDateServiceTests
     public async Task GetUserTodayAsync_NullTimezone_RollsOverAtUtcMidnight()
     {
         var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 23, 23, 30, 0, TimeSpan.Zero));
-        var service = new UserDateService(_userRepo, _cache, clock);
+        var service = new UserDateService(_userRepo, _cache, clock, Substitute.For<IUnitOfWork>());
 
         var beforeMidnight = await service.GetUserTodayAsync(null, UserId);
         clock.Advance(TimeSpan.FromHours(1));
@@ -147,7 +147,7 @@ public class UserDateServiceTests
         await _sut.GetUserWeekStartDayAsync(UserId);
 
         var secondInstanceRepo = Substitute.For<IGenericRepository<User>>();
-        var secondInstance = new UserDateService(secondInstanceRepo, _cache, TimeProvider.System);
+        var secondInstance = new UserDateService(secondInstanceRepo, _cache, TimeProvider.System, Substitute.For<IUnitOfWork>());
 
         var result = await secondInstance.GetUserWeekStartDayAsync(UserId);
 

@@ -157,7 +157,7 @@ public class WeeklyAiAllowanceTests
             config.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<int>(1));
             config.GetAsync("ProAiMessagesPerWeek", 250, Arg.Any<CancellationToken>()).Returns(250);
             Clock = new AllowanceClock { Now = start };
-            Dates = new UserDateService(Users, _cache, Clock);
+            Dates = new UserDateService(Users, _cache, Clock, Substitute.For<IUnitOfWork>());
             Gate = new PayGateService(Substitute.For<IGenericRepository<Habit>>(), Users, config, Dates,
                 Substitute.For<IFeatureFlagService>());
         }

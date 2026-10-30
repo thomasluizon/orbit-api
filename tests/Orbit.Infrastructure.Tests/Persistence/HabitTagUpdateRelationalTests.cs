@@ -270,7 +270,7 @@ public class HabitTagUpdateRelationalTests
             if (ReferenceEquals(eventData.Context, Target) && ++Starts == 2 && cancellation is not null)
             {
                 await cancellation.CancelAsync();
-                cancellationToken.ThrowIfCancellationRequested();
+                cancellation.Token.ThrowIfCancellationRequested();
             }
             return result;
         }

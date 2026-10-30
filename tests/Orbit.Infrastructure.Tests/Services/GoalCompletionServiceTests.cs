@@ -48,7 +48,7 @@ public class GoalCompletionServiceTests
         dbContext.ChangeTracker.Clear();
 
         var cache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
-        var dates = new UserDateService(new GenericRepository<User>(dbContext), cache, TimeProvider.System);
+        var dates = new UserDateService(new GenericRepository<User>(dbContext), cache, TimeProvider.System, CreateUnitOfWork(dbContext));
         var gamification = Substitute.For<IGamificationService>();
         var service = new GoalCompletionService(
             new GenericRepository<Goal>(dbContext), gamification, CreateUnitOfWork(dbContext), dates);

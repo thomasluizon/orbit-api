@@ -54,10 +54,13 @@ public sealed partial class BulkCreateAgentOperationTests
         _rescheduleFailure.Failure = failure;
         _rescheduleFailure.Cancellation = cancellation;
 
-        var failed = await _executor.ExecuteAsync(request, cancellation.Token);
+        var execute = () => _executor.ExecuteAsync(request, cancellation.Token);
+        if (failure == "cancel")
+            await execute.Should().ThrowAsync<OperationCanceledException>();
+        else
+            (await execute()).Operation.Status.Should().Be(AgentOperationStatus.Failed);
 
         _rescheduleFailure.CompletedWrites.Should().Be(1);
-        failed.Operation.Status.Should().Be(AgentOperationStatus.Failed);
         ReadDates().Should().BeEquivalentTo(original, "every proposed date must roll back together");
         using (var verify = _factory.CreateContext())
             verify.PendingAgentOperations.Single().ConsumedAtUtc.Should().BeNull();

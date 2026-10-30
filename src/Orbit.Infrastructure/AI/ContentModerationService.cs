@@ -14,6 +14,7 @@ public partial class ContentModerationService(
     IOptions<AiSettings> aiSettings,
     ILogger<ContentModerationService> logger) : IContentModerationService
 {
+    public static readonly HttpRequestOptionsKey<bool> HandlesFailedResponse = new("Orbit.ContentModeration.HandlesFailedResponse");
     private const string ModerationModel = "omni-moderation-latest";
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -28,6 +29,7 @@ public partial class ContentModerationService(
                 Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+            request.Options.Set(HandlesFailedResponse, true);
 
             using var response = await httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
