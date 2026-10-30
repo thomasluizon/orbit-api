@@ -3,8 +3,9 @@ key: schedule-math
 display_name: Schedule and Overdue Math
 related_capabilities: [habits.read]
 related_surfaces: [today]
-version: 1
+version: 2
 derived_from:
+  - src/Orbit.Infrastructure/Services/AgentCatalogService.Surfaces.cs DailyUseSurfaces
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs IsMonthlyMatch
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs IsYearlyMatch
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs HasMissedPastOccurrence
@@ -12,6 +13,10 @@ derived_from:
 ---
 
 # Schedule and Overdue Math
+
+## Where to set it
+
+Open Today, open the habit's details and choose Edit habit. Use Frequency to choose the repeat interval or a flexible target, and adjust the habit's date, weekdays and end date in the same form. The due date anchors the recurrence; an end date and weekday restrictions limit which dates are scheduled.
 
 A few scheduling rules surprise people because the calendar isn't uniform. Here is exactly how Orbit handles the tricky cases.
 

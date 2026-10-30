@@ -3,8 +3,9 @@ key: frequencies
 display_name: Habit Frequencies
 related_capabilities: [habits.read, habits.write]
 related_surfaces: [today]
-version: 1
+version: 2
 derived_from:
+  - src/Orbit.Infrastructure/Services/AgentCatalogService.Surfaces.cs DailyUseSurfaces
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs IsHabitDueOnDate
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs GetWindowStart
   - src/Orbit.Application/Habits/Services/HabitScheduleService.cs GetWindowEnd
@@ -12,6 +13,10 @@ derived_from:
 ---
 
 # Habit Frequencies
+
+## Where to set it
+
+Open Today, open the habit's details and choose Edit habit. In Frequency, choose the repeat interval or flexible target, then set the number and unit. Adjust the habit's date, weekdays or end date in the same form, then save.
 
 A habit's frequency decides which days it is due. Every recurring habit has a unit (Day, Week, Month, or Year), an interval quantity (how many of those units between occurrences), and an anchor date — the habit's due date — that the schedule aligns to.
 

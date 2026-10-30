@@ -4,6 +4,8 @@ using FluentAssertions;
 using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
+using Orbit.Domain.Models;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -24,6 +26,24 @@ public class DescribeFeatureToolTests
 
     private readonly FeatureExplanationService _service = new();
 
+    [Theory]
+    [InlineData("frequencies")]
+    [InlineData("schedule-math")]
+    public async Task ExecuteAsync_ScheduleHelpIncludesTheRealSurfaceAndEditingInstructions(string key)
+    {
+        var tool = new DescribeFeatureTool(_service, new AppSurfaceCatalog());
+        var result = await tool.ExecuteAsync(Args(key), Guid.NewGuid(), default);
+
+        var help = result.Payload.Should().BeOfType<FeatureHelpResult>().Subject;
+        help.AppSurfaces.Should().NotBeNull();
+        help.AppSurfaces.Should().BeEquivalentTo(new AgentCatalogService().GetSurfaces()
+            .Where(surface => help.RelatedSurfaces.Contains(surface.Id, StringComparer.Ordinal)));
+        help.AppSurfaces!.Should().ContainSingle().Which.Id.Should().Be("today");
+        help.Markdown.Should().Contain("Open Today, open the habit's details and choose Edit habit.");
+        help.AppSurfaces.Single().HowToSteps.Should().Contain("Open a habit's details and choose Edit habit.");
+        help.Markdown.Should().Contain("Frequency").And.Contain("due date");
+    }
+
     [Fact]
     public void FeatureKeyEnum_MatchesEmbeddedResourceKeys()
     {
@@ -40,7 +60,7 @@ public class DescribeFeatureToolTests
     [Fact]
     public void EnumSchema_ExposesEveryFeatureKey()
     {
-        var schema = JsonSerializer.Serialize(new DescribeFeatureTool(_service).GetParameterSchema());
+        var schema = JsonSerializer.Serialize(new DescribeFeatureTool(_service, new AppSurfaceCatalog()).GetParameterSchema());
 
         schema.Should().Contain("feature_key");
         foreach (var key in FeatureKeyEnum)
@@ -68,7 +88,7 @@ public class DescribeFeatureToolTests
     [Fact]
     public void Metadata_IsReadOnlyDescribeFeature()
     {
-        var tool = new DescribeFeatureTool(_service);
+        var tool = new DescribeFeatureTool(_service, new AppSurfaceCatalog());
 
         tool.Name.Should().Be("describe_feature");
         tool.IsReadOnly.Should().BeTrue();
@@ -78,7 +98,7 @@ public class DescribeFeatureToolTests
     [Fact]
     public async Task ExecuteAsync_ValidKey_ReturnsMarkdownAndMetadataPayload()
     {
-        var tool = new DescribeFeatureTool(_service);
+        var tool = new DescribeFeatureTool(_service, new AppSurfaceCatalog());
 
         var result = await tool.ExecuteAsync(Args("freezes"), Guid.NewGuid(), CancellationToken.None);
 
@@ -94,7 +114,7 @@ public class DescribeFeatureToolTests
     [Fact]
     public async Task ExecuteAsync_UnknownKey_ReturnsError()
     {
-        var tool = new DescribeFeatureTool(_service);
+        var tool = new DescribeFeatureTool(_service, new AppSurfaceCatalog());
 
         var result = await tool.ExecuteAsync(Args("does-not-exist"), Guid.NewGuid(), CancellationToken.None);
 

@@ -68,8 +68,6 @@ public partial class ProcessUserChatCommandHandler
             BuildToolError(operationResult),
             operationResult.Payload switch
             {
-                FeatureHelpResult help => help with
-                { AppSurfaces = ai.CatalogService.GetSurfaces().Where(surface => help.RelatedSurfaces.Contains(surface.Id, StringComparer.Ordinal)).ToArray() },
                 HabitListCard { Selection: { RequiresAnswer: true } selection } => new
                 {
                     selection_required = true,

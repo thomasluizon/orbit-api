@@ -116,6 +116,17 @@ public class EncouragingToneSectionTests
 public class GlobalRulesSectionTests
 {
     [Fact]
+    public void Build_LeavesFormSelectionInTheAskContextAndHistoricalEligibilityInTheContract()
+    {
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().NotContain("A single discrete selection always uses ask form choice");
+        result.Should().NotContain("then ask with form choice");
+        result.Should().NotContain("A current streak total does not establish historical missed days");
+    }
+
+    [Fact]
     public void Build_SmallerStepRequiresStrictlyLessTimeAndEffort()
     {
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);

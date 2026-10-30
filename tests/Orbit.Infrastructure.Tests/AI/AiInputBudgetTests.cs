@@ -57,7 +57,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Requests_TwoUsersAndTwoTurns_ShareIdenticalToolsAndStaticMessage()
+    public async Task Requests_TwoUsersAndTwoTurns_ShareStaticMessageAndToolsForEachNegotiatedCapability()
     {
         var transport = new SequenceHandler(ResponsesTestData.Text("done"));
         var service = BuildService(transport);
@@ -66,7 +66,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             User.Create("private-person-b", "b@example.com").Value };
         users[0].SetLanguage("en-US");
         users[1].SetLanguage("pt-BR");
-        string? prefix = null;
+        var prefixes = new Dictionary<bool, string>();
+        string? staticMessage = null;
         for (var index = 0; index < 4; index++)
         {
             var user = users[index / 2];
@@ -88,11 +89,16 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf("\"tools\":", StringComparison.Ordinal).Should().BeLessThan(body.IndexOf("\"input\":", StringComparison.Ordinal));
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
-            names.Should().HaveCount(71).And.Contain("suggest_habits")
-                .And.Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
+            var supportsAsk = index % 2 != 0;
+            names.Should().HaveCount(supportsAsk ? 71 : 70).And.Contain("suggest_habits");
+            names.Contains("ask").Should().Be(supportsAsk);
+            names.Where(name => name != "ask").Should().Equal(tools.Select(tool => tool.Name)
+                .Where(name => name != "ask").Order(StringComparer.Ordinal));
             var currentPrefix = CacheablePrefix(root);
-            prefix ??= currentPrefix;
-            Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefix));
+            prefixes.TryAdd(supportsAsk, currentPrefix);
+            Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefixes[supportsAsk]));
+            staticMessage ??= input[0].GetRawText();
+            input[0].GetRawText().Should().Be(staticMessage);
             input.GetArrayLength().Should().Be(4);
             input[0].GetProperty("role").GetString().Should().Be("system");
             input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain(date.ToString("yyyy-MM-dd"));
@@ -103,6 +109,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");
             root.GetProperty("prompt_cache_key").GetString().Should().Be(user.Id.ToString("N"));
         }
+        prefixes.Should().HaveCount(2);
+        prefixes[false].Should().NotBe(prefixes[true]);
     }
 
     [Theory]

@@ -35,6 +35,17 @@ Feature help must use only the returned markdown and related `app_surfaces` cata
 a related screen does not establish editing steps. These fallback and
 feature-help corrections apply independently of `astra_block_first`. #26 owns their live gate.
 
+Verify legacy clients and clients without an ask kind have no `ask` declaration. JWT clients
+with an ask kind retain it unless `astra_ask_blocks_disabled` or `astra_parts_disabled` applies.
+Ask declarations require form-specific content inside `input`; captured flat calls remain
+readable by the executor. No model or quota setting controls this negotiation.
+
+The streak response appends optional `firstEligibleDate` in the account's time zone. Deploy
+the API before the separate UI change uses that date to draw earlier days as neutral. Check
+the local date across midnight and omission for an account without active habits. Frequency
+help returns the existing Today editing steps directly, and text composition retains whole
+lines while limiting their count.
+
 Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
 build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and
 existing model-call telemetry. Do not attach prompt/completion text or arguments.

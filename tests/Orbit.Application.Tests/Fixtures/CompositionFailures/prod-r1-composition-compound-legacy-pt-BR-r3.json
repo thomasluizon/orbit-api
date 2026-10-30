@@ -1,0 +1,72 @@
+{
+  "caseId": "composition-compound-legacy-pt-BR",
+  "repeat": 3,
+  "answer": "Hábitos: 2\nBeber água (Hoje)\nCaminhada (Hoje)\n\nMetas: 1\nHidratação constante: 0/10 sessões",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "form": "question",
+        "question": null,
+        "title": null,
+        "multiSelect": false,
+        "allowFreeText": null,
+        "intro": null,
+        "progress": null,
+        "questions": null,
+        "options": null,
+        "action": null,
+        "items": null
+      },
+      "resultStatus": "Failed",
+      "result": {
+        "success": false,
+        "error": "Account reads were still pending after ask. Reassess the original request using their results. Prepare every resolved change with its write tool; ask only for input that remains missing, after all other calls.",
+        "payload": null
+      }
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    },
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": "Active",
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ]
+}

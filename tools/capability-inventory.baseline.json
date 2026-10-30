@@ -988,7 +988,12 @@
         "name": "ask",
         "parameters": [
           {
-            "name": "action",
+            "name": "input",
+            "type": "object",
+            "required": true
+          },
+          {
+            "name": "input.action",
             "type": "string",
             "required": false,
             "values": [
@@ -998,12 +1003,12 @@
             ]
           },
           {
-            "name": "allowFreeText",
+            "name": "input.allowFreeText",
             "type": "boolean",
             "required": false
           },
           {
-            "name": "form",
+            "name": "input.form",
             "type": "string",
             "required": true,
             "values": [
@@ -1013,12 +1018,12 @@
             ]
           },
           {
-            "name": "intro",
+            "name": "input.intro",
             "type": "string",
             "required": false
           },
           {
-            "name": "items",
+            "name": "input.items",
             "type": "array",
             "items": {
               "type": "object"
@@ -1026,41 +1031,41 @@
             "required": false
           },
           {
-            "name": "items[].arguments",
+            "name": "input.items[].arguments",
             "required": true
           },
           {
-            "name": "items[].arguments.date",
+            "name": "input.items[].arguments.date",
             "type": "string",
             "required": true
           },
           {
-            "name": "items[].arguments.habit_id",
+            "name": "input.items[].arguments.habit_id",
             "type": "string",
             "required": true
           },
           {
-            "name": "items[].detail",
+            "name": "input.items[].detail",
             "type": "string",
             "required": false
           },
           {
-            "name": "items[].id",
+            "name": "input.items[].id",
             "type": "string",
             "required": true
           },
           {
-            "name": "items[].label",
+            "name": "input.items[].label",
             "type": "string",
             "required": true
           },
           {
-            "name": "multiSelect",
+            "name": "input.multiSelect",
             "type": "boolean",
             "required": false
           },
           {
-            "name": "options",
+            "name": "input.options",
             "type": "array",
             "items": {
               "type": "object"
@@ -1068,42 +1073,42 @@
             "required": false
           },
           {
-            "name": "options[].description",
+            "name": "input.options[].description",
             "type": "string",
             "required": false
           },
           {
-            "name": "options[].id",
+            "name": "input.options[].id",
             "type": "string",
             "required": true
           },
           {
-            "name": "options[].label",
+            "name": "input.options[].label",
             "type": "string",
             "required": true
           },
           {
-            "name": "progress",
+            "name": "input.progress",
             "type": "object",
             "required": false
           },
           {
-            "name": "progress.current",
+            "name": "input.progress.current",
             "type": "integer",
             "required": true
           },
           {
-            "name": "progress.total",
+            "name": "input.progress.total",
             "type": "integer",
             "required": true
           },
           {
-            "name": "question",
+            "name": "input.question",
             "type": "string",
             "required": false
           },
           {
-            "name": "questions",
+            "name": "input.questions",
             "type": "array",
             "items": {
               "type": "object"
@@ -1111,37 +1116,37 @@
             "required": false
           },
           {
-            "name": "questions[].allowFreeText",
+            "name": "input.questions[].allowFreeText",
             "type": "boolean",
             "required": false
           },
           {
-            "name": "questions[].highLabel",
+            "name": "input.questions[].highLabel",
             "type": "string",
             "required": false
           },
           {
-            "name": "questions[].id",
+            "name": "input.questions[].id",
             "type": "string",
             "required": true
           },
           {
-            "name": "questions[].lowLabel",
+            "name": "input.questions[].lowLabel",
             "type": "string",
             "required": false
           },
           {
-            "name": "questions[].max",
+            "name": "input.questions[].max",
             "type": "number",
             "required": false
           },
           {
-            "name": "questions[].min",
+            "name": "input.questions[].min",
             "type": "number",
             "required": false
           },
           {
-            "name": "questions[].options",
+            "name": "input.questions[].options",
             "type": "array",
             "items": {
               "type": "object"
@@ -1149,32 +1154,32 @@
             "required": false
           },
           {
-            "name": "questions[].options[].id",
+            "name": "input.questions[].options[].id",
             "type": "string",
             "required": true
           },
           {
-            "name": "questions[].options[].label",
+            "name": "input.questions[].options[].label",
             "type": "string",
             "required": true
           },
           {
-            "name": "questions[].options[].recommended",
+            "name": "input.questions[].options[].recommended",
             "type": "boolean",
             "required": false
           },
           {
-            "name": "questions[].prompt",
+            "name": "input.questions[].prompt",
             "type": "string",
             "required": true
           },
           {
-            "name": "questions[].step",
+            "name": "input.questions[].step",
             "type": "number",
             "required": false
           },
           {
-            "name": "questions[].type",
+            "name": "input.questions[].type",
             "type": "string",
             "required": true,
             "values": [
@@ -1186,12 +1191,12 @@
             ]
           },
           {
-            "name": "questions[].unit",
+            "name": "input.questions[].unit",
             "type": "string",
             "required": false
           },
           {
-            "name": "title",
+            "name": "input.title",
             "type": "string",
             "required": false
           }

@@ -39,7 +39,7 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Ask_WireSchemaExplainsNullableFields()
+    public void Ask_WireSchemaRequiresNonemptyContentForEveryForm()
     {
         var tool = AllTools().Single(tool => tool is AskTool);
         var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -48,11 +48,35 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
         output.WriteLine(wire.RootElement.GetRawText());
         var schema = wire.RootElement.GetProperty("parameters");
         AssertStrict(schema);
-        foreach (var field in schema.GetProperty("properties").EnumerateObject().Where(field => field.Name != "form"))
+        schema.GetProperty("properties").TryGetProperty("input", out var input).Should().BeTrue(
+            "each ask form needs its own non-null required fields inside a nested union");
+        var forms = input.GetProperty("anyOf").EnumerateArray().ToArray();
+        forms.Should().HaveCount(3);
+        foreach (var (form, required) in new (string, string[])[]
+                 { ("choice", ["form", "question", "options"]), ("pickList", ["form", "title", "action", "items"]), ("question", ["form", "questions"]) })
         {
-            field.Value.GetProperty("type").EnumerateArray().Select(type => type.GetString()).Should().Contain("null");
-            field.Value.TryGetProperty("description", out var description).Should().BeTrue(field.Name);
-            description.GetString()!.ToLowerInvariant().Should().Contain("null", field.Name);
+            var fields = forms.Single(candidate => candidate.GetProperty("properties").GetProperty("form")
+                .GetProperty("enum")[0].GetString() == form).GetProperty("properties");
+            foreach (var name in required)
+                fields.GetProperty(name).GetProperty("type").ValueKind.Should().Be(JsonValueKind.String,
+                    $"{form}.{name} must never become nullable in the provider schema");
+            if (form == "choice") fields.GetProperty("question").GetProperty("pattern").GetString().Should().Be(@"\S");
+            if (form == "pickList")
+            {
+                fields.GetProperty("title").GetProperty("pattern").GetString().Should().Be(@"\S");
+                fields.GetProperty("items").GetProperty("minItems").GetInt32().Should().Be(1);
+            }
+            if (form == "question")
+            {
+                fields.GetProperty("questions").GetProperty("minItems").GetInt32().Should().Be(1);
+                foreach (var question in fields.GetProperty("questions").GetProperty("items").GetProperty("anyOf").EnumerateArray())
+                {
+                    question.GetProperty("properties").GetProperty("prompt").GetProperty("pattern").GetString().Should().Be(@"\S");
+                    foreach (var field in question.GetProperty("properties").EnumerateObject()
+                                 .Where(field => field.Name != "allowFreeText"))
+                        field.Value.GetProperty("type").ValueKind.Should().Be(JsonValueKind.String);
+                }
+            }
         }
     }
 

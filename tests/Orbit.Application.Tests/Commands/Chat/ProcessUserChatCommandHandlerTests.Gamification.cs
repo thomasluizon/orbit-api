@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         GamificationReadTestData.Configure(_mediator, Today);
-        var tool = new GetGamificationOverviewTool(_mediator);
+        var tool = new GetGamificationOverviewTool(_mediator, _habitRepo, _userDateService);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(ToolResponse(tool.Name, "gamification_read", JsonSerializer.Serialize(new
@@ -63,7 +63,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         GamificationReadTestData.Configure(_mediator, Today);
-        var tool = new GetGamificationOverviewTool(_mediator);
+        var tool = new GetGamificationOverviewTool(_mediator, _habitRepo, _userDateService);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(ToolResponse(tool.Name, "profile", """{"include_profile":true,"include_achievements":false,"include_streak":false}"""));
@@ -92,7 +92,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         GamificationReadTestData.Configure(_mediator, Today);
-        var tool = new GetGamificationOverviewTool(_mediator);
+        var tool = new GetGamificationOverviewTool(_mediator, _habitRepo, _userDateService);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(ToolResponse(tool.Name, "combined", "{}"));

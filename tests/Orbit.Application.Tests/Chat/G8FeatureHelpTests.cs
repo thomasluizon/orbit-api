@@ -24,7 +24,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var features = new FeatureExplanationService();
         var catalog = new AgentCatalogService([]);
         _catalogService.GetSurfaces().Returns(catalog.GetSurfaces());
-        var tool = new DescribeFeatureTool(features);
+        var tool = new DescribeFeatureTool(features, new AppSurfaceCatalog());
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(CapturedCompositionPlan("g8-composition-feature-help-pt-BR-r1"));

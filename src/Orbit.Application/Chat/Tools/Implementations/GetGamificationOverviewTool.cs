@@ -1,15 +1,22 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MediatR;
 using Orbit.Application.Gamification.Queries;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public record GamificationOverviewPayload(
     GamificationProfileResponse? Profile,
     AchievementsResponse? Achievements,
-    StreakInfoResponse? Streak);
+    StreakInfoResponse? Streak,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? FirstEligibleDate = null);
 
-public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
+public class GetGamificationOverviewTool(
+    IMediator mediator,
+    IGenericRepository<Habit> habits,
+    IUserDateService dates) : IAiTool
 {
     public string Name => "get_gamification_overview";
     public string Description => "Read the user's gamification profile, achievements, and streak information.";
@@ -48,6 +55,7 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         GamificationProfileResponse? profile = null;
         AchievementsResponse? achievements = null;
         StreakInfoResponse? streak = null;
+        DateOnly? firstEligibleDate = null;
 
         if (includeProfile)
         {
@@ -70,8 +78,16 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
             var streakResult = await mediator.Send(new GetStreakInfoQuery(userId, JsonArgumentParser.ParseDateOnly(args, "as_of")), ct);
             if (streakResult.IsFailure) return ToolResult.FromFailure(streakResult);
             streak = streakResult.Value;
+            var firstCreatedAtUtc = await habits.ProjectAsync(
+                habit => habit.UserId == userId && !habit.IsDeleted && !habit.IsCompleted,
+                query => query.OrderBy(habit => habit.CreatedAtUtc).Select(habit => habit.CreatedAtUtc).Take(1), ct);
+            if (firstCreatedAtUtc.Count > 0)
+            {
+                var zone = await dates.GetUserTimeZoneAsync(userId, ct);
+                firstEligibleDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(firstCreatedAtUtc[0], zone));
+            }
         }
 
-        return new ToolResult(true, Payload: new GamificationOverviewPayload(profile, achievements, streak));
+        return new ToolResult(true, Payload: new GamificationOverviewPayload(profile, achievements, streak, firstEligibleDate));
     }
 }

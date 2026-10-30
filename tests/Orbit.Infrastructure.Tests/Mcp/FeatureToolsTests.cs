@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Services;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
@@ -20,7 +21,7 @@ public class FeatureToolsTests
         explanation.Should().NotBeNull();
         var args = JsonSerializer.SerializeToElement(new { feature_key = key });
 
-        var chat = await new DescribeFeatureTool(features).ExecuteAsync(args, Guid.NewGuid(), CancellationToken.None);
+        var chat = await new DescribeFeatureTool(features, new AppSurfaceCatalog()).ExecuteAsync(args, Guid.NewGuid(), CancellationToken.None);
         var mcp = new FeatureTools(features).DescribeFeature(new ClaimsPrincipal(), key);
 
         chat.Success.Should().BeTrue();

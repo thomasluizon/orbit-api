@@ -40,6 +40,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHttpClient<IContentModerationService, ContentModerationService>()
             .ConfigureHttpClient(client => client.Timeout = GetDefaultHttpTimeout(builder));
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
+        builder.Services.AddSingleton<IAppSurfaceCatalog, AppSurfaceCatalog>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
         builder.Services.AddScoped<IIssuedAstraBlockStore, IssuedAstraBlockStore>();

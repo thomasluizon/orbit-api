@@ -57,10 +57,11 @@ public partial class ProcessUserChatCommandHandler
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
-        var availableTools = ai.ToolRegistry.GetAll();
+        var availableTools = ai.ToolRegistry.GetAll()
+            .Where(tool => tool.Name != "ask" || AskEnabled(request, context)).ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
-        dynamicContext = AddAskContext(dynamicContext, request, context, toolNames);
+        dynamicContext = AddAskContext(dynamicContext, request, context);
         dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
 
         var pendingPreviews = new List<object>();

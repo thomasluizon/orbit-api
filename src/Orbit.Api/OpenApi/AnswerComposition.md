@@ -71,14 +71,28 @@ asking for a reminder selection. Advice about starting an identified activity us
 in `instruction`, outside ordinary suggestion exclusions. Named-habit completion questions
 resolve the ID before `get_habit_metrics`; a metrics-enabled lookup is not the completion
 answer. A single discrete selection uses `ask` form `choice`, including target selection
-with a free-text change. These rules do not route tools or rewrite arguments from message text.
+with a free-text change. The form-selection and duplicate-target guidance lives in the
+`ask` description rather than the beginning of the system prompt. These rules do not route
+tools or rewrite arguments from message text.
 
-The streak producer supplies aggregate streak and freeze facts, not a daily missed-day
-timeline. Guidance forbids inferring missed days from a current streak or before a habit's
-creation. The consumer's `buildStreakWeekDays` helper currently defaults earlier days to
-`missed`; #1620 and #26 must align that rendering with the available evidence. API prompt
-guidance cannot change a client-derived label, and this contract does not fabricate daily
-history to satisfy it.
+The server declares `ask` only for JWT clients advertising parts and at least one of
+`choice`, `pickList` or `question`, while both ask and parts kill switches permit it.
+Other clients keep readable clarification text. The provider schema requires an `input`
+object containing one form: `choice` requires a nonempty question and options; `pickList`
+requires a nonempty title, action and items; `question` requires nonempty questions with
+type-specific fields. Nested unions preserve these requirements under strict normalization.
+The root remains an object, and optional fields become nullable within their form.
+The executor accepts the previous flat arguments for captured and in-flight calls; issued
+blocks and next-turn answers retain their existing client contracts and approval boundaries.
+
+The streak producer supplies aggregate streak and freeze facts. `StreakCard` appends optional
+`firstEligibleDate`, a local ISO date from the earliest creation instant of the account's
+active habits, excluding completed and deleted habits. The typed gamification result carries
+the same optional date into initial composition, refresh, streamed final output and history.
+Both fields are omitted when no active habit exists. Deploy the producer before the paired
+UI ticket consumes this field: `buildStreakWeekDays` must draw preceding days as neutral.
+The API does not infer a daily missed-day timeline from an aggregate streak; client rendering
+owns that interpretation, independently of model instructions.
 
 A validated question form containing one single-choice field becomes a `choice`
 when its options fit the existing choice contract and the client supports it.
@@ -111,7 +125,7 @@ the unresolved targets; the server does not derive intent from message patterns.
 | Proactive chat turns | Corresponding read block or short no-data nudge | #1620 |
 | Empty, partial and stale | Relevant block retains completeness and supported recovery | #1619, #1620 |
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
-| Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
+| Help, coaching and small talk | One to three complete lines, no headings or unsolicited bullets | #1620 |
 
 Moderation replies and localized chat errors use an explicit `clientContext.locale`,
 otherwise the account's profile language. `Accept-Language` does not become a client locale
@@ -276,14 +290,20 @@ require approval and never claim that a write has executed.
 `describe_feature` returns its existing markdown and metadata with an append-only model-facing
 `answer_scope` instruction, also present in the tool description. Its narrative tool result
 also includes `app_surfaces` for the related destination IDs, sourced from the same catalog
-as `list_app_surfaces_v2`. This supplies actual navigation steps without another model call
-or a second catalog. Only documented mechanics, screens, fields and steps support an explanation.
+as `list_app_surfaces_v2`. The tool itself resolves those surfaces through `IAppSurfaceCatalog`,
+which shares the agent catalog's surface builder without depending on its tool registry.
+Frequency and schedule explanations document the existing Today, habit-details and Edit habit
+controls. This supplies actual navigation steps without another model call or a second catalog.
+Only documented mechanics, screens, fields and steps support an explanation.
 `related_surfaces` identifies navigation
 destinations and does not document editing instructions. A missing detail calls for a brief
 acknowledgment in the person's language. This does not fabricate a UI route, execute another
 tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
 The deterministic replay tests verify the tool result supplied to the narrative model and the
 resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
+Text composition preserves complete lines and limits their count; it never slices a word at
+an arbitrary character boundary. Goal-progress guidance belongs to `query_goals`; habit-log
+analytics and month tools explicitly identify that they do not report goal progress.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without
@@ -1043,7 +1063,7 @@ copy approval.
 
 | Source | en | pt-BR |
 | --- | --- | --- |
-| `GlobalRulesSection`, duplicate targets | Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write. | Alvos duplicados: Um nome no singular que corresponde a títulos duplicados continua sem resolução mesmo quando o índice da conta contém todos os IDs correspondentes. Chame query_habits com search e for_selection=true e depois ask com form choice; nunca passe todos os IDs correspondentes para bulk_log_habits ou qualquer outra alteração em lote. |
+| `AskTool.DuplicateTargetsInstruction` | Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write. | Alvos duplicados: Um nome no singular que corresponde a títulos duplicados continua sem resolução mesmo quando o índice da conta contém todos os IDs correspondentes. Chame query_habits com search e for_selection=true e depois ask com form choice; nunca passe todos os IDs correspondentes para bulk_log_habits ou qualquer outra alteração em lote. |
 | `GlobalRulesSection`, checklist saves | Checklist saves: For a request to save a starting step in a checklist, query_habits only resolves the target; set orbit_read_complete=false, then call update_checklist with item_to_add containing the previous step verbatim and orbit_write_complete=true. Preserve an identical stored item, even if checked, and append the requested step unchecked. A habit list never fulfills this save request. | Salvar no checklist: Em um pedido para salvar um passo inicial em um checklist, query_habits apenas identifica o hábito; defina orbit_read_complete=false e depois chame update_checklist com item_to_add contendo o passo anterior sem alterações e orbit_write_complete=true. Preserve um item idêntico já salvo, mesmo se estiver marcado, e acrescente o passo solicitado desmarcado. Uma lista de hábitos nunca conclui esse pedido de salvamento. |
 | `HabitModelInstructions.BrainDumpCompletion`, also in `SuggestHabitsTool.Description` | For a combined approval request, set orbit_read_complete=false on query_habits and suggest_habits, then call bulk_create_habits with every explicit item and chosen idea. A suggestion result alone never completes that request. | Em um pedido de aprovação conjunta, defina orbit_read_complete=false em query_habits e suggest_habits e depois chame bulk_create_habits com todos os itens explícitos e a ideia escolhida. Um resultado de sugestão sozinho nunca conclui esse pedido. |
 | `RestartPlanInstructions.FreshLookup`, in `BulkRescheduleHabitsTool.Description` | Before every fresh restart proposal, call query_habits in this turn even when the account index already contains the habit IDs. The index does not establish which occurrences remain due or overdue; build revised_items only from the complete fresh query result. | Antes de cada nova proposta de recomeço, chame query_habits neste turno mesmo quando o índice da conta já contém os IDs dos hábitos. O índice não informa quais ocorrências ainda estão pendentes ou atrasadas; monte revised_items apenas a partir do resultado completo da consulta atual. |
@@ -1078,12 +1098,11 @@ is introduced; the API-key text already belongs to the localization catalog.
 | Read planning: coaching | An identified activity that the person wants to make easier to start uses suggest_breakdown with one_small_step=true, without asking them to select an existing habit. Account resolution is needed only for a requested save. | Uma atividade identificada que a pessoa quer começar com mais facilidade usa suggest_breakdown com one_small_step=true, sem pedir que ela selecione um hábito existente. Só é necessário localizar o registro da conta quando a pessoa pede para salvar. |
 | Read planning: account options | Every option presented as an existing account record must come from the account index or a successful read; never invent an alternative record. | Toda opção apresentada como um registro existente da conta deve vir do índice da conta ou de uma consulta bem-sucedida; nunca invente um registro alternativo. |
 | Read planning: completion metrics | For a named habit's completion rate or completion total, resolve its ID with query_habits and orbit_read_complete=false, then call get_habit_metrics. include_metrics on query_habits does not replace get_habit_metrics for a completion question. | Para a taxa ou o total de conclusões de um hábito nomeado, localize seu ID com query_habits e orbit_read_complete=false e depois chame get_habit_metrics. include_metrics em query_habits não substitui get_habit_metrics em uma pergunta sobre conclusões. |
-| Read planning: discrete choice | A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields. | Uma única seleção entre opções sempre usa ask com form choice, question e options no nível principal, inclusive quando a pergunta também pede uma alteração em texto livre. Reserve form question para vários campos de entrada separados. |
-| Read planning: streak history | A current streak total does not establish historical missed days. Never label days before a habit's creation as not logged or missed, or infer those states from a current streak alone. | O total da sequência atual não comprova dias perdidos no histórico. Nunca marque dias anteriores à criação de um hábito como não registrados ou perdidos, nem deduza esses estados apenas a partir da sequência atual. |
+| `AskTool.SingleSelectionInstruction` | A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields. | Uma única seleção entre opções sempre usa ask com form choice, question e options no nível principal, inclusive quando a pergunta também pede uma alteração em texto livre. Reserve form question para vários campos de entrada separados. |
 | Suggestion description addition | Keep the person's requested topics in instruction; never put those topics in excluded_activities for ordinary suggestions. | Mantenha os temas pedidos pela pessoa em instruction; nunca coloque esses temas em excluded_activities para sugestões comuns. |
 | Suggestion exclusion schema | Activities already planned for the combined preview. Return new activities outside this list and the account's existing habits, including synonyms; never offer those activities as adjustments. For ordinary suggestions, omit this field or use null; requested topics are not exclusions. | Atividades já planejadas para a prévia conjunta. Retorne atividades novas fora desta lista e dos hábitos existentes da conta, incluindo sinônimos; nunca ofereça essas atividades como ajustes. Para sugestões comuns, omita este campo ou use null; os temas pedidos não são exclusões. |
 | Existing API-key verification fallback, reused | Confirm the emailed code before managing API keys. | Confirme o código enviado por e-mail antes de gerenciar chaves de API. |
-| Today catalog steps, forwarded verbatim | Open Today. Review scheduled habits and overdue items. Log, skip, or inspect the day's tasks. | Abra Hoje. Confira os hábitos agendados e os itens atrasados. Registre, pule ou consulte as tarefas do dia. |
+| Today catalog read steps, forwarded verbatim | Open Today. Review scheduled habits and overdue items. Log, skip, or inspect the day's tasks. | Abra Hoje. Confira os hábitos agendados e os itens atrasados. Registre, pule ou consulte as tarefas do dia. |
 | Today catalog notes, forwarded verbatim | Uses timezone-aware dates from the backend. General habits can be hidden locally on some clients. | Usa datas calculadas pelo servidor com o fuso horário da pessoa. Alguns clientes permitem ocultar hábitos gerais localmente. |
 | Notifications catalog steps, forwarded verbatim | Open Notifications. Mark items read or manage subscriptions. Delete individual items only after confirmation. | Abra Notificações. Marque itens como lidos ou gerencie assinaturas de notificações. Exclua itens individuais somente após confirmação. |
 | Notifications catalog notes, forwarded verbatim | Push subscription cryptographic material is never AI-readable. Deletion requires confirmation. | O material criptográfico das assinaturas de notificações push nunca é legível pela IA. A exclusão exige confirmação. |
@@ -1091,3 +1110,27 @@ is introduced; the API-key text already belongs to the localization catalog.
 | Gamification catalog notes, forwarded verbatim | Freeze activation is a mutation. Level and XP are derived state. | Ativar uma proteção de sequência é uma alteração. Nível e XP são dados calculados. |
 | Subscriptions catalog steps, forwarded verbatim | Read plan and billing state. Open checkout or portal only after explicit confirmation and step-up authorization. | Consulte o plano e a situação de cobrança. Abra o pagamento ou o portal somente após confirmação explícita e verificação adicional. |
 | Subscriptions catalog notes, forwarded verbatim | Billing mutations require step-up authorization. Internal Stripe identifiers are never exposed to AI. | Alterações de cobrança exigem verificação adicional. Identificadores internos do Stripe nunca são expostos à IA. |
+
+
+## Production rerun copy review
+
+The runtime tool guidance remains English in both locales. The pt-BR guidance below is
+for coordinator copy approval. Achievement translations retain the approved app catalog.
+The existing single-selection and duplicate-target guidance above moved to `AskTool`.
+The former unsupported-client ask prohibition and streak-strip prompt were removed; declared
+capabilities and the optional eligibility date carry those constraints structurally.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| Ask input instruction | Put the selected form and its fields inside input. | Coloque a forma selecionada e seus campos dentro de input. |
+| Goal progress guidance | This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed. | Este resultado responde completamente a um pedido sobre o progresso de metas; não é necessário consultar análises nem o calendário de hábitos. |
+| Habit analytics and month guidance | This tool reads habit logs and does not report goal progress; use query_goals for goal progress. | Esta ferramenta consulta registros de hábitos e não informa o progresso de metas; use query_goals para consultar o progresso de metas. |
+| getting_momentum name | Gaining momentum | Ganhando ritmo |
+| legendary description | Complete 1,000 habits total | Complete 1.000 hábitos no total |
+| Frequency and schedule help heading | Where to set it | Onde configurar |
+| Frequency help navigation | Open Today, open the habit's details and choose Edit habit. In Frequency, choose the repeat interval or flexible target, then set the number and unit. Adjust the habit's date, weekdays or end date in the same form, then save. | Abra Hoje, abra os detalhes do hábito e escolha Editar hábito. Em Frequência, escolha o intervalo de repetição ou a meta flexível e defina o número e a unidade. Ajuste a data do hábito, os dias da semana ou a data final no mesmo formulário e salve. |
+| Schedule help navigation | Open Today, open the habit's details and choose Edit habit. Use Frequency to choose the repeat interval or a flexible target, and adjust the habit's date, weekdays and end date in the same form. The due date anchors the recurrence; an end date and weekday restrictions limit which dates are scheduled. | Abra Hoje, abra os detalhes do hábito e escolha Editar hábito. Use Frequência para escolher o intervalo de repetição ou uma meta flexível e ajuste a data do hábito, os dias da semana e a data final no mesmo formulário. A data prevista serve de referência para a recorrência; a data final e os dias da semana escolhidos limitam as datas agendadas. |
+| Today catalog edit step | Open a habit's details and choose Edit habit. | Abra os detalhes de um hábito e escolha Editar hábito. |
+| Today catalog frequency step | In Frequency, choose the repeat interval or flexible target, then set the number and unit. | Em Frequência, escolha o intervalo de repetição ou a meta flexível e defina o número e a unidade. |
+| Today catalog schedule step | Adjust the habit's date, weekdays or end date in the same form, then save. | Ajuste a data do hábito, os dias da semana ou a data final no mesmo formulário e salve. |
+| Ask form constraints, retained in each form branch | choice requires a nonempty question and 2 to 4 options; omit items, action, questions and progress. pickList requires nonempty title, action and 1 to 10 items; omit options, questions and progress, and set allowFreeText=false. question requires 1 to 10 questions; omit top-level options, items and action and set multiSelect=false. A single record selection uses choice; reserve question for multiple fields. Use only a supported form. | choice exige uma pergunta preenchida e de 2 a 4 opções; omita items, action, questions e progress. pickList exige um título preenchido, action e de 1 a 10 itens; omita options, questions e progress e defina allowFreeText=false. question exige de 1 a 10 perguntas; omita options, items e action no nível principal e defina multiSelect=false. Para selecionar um único registro, use choice; reserve question para vários campos. Use apenas uma forma compatível. |

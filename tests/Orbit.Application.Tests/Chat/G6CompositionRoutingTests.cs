@@ -1,3 +1,4 @@
+using Orbit.Infrastructure.Services;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using System.Text.Json;
@@ -132,7 +133,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         EnableComposition();
         var subscription = CompositionTool("get_subscription_overview");
-        var help = new DescribeFeatureTool(new FeatureExplanationService());
+        var help = new DescribeFeatureTool(new FeatureExplanationService(), new AppSurfaceCatalog());
         var handler = CreateHandler(subscription, help);
         UseProductionReadExecutor(subscription, help);
         SetupAiResponse(CapturedCompositionPlan("composition-plan-en-r1"));

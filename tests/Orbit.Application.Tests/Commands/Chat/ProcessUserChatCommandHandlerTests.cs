@@ -1741,7 +1741,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(Result.Success(new AchievementsResponse([])));
         _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(streak));
-        var tool = new GetGamificationOverviewTool(_mediator);
+        var tool = new GetGamificationOverviewTool(_mediator, _habitRepo, _userDateService);
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
         var description = schema.GetProperty("properties").GetProperty("include_streak")
             .GetProperty("description").GetString()!;

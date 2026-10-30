@@ -26,9 +26,11 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(0, "Choose a time.")]
-    [InlineData(AppConstants.MaxAiRequestTotalTokens / 2 + 1, null)]
-    public async Task Ask_EmitsNegotiatedPartAndIgnoresRepeatedAsk(int tokenCount, string? text)
+    [InlineData(0, "Choose a time.", false)]
+    [InlineData(0, "Choose a time.", true)]
+    [InlineData(AppConstants.MaxAiRequestTotalTokens / 2 + 1, null, false)]
+    [InlineData(AppConstants.MaxAiRequestTotalTokens / 2 + 1, null, true)]
+    public async Task Ask_EmitsNegotiatedPartAndIgnoresRepeatedAsk(int tokenCount, string? text, bool nested)
     {
         SetupUserAndPayGate();
         SetupAiResponse(new AiResponse
@@ -36,7 +38,7 @@ public partial class ProcessUserChatCommandHandlerTests
             TextMessage = text,
             ReportedTokenCount = tokenCount,
             ConversationContext = TestConversationContext,
-            ToolCalls = [new("ask", "ask1", ParseArguments(ChoiceArguments)),
+            ToolCalls = [new("ask", "ask1", nested ? JsonSerializer.SerializeToElement(new { input = ParseArguments(ChoiceArguments) }) : ParseArguments(ChoiceArguments)),
                 new("ask", "ask2", ParseArguments(ChoiceArguments))]
         });
         var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk",
@@ -96,7 +98,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData(false, false, AgentAuthMethod.Jwt)]
     [InlineData(true, true, AgentAuthMethod.Jwt)]
     [InlineData(true, false, AgentAuthMethod.ApiKey)]
-    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_KeepsDeclarationAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
+    public async Task Ask_UnsupportedClientKillSwitchOrApiKey_OmitsDeclarationAndFallsBackToText(bool supports, bool disabled, AgentAuthMethod auth)
     {
         SetupUserAndPayGate();
         if (disabled)
@@ -111,8 +113,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk", AuthMethod: auth,
             ClientContext: new(SupportsParts: true, PartKinds: supports ? ["choice"] : [])), default);
         response.IsSuccess.Should().BeTrue();
-        initial!.ToolDeclarations.Should().Contain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
-        initial.DynamicContext.Should().Contain("do not call ask");
+        initial!.ToolDeclarations.Should().NotContain(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString() == "ask");
+        initial.DynamicContext.Should().NotContain("do not call ask");
         results.Should().ContainSingle().Which.Error.Should().Contain("plain text");
         response.Value.Parts?.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);

@@ -4,7 +4,7 @@ namespace Orbit.Infrastructure.Services;
 
 public partial class AgentCatalogService
 {
-    private static IReadOnlyList<AppSurface> BuildSurfaces()
+    internal static IReadOnlyList<AppSurface> BuildSurfaces()
     {
         return
         [
@@ -24,7 +24,10 @@ public partial class AgentCatalogService
                 "today",
                 "Today",
                 "Shows the current day's scheduled habits, AI summary, and progress status.",
-                ["Open Today.", "Review scheduled habits and overdue items.", "Log, skip, or inspect the day's tasks."],
+                ["Open Today.", "Review scheduled habits and overdue items.", "Log, skip, or inspect the day's tasks.",
+                    "Open a habit's details and choose Edit habit.",
+                    "In Frequency, choose the repeat interval or flexible target, then set the number and unit.",
+                    "Adjust the habit's date, weekdays or end date in the same form, then save."],
                 ["Uses timezone-aware dates from the backend.", "General habits can be hidden locally on some clients."],
                 [AgentCapabilityIds.HabitsRead, AgentCapabilityIds.HabitsWrite, AgentCapabilityIds.DailySummaryRead],
                 ["HabitsController.GetHabits", "HabitsController.GetDailySummary"]),

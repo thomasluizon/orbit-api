@@ -6,6 +6,22 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public partial class AskToolTests
 {
+    [Theory]
+    [InlineData("""{"form":"choice","question":"When?","options":[{"id":"a","label":"Morning"},{"id":"b","label":"Evening"}]}""")]
+    [InlineData("""{"form":"pickList","title":"Choose","action":"create_habits","items":[{"id":"a","label":"Walk","arguments":{"title":"Walk"}}]}""")]
+    [InlineData("""{"form":"question","questions":[{"id":"q","type":"yesNo","prompt":"Ready?"}]}""")]
+    public async Task FormInput_UsesTheSameValidationAndTypedResultAsLegacyArguments(string json)
+    {
+        var input = JsonDocument.Parse(json).RootElement;
+        var legacy = await _tool.ExecuteAsync(input, UserId, default);
+        var nested = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { input }), UserId, default);
+
+        legacy.Success.Should().BeTrue(legacy.Error);
+        nested.Success.Should().BeTrue(nested.Error);
+        JsonElement.DeepEquals(JsonSerializer.SerializeToElement(nested.Payload),
+            JsonSerializer.SerializeToElement(legacy.Payload)).Should().BeTrue();
+    }
+
     [Fact]
     public async Task Question_ProviderOptionalNullPlaceholdersAreOmittedRecursively()
     {

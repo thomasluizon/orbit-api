@@ -1,0 +1,592 @@
+{
+  "caseId": "composition-streaks-en",
+  "repeat": 2,
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"streak\",\"block\":{\"title\":\"Your streak and XP\",\"current\":{\"label\":\"Current streak\",\"value\":\"1\"},\"level\":\"Level 12 · Legend\",\"xp\":\"16,597 of 16,900 XP\",\"days\":[{\"date\":\"Oct 17\",\"status\":\"day not logged\"},{\"date\":\"Oct 18\",\"status\":\"day not logged\"},{\"date\":\"Oct 19\",\"status\":\"day not logged\"},{\"date\":\"Oct 20\",\"status\":\"day not logged\"},{\"date\":\"Oct 21\",\"status\":\"day not logged\"},{\"date\":\"Oct 22\",\"status\":\"day not logged\"},{\"date\":\"Oct 23\",\"status\":\"day not logged\"},{\"date\":\"Oct 24\",\"status\":\"day not logged\"},{\"date\":\"Oct 25\",\"status\":\"day not logged\"},{\"date\":\"Oct 26\",\"status\":\"day not logged\"},{\"date\":\"Oct 27\",\"status\":\"day not logged\"},{\"date\":\"Oct 28\",\"status\":\"day not logged\"},{\"date\":\"Oct 29\",\"status\":\"day active\"},{\"date\":\"Oct 30\",\"status\":\"Today\"}],\"achievements\":[{\"name\":\"Mission control\",\"earned\":true},{\"name\":\"All systems go\",\"earned\":true},{\"name\":\"Comeback\",\"earned\":true},{\"name\":\"Liftoff\",\"earned\":true},{\"name\":\"First Orbit\",\"earned\":true},{\"name\":\"Week warrior\",\"earned\":false}],\"window\":\"Oct 30, 2026\"}}]}",
+  "toolCalls": [
+    {
+      "name": "get_gamification_overview",
+      "arguments": {
+        "as_of": null,
+        "include_profile": true,
+        "include_achievements": false,
+        "include_streak": true,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ],
+  "groundingEvidence": {
+    "fixture": {
+      "habits": [
+        {
+          "title": "Water",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-30",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-29T23:46:06.428181Z",
+          "logs": [
+            {
+              "date": "2026-10-29",
+              "value": 1,
+              "note": null,
+              "createdAtUtc": "2026-10-30T07:54:17.604609Z"
+            }
+          ],
+          "intervalWeeks": null
+        },
+        {
+          "title": "Walk",
+          "description": null,
+          "emoji": null,
+          "isBadHabit": false,
+          "isGeneral": false,
+          "dueDate": "2026-10-30",
+          "endDate": null,
+          "frequencyUnit": "Day",
+          "frequencyQuantity": 1,
+          "days": [],
+          "checklistItems": [],
+          "createdAtUtc": "2026-10-29T23:46:07.305995Z",
+          "logs": [
+            {
+              "date": "2026-10-29",
+              "value": 1,
+              "note": null,
+              "createdAtUtc": "2026-10-30T07:54:18.08928Z"
+            }
+          ],
+          "intervalWeeks": null
+        }
+      ],
+      "goals": [
+        {
+          "title": "Consistent hydration",
+          "description": null,
+          "targetValue": 10,
+          "currentValue": 0,
+          "unit": "sessions",
+          "status": "Active",
+          "type": "Standard",
+          "deadline": null,
+          "createdAtUtc": "2026-10-30T07:54:18.993077Z",
+          "completedAtUtc": null,
+          "progressLogs": []
+        }
+      ],
+      "tags": [
+        {
+          "name": "Health",
+          "color": "#22c55e",
+          "createdAtUtc": "2026-10-30T07:54:18.492432Z"
+        }
+      ],
+      "checklistTemplates": [
+        {
+          "name": "Morning",
+          "items": [
+            "Prepare water",
+            "Put on shoes"
+          ],
+          "createdAtUtc": "2026-10-30T07:54:18.829816Z"
+        }
+      ],
+      "apiKeys": [],
+      "notifications": [],
+      "loggedState": {
+        "fixture": "composition-streaks",
+        "date": "2026-10-30",
+        "habits": [
+          {
+            "title": "Water",
+            "completed": false,
+            "skipped": false
+          },
+          {
+            "title": "Walk",
+            "completed": false,
+            "skipped": false
+          }
+        ]
+      }
+    },
+    "successfulTools": [
+      {
+        "name": "get_gamification_overview",
+        "result": {
+          "profile": {
+            "totalXp": 16597,
+            "level": 12,
+            "levelTitle": "Legend",
+            "levelTitleKey": "legend",
+            "xpForCurrentLevel": 14400,
+            "xpForNextLevel": 16900,
+            "xpToNextLevel": 303,
+            "achievementsEarned": 5,
+            "achievementsTotal": 32,
+            "achievements": [
+              {
+                "name": "First Orbit",
+                "description": "Create your first habit",
+                "category": "GettingStarted",
+                "rarity": "Common",
+                "xpReward": 25,
+                "iconKey": "[redacted]",
+                "isEarned": true,
+                "earnedAtUtc": "2026-10-29T23:46:06.736911Z",
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Liftoff",
+                "description": "Complete your first habit",
+                "category": "GettingStarted",
+                "rarity": "Common",
+                "xpReward": 25,
+                "iconKey": "[redacted]",
+                "isEarned": true,
+                "earnedAtUtc": "2026-10-29T23:56:46.333368Z",
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Mission control",
+                "description": "Create your first goal",
+                "category": "GettingStarted",
+                "rarity": "Common",
+                "xpReward": 25,
+                "iconKey": "[redacted]",
+                "isEarned": true,
+                "earnedAtUtc": "2026-10-29T23:58:12.108298Z",
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "All systems go",
+                "description": "Complete your setup checklist",
+                "category": "GettingStarted",
+                "rarity": "Common",
+                "xpReward": 50,
+                "iconKey": "[redacted]",
+                "isEarned": true,
+                "earnedAtUtc": "2026-10-29T23:56:46.361838Z",
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Week warrior",
+                "description": "Achieve a 7-day streak on any habit",
+                "category": "Consistency",
+                "rarity": "Uncommon",
+                "xpReward": 50,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 7
+              },
+              {
+                "name": "Fortnight focus",
+                "description": "Achieve a 14-day streak",
+                "category": "Consistency",
+                "rarity": "Uncommon",
+                "xpReward": 75,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 14
+              },
+              {
+                "name": "Monthly master",
+                "description": "Achieve a 30-day streak",
+                "category": "Consistency",
+                "rarity": "Rare",
+                "xpReward": 100,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 30
+              },
+              {
+                "name": "Quarter champion",
+                "description": "Achieve a 90-day streak",
+                "category": "Consistency",
+                "rarity": "Epic",
+                "xpReward": 250,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 90
+              },
+              {
+                "name": "Centurion",
+                "description": "Achieve a 100-day streak",
+                "category": "Consistency",
+                "rarity": "Epic",
+                "xpReward": 250,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 100
+              },
+              {
+                "name": "Year of discipline",
+                "description": "Achieve a 365-day streak",
+                "category": "Consistency",
+                "rarity": "Legendary",
+                "xpReward": 500,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 365
+              },
+              {
+                "name": "Half-year hero",
+                "description": "Achieve a 180-day streak",
+                "category": "Consistency",
+                "rarity": "Epic",
+                "xpReward": 350,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 180
+              },
+              {
+                "name": "Streak titan",
+                "description": "Achieve a 500-day streak",
+                "category": "Consistency",
+                "rarity": "Legendary",
+                "xpReward": 750,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 500
+              },
+              {
+                "name": "Getting momentum",
+                "description": "Complete 10 habits total",
+                "category": "Volume",
+                "rarity": "Common",
+                "xpReward": 25,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 2,
+                "progressTarget": 10
+              },
+              {
+                "name": "Building habits",
+                "description": "Complete 50 habits total",
+                "category": "Volume",
+                "rarity": "Uncommon",
+                "xpReward": 50,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 2,
+                "progressTarget": 50
+              },
+              {
+                "name": "Dedicated",
+                "description": "Complete 100 habits total",
+                "category": "Volume",
+                "rarity": "Rare",
+                "xpReward": 100,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 2,
+                "progressTarget": 100
+              },
+              {
+                "name": "Relentless",
+                "description": "Complete 500 habits total",
+                "category": "Volume",
+                "rarity": "Epic",
+                "xpReward": 250,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 2,
+                "progressTarget": 500
+              },
+              {
+                "name": "Legendary",
+                "description": "Complete 1000 habits total",
+                "category": "Volume",
+                "rarity": "Legendary",
+                "xpReward": 500,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 2,
+                "progressTarget": 1000
+              },
+              {
+                "name": "Goal setter",
+                "description": "Create 3 goals",
+                "category": "Goals",
+                "rarity": "Uncommon",
+                "xpReward": 50,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 1,
+                "progressTarget": 3
+              },
+              {
+                "name": "Goal crusher",
+                "description": "Complete your first goal",
+                "category": "Goals",
+                "rarity": "Uncommon",
+                "xpReward": 75,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Overachiever",
+                "description": "Complete 5 goals",
+                "category": "Goals",
+                "rarity": "Rare",
+                "xpReward": 150,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 5
+              },
+              {
+                "name": "Dream maker",
+                "description": "Complete 10 goals",
+                "category": "Goals",
+                "rarity": "Epic",
+                "xpReward": 250,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 10
+              },
+              {
+                "name": "Perfect day",
+                "description": "Complete all habits in a day",
+                "category": "Perfection",
+                "rarity": "Uncommon",
+                "xpReward": 50,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Perfect week",
+                "description": "Complete all habits for 7 consecutive days",
+                "category": "Perfection",
+                "rarity": "Rare",
+                "xpReward": 150,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Perfect month",
+                "description": "Complete all habits for 30 consecutive days",
+                "category": "Perfection",
+                "rarity": "Legendary",
+                "xpReward": 500,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Early bird",
+                "description": "Complete a habit before 7 AM (10 times)",
+                "category": "Special",
+                "rarity": "Rare",
+                "xpReward": 100,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 10
+              },
+              {
+                "name": "Night owl",
+                "description": "Complete a habit after 10 PM (10 times)",
+                "category": "Special",
+                "rarity": "Rare",
+                "xpReward": 100,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 10
+              },
+              {
+                "name": "Comeback",
+                "description": "Resume after 7+ days of inactivity",
+                "category": "Special",
+                "rarity": "Uncommon",
+                "xpReward": 50,
+                "iconKey": "[redacted]",
+                "isEarned": true,
+                "earnedAtUtc": "2026-10-29T23:56:46.336375Z",
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Bad habit breaker",
+                "description": "Achieve a 30-day streak on a bad habit",
+                "category": "Special",
+                "rarity": "Rare",
+                "xpReward": 150,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Show off",
+                "description": "Share your first card",
+                "category": "Sharing",
+                "rarity": "Uncommon",
+                "xpReward": 75,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Year in review",
+                "description": "View your first Wrapped",
+                "category": "Sharing",
+                "rarity": "Uncommon",
+                "xpReward": 75,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": null,
+                "progressTarget": null
+              },
+              {
+                "name": "Streak immortal",
+                "description": "Achieve a 1000-day streak",
+                "category": "Consistency",
+                "rarity": "Legendary",
+                "xpReward": 1500,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 0,
+                "progressTarget": 1000
+              },
+              {
+                "name": "Unstoppable",
+                "description": "Complete 2500 habits total",
+                "category": "Volume",
+                "rarity": "Legendary",
+                "xpReward": 1000,
+                "iconKey": "[redacted]",
+                "isEarned": false,
+                "earnedAtUtc": null,
+                "progressCurrent": 2,
+                "progressTarget": 2500
+              }
+            ],
+            "userAchievements": [
+              {
+                "earnedAtUtc": "2026-10-29T23:46:06.736911Z"
+              },
+              {
+                "earnedAtUtc": "2026-10-29T23:56:46.336375Z"
+              },
+              {
+                "earnedAtUtc": "2026-10-29T23:56:46.333368Z"
+              },
+              {
+                "earnedAtUtc": "2026-10-29T23:56:46.361838Z"
+              },
+              {
+                "earnedAtUtc": "2026-10-29T23:58:12.108298Z"
+              }
+            ],
+            "currentStreak": 1,
+            "longestStreak": 1,
+            "lastActiveDate": "2026-10-29",
+            "isPro": true,
+            "achievementsLocked": false,
+            "nextReward": {
+              "nextLevel": 13,
+              "nextLevelTitle": "Legend",
+              "xpToNextLevel": 303,
+              "proTeaser": null
+            }
+          },
+          "achievements": null,
+          "streak": {
+            "currentStreak": 1,
+            "longestStreak": 1,
+            "lastActiveDate": "2026-10-29",
+            "freezesUsedThisMonth": 0,
+            "freezesAvailable": 0,
+            "maxFreezesPerMonth": 3,
+            "isFrozenToday": false,
+            "recentFreezeDates": [],
+            "streakFreezesAccumulated": 0,
+            "maxStreakFreezesAccumulated": 3,
+            "daysUntilNextFreeze": 6,
+            "freezesAvailableToUse": 0,
+            "canEarnMore": true,
+            "isRepairAvailable": false,
+            "repairDate": null,
+            "repairsRemainingThisMonth": 0,
+            "lastFreezeCoveredDate": null,
+            "freezeBankRemaining": null,
+            "lastFreezeCoveredOrigin": null,
+            "repairableGapDates": []
+          }
+        }
+      }
+    ],
+    "toolOutcomes": [],
+    "readScopes": [
+      {
+        "name": "get_gamification_overview",
+        "scope": {
+          "include_profile": true,
+          "include_achievements": false,
+          "include_streak": true,
+          "as_of": "2026-10-30"
+        }
+      }
+    ]
+  }
+}

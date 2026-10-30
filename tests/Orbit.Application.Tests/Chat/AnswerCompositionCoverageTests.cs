@@ -375,7 +375,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "# Heading\n- " + new string('a', 200) + "\n2. Second step.\nThird step.\nExtra caveat." });
         var result = await CreateHandler().Handle(new(UserId, steps ? "Give me steps" : "Help me plan",
             ClientContext: new(SupportsParts: true)), default);
-        result.Value.AiMessage.Should().Be((steps ? "- " + new string('a', 178) : new string('a', 180))
+        result.Value.AiMessage.Should().Be((steps ? "- " : "") + new string('a', 200)
             + (steps ? "\n2. Second step." : "\nSecond step.") + "\nThird step.");
     }
 }
