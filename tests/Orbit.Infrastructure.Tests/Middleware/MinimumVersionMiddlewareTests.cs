@@ -207,8 +207,8 @@ public class MinimumVersionMiddlewareTests
         context.Response.StatusCode.Should().Be(StatusCodes.Status426UpgradeRequired);
         var entry = logger.Entries.Should().ContainSingle().Subject;
         entry.Fields.Should().Contain("ClientVersion", "1.0.0").And.Contain("MinVersion", "1.3.91")
-            .And.Contain("RequestId", "request-1902").And.Contain("Method", "GET")
-            .And.Contain("Path", routed ? "/api/habits/{id}" : "/api/habits")
+            .And.Contain("RequestId", "request-1902")
+            .And.Contain("Request", routed ? "GET /api/habits/{id}" : "GET /api/habits")
             .And.Contain("UserAgent", new string('a', Math.Min(userAgentLength, 200)))
             .And.Contain("Authenticated", true);
         var logged = entry.Message + JsonSerializer.Serialize(entry.Fields);

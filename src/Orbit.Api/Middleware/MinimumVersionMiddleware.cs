@@ -41,7 +41,7 @@ public sealed partial class MinimumVersionMiddleware(
                 userAgent = userAgent[..200];
             var authentication = await context.AuthenticateAsync();
             LogUpgradeRequired(logger, clientVersion, minimumVersion, requestId,
-                context.Request.Method, path, userAgent, authentication.Succeeded);
+                $"{context.Request.Method} {path}", userAgent, authentication.Succeeded);
         }
 
         context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
@@ -86,7 +86,7 @@ public sealed partial class MinimumVersionMiddleware(
             .ToArray();
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Upgrade required: client version {ClientVersion} is below floor {MinVersion}. RequestId={RequestId} Method={Method} Path={Path} UserAgent={UserAgent} Authenticated={Authenticated}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Upgrade required: client version {ClientVersion} is below floor {MinVersion}. RequestId={RequestId} Request={Request} UserAgent={UserAgent} Authenticated={Authenticated}")]
     private static partial void LogUpgradeRequired(ILogger logger, string clientVersion, string minVersion, string requestId,
-        string method, string path, string userAgent, bool authenticated);
+        string request, string userAgent, bool authenticated);
 }
