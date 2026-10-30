@@ -52,6 +52,16 @@ public class SuggestBreakdownToolTests
         var schema = _tool.GetParameterSchema();
         schema.Should().NotBeNull();
     }
+
+    [Fact]
+    public void SmallerGuidance_RequiresLessTimeAndEffortThanStructuredPreviousStep()
+    {
+        const string guidance = "For a smaller refinement, use structured previousStartingStep as the baseline, keep its goal and return a proper part of its step or its first physical action, taking strictly less time and effort. A paraphrase or a different action of equal or greater effort is not smaller.";
+        _tool.Description.Should().Contain(guidance);
+        var schema = JsonSerializer.SerializeToElement(_tool.GetParameterSchema());
+        schema.GetProperty("properties").GetProperty("one_small_step").GetProperty("description").GetString()
+            .Should().Be("Return exactly one starting step as a oneSmallStep block. For a refinement, use structured previousStartingStep and return a proper part of its step or its first physical action, taking strictly less time and effort. Default false.");
+    }
     [Fact]
     public async Task ExecuteAsync_OneSmallStep_RejectsSeveralSteps()
     {

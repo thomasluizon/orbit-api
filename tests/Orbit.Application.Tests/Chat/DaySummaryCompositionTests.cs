@@ -4,12 +4,76 @@ using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Queries;
+using Orbit.Application.Habits.Services;
+using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Theory]
+    [InlineData("en", "legacy-card", false)]
+    [InlineData("pt-BR", "legacy-card", false)]
+    [InlineData("en", "legacy-card", true)]
+    [InlineData("pt-BR", "legacy-card", true)]
+    [InlineData("en", "legacy", true)]
+    [InlineData("pt-BR", "legacy", true)]
+    [InlineData("en", "absent", true)]
+    [InlineData("pt-BR", "absent", true)]
+    public async Task DaySummary_LegacyRetainsSentenceAndGroundedFactsInStreamAndReplay(
+        string language, string mode, bool narrative)
+    {
+        var user = User.Create("Person", "person@example.com").Value;
+        user.SetLanguage(language);
+        SetupUserAndPayGate(user);
+        EnableComposition();
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId,
+            "Reading", null, null, Today)).Value;
+        var (card, revision) = DailySummaryReadProjection.Project([habit], Today, Today, TimeZoneInfo.Utc,
+            1, 0, Orbit.Application.Tests.Common.DailySummaryScheduleFixture.Project([habit], Today));
+        var sentence = narrative
+            ? language == "pt-BR" ? "Seu almoço é o próximo passo por ser a primeira refeição pendente."
+                : "Your lunch is the next step because it is the earliest pending meal."
+            : language == "pt-BR" ? "Aqui está o que você concluiu e o que falta para hoje."
+                : "Here is what you finished and what is left for today.";
+        _mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DailySummaryResponse(sentence, string.Empty, false, card, revision)));
+        var tool = new GetDailySummaryTool(_mediator, _userDateService);
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        SetupAiResponse(ToolResponse(tool.Name, "summary", JsonSerializer.Serialize(new
+        { generate_narrative = narrative, orbit_read_complete = true })));
+        ContinueWithReadDirective("You finished 99 habits.\n[[orbit:read:summary]]");
+        var client = mode == "absent" ? null : new AgentClientContext(SupportsParts: false,
+            SupportsDaySummaryCard: mode == "legacy-card");
+        var events = new List<ChatStreamEvent>();
+
+        var result = await handler.Handle(new(UserId, "Summarize my day", ClientContext: client,
+            StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Parts.Should().BeNull();
+        var facts = language == "pt-BR" ? "Hoje: Concluídos / agendados: 0/1" : "Today: Completed / scheduled: 0/1";
+        result.Value.AiMessage.Should().Be(sentence + "\n\n" + facts).And.NotContain("99");
+        result.Value.AiMessage!.Split(sentence, StringSplitOptions.None).Should().HaveCount(2);
+        if (mode == "legacy-card")
+            result.Value.DaySummary!.Rows.Should().ContainSingle().Which.Title.Should().Be("Reading");
+        events.Last(item => item.Type == "delta").Text.Should().Be(result.Value.AiMessage);
+        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+            turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
+        var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value,
+            ChatStreamEvent.SerializerOptions), ChatStreamEvent.SerializerOptions)!;
+        var replay = ChatResponseNegotiation.ForClient(stored, client, [], language, user.TimeZone, Today);
+
+        replay.Parts.Should().BeNull();
+        replay.AiMessage.Should().Be(result.Value.AiMessage);
+    }
+
     [Theory]
     [InlineData(true, true, "en")]
     [InlineData(true, false, "en")]

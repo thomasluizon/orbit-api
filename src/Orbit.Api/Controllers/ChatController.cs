@@ -386,7 +386,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
                 ? (null, BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody()))
                 : (parsed, null);
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogClientContextParseFailed(logger, ex, ex.Message);

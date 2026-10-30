@@ -12,7 +12,9 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
 
     public string Description =>
         "Read a completion summary with totals and an optional narrative recap for a date range, defaulting to today. "
-        + "Use only when the person asks for completion totals or a recap. Use query_habits for habit listings and schedules; "
+        + "Use for completion totals, a recap or today's next pending step. "
+        + "For what to do next today, pass relative_period: today and generate_narrative: true. "
+        + "The narrative uses the complete ordered pending schedule and the profile language. Use query_habits for habit listings and schedules; "
         + "a request for habits and goals needs query_habits and query_goals. "
         + "Pass generate_narrative: true to include its saved narrative when available.";
 
@@ -23,7 +25,7 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
         {
             relative_period = RelativeReadPeriod.PeriodSchema(),
             period_count = RelativeReadPeriod.CountSchema(),
-            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Pass true when the person asks for a summary with its narrative. Returns the saved narrative when available, otherwise generates one. Omission defaults to true for multi-day ranges and false for a single day. False reads facts only, without the saved narrative; use false for exact refresh." },
+            generate_narrative = new { type = JsonSchemaTypes.Boolean, description = "Pass true for a next-step recommendation today or a summary with its narrative. Returns the saved narrative when available, otherwise generates one. Omission defaults to true for multi-day ranges and false for a single day. False reads facts only, without the saved narrative; use false for exact refresh." },
             date_from = new { type = JsonSchemaTypes.String, description = "Start date (YYYY-MM-DD). Defaults to today." },
             date_to = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD). Defaults to date_from." },
             language = new { type = JsonSchemaTypes.String, description = "Language code for the summary text. Default: 'en'." }

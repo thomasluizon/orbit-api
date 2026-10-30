@@ -64,7 +64,9 @@ internal static class ChatResponseNegotiation
             }
             var value = Decode(block);
             if (supportsParts && Supported(block.Kind, value, client, flags))
-                negotiated.Add(block);
+                negotiated.Add(value is OneSmallStepCard step
+                    ? block with { Block = step.ForClient(client?.SupportsStartingStepContext == true) }
+                    : block);
             else
             {
                 downgraded = true;
