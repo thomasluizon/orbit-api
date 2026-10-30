@@ -28,6 +28,11 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
             .WithCopy(ErrorCodes.InvalidClientContext);
 
         RuleFor(x => x.ClientContext)
+            .Must(context => context?.SelectedOfferKey is null || context.SelectedOfferKey.Length is > 0 and <= 200
+                && !context.SelectedOfferKey.Any(char.IsControl))
+            .WithCopy(ErrorCodes.InvalidClientContext);
+
+        RuleFor(x => x.ClientContext)
             .Must(context => context?.DismissedOfferKeys is null || context.DismissedOfferKeys.Count <= 100
                 && context.DismissedOfferKeys.All(key => !string.IsNullOrWhiteSpace(key)
                     && key.Length <= 200 && !key.Any(char.IsControl)))

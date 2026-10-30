@@ -51,7 +51,7 @@ public sealed partial class PendingOperationChangePreviewer(
         operationId is "create_habit" or "create_sub_habit" or BulkCreateHabits or "update_habit" or "bulk_update_habits"
         && (field is ParentHabitId or "is_completed" || field != HabitId && CreateFields.Contains(field));
 
-    public async Task<Result<PendingOperationChangePreview?>> PreviewAsync(
+    private async Task<Result<PendingOperationChangePreview?>> PreviewCoreAsync(
         Guid userId,
         string operationId,
         JsonElement arguments,

@@ -17174,6 +17174,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "selectedOfferKey": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -25977,6 +25983,16 @@
                 "$ref": "#/components/schemas/ReadBlockMetadata"
               }
             ]
+          },
+          "connection": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotionConnectionResponse"
+              }
+            ]
           }
         }
       },
@@ -26241,6 +26257,16 @@
               },
               {
                 "$ref": "#/components/schemas/ReadBlockMetadata"
+              }
+            ]
+          },
+          "connection": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotionConnectionResponse"
               }
             ]
           }
@@ -26740,6 +26766,15 @@
               "null",
               "string"
             ]
+          },
+          "removeSuggestedFields": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

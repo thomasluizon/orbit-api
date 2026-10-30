@@ -80,7 +80,7 @@ public class QueryGoalsTool(
                 GoalProgressSyncService.ApplyReadValue(goal, fresh);
         var card = GoalListCardBuilder.Build(filtered, userToday, includeProjections: false)
             with
-        { TotalCount = allFiltered.Count, SourceRevision = ReadRevision.Hash(allFiltered.Select(g => new { g.Id, g.UpdatedAtUtc, Fresh = freshProgressValues.TryGetValue(g.Id, out var v) ? v : g.CurrentValue })) };
+        { OfferTracking = filtered.ToDictionary(goal => goal.Id, goal => Orbit.Application.Goals.Services.GoalMetricsCalculator.Calculate(goal, userToday, 1).TrackingStatus), TotalCount = allFiltered.Count, SourceRevision = ReadRevision.Hash(allFiltered.Select(g => new { g.Id, g.UpdatedAtUtc, Fresh = freshProgressValues.TryGetValue(g.Id, out var v) ? v : g.CurrentValue })) };
 
         if (filtered.Count == 0)
             return new ToolResult(true, EntityName: "No goals found matching the given filters.", Payload: card);

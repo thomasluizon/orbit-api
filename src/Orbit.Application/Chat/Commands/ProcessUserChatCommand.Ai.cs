@@ -65,6 +65,10 @@ public partial class ProcessUserChatCommandHandler
             .Where(tool => tool.Name != "ask").ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
+        if (ProactiveProposal.Enabled(request.ClientContext))
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, ProactiveProposal.Instruction,
+                "Dismissed offer keys: " + JsonSerializer.Serialize(request.ClientContext!.DismissedOfferKeys ?? []));
+
         dynamicContext = AddAskContext(dynamicContext, request, context);
         dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
 
@@ -84,7 +88,7 @@ public partial class ProcessUserChatCommandHandler
                 PendingPreviewModelContext.Serialize(pendingPreviews));
 
         dynamicContext = AppendCardPromptInstructions(dynamicContext, request, context, toolNames);
-        if (request.ClientContext?.SupportsFollowUps == true)
+        if (request.ClientContext?.SupportsFollowUps == true && !ProactiveProposal.Enabled(request.ClientContext))
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 "Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
 
@@ -93,10 +97,7 @@ public partial class ProcessUserChatCommandHandler
             .Select(tool => (object)new
             {
                 name = tool.Name,
-                description = tool.IsReadOnly ? tool.Description : tool.Description
-                    + (habitTargets.HasSharedTargets ? Environment.NewLine + HabitTargetContext.Instruction : string.Empty)
-                    + (tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
-                        ? Environment.NewLine + HabitModelInstructions.Titles : string.Empty),
+                description = OfferToolDescription(tool, habitTargets.HasSharedTargets, request.ClientContext),
                 parameters = ChatToolSchema(tool, request, context)
             })
             .ToList();
@@ -136,10 +137,20 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
     }
 
+    private static string OfferToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, bool sharedTargets, AgentClientContext? client) =>
+        tool.Description + (tool.IsReadOnly ? string.Empty
+            : (sharedTargets ? Environment.NewLine + HabitTargetContext.Instruction : string.Empty)
+                + (tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
+                    ? Environment.NewLine + HabitModelInstructions.Titles : string.Empty)
+                + (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name)
+                    ? Environment.NewLine + ProactiveProposal.Instruction : string.Empty));
+
     private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context,
         bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
     {
         var schema = tool is AskTool ask ? ask.GetParameterSchema(hasAccountRead, drafts) : tool.GetParameterSchema();
+        if (ProactiveProposal.Enabled(request.ClientContext) && ProactiveProposal.Supports(tool.Name))
+            schema = ProactiveProposal.Schema(schema);
         return tool.IsReadOnly
             ? UsesComposition(request, context)
                 ? tool.Name == "revise_pending_changes"

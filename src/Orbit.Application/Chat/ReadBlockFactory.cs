@@ -18,7 +18,7 @@ namespace Orbit.Application.Chat;
 
 public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenService tokens, IGenericRepository<User> users)
 {
-    public static bool Supports(string tool) => tool is "query_habits" or "query_goals" or "review_goals"
+    public static bool Supports(string tool, bool offers = false) => tool == "get_notion_tasks" && offers || tool is "query_habits" or "query_goals" or "review_goals"
         or "get_habit_metrics" or "get_period_analytics" or "get_habit_history" or "get_daily_summary"
         or "get_retrospective" or "get_habit_month" or "get_calendar_overview" or "get_gamification_overview"
         or "get_notifications" or "list_tags" or "get_checklist_templates" or "get_api_keys"
@@ -157,6 +157,10 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
 
     private static Projection? Project(string tool, object? payload, Guid userId, int offset) => payload switch
     {
+        NotionTasksPayload notion => new("recordList", new RecordListCard("notionTasks", notion.Tasks.Count,
+            notion.Tasks.Skip(offset).Take(20).Select(task => new RecordListItem(task.PageId.ToString(), task.Title,
+                State: task.Status, LogDate: task.DueDate)).ToArray(), Connection: notion.Connection),
+            ReadRevision.Hash(notion), Total: notion.Tasks.Count, Count: Math.Min(20, Math.Max(0, notion.Tasks.Count - offset))),
         HabitListCard card => new("habitList", card, card.SourceRevision, Total: card.TotalCount ?? card.Items.Count, Count: card.Items.Count),
         GoalListCard card => GoalProjection(tool, card, offset),
         MetricsCard metrics => new("metrics", metrics),
@@ -220,7 +224,7 @@ public sealed class ReadBlockFactory(IUserDateService dates, IReadQueryTokenServ
             Total: payload.Events.Count, Count: Math.Min(10, events.Count), Recovery: payload.Recovery);
     }
 
-    private static object Attach(object block, ReadBlockMetadata read) => block switch
+    public static object Attach(object block, ReadBlockMetadata read) => block switch
     {
         HabitListCard card => card with { Read = read },
         GoalListCard card => card with { Read = read },

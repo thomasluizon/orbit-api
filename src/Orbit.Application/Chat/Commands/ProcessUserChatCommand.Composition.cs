@@ -156,6 +156,9 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
         }
         cards = SuppressCreationReadCards(cards, request, executionResults);
+        var offered = await ComposeOfferAsync(request, context, cards, executionResults, cancellationToken);
+        cards = offered.Cards;
+        if (ProactiveProposal.Enabled(request.ClientContext)) followUps = null;
         followUps = composition ? ContextualFollowUps(followUps, executionResults) : followUps;
         if (composition)
             AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,

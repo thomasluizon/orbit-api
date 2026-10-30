@@ -8,7 +8,11 @@ namespace Orbit.Application.Chat;
 public record GoalListCard(IReadOnlyList<GoalListCardItem> Items,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? TotalCount = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? SourceRevision = null) : ReadBlockCard;
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? SourceRevision = null) : ReadBlockCard
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyDictionary<Guid, string>? OfferTracking { get; init; }
+}
 
 public record GoalListCardItem(
     string Id,

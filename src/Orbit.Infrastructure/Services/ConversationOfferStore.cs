@@ -29,7 +29,8 @@ public sealed class ConversationOfferStore(OrbitDbContext db, IEncryptionService
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "ConversationOffers" ("Id", "UserId", "ConversationId", "OfferKey", "DefinitionJson", "Dismissed")
             VALUES ({offer.Id}, {offer.UserId}, {offer.ConversationId}, {offer.OfferKey}, {definition}, FALSE)
-            ON CONFLICT ("UserId", "ConversationId", "OfferKey") DO NOTHING
+            ON CONFLICT ("UserId", "ConversationId", "OfferKey") DO UPDATE
+            SET "DefinitionJson" = EXCLUDED."DefinitionJson" WHERE NOT "ConversationOffers"."Dismissed"
             """, ct);
     }
 

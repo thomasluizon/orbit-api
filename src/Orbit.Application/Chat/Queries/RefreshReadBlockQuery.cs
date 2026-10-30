@@ -42,7 +42,7 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
     private async Task<Result<QueryReadBlock>> RefreshAsync(RefreshReadBlockQuery request, CancellationToken ct)
     {
         var ticket = tokens.Read(request.Token, request.UserId);
-        if (ticket is null || !ReadBlockFactory.Supports(ticket.Tool))
+        if (ticket is null || !ReadBlockFactory.Supports(ticket.Tool, ProactiveProposal.Enabled(request.ClientContext)))
             return Result.Failure<QueryReadBlock>("This exact query is unavailable. Repeat the original request.", errorCode: "READ_QUERY_EXPIRED");
         if (!MatchesContract(request, ticket.Kind))
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);

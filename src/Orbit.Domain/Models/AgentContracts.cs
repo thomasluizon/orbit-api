@@ -315,7 +315,8 @@ public record AgentClientContext(
     bool? SupportsStartingStepContext = null,
     bool? SupportsProactiveOffers = null,
     Guid? ConversationId = null,
-    IReadOnlyList<string>? DismissedOfferKeys = null);
+    IReadOnlyList<string>? DismissedOfferKeys = null,
+    string? SelectedOfferKey = null);
 
 public record AgentContextSnapshot(
     string Plan,

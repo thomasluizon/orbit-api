@@ -14,7 +14,10 @@ public sealed record AstraNextAction(string OfferKey, string Kind, string Label,
     DateOnly? Date = null);
 
 public sealed record AstraOfferFact(string Id, string Family, string Evidence,
-    AstraNextAction Action, Guid QueryId, string Revision, DateOnly LocalDate);
+    AstraNextAction Action, Guid QueryId, string Revision, DateOnly LocalDate)
+{
+    public ReadBlockMetadata? Source { get; init; }
+}
 
 public sealed record QueryReadBlock(string Kind, object Block, ReadBlockMetadata Read);
 public sealed record ReadQueryTicket(Guid UserId, Guid QueryId, string Tool, JsonElement Arguments,

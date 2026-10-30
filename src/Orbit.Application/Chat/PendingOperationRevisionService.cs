@@ -9,7 +9,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat;
 
-public sealed record RevisedPendingOperationItem(string ItemId, JsonElement? Edits = null, string? Placement = null);
+public sealed record RevisedPendingOperationItem(string ItemId, JsonElement? Edits = null, string? Placement = null, IReadOnlyList<string>? RemoveSuggestedFields = null);
 
 public sealed record RevisePendingOperationRequest(
     string PreviewFingerprint,
@@ -27,7 +27,7 @@ public sealed partial class PendingOperationRevisionService(
     IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer,
     IValidator<RevisePendingOperationRequest> validator,
-    AiToolRegistry toolRegistry)
+    AiToolRegistry toolRegistry, IConversationOfferStore? offerStore = null)
 {
     public async Task<PendingOperationRevisionResult> RefreshAsync(
         Guid userId, Guid pendingOperationId, CancellationToken cancellationToken, AgentClientContext? clientContext = null)
@@ -123,6 +123,7 @@ public sealed partial class PendingOperationRevisionService(
             revisedFingerprint, revisedPreview.PreviewFingerprint!))
             return Failure("revision_conflict");
 
+        await RecordRemovedOffersAsync(userId, request, original, cancellationToken);
         return new PendingOperationRevisionResult(true, null, pendingOperationId, revisedPreview);
     }
 
@@ -155,6 +156,9 @@ public sealed partial class PendingOperationRevisionService(
     {
         foreach (var item in items)
         {
+            if (item.RemoveSuggestedFields?.Any(field => offered[item.ItemId].Fields
+                .All(change => change.Field != field || change.Removal is null)) == true)
+                return "field_not_suggested";
             if (item.Placement is { } placement && (offered[item.ItemId].Placement is not { } placementChoice
                 || placement != placementChoice.Selected && !placementChoice.Alternatives.Contains(placement, StringComparer.Ordinal)))
                 return "placement_not_offered";
@@ -268,6 +272,11 @@ public sealed partial class PendingOperationRevisionService(
         if (JsonNode.Parse(original.GetRawText()) is not JsonObject root)
             return null;
 
+        foreach (var item in selected)
+        {
+            var source = ProactiveProposal.Source(root, operationId, item.ItemId);
+            if (source is null || !ProactiveProposal.Remove(source, item.RemoveSuggestedFields)) return null;
+        }
         var built = operationId.StartsWith("bulk_", StringComparison.Ordinal)
             || operationId == "delete_habit"
             ? BuildHabitArguments(root, operationId, selected, offered)
@@ -531,6 +540,17 @@ public sealed partial class PendingOperationRevisionService(
             if (clears[index]?.GetValue<string>() == field.Name) clears.RemoveAt(index);
         if (field.Value.ValueKind == JsonValueKind.Null) clears.Add(field.Name);
         target["clear_fields"] = clears;
+    }
+
+    private async Task RecordRemovedOffersAsync(Guid userId, RevisePendingOperationRequest request,
+        PendingOperationChangePreview original, CancellationToken ct)
+    {
+        if (offerStore is null || !ProactiveProposal.Enabled(request.ClientContext)) return;
+        var keys = request.Items.SelectMany(item => original.Items!.Single(old => old.ItemId == item.ItemId).Fields
+            .Where(field => item.RemoveSuggestedFields?.Contains(field.Field, StringComparer.Ordinal) == true)
+            .Select(field => field.Removal!.OfferKey)).Distinct(StringComparer.Ordinal).ToArray();
+        if (keys.Length > 0)
+            await offerStore.DismissAsync(userId, request.ClientContext!.ConversationId!.Value, keys, ct);
     }
 
     private static PendingOperationRevisionResult Failure(string error) =>

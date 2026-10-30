@@ -88,6 +88,7 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Moderation_RefusesBeforeCallingModel(bool flagged, bool unavailable)
     {
         EnableRecording();
+        _offers.DismissedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new HashSet<string>());
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(flagged, unavailable, []));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
@@ -184,7 +185,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder, timeProvider: _turnClock);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder, timeProvider: _turnClock, offerStore: _offers);
     }
 
     public ProcessUserChatCommandHandlerTests()

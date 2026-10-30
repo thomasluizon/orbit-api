@@ -178,6 +178,7 @@ public partial class ProcessUserChatCommandHandler
         HabitListCard card when (!blockFirst || client?.SupportsParts != true) && card.Read is { } read
             && HabitReadMessages.IsMissingMetricsLookup(new("habitList", card, read)) => false,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
+        RecordListCard { Kind: "notionTasks" } => ProactiveProposal.Enabled(client),
         RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
         _ => true
     };

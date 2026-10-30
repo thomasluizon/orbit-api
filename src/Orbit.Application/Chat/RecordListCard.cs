@@ -22,7 +22,8 @@ public record RecordListCard(
     string Kind, int TotalCount, IReadOnlyList<RecordListItem> Items,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SurfaceId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NextCursor = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Application.Connections.NotionConnectionResponse? Connection = null) : ReadBlockCard;
 
 public static class RecordListCardBuilder
 {
