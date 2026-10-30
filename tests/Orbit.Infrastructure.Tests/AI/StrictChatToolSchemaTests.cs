@@ -34,6 +34,7 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
             using var wire = JsonDocument.Parse(ModelReaderWriter.Write(sdkTool).ToString());
             wire.RootElement.GetProperty("strict").GetBoolean().Should().BeTrue(tool.Name);
             AssertStrict(wire.RootElement.GetProperty("parameters"));
+            AssertNoEnumWithPattern(wire.RootElement.GetProperty("parameters"), tool.Name);
             AssertOptionalFields(JsonSerializer.SerializeToElement(schema), wire.RootElement.GetProperty("parameters"));
         }
     }
@@ -251,6 +252,24 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
         ? new AskTool((BulkCreateHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkCreateHabitsTool)), (BulkLogHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkLogHabitsTool)),
             (BulkSkipHabitsTool)RuntimeHelpers.GetUninitializedObject(typeof(BulkSkipHabitsTool)), Substitute.For<IUserDateService>())
         : (IAiTool)RuntimeHelpers.GetUninitializedObject(type);
+
+    private static void AssertNoEnumWithPattern(JsonElement node, string path)
+    {
+        if (node.ValueKind == JsonValueKind.Object)
+        {
+            if (node.TryGetProperty("enum", out _))
+                node.TryGetProperty("pattern", out _).Should().BeFalse(
+                    $"provider-facing schema {path} must not combine enum and pattern: {node.GetRawText()}");
+            foreach (var property in node.EnumerateObject())
+                AssertNoEnumWithPattern(property.Value, $"{path}.{property.Name}");
+        }
+        else if (node.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var child in node.EnumerateArray())
+                AssertNoEnumWithPattern(child, $"{path}[{index++}]");
+        }
+    }
 
     private static void AssertLowercaseTypes(JsonElement node)
     {
