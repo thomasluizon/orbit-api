@@ -188,7 +188,13 @@ public record PendingOperationChange(
     JsonElement? ProposedValue = null,
     bool IsEditable = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? EntityEmoji = null);
+    string? EntityEmoji = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Provenance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    PendingProposalRemoval? Removal = null);
+
+public sealed record PendingProposalRemoval(string OfferKey, string Field);
 
 public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
@@ -306,7 +312,10 @@ public record AgentClientContext(
     bool? SupportsCompletedHabitsMetric = null,
     bool? SupportsSkippedHabitRows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StartingStep? PreviousStartingStep = null,
-    bool? SupportsStartingStepContext = null);
+    bool? SupportsStartingStepContext = null,
+    bool? SupportsProactiveOffers = null,
+    Guid? ConversationId = null,
+    IReadOnlyList<string>? DismissedOfferKeys = null);
 
 public record AgentContextSnapshot(
     string Plan,

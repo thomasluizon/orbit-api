@@ -4882,6 +4882,68 @@
         }
       }
     },
+    "/api/Chat/offers/dismiss": {
+      "post": {
+        "tags": [
+          "Chat"
+        ],
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissConversationOffersRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissConversationOffersRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissConversationOffersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/checklist-templates": {
       "get": {
         "tags": [
@@ -17090,6 +17152,28 @@
               "null",
               "boolean"
             ]
+          },
+          "supportsProactiveOffers": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "conversationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "dismissedOfferKeys": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -17873,6 +17957,51 @@
                 }
               }
             }
+          }
+        }
+      },
+      "AstraNextAction": {
+        "required": [
+          "offerKey",
+          "kind",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "offerKey": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "surface": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -20285,6 +20414,25 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "DismissConversationOffersRequest": {
+        "required": [
+          "conversationId",
+          "offerKeys"
+        ],
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "offerKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -23762,6 +23910,22 @@
               "null",
               "string"
             ]
+          },
+          "provenance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "removal": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PendingProposalRemoval"
+              }
+            ]
           }
         }
       },
@@ -24019,6 +24183,21 @@
             "type": "string"
           },
           "error": {
+            "type": "string"
+          }
+        }
+      },
+      "PendingProposalRemoval": {
+        "required": [
+          "offerKey",
+          "field"
+        ],
+        "type": "object",
+        "properties": {
+          "offerKey": {
+            "type": "string"
+          },
+          "field": {
             "type": "string"
           }
         }
@@ -25968,6 +26147,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "nextAction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraNextAction"
+              }
             ]
           }
         }
