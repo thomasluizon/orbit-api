@@ -1,0 +1,96 @@
+{
+  "caseId": "composition-one-small-step-smaller-en",
+  "repeat": 1,
+  "reason": "All assertions passed",
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "en",
+        "title": "Studying",
+        "suggested_sub_habits": [
+          {
+            "title": "Open your study materials",
+            "description": null,
+            "frequency_unit": null,
+            "frequency_quantity": null,
+            "days": null
+          }
+        ],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 4309.676979,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 457.1737715,
+        "elapsedMilliseconds": 461.990534
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 4.8167625,
+        "elapsedMilliseconds": 9.633525
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.02372,
+        "elapsedMilliseconds": 0.02372
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 5.728309,
+        "elapsedMilliseconds": 5.728309
+      },
+      {
+        "name": "budget",
+        "milliseconds": 2.415399,
+        "elapsedMilliseconds": 2.415399
+      },
+      {
+        "name": "budget",
+        "milliseconds": 19.167867,
+        "elapsedMilliseconds": 19.167867
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 3772.196776,
+        "elapsedMilliseconds": 3772.196776
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.14415,
+        "elapsedMilliseconds": 4.14415
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 9.755278,
+        "elapsedMilliseconds": 9.755278
+      },
+      {
+        "name": "save",
+        "milliseconds": 8.269621,
+        "elapsedMilliseconds": 8.269621
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.082902,
+        "elapsedMilliseconds": 0.082902
+      },
+      {
+        "name": "other",
+        "milliseconds": 25.902423000000002,
+        "elapsedMilliseconds": 25.902423000000002
+      }
+    ]
+  }
+}

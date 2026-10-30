@@ -1,0 +1,96 @@
+{
+  "caseId": "composition-one-small-step-smaller-pt-BR",
+  "repeat": 1,
+  "reason": "“Tocar no material de estudo para abri-lo” apenas descreve como abrir o material, sem reduzir o esforço do passo anterior.",
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "pt-BR",
+        "title": "Estudar",
+        "suggested_sub_habits": [
+          {
+            "title": "Tocar no material de estudo para abri-lo",
+            "description": null,
+            "frequency_unit": null,
+            "frequency_quantity": null,
+            "days": null
+          }
+        ],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 4568.217725,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 343.33430799999996,
+        "elapsedMilliseconds": 347.969566
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 4.635258,
+        "elapsedMilliseconds": 9.270516
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.021231,
+        "elapsedMilliseconds": 0.021231
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 4.374986,
+        "elapsedMilliseconds": 4.374986
+      },
+      {
+        "name": "budget",
+        "milliseconds": 1.917487,
+        "elapsedMilliseconds": 1.917487
+      },
+      {
+        "name": "budget",
+        "milliseconds": 13.54066,
+        "elapsedMilliseconds": 13.54066
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4142.336351,
+        "elapsedMilliseconds": 4142.336351
+      },
+      {
+        "name": "budget",
+        "milliseconds": 6.504729,
+        "elapsedMilliseconds": 6.504729
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 11.888489,
+        "elapsedMilliseconds": 11.888489
+      },
+      {
+        "name": "save",
+        "milliseconds": 14.176276,
+        "elapsedMilliseconds": 14.176276
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.138863,
+        "elapsedMilliseconds": 0.138863
+      },
+      {
+        "name": "other",
+        "milliseconds": 25.349087,
+        "elapsedMilliseconds": 25.349087
+      }
+    ]
+  }
+}
