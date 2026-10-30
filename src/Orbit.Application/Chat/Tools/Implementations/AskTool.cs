@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Validators;
 using Orbit.Domain.Common;
@@ -14,18 +15,78 @@ public sealed class AskTool(
     IUserDateService userDateService) : IChatOnlyAiTool
 {
     public const string TargetResolutionInstruction = "A habit identified by id or by an exact unique title is resolved. Different actions on different identified habits are not ambiguous. Ask only for input that is still missing after reading account data. In a compound request, call the independent write tools before ask so their approval preview appears beside the question; withhold only changes that depend on the answer. Never ask the person to choose again between already identified targets. A single pick uses choice even when it has a heading; use question for two or more fields.";
+    public const string SingleSelectionInstruction = "A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields.";
+    public const string DuplicateTargetsInstruction = "Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.";
 
     public string Name => "ask";
     public string Description => "Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. "
         + "Do not call ask for a clear request you can act on, including a batch of dated items or a request to show habits and goals. Null fields are absent; form question requires nonempty questions. "
         + "An explicit request for the person to choose habits requires ask, even with one candidate. Use pickList for selecting habits to log or skip, with action and items; it prepares no write. "
         + "For a single choice among existing records, use form choice with top-level question and options, even when form question is supported. Reserve form question for multiple fields. If the change is also missing, ask for both target and change in the choice question with allowFreeText=true. Use only a form the client supports. "
+        + "Put the selected form and its fields inside input. "
+        + SingleSelectionInstruction + " " + DuplicateTargetsInstruction + " "
         + TargetResolutionInstruction + " " + RestartPlanInstructions.ProposalBoundary;
     public bool IsReadOnly => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public object GetParameterSchema()
+    {
+        var fields = JsonSerializer.SerializeToNode(GetFieldsSchema())!["properties"]!.AsObject();
+        var questionFields = fields["questions"]!["items"]!["properties"]!.AsObject();
+        fields["questions"]!["items"] = new JsonObject
+        {
+            ["anyOf"] = new JsonArray(
+                Variant(questionFields, "type", "singleChoice", ["id", "prompt", "options"], ["allowFreeText"]),
+                Variant(questionFields, "type", "multipleChoice", ["id", "prompt", "options"], ["allowFreeText"]),
+                Variant(questionFields, "type", "scale", ["id", "prompt", "lowLabel", "highLabel"], []),
+                Variant(questionFields, "type", "slider", ["id", "prompt", "min", "max", "step", "unit"], []),
+                Variant(questionFields, "type", "yesNo", ["id", "prompt"], ["allowFreeText"]))
+        };
+        return new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["input"] = new JsonObject
+                {
+                    ["anyOf"] = new JsonArray(
+                        Variant(fields, "form", "choice", ["question", "options"], ["multiSelect", "allowFreeText"]),
+                        Variant(fields, "form", "pickList", ["title", "action", "items"], []),
+                        Variant(fields, "form", "question", ["questions"], ["title", "intro", "progress"]))
+                }
+            },
+            ["required"] = new JsonArray("input")
+        };
+    }
+
+    private static JsonObject Variant(JsonObject fields, string discriminator, string value,
+        string[] required, string[] optional)
+    {
+        var properties = new JsonObject
+        {
+            [discriminator] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(value) }
+        };
+        foreach (var name in required.Concat(optional))
+        {
+            var field = fields[name]!.DeepClone();
+            if (required.Contains(name) && field["type"]?.GetValue<string>() == "string")
+                field["pattern"] = @"\S";
+            properties[name] = field;
+        }
+        return new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = properties,
+            ["required"] = new JsonArray(new[] { discriminator }.Concat(required)
+                .Select(name => (JsonNode?)JsonValue.Create(name)).ToArray())
+        };
+    }
+
+    internal static JsonElement ExecutionArguments(JsonElement args) =>
+        args.ValueKind == JsonValueKind.Object && args.TryGetProperty("input", out var input) ? input : args;
+
+    private object GetFieldsSchema()
     {
         var createSchema = JsonSerializer.SerializeToElement(createTool.GetParameterSchema());
         return new
@@ -142,7 +203,7 @@ public sealed class AskTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        args = OptionalToolArguments.OmitOptionalNulls(args, GetParameterSchema());
+        args = OptionalToolArguments.OmitOptionalNulls(ExecutionArguments(args), GetFieldsSchema());
         AskToolArguments? input;
         try
         {

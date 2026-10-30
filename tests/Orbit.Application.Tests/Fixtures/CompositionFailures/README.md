@@ -60,3 +60,11 @@ composition because the captured calls do not declare read completion. The rende
 answer is evidence only. Local replay verifies formatting, synchronous and streamed
 composition, recording and replay; it does not prove a live model now chooses a habit
 listing. The coordinator owns that bilingual gate rerun.
+# Production rerun ask captures
+
+The `prod-r1-composition-compound-legacy-*` fixtures retain the answer and complete
+tool-call arguments from the #26 production rerun on API `9ba7dfea`, harness
+`6cae53206`. They preserve the captured empty ask followed by habit and goal reads.
+The replay asserts the actual model-service declarations, grounded fallback text,
+stored composition and absence of ask execution for legacy clients.
+

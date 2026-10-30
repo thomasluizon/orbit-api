@@ -31,6 +31,13 @@ public partial class AskToolTests
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
     }
 
+    [Fact]
+    public void Description_OwnsSelectionGuidanceOutsideTheGlobalPrompt()
+    {
+        _tool.Description.Should().Contain("A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields.");
+        _tool.Description.Should().Contain("Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.");
+    }
+
     [Theory]
     [InlineData("title")]
     [InlineData("multiSelect")]
@@ -120,11 +127,12 @@ public partial class AskToolTests
     [Fact]
     public void Schema_DeclaresTextLimitsWithoutCappingPickListLabel()
     {
-        var properties = JsonSerializer.SerializeToElement(_tool.GetParameterSchema()).GetProperty("properties");
-        var option = properties.GetProperty("options").GetProperty("items").GetProperty("properties");
+        var forms = JsonSerializer.SerializeToElement(_tool.GetParameterSchema()).GetProperty("properties")
+            .GetProperty("input").GetProperty("anyOf");
+        var option = forms[0].GetProperty("properties").GetProperty("options").GetProperty("items").GetProperty("properties");
         option.GetProperty("label").GetProperty("maxLength").GetInt32().Should().Be(20);
         option.GetProperty("description").GetProperty("maxLength").GetInt32().Should().Be(24);
-        var item = properties.GetProperty("items").GetProperty("items").GetProperty("properties");
+        var item = forms[1].GetProperty("properties").GetProperty("items").GetProperty("items").GetProperty("properties");
         item.GetProperty("detail").GetProperty("maxLength").GetInt32().Should().Be(24);
         item.GetProperty("label").TryGetProperty("maxLength", out _).Should().BeFalse();
     }

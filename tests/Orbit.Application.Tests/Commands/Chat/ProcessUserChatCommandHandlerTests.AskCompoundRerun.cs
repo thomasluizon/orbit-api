@@ -67,10 +67,11 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task AskRerun_RealAmbiguityKeepsIndependentPreviewAndBlocksCandidate(bool composition, bool askFirst)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task AskRerun_RealAmbiguityKeepsIndependentPreviewAndBlocksCandidate(bool composition, bool askFirst, bool nested)
     {
         SetupUserAndPayGate();
         if (composition) EnableComposition();
@@ -90,7 +91,7 @@ public partial class ProcessUserChatCommandHandlerTests
             id = walk.Id.ToString(),
             label = index == 0 ? "Morning walk" : "Evening walk"
         }));
-        var ask = captured with { Args = JsonSerializer.SerializeToElement(args) };
+        var ask = captured with { Args = nested ? JsonSerializer.SerializeToElement(new { input = args }) : JsonSerializer.SerializeToElement(args) };
         var writes = AskRerunWrites(water, walks[0]);
         SetupAiResponse(new AiResponse
         {

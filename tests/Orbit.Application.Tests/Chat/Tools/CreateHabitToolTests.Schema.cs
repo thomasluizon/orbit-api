@@ -34,7 +34,7 @@ public partial class CreateHabitToolTests
             new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), Substitute.For<IUnitOfWork>())),
             Substitute.For<IUserDateService>());
         var askSchema = JsonSerializer.SerializeToNode(ask.GetParameterSchema())!;
-        WithoutDescriptions(askSchema["properties"]!["items"]!["items"]!["properties"]!["arguments"]!["anyOf"]![0]!).ToJsonString()
+        WithoutDescriptions(askSchema["properties"]!["input"]!["anyOf"]![1]!["properties"]!["items"]!["items"]!["properties"]!["arguments"]!["anyOf"]![0]!).ToJsonString()
             .Should().Be(WithoutDescriptions(original.DeepClone()).ToJsonString());
         var sub = JsonSerializer.SerializeToNode(new CreateSubHabitTool(Substitute.For<IMediator>()).GetParameterSchema())!;
         var expectedSub = original.DeepClone();

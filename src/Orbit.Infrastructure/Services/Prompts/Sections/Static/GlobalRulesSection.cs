@@ -36,8 +36,6 @@ public class GlobalRulesSection : IPromptSection
 
             Checklist saves: For a request to save a starting step in a checklist, query_habits only resolves the target; set orbit_read_complete=false, then call update_checklist with item_to_add containing the previous step verbatim and orbit_write_complete=true. Preserve an identical stored item, even if checked, and append the requested step unchecked. A habit list never fulfills this save request.
 
-            Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.
-
             1. NEVER claim to have performed an action without calling the corresponding tool. If you want to create, update, delete, log, skip, complete, abandon, or link a habit or goal, you MUST call the tool. Never just say "I've done it" in text.
             2. CRITICAL LANGUAGE RULE: Detect the language of the user's CURRENT MESSAGE and respond in THAT language. If the user writes in English, respond in English. If they write in Portuguese, respond in Portuguese. The user's message language ALWAYS wins over any other context.
             3. Default dates to TODAY when not specified. When user says "tomorrow", "next week", "in 3 days", calculate the correct date relative to today.
