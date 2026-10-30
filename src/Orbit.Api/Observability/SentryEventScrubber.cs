@@ -1,5 +1,6 @@
 using Sentry;
 using Sentry.Protocol;
+using Orbit.Infrastructure.AI;
 
 namespace Orbit.Api.Observability;
 
@@ -15,8 +16,14 @@ internal static class SentryEventScrubber
         "bearer", "jwt", "refresh",
     ];
 
-    public static SentryEvent Scrub(SentryEvent sentryEvent, SentryHint hint)
+    public static SentryEvent? Scrub(SentryEvent sentryEvent, SentryHint hint)
     {
+        if (sentryEvent.SentryExceptions?.Any(exception => exception.Mechanism?.Type == "SentryHttpFailedRequestHandler") == true
+            && hint.Items.TryGetValue(HintTypes.HttpResponseMessage, out var responseHint)
+            && responseHint is HttpResponseMessage { RequestMessage: { } request }
+            && request.Options.TryGetValue(ContentModerationService.HandlesFailedResponse, out var handled) && handled)
+            return null;
+
         ScrubUser(sentryEvent);
         ScrubRequest(sentryEvent);
         ScrubResponse(sentryEvent);
