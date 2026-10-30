@@ -795,7 +795,11 @@ another model call. The response has no framing prose and one typed part:
 ```
 
 Clients advertise `supportsParts: true` and include `oneSmallStep` in `partKinds`.
-The kind is a string extension, without adding a value to any strict enum.
+Clients that forward the structured baseline also advertise
+`supportsStartingStepContext: true`. Without that capability, action objects keep
+exactly their original `id`, `label` and `message` fields, including stored replay,
+because shipped clients validate that shape strictly. The kind is a string
+extension, without adding a value to any strict enum.
 The parts kill flag still applies. Fresh replies and stored-answer replay negotiate
 the kind against the client capabilities. Unsupported clients receive readable text
 containing only the step, without action requests or an unsupported block. Both
@@ -804,7 +808,8 @@ responses agree. No new endpoint, account mutation or minimum client version app
 
 Actions submit their complete `message` as a fresh chat request with the current
 conversation history. They are requests, never confirmation tokens or executable
-commands. The `smaller` action appends optional `previousStep`, the exact typed
+commands. For clients advertising `supportsStartingStepContext: true`, the
+`smaller` action appends optional `previousStep`, the exact typed
 `suggestion` from that block. Clients copy it to the fresh request's optional
 `clientContext.previousStartingStep`; they do not extract the baseline from
 `message` or conversation prose. This field contains `goal`, `step` and `language`,
@@ -827,7 +832,8 @@ claimed by the API.
 Older clients may omit the new fields and retain the existing message/history path.
 Structured refinement requires the paired web/Android action wiring and eval setup
 under thomasluizon/orbit-tickets#1866 and thomasluizon/orbit-tickets#1867 to copy the
-new field after API deployment. No minimum supported version changes.
+new field and advertise the capability after API deployment. No minimum supported
+version changes.
 Titles in action messages remain JSON-quoted as untrusted data.
 The save request uses the existing `create_habit` tool for a one-time task or
 `update_checklist` for an owned habit. A checklist target must be resolved first,

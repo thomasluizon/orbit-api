@@ -32,7 +32,8 @@ public sealed partial class ChatWriteHoldHandlerTests
     {
         _user.SetLanguage(language);
         if (composition) _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>()).Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
-        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsPendingOperationChanges: true);
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsPendingOperationChanges: true,
+            SupportsStartingStepContext: true);
         var firstResponse = await ReplayStartingStep(message, message, first, language, client);
         var card = StartingStepCard(firstResponse);
         card.Suggestion.Step.Should().Be(first);
@@ -280,12 +281,29 @@ public sealed partial class ChatWriteHoldHandlerTests
         .Should().ContainSingle().Which.Block.Should().BeOfType<OneSmallStepCard>().Subject;
 
     [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task OneSmallStep_ExistingClientsKeepStrictActionShapeOnFreshAndReplayedResponses(string language)
+    {
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"]);
+        var response = await ReplayStartingStep("...", "Study", "Open the book", language, client);
+        var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions),
+            ChatStreamEvent.SerializerOptions)!;
+        foreach (var delivered in new[] { response, ChatResponseNegotiation.ForClient(stored, client, []) })
+        {
+            var wire = JsonSerializer.SerializeToElement(delivered, ChatStreamEvent.SerializerOptions);
+            foreach (var action in wire.GetProperty("parts")[0].GetProperty("block").GetProperty("actions").EnumerateArray())
+                action.EnumerateObject().Select(field => field.Name).Should().Equal("id", "label", "message");
+        }
+    }
+
+    [Theory]
     [InlineData("en", "Study", "Open the book and read a paragraph", "Open the book", "Touch the cover", "Smaller")]
     [InlineData("pt-BR", "Estudar", "Abrir o livro e ler um parágrafo", "Abrir o livro", "Encostar na capa", "Menor ainda")]
     public async Task OneSmallStep_RepeatedRefinementUsesReturnedContextWithoutHistory(
         string language, string goal, string first, string second, string third, string message)
     {
-        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"]);
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsStartingStepContext: true);
         var card = StartingStepCard(await ReplayStartingStep("...", goal, first, language, client));
         foreach (var step in new[] { second, third })
         {

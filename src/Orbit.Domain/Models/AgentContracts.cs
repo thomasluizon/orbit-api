@@ -305,7 +305,8 @@ public record AgentClientContext(
     bool? SupportsPendingOperationPlacement = null,
     bool? SupportsCompletedHabitsMetric = null,
     bool? SupportsSkippedHabitRows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StartingStep? PreviousStartingStep = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StartingStep? PreviousStartingStep = null,
+    bool? SupportsStartingStepContext = null);
 
 public record AgentContextSnapshot(
     string Plan,

@@ -29,4 +29,12 @@ public sealed record OneSmallStepCard(StartingStep Suggestion, IReadOnlyList<One
     }
 
     internal static string Readable(OneSmallStepCard card) => card.Suggestion.Step;
+
+    internal OneSmallStepCard ForClient(bool supportsContext) => this with
+    {
+        Actions = Actions.Select(action => action with
+        {
+            PreviousStep = supportsContext && action.Id == "smaller" ? Suggestion : null
+        }).ToArray()
+    };
 }

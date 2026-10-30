@@ -366,7 +366,8 @@ the failed outcome before the server composes the block.
 Prompt and tool descriptions route starting help and smaller refinements through
 this tool in both languages, independently of message patterns.
 The server composes the negotiated `oneSmallStep` block without a continuation.
-Its smaller action carries typed `previousStep`; clients forward it as
+For clients advertising `supportsStartingStepContext: true`, its smaller action
+carries typed `previousStep`; clients forward it as
 `clientContext.previousStartingStep` with the ordinary chat request. The model
 receives that JSON baseline and must return a proper part or first physical action
 requiring strictly less time and effort. Save requests reuse

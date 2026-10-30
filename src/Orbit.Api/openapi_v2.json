@@ -17084,6 +17084,12 @@
                 "$ref": "#/components/schemas/StartingStep"
               }
             ]
+          },
+          "supportsStartingStepContext": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
