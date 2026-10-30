@@ -47,7 +47,8 @@ the API before the separate UI change uses that date to draw earlier days as neu
 the local date across midnight and omission for an account without active habits. Frequency
 help returns the existing Today editing steps directly. Parts composition asks for one
 to three complete sentences on separate lines, at most 180 characters per line. The
-server retains complete lines without slicing words or sentences to meet that bound.
+server separates sentences after typed feature help, wraps long sentences at word boundaries
+and includes only whole sentences within three lines. It adds no model round and preserves legacy text.
 
 Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
 build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and

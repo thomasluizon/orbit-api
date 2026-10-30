@@ -1,0 +1,20 @@
+{
+  "caseId": "composition-feature-help-en",
+  "repeat": 2,
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"Open Today, open the habit’s details, then choose Edit habit. In Frequency, set the repeat interval or flexible target, then adjust the date, weekdays, or end date in the same form and save.\"}],\"relatedActions\":[\"Today\"]}",
+  "toolCalls": [
+    {
+      "name": "describe_feature",
+      "arguments": {
+        "feature_key": "frequencies",
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ]
+}

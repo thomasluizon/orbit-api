@@ -303,8 +303,12 @@ The deterministic replay tests verify the tool result supplied to the narrative 
 resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
 The model must use the least text needed: one to three short lines with one complete
 sentence per line, at most 180 characters per line. Split help steps across lines instead
-of chaining sentences on one line. Text composition preserves complete lines and limits
-their count; it never slices a word or sentence to meet the character bound.
+of chaining sentences on one line. After a successful typed `describe_feature` result,
+composition separates the model's sentences into lines deterministically. A sentence longer
+than 180 characters wraps at word boundaries and is included only when all its lines fit
+the three-line budget. Trailing sentences outside that budget are omitted as whole sentences;
+words and sentences are never truncated. This normalization uses the existing narrative
+response, adds no model round and leaves legacy text unchanged.
 Goal progress is the goal's current value against its
 target from `query_goals`; a goal-progress request uses that read alone with
 `orbit_read_complete=true`. Habit metrics, analytics, month and profile tools explicitly

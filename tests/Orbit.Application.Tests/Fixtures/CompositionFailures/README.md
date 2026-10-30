@@ -12,6 +12,12 @@ they do not invent provider message items, call IDs or response envelopes. Synth
 IDs used by the test producer replace redacted account IDs where necessary.
 `Fixtures/TerminalReads` separately covers the real provider/SDK response boundary.
 
+The `prod-r4` fixtures retain case IDs, repeat numbers, rendered answers and executed
+tool-call evidence from production API `f890b5d2`, harness `22c556d2d`. The source is
+`eval-gate-prod-r4/evals/astra/reports/attempts/<case>-r<n>.json` in the coordinator's
+read-only run scratchpad. Help replays use the captured text as the narrative response;
+proactive replays preserve the emitted reasons and question forms, including invalid calls.
+
 Captured plans are replayed without correcting their tool names. Wrong-family calls remain
 their actual typed results or negotiated readable fallbacks. Corrected structured plans are
 separate tests; only a subsequent model call can request a dependent read. Fixtures do not

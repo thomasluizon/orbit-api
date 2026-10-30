@@ -17,7 +17,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task G11_CapturedFeatureHelpKeepsWholeNarrativeLinesAndLimitsTheirCount(bool longLine)
+    public async Task G11_CapturedFeatureHelpKeepsWholeSentencesWithinTheLineBudget(bool longLine)
     {
         SetupExistingParents("en");
         EnableComposition();
@@ -43,9 +43,14 @@ public partial class ProcessUserChatCommandHandlerTests
             StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        var expected = string.Join("\n", first, steps[0], steps[1]);
-        result.Value.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(expected));
-        result.Value.AiMessage.Should().Be(expected);
+        var lines = result.Value.AiMessage!.Split('\n');
+        lines.Length.Should().BeInRange(1, 3);
+        lines.Should().OnlyContain(line => line.Length <= 180);
+        if (longLine)
+            string.Join(" ", lines).Should().Be(paragraph);
+        else
+            result.Value.AiMessage.Should().Be(string.Join("\n", first, steps[0], steps[1]));
+        result.Value.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(result.Value.AiMessage));
         AssertStoredComposition(result.Value, client, "en");
         events.Should().NotContain(item => item.Type == "delta");
     }
