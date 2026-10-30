@@ -1,0 +1,158 @@
+{
+  "first_orbit": {
+    "name": "First Orbit",
+    "description": "Create your first habit"
+  },
+  "liftoff": {
+    "name": "Liftoff",
+    "description": "Complete your first habit"
+  },
+  "mission_control": {
+    "name": "Mission control",
+    "description": "Create your first goal"
+  },
+  "onboarding_complete": {
+    "name": "All systems go",
+    "description": "Complete your setup checklist"
+  },
+  "week_warrior": {
+    "name": "Week warrior",
+    "description": "Achieve a 7-day streak on any habit"
+  },
+  "fortnight_focus": {
+    "name": "Fortnight focus",
+    "description": "Achieve a 14-day streak"
+  },
+  "monthly_master": {
+    "name": "Monthly master",
+    "description": "Achieve a 30-day streak"
+  },
+  "quarter_champion": {
+    "name": "Quarter champion",
+    "description": "Achieve a 90-day streak"
+  },
+  "centurion": {
+    "name": "Centurion",
+    "description": "Achieve a 100-day streak"
+  },
+  "year_of_discipline": {
+    "name": "Year of discipline",
+    "description": "Achieve a 365-day streak"
+  },
+  "half_year_hero": {
+    "name": "Half-year hero",
+    "description": "Achieve a 180-day streak"
+  },
+  "streak_titan": {
+    "name": "Streak titan",
+    "description": "Achieve a 500-day streak"
+  },
+  "getting_momentum": {
+    "name": "Gaining momentum",
+    "description": "Complete 10 habits total"
+  },
+  "building_habits": {
+    "name": "Building habits",
+    "description": "Complete 50 habits total"
+  },
+  "dedicated": {
+    "name": "Dedicated",
+    "description": "Complete 100 habits total"
+  },
+  "relentless": {
+    "name": "Relentless",
+    "description": "Complete 500 habits total"
+  },
+  "legendary": {
+    "name": "Legendary",
+    "description": "Complete 1,000 habits total"
+  },
+  "goal_setter": {
+    "name": "Goal setter",
+    "description": "Create 3 goals"
+  },
+  "goal_crusher": {
+    "name": "Goal crusher",
+    "description": "Complete your first goal"
+  },
+  "overachiever": {
+    "name": "Overachiever",
+    "description": "Complete 5 goals"
+  },
+  "dream_maker": {
+    "name": "Dream maker",
+    "description": "Complete 10 goals"
+  },
+  "perfect_day": {
+    "name": "Perfect day",
+    "description": "Complete all habits in a day"
+  },
+  "perfect_week": {
+    "name": "Perfect week",
+    "description": "Complete all habits for 7 consecutive days"
+  },
+  "perfect_month": {
+    "name": "Perfect month",
+    "description": "Complete all habits for 30 consecutive days"
+  },
+  "early_bird": {
+    "name": "Early bird",
+    "description": "Complete a habit before 7 AM (10 times)"
+  },
+  "night_owl": {
+    "name": "Night owl",
+    "description": "Complete a habit after 10 PM (10 times)"
+  },
+  "comeback": {
+    "name": "Comeback",
+    "description": "Resume after 7+ days of inactivity"
+  },
+  "bad_habit_breaker": {
+    "name": "Bad habit breaker",
+    "description": "Achieve a 30-day streak on a bad habit"
+  },
+  "first_cheer": {
+    "name": "Good vibes",
+    "description": "Send or receive your first cheer"
+  },
+  "first_friend": {
+    "name": "First friend",
+    "description": "Add your first friend"
+  },
+  "squad_goals": {
+    "name": "Squad goals",
+    "description": "Reach 5 friends"
+  },
+  "cheerleader": {
+    "name": "Cheerleader",
+    "description": "Send 25 cheers"
+  },
+  "show_off": {
+    "name": "Show off",
+    "description": "Share your first card"
+  },
+  "year_in_review": {
+    "name": "Year in review",
+    "description": "View your first Wrapped"
+  },
+  "team_player": {
+    "name": "Team player",
+    "description": "Join your first cooperative challenge"
+  },
+  "mission_accomplished": {
+    "name": "Mission accomplished",
+    "description": "Complete a cooperative challenge"
+  },
+  "battle_buddy": {
+    "name": "Battle buddy",
+    "description": "Start a 1:1 accountability pair"
+  },
+  "streak_immortal": {
+    "name": "Streak immortal",
+    "description": "Achieve a 1000-day streak"
+  },
+  "unstoppable": {
+    "name": "Unstoppable",
+    "description": "Complete 2500 habits total"
+  }
+}

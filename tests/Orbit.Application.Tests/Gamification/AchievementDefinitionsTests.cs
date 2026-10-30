@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Orbit.Application.Gamification;
 using Orbit.Application.Tests.Notifications;
@@ -7,6 +8,23 @@ namespace Orbit.Application.Tests.Gamification;
 
 public class AchievementDefinitionsTests
 {
+    /// <summary>
+    /// The fixture copies gamification.achievements from orbit-ui-mobile/packages/shared/src/i18n/en.json.
+    /// </summary>
+    [Fact]
+    public void All_EnglishCopyMatchesTheAppCatalog()
+    {
+        using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+            "Fixtures", "Gamification", "achievements.en.json")));
+
+        AchievementDefinitions.All.Should().AllSatisfy(achievement =>
+        {
+            var entry = catalog.RootElement.GetProperty(achievement.Id);
+            achievement.Name.Should().Be(entry.GetProperty("name").GetString(), achievement.Id);
+            achievement.Description.Should().Be(entry.GetProperty("description").GetString(), achievement.Id);
+        });
+    }
+
     [Fact]
     public void All_NameResources_UseSentenceCase()
     {
@@ -80,7 +98,7 @@ public class AchievementDefinitionsTests
     [InlineData(AchievementDefinitions.WeekWarrior, "Week warrior")]
     [InlineData(AchievementDefinitions.MonthlyMaster, "Monthly master")]
     [InlineData(AchievementDefinitions.Centurion, "Centurion")]
-    [InlineData(AchievementDefinitions.GettingMomentum, "Getting momentum")]
+    [InlineData(AchievementDefinitions.GettingMomentum, "Gaining momentum")]
     [InlineData(AchievementDefinitions.Dedicated, "Dedicated")]
     [InlineData(AchievementDefinitions.GoalCrusher, "Goal crusher")]
     [InlineData(AchievementDefinitions.PerfectDay, "Perfect day")]
