@@ -95,14 +95,18 @@ public partial class ProcessUserChatCommandHandlerTests
                 .And.NotContain("completedHabits").And.NotContain("99")
                 .And.NotMatchRegex(@"\d{4}-\d{2}-\d{2}");
             if (compare) result.Value.AiMessage.Should().Contain("1");
-            events.Should().NotContain(item => item.Type == "delta", "fallback figures replace the model narrative");
             if (supportsParts)
             {
+                events.Should().NotContain(item => item.Type == "delta", "fallback figures replace the model narrative");
                 result.Value.Parts.Should().NotBeNull();
                 result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
                 result.Value.Parts.OfType<ChatTextPart>().Should().Contain(part => part.Text.Contains($"{label}: 3"));
             }
-            else result.Value.Parts.Should().BeNull();
+            else
+            {
+                result.Value.Parts.Should().BeNull();
+                events.Where(item => item.Type == "delta").Should().ContainSingle().Which.Text.Should().Be(result.Value.AiMessage);
+            }
         }
         else
         {
