@@ -16,7 +16,8 @@ namespace Orbit.Application.Chat;
 public sealed record PreparedAstraBlockAnswer(
     string Message, ChatResponse? Response = null, CrisisLocales Crisis = CrisisLocales.None,
     DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false,
-    bool MessageAllowanceConsumed = false, ModerationResult? ModeratedInput = null, string? SafetyText = null);
+    bool MessageAllowanceConsumed = false, ModerationResult? ModeratedInput = null, string? SafetyText = null,
+    AstraChoiceSelection? ChoiceSelection = null);
 
 public sealed class AstraBlockAnswerService(
     IIssuedAstraBlockStore store,
@@ -230,7 +231,8 @@ public sealed class AstraBlockAnswerService(
                         IssuedAstraBlock.SerializeAnswer(answer), reservedAllowanceDate,
                         response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
-                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed, SafetyText: safetyText));
+                    answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed, SafetyText: safetyText,
+                    ChoiceSelection: AstraChoiceSelection.FromValidatedAnswer(definition, answer)));
             }, ct);
         }
         catch (AnswerRejectedException exception)

@@ -1,0 +1,102 @@
+{
+  "caseId": "ambiguity-pt",
+  "repeat": 1,
+  "reason": "The answer proposes logging both Caminhada habits instead of asking in Brazilian Portuguese which one the user means. It also uses disallowed operation previews rather than plain text or exactly one choice block.",
+  "toolCalls": [
+    {
+      "name": "bulk_log_habits",
+      "arguments": {
+        "filter": null,
+        "habit_ids": [
+          "[redacted]",
+          "[redacted]"
+        ],
+        "date": "2026-10-30",
+        "dates": null,
+        "orbit_write_complete": true
+      },
+      "resultStatus": "PendingConfirmation",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {
+          "status": "awaiting_confirmation",
+          "item_count": 2,
+          "habit_count": 2,
+          "date_count": 1,
+          "proposed_titles": [
+            "Caminhada"
+          ],
+          "dates": [
+            "2026-10-30"
+          ]
+        }
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 5148.001905,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 253.69025100000002,
+        "elapsedMilliseconds": 263.369807
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 9.679556,
+        "elapsedMilliseconds": 19.359112
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.141923,
+        "elapsedMilliseconds": 0.141923
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 10.814674,
+        "elapsedMilliseconds": 10.814674
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.550017,
+        "elapsedMilliseconds": 3.550017
+      },
+      {
+        "name": "budget",
+        "milliseconds": 15.649691,
+        "elapsedMilliseconds": 15.649691
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4607.874443,
+        "elapsedMilliseconds": 4607.874443
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.448008,
+        "elapsedMilliseconds": 4.448008
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 182.319152,
+        "elapsedMilliseconds": 182.319152
+      },
+      {
+        "name": "save",
+        "milliseconds": 9.070231,
+        "elapsedMilliseconds": 9.070231
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.310187,
+        "elapsedMilliseconds": 0.310187
+      },
+      {
+        "name": "other",
+        "milliseconds": 50.45377200000001,
+        "elapsedMilliseconds": 50.45377200000001
+      }
+    ]
+  }
+}

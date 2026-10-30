@@ -187,9 +187,9 @@ public partial class ProcessUserChatCommandHandler
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
-        var (orderedCalls, deferAsk) = OrderCallsForAsk(aiResponse.ToolCalls!, context.UserHabits);
+        var orderedCalls = OrderCallsForAsk(aiResponse.ToolCalls!, context.UserHabits);
         var outcomesByCallId = correction is null
-            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken, deferAsk)
+            ? await ExecuteToolCallsAsync(orderedCalls, request, executionResults, language, cancellationToken)
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
@@ -439,8 +439,7 @@ public partial class ProcessUserChatCommandHandler
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         string? language,
-        CancellationToken cancellationToken,
-        bool deferAsk = false)
+        CancellationToken cancellationToken)
     {
         var readOnlyCalls = orderedCalls
             .Where(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
@@ -488,6 +487,7 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
+        RejectUnreadDuplicateTargets(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
         RejectUnansweredSelections(writeCalls, resolvedWrites, executionResults, outcomesByCallId);
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
@@ -532,7 +532,7 @@ public partial class ProcessUserChatCommandHandler
         }
 
         if (orderedCalls.FirstOrDefault(call => call.Name == "ask") is { } askCall)
-            outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken, deferAsk);
+            outcomesByCallId[askCall.Id] = await ExecuteAskCallAsync(askCall, request, executionResults, cancellationToken);
         return outcomesByCallId;
     }
 

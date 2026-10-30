@@ -1,0 +1,154 @@
+{
+  "caseId": "ambiguity-pt",
+  "repeat": 3,
+  "reason": "Call to \"ask\" does not match schema: [{\"instancePath\":\"/input/missing_input\",\"schemaPath\":\"#/properties/input/anyOf/0/properties/missing_input/enum\",\"keyword\":\"enum\",\"params\":{\"allowedValues\":[\"habit_setup\"]},\"message\":\"must be equal to one of the allowed values\"},{\"instancePath\":\"/input\",\"schemaPath\":\"#/properties/input/anyOf/1/required\",\"keyword\":\"required\",\"params\":{\"missingProperty\":\"title\"},\"message\":\"must have required property 'title'\"},{\"instancePath\":\"/input\",\"schemaPath\":\"#/properties/input/anyOf/2/required\",\"keyword\":\"required\",\"params\":{\"missingProperty\":\"questions\"},\"message\":\"must have required property 'questions'\"},{\"instancePath\":\"/input\",\"schemaPath\":\"#/properties/input/anyOf\",\"keyword\":\"anyOf\",\"params\":{},\"message\":\"must match a schema in anyOf\"}]",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": true,
+        "relative_period": null,
+        "search": "Caminhada",
+        "date": "today",
+        "include_overdue": false,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    },
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Qual caminhada você quer marcar como feita?",
+          "options": [
+            {
+              "id": "[redacted]",
+              "label": "Caminhada",
+              "description": "Primeira ocorrência"
+            },
+            {
+              "id": "[redacted]",
+              "label": "Caminhada",
+              "description": "Segunda ocorrência"
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": false
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 10753.065093,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 182.2447855,
+        "elapsedMilliseconds": 194.572621
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 12.3278355,
+        "elapsedMilliseconds": 24.655671
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.039221,
+        "elapsedMilliseconds": 0.039221
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 6.627361,
+        "elapsedMilliseconds": 6.627361
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.437923,
+        "elapsedMilliseconds": 5.437923
+      },
+      {
+        "name": "budget",
+        "milliseconds": 135.82186,
+        "elapsedMilliseconds": 135.82186
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4606.813606,
+        "elapsedMilliseconds": 4606.813606
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.222987,
+        "elapsedMilliseconds": 5.222987
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 29.192461,
+        "elapsedMilliseconds": 29.192461
+      },
+      {
+        "name": "budget",
+        "milliseconds": 7.283777,
+        "elapsedMilliseconds": 7.283777
+      },
+      {
+        "name": "budget",
+        "milliseconds": 16.541273,
+        "elapsedMilliseconds": 16.541273
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 5608.542555,
+        "elapsedMilliseconds": 5608.542555
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.039499,
+        "elapsedMilliseconds": 4.039499
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 6.213892,
+        "elapsedMilliseconds": 6.213892
+      },
+      {
+        "name": "save",
+        "milliseconds": 8.410205,
+        "elapsedMilliseconds": 8.410205
+      },
+      {
+        "name": "composition",
+        "milliseconds": 1.052785,
+        "elapsedMilliseconds": 1.052785
+      },
+      {
+        "name": "other",
+        "milliseconds": 117.25306699999999,
+        "elapsedMilliseconds": 117.25306699999999
+      }
+    ]
+  }
+}

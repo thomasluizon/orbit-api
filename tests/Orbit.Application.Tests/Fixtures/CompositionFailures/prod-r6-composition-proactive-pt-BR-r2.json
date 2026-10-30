@@ -1,0 +1,103 @@
+{
+  "caseId": "composition-proactive-pt-BR",
+  "repeat": 2,
+  "reason": "As opções “A” e “B” não têm suporte no fixture. As escolhas de hábitos disponíveis são “Beber água” e “Caminhada”.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "habit_setup",
+          "question": "Qual hábito você quer mudar e o que quer mudar nele?",
+          "options": [
+            {
+              "id": "x",
+              "label": "A",
+              "description": null
+            },
+            {
+              "id": "y",
+              "label": "B",
+              "description": null
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": true
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 4317.069473,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 164.233691,
+        "elapsedMilliseconds": 171.58049
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 7.346799,
+        "elapsedMilliseconds": 14.693598
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.031271,
+        "elapsedMilliseconds": 0.031271
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 6.776245,
+        "elapsedMilliseconds": 6.776245
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.358842,
+        "elapsedMilliseconds": 3.358842
+      },
+      {
+        "name": "budget",
+        "milliseconds": 18.45819,
+        "elapsedMilliseconds": 18.45819
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4059.659292,
+        "elapsedMilliseconds": 4059.659292
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.705035,
+        "elapsedMilliseconds": 4.705035
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 10.975847,
+        "elapsedMilliseconds": 10.975847
+      },
+      {
+        "name": "save",
+        "milliseconds": 9.041291,
+        "elapsedMilliseconds": 9.041291
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.229526,
+        "elapsedMilliseconds": 0.229526
+      },
+      {
+        "name": "other",
+        "milliseconds": 32.253443999999995,
+        "elapsedMilliseconds": 32.253443999999995
+      }
+    ]
+  }
+}

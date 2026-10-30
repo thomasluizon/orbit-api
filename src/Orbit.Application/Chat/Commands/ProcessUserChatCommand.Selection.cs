@@ -33,6 +33,40 @@ public partial class ProcessUserChatCommandHandler
         }
     }
 
+    private static void RejectUnreadDuplicateTargets(IReadOnlyList<AiToolCall> calls,
+        Dictionary<string, AiToolCall?> resolvedCalls, ToolExecutionAccumulator results,
+        Dictionary<string, ToolCallOutcome> outcomes)
+    {
+        foreach (var call in calls)
+        {
+            if (resolvedCalls[call.Id] is not { } resolved)
+                continue;
+            var ids = DuplicateWriteTargetIds(resolved, results).ToHashSet();
+            var duplicateTargets = results.AllHabits.Where(habit => ids.Contains(habit.Id))
+                .GroupBy(habit => HabitNameMatcher.Normalize(habit.Title)).Where(group => group.Count() > 1);
+            if (!duplicateTargets.Any(group => group.Any(habit => !results.ReadHabitItems.ContainsKey(habit.Id.ToString()))))
+                continue;
+            outcomes[call.Id] = new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
+                "Several targets share a title and have not been read in this turn. Call query_habits to resolve the requested scope. A singular name requires for_selection=true and ask with the returned IDs; do not pass every matching ID to a bulk write. An explicit request for the full set uses for_selection=false without a name search."),
+                null, null, null, null);
+            resolvedCalls[call.Id] = null;
+        }
+    }
+
+    private static IEnumerable<Guid> DuplicateWriteTargetIds(AiToolCall call, ToolExecutionAccumulator results)
+    {
+        if (call.Args.TryGetProperty("revised_items", out var items) && items.ValueKind == JsonValueKind.Array)
+            return items.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object
+                    && item.TryGetProperty("habit_id", out var id) && id.ValueKind == JsonValueKind.String)
+                .Select(item => Guid.TryParse(item.GetProperty("habit_id").GetString(), out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty);
+        if (call.Args.TryGetProperty("habit_ids", out var ids) && ids.ValueKind == JsonValueKind.Array)
+            return ids.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.String)
+                .Select(id => Guid.TryParse(id.GetString(), out var parsed) ? parsed : Guid.Empty)
+                .Where(id => id != Guid.Empty);
+        return BulkNoChangesOutcome.Supports(call.Name) ? EffectiveWriteTargetIds(call, results) : [];
+    }
+
     private static HabitSelectionCandidates? SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results)
     {
         var ids = EffectiveWriteTargetIds(call, results).Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);

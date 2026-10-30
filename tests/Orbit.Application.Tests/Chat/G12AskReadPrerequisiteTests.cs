@@ -20,6 +20,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var args = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
         var input = args["input"]?.AsObject() ?? args;
         input["missing_input"] = reason;
+        if (reason == "habit_setup") input["proposed_habit_title"] = "Morning walk";
         return call with { Args = JsonSerializer.SerializeToElement(args) };
     }
 
@@ -68,7 +69,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         EnableComposition();
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        SetupAiResponse(ToolResponse("ask", "draft", """{"input":{"missing_input":"habit_setup","form":"pickList","title":"Choose drafts","action":"create_habits","items":[{"id":"walk","label":"Walk","arguments":{"title":"Walk","frequency_unit":"Day","frequency_quantity":1}}]}}"""));
+        SetupAiResponse(ToolResponse("ask", "draft", """{"input":{"missing_input":"habit_setup","proposed_habit_title":"Walk","form":"pickList","title":"Choose drafts","action":"create_habits","items":[{"id":"walk","label":"Walk","arguments":{"title":"Walk","frequency_unit":"Day","frequency_quantity":1}}]}}"""));
 
         var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan.",
             ClientContext: new(SupportsParts: true, PartKinds: ["pickList"])), default);

@@ -96,6 +96,9 @@ public partial class ProcessUserChatCommandHandler
             })
             .ToList();
 
+        if (turn.ChoiceSelection is { } selection)
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());
+
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         promptPhase?.Dispose();
 

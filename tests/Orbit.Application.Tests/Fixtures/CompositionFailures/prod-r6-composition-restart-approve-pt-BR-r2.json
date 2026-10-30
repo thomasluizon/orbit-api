@@ -1,0 +1,103 @@
+{
+  "caseId": "composition-restart-approve-pt-BR",
+  "repeat": 2,
+  "reason": "A resposta apresenta uma pergunta de escolha, sem a prévia completa de recomeço exigida, com menos hábitos hoje e os demais distribuídos na próxima semana.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "habit_setup",
+          "question": "Qual hábito você quer alterar, e o que gostaria de mudar nele?",
+          "options": [
+            {
+              "id": "restart-plan",
+              "label": "Plano para recomeçar",
+              "description": null
+            },
+            {
+              "id": "other-change",
+              "label": "Outra alteração",
+              "description": null
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": true
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 4856.917757,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 289.3601975,
+        "elapsedMilliseconds": 297.959657
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 8.5994595,
+        "elapsedMilliseconds": 17.198919
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.023401,
+        "elapsedMilliseconds": 0.023401
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 13.272183,
+        "elapsedMilliseconds": 13.272183
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.994098,
+        "elapsedMilliseconds": 3.994098
+      },
+      {
+        "name": "budget",
+        "milliseconds": 15.113748,
+        "elapsedMilliseconds": 15.113748
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4441.104149,
+        "elapsedMilliseconds": 4441.104149
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.471773,
+        "elapsedMilliseconds": 5.471773
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 11.612693,
+        "elapsedMilliseconds": 11.612693
+      },
+      {
+        "name": "save",
+        "milliseconds": 24.492836,
+        "elapsedMilliseconds": 24.492836
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.156384,
+        "elapsedMilliseconds": 0.156384
+      },
+      {
+        "name": "other",
+        "milliseconds": 43.716834999999996,
+        "elapsedMilliseconds": 43.716834999999996
+      }
+    ]
+  }
+}
