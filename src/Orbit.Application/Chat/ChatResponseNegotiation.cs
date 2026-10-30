@@ -40,7 +40,9 @@ internal static class ChatResponseNegotiation
                 ?? preview.Changes?.Select(change => change.EntityName) ?? [])
             .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal)
             .Select(name => "- " + name.ReplaceLineEndings(" "));
-        var instruction = ErrorCopy.Resolve("chat.answer.pendingPreview", LocaleHelper.IsPortuguese(language));
+        var instruction = ErrorCopy.Resolve(previews.All(preview => preview.CapabilityId == AgentCapabilityIds.ApiKeysRead
+                && preview.ConfirmationRequirement == AgentConfirmationRequirement.StepUp)
+            ? ErrorCodes.ApiKeyCreationChallengeRequired : "chat.answer.pendingPreview", LocaleHelper.IsPortuguese(language));
         return response with { AiMessage = string.Join("\n", new[] { instruction }.Concat(names)), Parts = null };
     }
 

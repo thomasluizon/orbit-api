@@ -1,0 +1,14 @@
+{
+  "caseId": "composition-api-keys-en",
+  "repeat": 1,
+  "answer": "I couldn't prepare an answer. Please try again.",
+  "toolCalls": [
+    {
+      "name": "get_api_keys",
+      "arguments": {
+        "orbit_read_complete": true
+      },
+      "resultStatus": "PendingConfirmation"
+    }
+  ]
+}

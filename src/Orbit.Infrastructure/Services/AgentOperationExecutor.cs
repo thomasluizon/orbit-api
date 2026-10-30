@@ -243,7 +243,7 @@ public partial class AgentOperationExecutor(
 
         var pending = policyDecision.PendingOperation;
         if (pending is not null && execution.Request.Surface == AgentExecutionSurface.Chat
-            && (execution.Operation.IsMutation || execution.Request.IncludeChangePreview))
+            && execution.Operation.IsMutation)
         {
             var attemptedPreview = await PrepareConfirmationPreviewAsync(execution, pending, cancellationToken);
             if (attemptedPreview.IsFailure)
