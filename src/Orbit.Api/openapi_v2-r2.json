@@ -20576,6 +20576,13 @@
                 "$ref": "#/components/schemas/StreakInfoResponse"
               }
             ]
+          },
+          "firstEligibleDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -25999,6 +26006,13 @@
                 "$ref": "#/components/schemas/ReadBlockMetadata"
               }
             ]
+          },
+          "firstEligibleDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -27171,6 +27185,13 @@
                 "$ref": "#/components/schemas/ReadBlockMetadata"
               }
             ]
+          },
+          "firstEligibleDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },

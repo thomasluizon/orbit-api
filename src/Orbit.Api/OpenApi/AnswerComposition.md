@@ -85,12 +85,14 @@ The root remains an object, and optional fields become nullable within their for
 The executor accepts the previous flat arguments for captured and in-flight calls; issued
 blocks and next-turn answers retain their existing client contracts and approval boundaries.
 
-The streak producer supplies aggregate streak and freeze facts, not a daily missed-day
-timeline. Guidance forbids inferring missed days from a current streak or before a habit's
-creation. The consumer's `buildStreakWeekDays` helper currently defaults earlier days to
-`missed`; #1620 and #26 must align that rendering with the available evidence. API prompt
-guidance cannot change a client-derived label, and this contract does not fabricate daily
-history to satisfy it.
+The streak producer supplies aggregate streak and freeze facts. `StreakCard` appends optional
+`firstEligibleDate`, a local ISO date from the earliest creation instant of the account's
+active habits, excluding completed and deleted habits. The typed gamification result carries
+the same optional date into initial composition, refresh, streamed final output and history.
+Both fields are omitted when no active habit exists. Deploy the producer before the paired
+UI ticket consumes this field: `buildStreakWeekDays` must draw preceding days as neutral.
+The API does not infer a daily missed-day timeline from an aggregate streak; client rendering
+owns that interpretation, independently of model instructions.
 
 A validated question form containing one single-choice field becomes a `choice`
 when its options fit the existing choice contract and the client supports it.

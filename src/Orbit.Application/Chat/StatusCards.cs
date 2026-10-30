@@ -29,7 +29,8 @@ public record StreakCard(
     string SurfaceId = "progress",
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StreakAchievementDisc>? AchievementDiscs = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GamificationOverviewPayload? State = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null) : ReadBlockCard;
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Orbit.Domain.Models.ReadBlockMetadata? Read = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? FirstEligibleDate = null) : ReadBlockCard;
 
 public record CalendarCardEvent(string Title, string Start, string? End, bool IsAllDay,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Id = null,
@@ -99,7 +100,7 @@ public static class StatusCardBuilder
                 .Take(6)
                 .Select(item => new StreakAchievement(item.Id, item.IconKey, item.EarnedAtUtc!.Value))
                 .ToList(),
-            AchievementDiscs: discs, State: payload);
+            AchievementDiscs: discs, State: payload, FirstEligibleDate: payload.FirstEligibleDate);
     }
 
     public static CalendarCard? BuildCalendar(CalendarOverviewPayload? payload)
