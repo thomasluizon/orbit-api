@@ -249,6 +249,7 @@ public partial class ProcessUserChatCommandHandler
         {
             correction.OmitReads(executionResults);
             correction = null;
+            hadToolFailure = false;
         }
 
         return new ToolRoundResult(continueResult.Value,

@@ -170,6 +170,7 @@ public partial class ProcessUserChatCommandHandlerTests
         using var capture = GateTenPreviewCapture("ambiguity-pt-r2");
         var calls = BrainDumpCalls(capture);
         var ask = JsonNode.Parse(calls[1].Args.GetRawText())!.AsObject();
+        ask["missing_input"] = "record_selection";
         for (var index = 0; index < habits.Length; index++)
             ask["options"]![index]!["id"] = habits[index].Id.ToString();
         SetupAiResponse(new AiResponse { ToolCalls = [calls[0]], ConversationContext = TestConversationContext });
