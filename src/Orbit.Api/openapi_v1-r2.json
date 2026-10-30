@@ -16870,6 +16870,16 @@
               "null",
               "boolean"
             ]
+          },
+          "previousStartingStep": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StartingStep"
+              }
+            ]
           }
         }
       },
@@ -26767,6 +26777,25 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "StartingStep": {
+        "required": [
+          "goal",
+          "step",
+          "language"
+        ],
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string"
+          },
+          "step": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
           }
         }
       },

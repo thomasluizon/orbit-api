@@ -11,7 +11,7 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
     public string Description =>
         "Suggest sub-habits without creating them. When the person cannot get themselves to do an activity, is stuck starting it, or asks for one concrete first step, call suggest_breakdown with one_small_step=true even if they do not say start. "
         + "Set language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. "
-        + "For a request to make a step smaller, return an easier action requiring less effort than the previous step, keeping the same activity. "
+        + "For a smaller refinement, use structured previousStartingStep as the baseline, keep its goal and return a proper part of its step or its first physical action, taking strictly less time and effort. A paraphrase or a different action of equal or greater effort is not smaller. "
         + "The server returns oneSmallStep with smaller and save actions. Emit no prose or lists alongside it. "
         + "Suggestions never save anything. Only an explicit save request uses create_habit for a Task or update_checklist, "
         + "with item_to_add containing only the step, resolving the owned habit first. The server preserves all stored checklist items. Both require the existing approval preview.";
@@ -21,7 +21,7 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            one_small_step = new { type = JsonSchemaTypes.Boolean, description = "Return exactly one starting step, or a smaller refinement, as a oneSmallStep block. Default false." },
+            one_small_step = new { type = JsonSchemaTypes.Boolean, description = "Return exactly one starting step as a oneSmallStep block. For a refinement, use structured previousStartingStep and return a proper part of its step or its first physical action, taking strictly less time and effort. Default false." },
             language = new { type = JsonSchemaTypes.String, @enum = new[] { "en", "pt-BR" }, description = "Required with one_small_step=true; the person's message language." },
             title = new { type = JsonSchemaTypes.String, description = "The broad habit title to break down" },
             suggested_sub_habits = new
