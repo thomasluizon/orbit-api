@@ -240,6 +240,7 @@ public partial class ProcessUserChatCommandHandler(
                 prepared =>
                 {
                     recording.UserContent = prepared.Message;
+                    recording.ChoiceSelection = prepared.ChoiceSelection;
                     recording.Enabled = !prepared.IsReplay;
                     recording.MessageAllowanceConsumed = prepared.MessageAllowanceConsumed;
                 }, recording.ToolCalls.Add);

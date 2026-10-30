@@ -89,7 +89,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;
         block.Options.Select(option => option.Id).Should().Equal(first.Id.ToString(), second.Id.ToString());
         block.Options.Select(option => option.Description).Should().OnlyContain(detail => detail ==
-            (language == "en" ? "Same details" : "Mesmos dados"));
+            (language == "en" ? "Looks the same" : "Parece igual"));
         await AssertNoCompositionContinuation();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         AssertStoredComposition(result.Value, client, language);
@@ -199,7 +199,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<AstraChoiceBlock>().Which.Options.Should().OnlyContain(option =>
-                option.Description == (language == "en" ? "Same details" : "Mesmos dados"));
+                option.Description == (language == "en" ? "Looks the same" : "Parece igual"));
         round.Should().Be(2);
         AssertStoredComposition(result.Value, client, language);
     }

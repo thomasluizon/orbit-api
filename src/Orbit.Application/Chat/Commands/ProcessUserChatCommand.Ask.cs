@@ -199,7 +199,7 @@ public partial class ProcessUserChatCommandHandler
                 options[Array.IndexOf(options, option)] = option with
                 {
                     Label = label,
-                    Description = distinction?.Invoke(item) ?? (LocaleHelper.IsPortuguese(language) ? "Mesmos dados" : "Same details")
+                    Description = distinction?.Invoke(item) ?? (LocaleHelper.IsPortuguese(language) ? "Parece igual" : "Looks the same")
                 };
             }
         }
