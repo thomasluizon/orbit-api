@@ -9,7 +9,8 @@ namespace Orbit.Infrastructure.Services;
 public class UserDateService(
     IGenericRepository<User> userRepository,
     IDistributedCache cache,
-    TimeProvider timeProvider) : IUserDateService
+    TimeProvider timeProvider,
+    IUnitOfWork unitOfWork) : IUserDateService
 {
     private static readonly DistributedCacheEntryOptions CacheEntryOptions = new()
     {
@@ -51,6 +52,12 @@ public class UserDateService(
 
     private async Task<UserDatePreferences> GetPreferencesAsync(Guid userId, CancellationToken cancellationToken)
     {
+        if (unitOfWork.HasActiveTransaction)
+        {
+            var transactionUser = await userRepository.GetByIdAsync(userId, cancellationToken);
+            return new UserDatePreferences(transactionUser?.TimeZone, transactionUser?.WeekStartDay ?? 1);
+        }
+
         var cacheKey = CacheKey(userId);
         var cached = await cache.GetStringAsync(cacheKey, cancellationToken);
         if (cached is not null)

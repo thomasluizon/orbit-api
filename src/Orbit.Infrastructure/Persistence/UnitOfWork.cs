@@ -53,9 +53,10 @@ public sealed class UnitOfWork(
             return await operation(cancellationToken);
         }
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
-        var transactionToken = timeoutCts.Token;
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
+        using var operationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        var previousCompletionToken = context.TransactionCompletionToken;
+        context.TransactionCompletionToken = timeoutCts.Token;
 
         try
         {
@@ -64,12 +65,16 @@ public sealed class UnitOfWork(
                 context.ChangeTracker.Clear();
                 scheduleSnapshots?.Invalidate();
                 eventCollector?.Clear();
-            }, transactionToken, verifyCommit);
+            }, operationCts.Token, timeoutCts.Token, verifyCommit);
         }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             throw new TimeoutException(
                 $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
+        }
+        finally
+        {
+            context.TransactionCompletionToken = previousCompletionToken;
         }
     }
 
@@ -84,9 +89,11 @@ public sealed class UnitOfWork(
             return;
         }
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
-        var token = timeoutCts.Token;
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
+        using var operationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        var token = operationCts.Token;
+        var previousCompletionToken = context.TransactionCompletionToken;
+        context.TransactionCompletionToken = timeoutCts.Token;
         try
         {
             var strategy = context.Database.CreateExecutionStrategy();
@@ -96,7 +103,7 @@ public sealed class UnitOfWork(
                 try
                 {
                     await operation(token);
-                    await transaction.CommitAsync(token);
+                    await transaction.CommitAsync(timeoutCts.Token);
                 }
                 catch
                 {
@@ -107,10 +114,14 @@ public sealed class UnitOfWork(
                 }
             });
         }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             throw new TimeoutException(
                 $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
+        }
+        finally
+        {
+            context.TransactionCompletionToken = previousCompletionToken;
         }
     }
 
@@ -121,12 +132,15 @@ public sealed class UnitOfWork(
         var transaction = context.Database.CurrentTransaction;
         if (transaction is null)
             return await ExecuteInTransactionAsync(operation, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var completionCts = CancellationTokenSource.CreateLinkedTokenSource(context.TransactionCompletionToken ?? CancellationToken.None);
+        completionCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.CommandTimeoutSeconds));
         var name = $"orbit_{Guid.NewGuid():N}";
-        await transaction.CreateSavepointAsync(name, cancellationToken);
+        await transaction.CreateSavepointAsync(name, completionCts.Token);
         try
         {
             var result = await operation(cancellationToken);
-            await transaction.ReleaseSavepointAsync(name, cancellationToken);
+            await transaction.ReleaseSavepointAsync(name, completionCts.Token);
             return result;
         }
         catch

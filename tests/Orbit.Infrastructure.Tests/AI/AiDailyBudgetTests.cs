@@ -234,7 +234,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         var clock = Substitute.For<TimeProvider>();
         clock.GetUtcNow().Returns(_ => now);
         var localDates = new UserDateService(Substitute.For<IGenericRepository<User>>(),
-            Substitute.For<IDistributedCache>(), clock);
+            Substitute.For<IDistributedCache>(), clock, Substitute.For<IUnitOfWork>());
         fixture.Dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>())
             .Returns(_ => localDates.GetUserTodayAsync(fixture.User.TimeZone, fixture.User.Id));
         var localDate = await fixture.Dates.GetUserTodayAsync(fixture.User.Id);

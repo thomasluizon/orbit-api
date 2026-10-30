@@ -29,6 +29,9 @@ public class OrbitDbContext : DbContext
     /// </summary>
     public bool HasEncryptionService => _encryptionService is not null;
 
+    /// <summary>Keeps database batch cleanup on the server deadline when the caller disconnects.</summary>
+    internal CancellationToken? TransactionCompletionToken { get; set; }
+
     public DbSet<OwedSubscriptionCancellation> OwedSubscriptionCancellations => Set<OwedSubscriptionCancellation>();
     public DbSet<User> Users => Set<User>();
     public DbSet<MarketingContact> MarketingContacts => Set<MarketingContact>();
@@ -999,6 +1002,10 @@ public class OrbitDbContext : DbContext
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Database.CurrentTransaction is not null && TransactionCompletionToken is { } completionToken)
+            cancellationToken = completionToken;
+
         var now = DateTime.UtcNow;
         foreach (var entry in ChangeTracker.Entries<ITimestamped>()
             .Where(e => e.State is EntityState.Modified or EntityState.Added))
