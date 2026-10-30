@@ -8,6 +8,7 @@ using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Common;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
@@ -21,6 +22,8 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupExistingParents(language);
         EnableComposition();
         var features = new FeatureExplanationService();
+        var catalog = new AgentCatalogService([]);
+        _catalogService.GetSurfaces().Returns(catalog.GetSurfaces());
         var tool = new DescribeFeatureTool(features);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
@@ -45,11 +48,14 @@ public partial class ProcessUserChatCommandHandlerTests
         response.IsSuccess.Should().BeTrue(response.Error);
         payload.GetProperty("markdown").GetString().Should().Be(features.Get("schedule-math")!.Body);
         payload.GetProperty("related_surfaces").EnumerateArray().Select(item => item.GetString()).Should().Equal("today");
+        payload.GetProperty("app_surfaces").GetRawText().Should().Be(JsonSerializer.Serialize(catalog.GetSurfaces().Where(surface => surface.Id == "today")));
         payload.TryGetProperty("answer_scope", out var scope).Should().BeTrue("feature help must distinguish documented rules from unsupported editing instructions");
         scope.GetString().Should().Contain("explicitly documented in markdown").And.Contain("not editing instructions")
             .And.Contain("does not cover it").And.Contain("person's language");
-        var declaration = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>())
-            .SelectMany(request => request.ToolDeclarations).Select(value => JsonSerializer.SerializeToElement(value))
+        scope.GetString().Should().Contain("app_surfaces comes from the same catalog as list_app_surfaces_v2")
+            .And.Contain("Never infer a habit edit screen or creation workflow from a related destination.");
+        var modelRequest = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
+        var declaration = modelRequest.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
             .Single(value => value.GetProperty("name").GetString() == tool.Name);
         declaration.GetProperty("description").GetString().Should().Contain(scope.GetString()!);
         response.Value.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(answer));

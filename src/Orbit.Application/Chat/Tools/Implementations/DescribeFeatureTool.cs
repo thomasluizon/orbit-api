@@ -1,12 +1,25 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Orbit.Application.Chat.FeatureExplanations;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
+public sealed record FeatureHelpResult(
+    [property: JsonPropertyName("key")] string Key,
+    [property: JsonPropertyName("display_name")] string DisplayName,
+    [property: JsonPropertyName("related_capabilities")] IReadOnlyList<string> RelatedCapabilities,
+    [property: JsonPropertyName("related_surfaces")] IReadOnlyList<string> RelatedSurfaces,
+    [property: JsonPropertyName("markdown")] string Markdown,
+    [property: JsonPropertyName("answer_scope")] string AnswerScope,
+    [property: JsonPropertyName("app_surfaces"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AppSurface>? AppSurfaces = null);
+
 public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
 {
-    private const string AnswerScope = "Use only mechanics, screens, fields and steps explicitly documented in markdown. "
+    private const string AnswerScope = "Use only mechanics, screens, fields and steps explicitly documented in markdown or app_surfaces. "
         + "related_surfaces lists destinations, not editing instructions. "
+        + "app_surfaces comes from the same catalog as list_app_surfaces_v2; use only its documented destinations and steps. "
+        + "Never infer a habit edit screen or creation workflow from a related destination. "
         + "When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. "
         + "Answer in the person's language.";
 
@@ -41,14 +54,7 @@ public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
         if (explanation is null)
             return Task.FromResult(new ToolResult(false, Error: $"Unknown feature '{featureKey}'."));
 
-        return Task.FromResult(new ToolResult(true, Payload: new
-        {
-            key = explanation.Key,
-            display_name = explanation.DisplayName,
-            related_capabilities = explanation.RelatedCapabilities,
-            related_surfaces = explanation.RelatedSurfaces,
-            markdown = explanation.Body,
-            answer_scope = AnswerScope
-        }));
+        return Task.FromResult(new ToolResult(true, Payload: new FeatureHelpResult(explanation.Key,
+            explanation.DisplayName, explanation.RelatedCapabilities, explanation.RelatedSurfaces, explanation.Body, AnswerScope)));
     }
 }

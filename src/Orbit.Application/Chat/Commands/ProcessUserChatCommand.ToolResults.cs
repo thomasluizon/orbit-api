@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.ChecklistTemplates.Queries;
 using Orbit.Application.Habits.Queries;
@@ -56,7 +57,7 @@ public partial class ProcessUserChatCommandHandler
         return $"{ToolNameToPascalCase(call.Name)} requested via chat";
     }
 
-    private static AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult)
+    private AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult)
     {
         return new AiToolCallResult(
             call.Name,
@@ -67,6 +68,8 @@ public partial class ProcessUserChatCommandHandler
             BuildToolError(operationResult),
             operationResult.Payload switch
             {
+                FeatureHelpResult help => help with
+                { AppSurfaces = ai.CatalogService.GetSurfaces().Where(surface => help.RelatedSurfaces.Contains(surface.Id, StringComparer.Ordinal)).ToArray() },
                 HabitListCard { Selection: { RequiresAnswer: true } selection } => new
                 {
                     selection_required = true,
