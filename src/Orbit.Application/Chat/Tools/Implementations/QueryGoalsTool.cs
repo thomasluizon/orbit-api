@@ -19,7 +19,8 @@ public class QueryGoalsTool(
 
     public string Description =>
         "Read goals and their progress, deadlines and linked habits. Call before answering goal questions; indexes do not ground replies. "
-        + "This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed.";
+        + "This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed. "
+        + "Goal progress is the goal's current value against its target in this result. For a goal-progress request, call query_goals alone with orbit_read_complete=true.";
 
     public object GetParameterSchema() => new
     {

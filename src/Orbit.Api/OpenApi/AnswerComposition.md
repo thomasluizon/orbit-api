@@ -302,8 +302,15 @@ tool, replace the model's answer or add a model round. Public chat DTOs and enum
 The deterministic replay tests verify the tool result supplied to the narrative model and the
 resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
 Text composition preserves complete lines and limits their count; it never slices a word at
-an arbitrary character boundary. Goal-progress guidance belongs to `query_goals`; habit-log
-analytics and month tools explicitly identify that they do not report goal progress.
+an arbitrary character boundary. Goal progress is the goal's current value against its
+target from `query_goals`; a goal-progress request uses that read alone with
+`orbit_read_complete=true`. Habit metrics, analytics, month and profile tools explicitly
+exclude goal progress, and goal IDs cannot be used as habit IDs. Linked habit IDs in the
+goal index support goal and link writes.
+A read denied with `target_not_owned` can use the existing single correction allowance
+to correct that read's owned target or omit it when successful typed reads already answer
+the request. Correction candidates cannot introduce writes or repeat successful reads.
+Other permission denials and failed corrections retain the concise failure status.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without

@@ -10,7 +10,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class GetProfileTool(IMediator mediator) : IAiTool
 {
     public string Name => "get_profile";
-    public string Description => "Read profile, plan, AI preferences and calendar sync. Orbit uses one accent.";
+    public string Description => "Read profile, plan, AI preferences and calendar sync. Orbit uses one accent. "
+        + "Use only for profile, plan or settings requests; this tool reports no goal or habit progress.";
     public bool IsReadOnly => true;
 
     public object GetParameterSchema() => new

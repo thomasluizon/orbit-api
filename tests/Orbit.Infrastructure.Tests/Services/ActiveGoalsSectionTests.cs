@@ -52,6 +52,8 @@ public class ActiveGoalsSectionTests
             result.Should().Contain("Deadline: 2026-12-31");
             result.Should().Contain("Description: \"Race training\"");
             result.Should().Contain("Linked habits: \"Morning run\"");
+            result.Should().Contain("Goal progress is the goal's current value against its target in the query_goals result, not the Progress screen's habit metrics. For a goal-progress request, call query_goals alone with orbit_read_complete=true.");
+            result.Should().Contain("Linked habit IDs are for goal and link writes; they do not require a separate habit-progress read.");
         }
         finally
         {

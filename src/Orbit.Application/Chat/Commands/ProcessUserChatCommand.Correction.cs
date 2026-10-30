@@ -9,12 +9,27 @@ public partial class ProcessUserChatCommandHandler
 {
     internal sealed record CorrectionOccurrence(AiToolCall Call, ToolCallOutcome Outcome);
 
+    private static bool IsOwnershipReadDenial(ToolCallOutcome outcome) =>
+        outcome.OperationResult is { Status: AgentOperationStatus.Denied, Access: "read", PolicyReason: { } reason }
+        && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
+
     private static void OfferCorrections(List<AiToolCallResult> results, IReadOnlyDictionary<string, ToolCallOutcome> outcomes)
     {
         for (var index = 0; index < results.Count; index++)
-            if (outcomes.TryGetValue(results[index].Id, out var outcome)
-                && outcome.PreparedResponse is RejectedBeforeDispatchResponse { Operation.Status: AgentOperationStatus.Failed })
-                results[index] = results[index] with { Payload = new { correction_allowed = true } };
+            if (outcomes.TryGetValue(results[index].Id, out var outcome))
+            {
+                if (IsOwnershipReadDenial(outcome))
+                    results[index] = results[index] with
+                    {
+                        Payload = new
+                        {
+                            correction_allowed = true,
+                            instruction = "Correct only this read once using an owned ID from the appropriate account index, or omit it if successful reads already answer the request. Do not add writes or repeat successful reads."
+                        }
+                    };
+                else if (outcome.PreparedResponse is RejectedBeforeDispatchResponse { Operation.Status: AgentOperationStatus.Failed })
+                    results[index] = results[index] with { Payload = new { correction_allowed = true } };
+            }
     }
 
     /// <summary>
@@ -26,13 +41,16 @@ public partial class ProcessUserChatCommandHandler
     private sealed class RejectedCallCorrection(IReadOnlyList<CorrectionOccurrence> occurrences)
     {
         private readonly HashSet<CorrectionOccurrence> _unresolved = occurrences
-            .Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed).ToHashSet();
+            .Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed || IsOwnershipReadDenial(item.Outcome)).ToHashSet();
         private bool _consumed;
 
         public bool HasUnresolvedFailures => _unresolved.Count > 0;
+        public bool IsReadOnly => occurrences.Count > 0 && occurrences.All(item => IsOwnershipReadDenial(item.Outcome));
 
         public static bool CanRecover(IReadOnlyList<CorrectionOccurrence> occurrences) =>
-            occurrences.Count == 1 && IsFailedStartingStep(occurrences[0])
+            occurrences.Any(item => IsOwnershipReadDenial(item.Outcome))
+            ? occurrences.All(item => IsOwnershipReadDenial(item.Outcome))
+            : occurrences.Count == 1 && IsFailedStartingStep(occurrences[0])
             || occurrences.Any(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
             && occurrences.Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
                 .All(item => item.Outcome.PreparedResponse is RejectedBeforeDispatchResponse);
@@ -56,6 +74,19 @@ public partial class ProcessUserChatCommandHandler
         private async Task<IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)>> PrepareBindingsAsync(
             IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, CancellationToken ct)
         {
+            if (IsReadOnly)
+            {
+                var reads = new List<(AiToolCall, CorrectionOccurrence)>();
+                foreach (var candidate in candidates)
+                {
+                    var original = _unresolved.FirstOrDefault(item => item.Call.Name == candidate.Name
+                        && reads.All(bound => bound.Item2 != item));
+                    if (registry.GetTool(candidate.Name)?.IsReadOnly != true || original is null)
+                        return [];
+                    reads.Add((candidate, original));
+                }
+                return reads;
+            }
             if (occurrences.Count == 1 && IsFailedStartingStep(occurrences[0]))
                 return candidates.Count == 1 && IsStartingStepCall(candidates[0])
                     ? [(candidates[0], occurrences[0])] : [];
@@ -86,10 +117,29 @@ public partial class ProcessUserChatCommandHandler
 
         public void Accept(CorrectionOccurrence original, ToolCallOutcome outcome)
         {
-            if (IsFailedStartingStep(original)
+            if (IsReadOnly && outcome.OperationResult?.Status == AgentOperationStatus.Succeeded
+                || IsFailedStartingStep(original)
                     && outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: StartingStep }
                 || outcome.PreparedResponse?.Operation.Status is AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation)
                 _unresolved.Remove(original);
+        }
+
+        public bool CanOmitReads(ToolExecutionAccumulator results)
+        {
+            var remaining = results.OperationResults.Where(operation => _unresolved.All(item => item.Outcome.OperationResult != operation)).ToArray();
+            return IsReadOnly && remaining.Length > 0
+                && remaining.All(operation => operation is { Status: AgentOperationStatus.Succeeded, ReadBlock: not null });
+        }
+
+        public void OmitReads(ToolExecutionAccumulator results)
+        {
+            foreach (var original in _unresolved)
+            {
+                if (original.Outcome.OperationResult is { } operation) results.OperationResults.Remove(operation);
+                if (original.Outcome.PolicyDenial is { } denial) results.PolicyDenials.Remove(denial);
+                results.ToolResults.Remove(original.Outcome.ToolResult);
+            }
+            _unresolved.Clear();
         }
     }
 
@@ -112,8 +162,10 @@ public partial class ProcessUserChatCommandHandler
                 results.ActionResults.Remove(action);
             if (original.Outcome.OperationResult is { } operation)
                 results.OperationResults.Remove(operation);
+            if (correction.IsReadOnly && original.Outcome.PolicyDenial is { } denial)
+                results.PolicyDenials.Remove(denial);
             results.ToolResults.Remove(original.Outcome.ToolResult);
-            if (outcome.ToolResult.Success)
+            if (outcome.ToolResult.Success && !correction.IsReadOnly)
             {
                 results.PreviousWriteCalls.Add(corrected);
                 results.PreviewedCalls.Add(AgentOperationFingerprint.Compute(corrected.Name, corrected.Args.GetRawText()));

@@ -732,7 +732,8 @@ public sealed class ReadBlockScopeTests
         card.State.Streak.Should().NotBeNull();
     }
 
-    internal static AgentOperationExecutor CreateExecutor(IAiTool tool, ReadBlockFactory blocks)
+    internal static AgentOperationExecutor CreateExecutor(IAiTool tool, ReadBlockFactory blocks,
+        IAgentTargetOwnershipService? ownership = null)
     {
         var catalog = new AgentCatalogService([tool]);
         var bridge = Substitute.For<IAgentStepUpAuthorizationBridge>();
@@ -745,8 +746,11 @@ public sealed class ReadBlockScopeTests
             return new AgentPolicyDecision(context.AuthMethod == AgentAuthMethod.ApiKey && !context.GrantedScopes.Contains(capability.Scope)
                 ? AgentPolicyDecisionStatus.Denied : AgentPolicyDecisionStatus.Allowed, capability);
         });
-        var ownership = Substitute.For<IAgentTargetOwnershipService>();
-        ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        if (ownership is null)
+        {
+            ownership = Substitute.For<IAgentTargetOwnershipService>();
+            ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        }
         return new(catalog, policy, Substitute.For<IAgentAuditService>(), ownership, bridge, new([tool]),
             Substitute.For<IPendingOperationChangePreviewer>(), Substitute.For<IPendingAgentOperationStore>(),
             Substitute.For<IUnitOfWork>(), NullLogger<AgentOperationExecutor>.Instance, blocks);
