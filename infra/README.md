@@ -37,14 +37,17 @@ feature-help corrections apply independently of `astra_block_first`. #26 owns th
 
 Verify legacy clients and clients without an ask kind have no `ask` declaration. JWT clients
 with an ask kind retain it unless `astra_ask_blocks_disabled` or `astra_parts_disabled` applies.
-Ask declarations require form-specific content inside `input`; captured flat calls remain
-readable by the executor. No model or quota setting controls this negotiation.
+Ask declarations require form-specific content and `missing_input` inside `input`;
+flat calls use the same required reason. Record selection requires a successful
+current-turn habit read; setup, preferences and check-ins can ask without that read.
+No model or quota setting controls this negotiation.
 
 The streak response appends optional `firstEligibleDate` in the account's time zone. Deploy
 the API before the separate UI change uses that date to draw earlier days as neutral. Check
 the local date across midnight and omission for an account without active habits. Frequency
-help returns the existing Today editing steps directly, and text composition retains whole
-lines while limiting their count.
+help returns the existing Today editing steps directly. Parts composition asks for one
+to three complete sentences on separate lines, at most 180 characters per line. The
+server retains complete lines without slicing words or sentences to meet that bound.
 
 Monitor `astra_answer_composed` family, leading kind, external-text count, fallback reason,
 build failures and duplicate suppression, plus `astra_composition_follow_ups` counts and
