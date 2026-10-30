@@ -187,9 +187,11 @@ public sealed class AskTool(
     private static JsonObject Variant(JsonObject fields, string discriminator, string value,
         string[] required, string[] optional)
     {
+        var marker = fields[discriminator]!.DeepClone();
+        marker["enum"] = new JsonArray(value);
         var properties = new JsonObject
         {
-            [discriminator] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(value) }
+            [discriminator] = marker
         };
         foreach (var name in required.Concat(optional))
         {

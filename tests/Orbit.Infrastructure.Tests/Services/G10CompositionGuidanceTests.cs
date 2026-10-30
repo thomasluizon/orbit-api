@@ -14,7 +14,7 @@ public class G10CompositionGuidanceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void StructuredReadGuidanceCoversRemindersCoachingMetricsChoicesAndHistory(bool composition)
+    public void StructuredReadGuidanceCoversReadsAndLeavesFormSelectionToTheTool(bool composition)
     {
         var builder = new SystemPromptBuilder();
         var request = new PromptBuildRequest([], UserToday: new DateOnly(2026, 10, 30), BlockFirstComposition: composition);
@@ -25,8 +25,8 @@ public class G10CompositionGuidanceTests
         prompt.Should().Contain("Every option presented as an existing account record must come from the account index or a successful read; never invent an alternative record.");
         prompt.Should().Contain("For a named habit's completion rate or completion total, resolve its ID with query_habits and orbit_read_complete=false, then call get_habit_metrics.");
         prompt.Should().Contain("include_metrics on query_habits does not replace get_habit_metrics for a completion question.");
-        prompt.Should().Contain("A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change.");
-        prompt.Should().Contain("A current streak total does not establish historical missed days. Never label days before a habit's creation as not logged or missed, or infer those states from a current streak alone.");
+        prompt.Should().NotContain(AskTool.SingleSelectionInstruction);
+        prompt.Should().NotContain("A current streak total does not establish historical missed days.");
     }
 
     [Fact]

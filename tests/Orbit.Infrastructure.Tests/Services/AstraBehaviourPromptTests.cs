@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Services;
 
@@ -138,7 +139,7 @@ public class AstraBehaviourPromptTests
         prompt.Should().Contain("When more than one existing record matches and the intended target is unclear");
         prompt.Should().Contain("prepare no write or preview until the person answers");
         prompt.Should().Contain("Use ask with form choice for existing-record selection");
-        prompt.Should().Contain("A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.");
+        prompt.Should().NotContain(AskTool.DuplicateTargetsInstruction);
         prompt.Should().NotContain("Ambiguous matches are choices inside the preview");
         prompt.Should().NotContain("Resolve all choices in the preview");
         prompt.Should().NotContain("ask one short question only when no usable preview can be proposed");
