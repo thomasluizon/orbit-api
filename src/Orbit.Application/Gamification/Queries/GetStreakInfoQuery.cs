@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
@@ -29,13 +30,15 @@ public record StreakInfoResponse(
     DateOnly? LastFreezeCoveredDate = null,
     int? FreezeBankRemaining = null,
     string? LastFreezeCoveredOrigin = null,
-    IReadOnlyList<DateOnly>? RepairableGapDates = null);
+    IReadOnlyList<DateOnly>? RepairableGapDates = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? FirstEligibleDate = null);
 
 public record GetStreakInfoQuery(Guid UserId, DateOnly? AsOf = null) : IRequest<Result<StreakInfoResponse>>, IConcurrencyRetryable;
 
 public class GetStreakInfoQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
+    IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
     IUserStreakService userStreakService,
     IFeatureFlagService featureFlagService,
@@ -122,6 +125,8 @@ public class GetStreakInfoQueryHandler(
             ? user.StreakFreezesAccumulated
             : null;
 
+        var firstEligibleDate = await GetFirstEligibleDateAsync(request.UserId, cancellationToken);
+
         return Result.Success(new StreakInfoResponse(
             currentStreak,
             longestStreak,
@@ -142,8 +147,22 @@ public class GetStreakInfoQueryHandler(
             lastFreezeCoveredDate,
             freezeBankRemaining,
             lastFreeze?.Origin?.ToString().ToLowerInvariant(),
-            repairableGapDates));
+            repairableGapDates,
+            firstEligibleDate));
     }
+    private async Task<DateOnly?> GetFirstEligibleDateAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var firstCreatedAtUtc = await habitRepository.ProjectAsync(
+            habit => habit.UserId == userId && !habit.IsDeleted && !habit.IsCompleted,
+            query => query.OrderBy(habit => habit.CreatedAtUtc).Select(habit => habit.CreatedAtUtc).Take(1),
+            cancellationToken);
+        if (firstCreatedAtUtc.Count == 0)
+            return null;
+
+        var zone = await userDateService.GetUserTimeZoneAsync(userId, cancellationToken);
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(firstCreatedAtUtc[0], zone));
+    }
+
     private Task<Orbit.Domain.Models.UserStreakState?> CalculateStreakAsync(GetStreakInfoQuery request, CancellationToken ct) =>
         request.AsOf is { } asOf
             ? userStreakService.CalculateAtAsync(request.UserId, asOf, ct)

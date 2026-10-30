@@ -58,6 +58,16 @@ present streak. The card adds no mandatory level, XP or streak summary figures.
 The full returned collections are preserved without a six-achievement display cap.
 The existing `streak` card also retains its complete original payload in `state`.
 
+`StreakInfoResponse` appends optional nullable `firstEligibleDate`: the earliest
+creation instant among the account's habits that are neither deleted nor completed,
+converted to the account's timezone and returned as a local calendar date. No active
+habits means the field is omitted. The streak info read and both streak repair
+responses use the same query. The overview payload and existing `streak` card keep
+their own `firstEligibleDate` fields with that same value. This date uses current
+active habits even when the streak read supplies a historical `as_of`; it does not
+claim a historical habit snapshot. Deploy this producer before the streak info
+consumer in thomasluizon/orbit-tickets#1900. Tracks thomasluizon/orbit-tickets#1617.
+
 ## Scope and refresh
 
 `read.scope` contains the resolved original arguments, including each supplied

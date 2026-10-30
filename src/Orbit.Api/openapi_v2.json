@@ -27183,6 +27183,13 @@
               "type": "string",
               "format": "date"
             }
+          },
+          "firstEligibleDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
