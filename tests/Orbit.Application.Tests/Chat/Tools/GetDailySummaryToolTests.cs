@@ -26,6 +26,17 @@ public class GetDailySummaryToolTests
     }
 
     [Fact]
+    public void Description_OffersTheNarrativeForTodaysNextPendingStep()
+    {
+        _tool.Description.Should().Contain("today's next pending step")
+            .And.Contain("For what to do next today, pass relative_period: today and generate_narrative: true")
+            .And.NotContain("Use only when");
+        var schema = JsonSerializer.SerializeToElement(_tool.GetParameterSchema());
+        schema.GetProperty("properties").GetProperty("generate_narrative").GetProperty("description")
+            .GetString().Should().Contain("true for a next-step recommendation today");
+    }
+
+    [Fact]
     public async Task Success_ReturnsPayload()
     {
         var response = new DailySummaryResponse("You completed 3 of 4 habits today.", "Log your evening walk next.", FromCache: false);
