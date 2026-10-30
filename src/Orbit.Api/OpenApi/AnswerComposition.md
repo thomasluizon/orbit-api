@@ -125,7 +125,7 @@ the unresolved targets; the server does not derive intent from message patterns.
 | Proactive chat turns | Corresponding read block or short no-data nudge | #1620 |
 | Empty, partial and stale | Relevant block retains completeness and supported recovery | #1619, #1620 |
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
-| Help, coaching and small talk | One to three lines, at most 180 characters each, no headings or unsolicited bullets | #1620 |
+| Help, coaching and small talk | One to three complete lines, no headings or unsolicited bullets | #1620 |
 
 Moderation replies and localized chat errors use an explicit `clientContext.locale`,
 otherwise the account's profile language. `Accept-Language` does not become a client locale
@@ -290,14 +290,20 @@ require approval and never claim that a write has executed.
 `describe_feature` returns its existing markdown and metadata with an append-only model-facing
 `answer_scope` instruction, also present in the tool description. Its narrative tool result
 also includes `app_surfaces` for the related destination IDs, sourced from the same catalog
-as `list_app_surfaces_v2`. This supplies actual navigation steps without another model call
-or a second catalog. Only documented mechanics, screens, fields and steps support an explanation.
+as `list_app_surfaces_v2`. The tool itself resolves those surfaces through `IAppSurfaceCatalog`,
+which shares the agent catalog's surface builder without depending on its tool registry.
+Frequency and schedule explanations document the existing Today, habit-details and Edit habit
+controls. This supplies actual navigation steps without another model call or a second catalog.
+Only documented mechanics, screens, fields and steps support an explanation.
 `related_surfaces` identifies navigation
 destinations and does not document editing instructions. A missing detail calls for a brief
 acknowledgment in the person's language. This does not fabricate a UI route, execute another
 tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
 The deterministic replay tests verify the tool result supplied to the narrative model and the
 resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
+Text composition preserves complete lines and limits their count; it never slices a word at
+an arbitrary character boundary. Goal-progress guidance belongs to `query_goals`; habit-log
+analytics and month tools explicitly identify that they do not report goal progress.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without
@@ -1077,7 +1083,7 @@ is introduced; the API-key text already belongs to the localization catalog.
 | Suggestion description addition | Keep the person's requested topics in instruction; never put those topics in excluded_activities for ordinary suggestions. | Mantenha os temas pedidos pela pessoa em instruction; nunca coloque esses temas em excluded_activities para sugestões comuns. |
 | Suggestion exclusion schema | Activities already planned for the combined preview. Return new activities outside this list and the account's existing habits, including synonyms; never offer those activities as adjustments. For ordinary suggestions, omit this field or use null; requested topics are not exclusions. | Atividades já planejadas para a prévia conjunta. Retorne atividades novas fora desta lista e dos hábitos existentes da conta, incluindo sinônimos; nunca ofereça essas atividades como ajustes. Para sugestões comuns, omita este campo ou use null; os temas pedidos não são exclusões. |
 | Existing API-key verification fallback, reused | Confirm the emailed code before managing API keys. | Confirme o código enviado por e-mail antes de gerenciar chaves de API. |
-| Today catalog steps, forwarded verbatim | Open Today. Review scheduled habits and overdue items. Log, skip, or inspect the day's tasks. | Abra Hoje. Confira os hábitos agendados e os itens atrasados. Registre, pule ou consulte as tarefas do dia. |
+| Today catalog read steps, forwarded verbatim | Open Today. Review scheduled habits and overdue items. Log, skip, or inspect the day's tasks. | Abra Hoje. Confira os hábitos agendados e os itens atrasados. Registre, pule ou consulte as tarefas do dia. |
 | Today catalog notes, forwarded verbatim | Uses timezone-aware dates from the backend. General habits can be hidden locally on some clients. | Usa datas calculadas pelo servidor com o fuso horário da pessoa. Alguns clientes permitem ocultar hábitos gerais localmente. |
 | Notifications catalog steps, forwarded verbatim | Open Notifications. Mark items read or manage subscriptions. Delete individual items only after confirmation. | Abra Notificações. Marque itens como lidos ou gerencie assinaturas de notificações. Exclua itens individuais somente após confirmação. |
 | Notifications catalog notes, forwarded verbatim | Push subscription cryptographic material is never AI-readable. Deletion requires confirmation. | O material criptográfico das assinaturas de notificações push nunca é legível pela IA. A exclusão exige confirmação. |
@@ -1085,3 +1091,26 @@ is introduced; the API-key text already belongs to the localization catalog.
 | Gamification catalog notes, forwarded verbatim | Freeze activation is a mutation. Level and XP are derived state. | Ativar uma proteção de sequência é uma alteração. Nível e XP são dados calculados. |
 | Subscriptions catalog steps, forwarded verbatim | Read plan and billing state. Open checkout or portal only after explicit confirmation and step-up authorization. | Consulte o plano e a situação de cobrança. Abra o pagamento ou o portal somente após confirmação explícita e verificação adicional. |
 | Subscriptions catalog notes, forwarded verbatim | Billing mutations require step-up authorization. Internal Stripe identifiers are never exposed to AI. | Alterações de cobrança exigem verificação adicional. Identificadores internos do Stripe nunca são expostos à IA. |
+
+
+## Production rerun copy review
+
+The runtime tool guidance remains English in both locales. The pt-BR guidance below is
+for coordinator copy approval. Achievement translations retain the approved app catalog.
+The existing single-selection and duplicate-target guidance above moved to `AskTool`.
+The former unsupported-client ask prohibition and streak-strip prompt were removed; declared
+capabilities and the optional eligibility date carry those constraints structurally.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| Ask input instruction | Put the selected form and its fields inside input. | Coloque a forma selecionada e seus campos dentro de input. |
+| Goal progress guidance | This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed. | Este resultado responde completamente a um pedido sobre o progresso de metas; não é necessário consultar análises nem o calendário de hábitos. |
+| Habit analytics and month guidance | This tool reads habit logs and does not report goal progress; use query_goals for goal progress. | Esta ferramenta consulta registros de hábitos e não informa o progresso de metas; use query_goals para consultar o progresso de metas. |
+| getting_momentum name | Gaining momentum | Ganhando ritmo |
+| legendary description | Complete 1,000 habits total | Complete 1.000 hábitos no total |
+| Frequency and schedule help heading | Where to set it | Onde configurar |
+| Frequency help navigation | Open Today, open the habit's details and choose Edit habit. In Frequency, choose the repeat interval or flexible target, then set the number and unit. Adjust the habit's date, weekdays or end date in the same form, then save. | Abra Hoje, abra os detalhes do hábito e escolha Editar hábito. Em Frequência, escolha o intervalo de repetição ou a meta flexível e defina o número e a unidade. Ajuste a data do hábito, os dias da semana ou a data final no mesmo formulário e salve. |
+| Schedule help navigation | Open Today, open the habit's details and choose Edit habit. Use Frequency to choose the repeat interval or a flexible target, and adjust the habit's date, weekdays and end date in the same form. The due date anchors the recurrence; an end date and weekday restrictions limit which dates are scheduled. | Abra Hoje, abra os detalhes do hábito e escolha Editar hábito. Use Frequência para escolher o intervalo de repetição ou uma meta flexível e ajuste a data do hábito, os dias da semana e a data final no mesmo formulário. A data prevista serve de referência para a recorrência; a data final e os dias da semana escolhidos limitam as datas agendadas. |
+| Today catalog edit step | Open a habit's details and choose Edit habit. | Abra os detalhes de um hábito e escolha Editar hábito. |
+| Today catalog frequency step | In Frequency, choose the repeat interval or flexible target, then set the number and unit. | Em Frequência, escolha o intervalo de repetição ou a meta flexível e defina o número e a unidade. |
+| Today catalog schedule step | Adjust the habit's date, weekdays or end date in the same form, then save. | Ajuste a data do hábito, os dias da semana ou a data final no mesmo formulário e salve. |

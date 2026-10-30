@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Orbit.Application.Chat.FeatureExplanations;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
@@ -14,7 +15,7 @@ public sealed record FeatureHelpResult(
     [property: JsonPropertyName("answer_scope")] string AnswerScope,
     [property: JsonPropertyName("app_surfaces"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<AppSurface>? AppSurfaces = null);
 
-public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
+public class DescribeFeatureTool(IFeatureExplanationService features, IAppSurfaceCatalog surfaces) : IAiTool
 {
     private const string AnswerScope = "Use only mechanics, screens, fields and steps explicitly documented in markdown or app_surfaces. "
         + "related_surfaces lists destinations, not editing instructions. "
@@ -55,6 +56,7 @@ public class DescribeFeatureTool(IFeatureExplanationService features) : IAiTool
             return Task.FromResult(new ToolResult(false, Error: $"Unknown feature '{featureKey}'."));
 
         return Task.FromResult(new ToolResult(true, Payload: new FeatureHelpResult(explanation.Key,
-            explanation.DisplayName, explanation.RelatedCapabilities, explanation.RelatedSurfaces, explanation.Body, AnswerScope)));
+            explanation.DisplayName, explanation.RelatedCapabilities, explanation.RelatedSurfaces, explanation.Body, AnswerScope,
+            surfaces.GetSurfaces().Where(surface => explanation.RelatedSurfaces.Contains(surface.Id, StringComparer.Ordinal)).ToArray())));
     }
 }

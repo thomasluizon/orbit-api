@@ -404,7 +404,6 @@ public partial class ProcessUserChatCommandHandler
             .Where(line => !line.StartsWith('#'))
             .Select(line => steps ? line : Regex.Replace(line, @"^(?:[-*•]|\d+[.)])\s*", string.Empty,
                 RegexOptions.None, TimeSpan.FromSeconds(1)))
-            .Select(line => line.Length <= 180 ? line : line[..180].TrimEnd())
             .Take(maxLines));
 
     private static bool Mentions(string message, string pattern) => Regex.IsMatch(message,

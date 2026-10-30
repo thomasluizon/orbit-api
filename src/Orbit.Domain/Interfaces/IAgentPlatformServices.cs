@@ -4,6 +4,11 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Domain.Interfaces;
 
+public interface IAppSurfaceCatalog
+{
+    IReadOnlyList<AppSurface> GetSurfaces();
+}
+
 public interface IAgentCatalogService
 {
     IReadOnlyList<AgentCapability> GetCapabilities();

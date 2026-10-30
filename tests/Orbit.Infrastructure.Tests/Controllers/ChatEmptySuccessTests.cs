@@ -145,7 +145,7 @@ public class ChatEmptySuccessTests
         config.GetAsync(AppConfigKeys.AstraGroundingEnforce, false, Arg.Any<CancellationToken>()).Returns(enforceGrounding);
         var recorder = Substitute.For<IConversationTurnRecorder>();
         var mediator = Substitute.For<IMediator>();
-        IAiTool[] tools = successfulRead ? [new DescribeFeatureTool(new FeatureExplanationService())] : [];
+        IAiTool[] tools = successfulRead ? [new DescribeFeatureTool(new FeatureExplanationService(), new AppSurfaceCatalog())] : [];
         var catalog = new AgentCatalogService(tools);
         var policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call =>

@@ -18,7 +18,8 @@ public class QueryGoalsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read goals and their progress, deadlines and linked habits. Call before answering goal questions; indexes do not ground replies.";
+        "Read goals and their progress, deadlines and linked habits. Call before answering goal questions; indexes do not ground replies. "
+        + "This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed.";
 
     public object GetParameterSchema() => new
     {

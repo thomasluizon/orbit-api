@@ -1,0 +1,20 @@
+{
+  "caseId": "composition-feature-help-en",
+  "repeat": 3,
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"Choose a recurring schedule such as daily, every few days, weekly, monthly, or yearly. You can also limit it to specific weekdays, or set a flexible target of a certain number of c\\nI can explain how the schedule works, but the available instructions do not show where to edit or set it in the app.\"}],\"relatedActions\":[\"Today\"]}",
+  "toolCalls": [
+    {
+      "name": "describe_feature",
+      "arguments": {
+        "feature_key": "frequencies",
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ]
+}
