@@ -25,7 +25,7 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupExistingParents(language);
         EnableComposition();
-        SetupAiResponse(CapturedCompositionPlan("prod-r7-" + capture));
+        SetupAiResponse(CapturedCompositionPlan("prod-r7-" + capture) with { ConversationContext = new() });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = language == "en" ? "Start with one easy action." : "Comece com uma ação fácil." }));
@@ -64,7 +64,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var create = new CreateHabitTool(_userDateService, _mediator);
         var handler = CreateHandler(create, RealAskTool());
         var title = language == "en" ? "Walking habit" : "Hábito de caminhada";
-        SetupAiResponse(ToolResponse(create.Name, "new-draft", JsonSerializer.Serialize(new { title })));
+        SetupAiResponse(ToolResponse(create.Name, "new-draft", JsonSerializer.Serialize(new { title })) with { ConversationContext = new() });
         var rounds = 0;
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -72,7 +72,7 @@ public partial class ProcessUserChatCommandHandlerTests
             {
                 if (rounds++ > 0) return Result.Success(new AiResponse { TextMessage = language == "en" ? "How often?" : "Com que frequência?" });
                 var conversation = invocation.Arg<AiConversationContext>();
-                var declaration = JsonSerializer.SerializeToElement(conversation.ToolDeclarationUpdates.Single());
+                var declaration = JsonSerializer.SerializeToElement(conversation.ToolDeclarationUpdates.Should().ContainSingle().Subject);
                 declaration.GetProperty("name").GetString().Should().Be("ask");
                 var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
                 foreach (var form in forms.EnumerateArray())

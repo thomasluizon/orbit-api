@@ -56,6 +56,8 @@ public partial class ProcessUserChatCommandHandler
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
         if (!result.Success || result.Payload is not AstraBlockDefinition definition)
             return Failed(result.Error ?? "Invalid ask arguments.");
+        if (!results.HasSuccessfulAccountRead && !HasBoundMissingField(call.Args, results))
+            return Failed(AskTool.AccountReadInstruction);
         if (AskMissingInputError(call.Args, definition, results) is { } missingInputError)
             return Failed(missingInputError);
         var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
@@ -100,7 +102,7 @@ public partial class ProcessUserChatCommandHandler
         results.CanRetryAsk = results.AskAttempts < 2 && request.ClientContext.PartKinds?.Any(IsAskKind) == true
             && (results.HasSuccessfulAccountRead || results.MissingHabitDrafts.Count > 0);
         if (!CanAttemptAsk(args, request.ClientContext)) return "The client does not support this block kind.";
-        return !results.HasSuccessfulAccountRead && !HasBoundMissingField(args, results) ? AskTool.AccountReadInstruction : null;
+        return null;
     }
 
     private static void RetireDraftClarification(JsonElement args, ToolExecutionAccumulator results)
@@ -306,7 +308,9 @@ public partial class ProcessUserChatCommandHandler
 
     private static string AskRecoveryInstruction(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
         " A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request."
-        + (!results.HasSuccessfulAccountRead && results.MissingHabitDrafts.Count == 0
+        + (results.AskAttempts == 0 || results.AskAttempts >= 2 || request.ClientContext?.PartKinds?.Any(IsAskKind) != true
+            ? " Ask in plain text instead."
+            : !results.HasSuccessfulAccountRead && results.MissingHabitDrafts.Count == 0
             ? " Continue the original request with the appropriate account read, requested create tool or short advice; ask remains unavailable until its typed prerequisite is met."
             : results.CanRetryAsk
             ? " Retry ask once with valid arguments and a supported form: " + string.Join(", ", request.ClientContext?.PartKinds?.Where(IsAskKind) ?? [])

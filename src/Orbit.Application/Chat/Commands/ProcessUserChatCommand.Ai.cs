@@ -51,13 +51,15 @@ public partial class ProcessUserChatCommandHandler
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
-            habitTargets.Context,
             HabitModelInstructions.TitleLanguage(context.Language),
             TerminalWriteDirective.Instruction,
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
             request.ClientContext?.SupportsPendingOperationPlacement == true
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
+
+        if (habitTargets.HasSharedTargets)
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, habitTargets.Context);
 
         var availableTools = ai.ToolRegistry.GetAll()
             .Where(tool => tool.Name != "ask").ToArray();

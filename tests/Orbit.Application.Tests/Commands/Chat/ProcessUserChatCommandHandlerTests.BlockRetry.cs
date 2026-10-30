@@ -324,8 +324,10 @@ public partial class ProcessUserChatCommandHandlerTests
         var quota = CreateRealPayGate(user);
         var block = RetryChoice();
         var followup = ToolResponse("ask", "followup", ChoiceArguments);
-        SetupAiResponse(followup with { ToolCalls = [AskWithMissingInput(followup.ToolCalls!.Single(), "habit_setup")] });
-        var handler = CreateHandler(quota, RealAskTool());
+        SetupAiResponse(followup with { ToolCalls = [AskSelectionRead(), AskWithMissingInput(followup.ToolCalls!.Single(), "habit_setup")] });
+        SetupSelectionHabits(CreateHabit("Walk"));
+        var query = new Orbit.Application.Chat.Tools.Implementations.QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(quota, RealAskTool(), query);
         var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]),
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"]));
 

@@ -32,7 +32,7 @@ public partial class ProcessUserChatCommandHandlerTests
             new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork));
         var handler = CreateHandler(RealAskTool(), query, write);
         UseProductionReadExecutor(query);
-        var captured = CapturedCompositionPlan($"prod-r7-ambiguity-pt-r{repeat}");
+        var captured = CapturedCompositionPlan($"prod-r7-ambiguity-pt-r{repeat}") with { ConversationContext = new() };
         var ask = captured.ToolCalls!.Single(call => call.Name == "ask");
         var arguments = JsonNode.Parse(ask.Args.GetRawText())!.AsObject();
         for (var index = 0; index < 2; index++) arguments["input"]!["options"]![index]!["id"] = habits[index].Id.ToString();
