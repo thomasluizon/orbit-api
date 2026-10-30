@@ -1,0 +1,210 @@
+{
+  "caseId": "ambiguity-pt",
+  "repeat": 2,
+  "reason": "“Primeira hoje” and “Segunda hoje” imply an unsupported order or schedule for the two identically named habits.",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": "Caminhada",
+        "date": "2026-10-30",
+        "include_overdue": false,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    },
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Qual das caminhadas você quer marcar como feita?",
+          "options": [
+            {
+              "id": "[redacted]",
+              "label": "Caminhada 1",
+              "description": "Primeira ocorrência de hoje"
+            },
+            {
+              "id": "[redacted]",
+              "label": "Caminhada 2",
+              "description": "Segunda ocorrência de hoje"
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": false
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Failed",
+      "result": {
+        "success": false,
+        "error": "ask text is too long: question max 120, option label max 20, option description and item detail max 24 characters. Shorten the text and retry. A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request. Retry ask once with valid arguments and a supported form: choice, pickList, question. choice requires question and options; pickList requires title, action and items; question requires questions.",
+        "payload": null
+      }
+    },
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Qual caminhada marco como feita?",
+          "options": [
+            {
+              "id": "[redacted]",
+              "label": "Caminhada 1",
+              "description": "Primeira hoje"
+            },
+            {
+              "id": "[redacted]",
+              "label": "Caminhada 2",
+              "description": "Segunda hoje"
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": false
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 21109.118436,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 412.78844300000003,
+        "elapsedMilliseconds": 419.958713
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 7.17027,
+        "elapsedMilliseconds": 14.34054
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.052361,
+        "elapsedMilliseconds": 0.052361
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 8.324292,
+        "elapsedMilliseconds": 8.324292
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.496659,
+        "elapsedMilliseconds": 4.496659
+      },
+      {
+        "name": "budget",
+        "milliseconds": 15.210251,
+        "elapsedMilliseconds": 15.210251
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 9068.342003,
+        "elapsedMilliseconds": 9068.342003
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.215932,
+        "elapsedMilliseconds": 4.215932
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 28.571946,
+        "elapsedMilliseconds": 28.571946
+      },
+      {
+        "name": "budget",
+        "milliseconds": 2.837989,
+        "elapsedMilliseconds": 2.837989
+      },
+      {
+        "name": "budget",
+        "milliseconds": 13.553611,
+        "elapsedMilliseconds": 13.553611
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 5202.85363,
+        "elapsedMilliseconds": 5202.85363
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.283584,
+        "elapsedMilliseconds": 4.283584
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 45.691444,
+        "elapsedMilliseconds": 45.691444
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.716415,
+        "elapsedMilliseconds": 4.716415
+      },
+      {
+        "name": "budget",
+        "milliseconds": 18.446199,
+        "elapsedMilliseconds": 18.446199
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 6117.952378,
+        "elapsedMilliseconds": 6117.952378
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.242013,
+        "elapsedMilliseconds": 4.242013
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 55.133773,
+        "elapsedMilliseconds": 55.133773
+      },
+      {
+        "name": "save",
+        "milliseconds": 12.273869,
+        "elapsedMilliseconds": 12.273869
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.529023,
+        "elapsedMilliseconds": 0.529023
+      },
+      {
+        "name": "other",
+        "milliseconds": 77.432351,
+        "elapsedMilliseconds": 77.432351
+      }
+    ]
+  }
+}

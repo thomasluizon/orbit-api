@@ -17,7 +17,7 @@ public sealed class AskTool(
     public const string TargetResolutionInstruction = "A habit identified by id or by an exact unique title is resolved. Different actions on different identified habits are not ambiguous. Ask only for input that is still missing after reading account data. In a compound request, call the independent write tools before ask so their approval preview appears beside the question; withhold only changes that depend on the answer. Never ask the person to choose again between already identified targets. A single pick uses choice even when it has a heading; use question for two or more fields.";
     public const string SingleSelectionInstruction = "A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields.";
     public const string DuplicateTargetsInstruction = "Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.";
-    public const string AccountReadInstruction = "Before a successful account read in this turn, ask accepts only habit_setup for missing input to create new habit drafts. Never use habit_setup for a reminder, an existing record, a preference or a check-in. Other reasons become available after a successful account read. When that read answers the request, return it with orbit_read_complete=true and do not ask.";
+    public const string AccountReadInstruction = "Before a successful account read in this turn, ask accepts only habit_setup with proposed_habit_title naming the concrete new habit draft being completed. Never invent a draft to ask a generic question. Never use habit_setup for a reminder, an existing record, a preference or a check-in. Other reasons become available after a successful account read. When that read answers the request, return it with orbit_read_complete=true and do not ask.";
 
     public string Name => "ask";
     public string Description => "Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. "
@@ -50,6 +50,7 @@ public sealed class AskTool(
                             @enum = new[] { "habit_setup", "preference", "check_in", "record_selection", "bulk_selection" },
                             description = "Identify input only the person can supply: habit_setup, preference, check_in, record_selection for one existing record, or bulk_selection for several existing records. Record and bulk selection require query_habits with for_selection=true earlier in this turn. Resolve an earlier Astra message from history; never ask which message it was."
                         },
+                        proposed_habit_title = new { type = "string", maxLength = 200, pattern = @"\S", description = "Required for habit_setup: the concrete new habit draft whose missing input this question completes. Never invent a draft for an account read, an existing record or advice. Omit for other reasons." },
                         form = new { type = "string", @enum = new[] { "choice", "pickList", "question" }, description = "choice requires a nonempty question and 2 to 4 options; omit items, action, questions and progress. pickList requires nonempty title, action and 1 to 10 items; omit options, questions and progress, and set allowFreeText=false. question requires 1 to 10 questions; omit top-level options, items and action and set multiSelect=false. A single record selection uses choice; reserve question for multiple fields. Use only a supported form." },
                         question = new { type = "string", maxLength = 120, description = "Required nonempty question for choice, at most 120 characters. Use null for other forms." },
                         title = new { type = "string", description = "Required nonempty heading for pickList; optional heading of at most 120 characters for question. Null means absent." },
@@ -170,6 +171,7 @@ public sealed class AskTool(
             var reason = form!["properties"]!["missing_input"]!;
             reason["enum"] = new JsonArray("habit_setup");
             reason["description"] = AccountReadInstruction;
+            form!["required"]!.AsArray().Add("proposed_habit_title");
         }
         return schema;
     }
@@ -195,9 +197,9 @@ public sealed class AskTool(
                 ["input"] = new JsonObject
                 {
                     ["anyOf"] = new JsonArray(
-                        Variant(fields, "form", "choice", ["missing_input", "question", "options"], ["multiSelect", "allowFreeText"]),
-                        Variant(fields, "form", "pickList", ["missing_input", "title", "action", "items"], []),
-                        Variant(fields, "form", "question", ["missing_input", "questions"], ["title", "intro", "progress"]))
+                        Variant(fields, "form", "choice", ["missing_input", "question", "options"], ["multiSelect", "allowFreeText", "proposed_habit_title"]),
+                        Variant(fields, "form", "pickList", ["missing_input", "title", "action", "items"], ["proposed_habit_title"]),
+                        Variant(fields, "form", "question", ["missing_input", "questions"], ["title", "intro", "progress", "proposed_habit_title"]))
                 }
             },
             ["required"] = new JsonArray("input")

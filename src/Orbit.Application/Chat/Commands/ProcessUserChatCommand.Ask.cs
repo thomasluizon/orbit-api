@@ -38,16 +38,12 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private async Task<ToolCallOutcome> ExecuteAskCallAsync(AiToolCall call, ProcessUserChatCommand request,
-        ToolExecutionAccumulator results, CancellationToken ct, bool deferAsk = false)
+        ToolExecutionAccumulator results, CancellationToken ct)
     {
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         call = call with { Args = AskTool.ExecutionArguments(call.Args) };
         results.CanRetryAsk = false;
         PreserveAskRecordSelection(call.Args, request.UserId, results);
-        if (deferAsk)
-            return new ToolCallOutcome(new AiToolCallResult(call.Name, call.Id, false, null, null,
-                "Account reads were still pending after ask. Reassess the original request using their results. Prepare every resolved change with its write tool; ask only for input that remains missing, after all other calls."),
-                null, null, null, null);
         ToolCallOutcome Failed(string error) => new(new AiToolCallResult(call.Name, call.Id, false, null, null,
             error + AskRecoveryInstruction(request, results)), null, null, null, null);
         var flags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
@@ -69,6 +65,8 @@ public partial class ProcessUserChatCommandHandler
             return Failed(result.Error ?? "Invalid ask arguments.");
         if (AskMissingInputError(call.Args, definition, results) is { } missingInputError)
             return Failed(missingInputError);
+        var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
+        definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext, call.Args);
         if (request.ClientContext.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("The client does not support this block kind.");
@@ -85,7 +83,6 @@ public partial class ProcessUserChatCommandHandler
                 definition.Action!, block.ExpiresAtUtc)
         };
         results.AskBlock = new ChatBlockPart(definition.Form, payload);
-        var user = await data.UserRepository.GetByIdAsync(request.UserId, ct);
         AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,
             user?.Plan.ToString() ?? "Free", "astra_block_issued", new Dictionary<string, object>
             {
@@ -119,10 +116,12 @@ public partial class ProcessUserChatCommandHandler
         if (outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, ReadBlock: not null })
             results.HasSuccessfulAccountRead = true;
         if (call.Name == "query_habits" && outcome.OperationResult is
-            { Status: AgentOperationStatus.Succeeded, Payload: HabitListCard })
+            { Status: AgentOperationStatus.Succeeded, Payload: HabitListCard card })
         {
             results.HasSuccessfulAccountRead = true;
             results.HasSuccessfulSelectionRead = true;
+            foreach (var item in card.Items)
+                results.ReadHabitItems[item.Id] = item;
         }
     }
 
@@ -161,18 +160,50 @@ public partial class ProcessUserChatCommandHandler
         results.SelectionCandidates.Add(selection);
     }
 
-    private (List<AiToolCall> Calls, bool DeferAsk) OrderCallsForAsk(IReadOnlyList<AiToolCall> calls, IReadOnlyList<Habit> habits)
+    private List<AiToolCall> OrderCallsForAsk(IReadOnlyList<AiToolCall> calls, IReadOnlyList<Habit> habits)
     {
         var ask = calls.FirstOrDefault(call => call.Name == "ask");
         if (ask is not null) ask = ask with { Args = AskTool.ExecutionArguments(ask.Args) };
-        var defer = ask is not null && calls.SkipWhile(call => call.Id != ask.Id).Skip(1)
-            .Any(call => call.Name != "ask" && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true);
         var ordered = calls.Where(call => call.Name != "ask")
             .Where(call => ask is null || ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true
                 || CanPrepareBesideAsk(call, ask, habits))
             .OrderBy(call => ai.ToolRegistry.GetTool(call.Name)?.Order ?? int.MaxValue).ToList();
         if (ask is not null) ordered.Add(ask);
-        return (ordered.Select(NormalizeExecutionArguments).ToList(), defer);
+        return ordered.Select(NormalizeExecutionArguments).ToList();
+    }
+
+    private static AstraBlockDefinition GroundDuplicateRecordOptions(AstraBlockDefinition definition,
+        ToolExecutionAccumulator results, string? language)
+    {
+        if (definition.Form != AstraBlockKinds.Choice)
+            return definition;
+        var options = definition.Options.ToArray();
+        var records = options.Where(option => results.ReadHabitItems.ContainsKey(option.Id))
+            .GroupBy(option => HabitNameMatcher.Normalize(results.ReadHabitItems[option.Id].Title));
+        foreach (var group in records.Where(group => group.Count() > 1))
+        {
+            var candidates = group.Select(option => results.ReadHabitItems[option.Id]).ToArray();
+            var details = new Func<HabitListCardItem, string?>[]
+            {
+                item => item.ParentTitle,
+                item => item.StartDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                item => item.Emoji,
+                item => item.Tags is { Count: > 0 } tags ? string.Join(", ", tags.Select(tag => tag.Name)) : null
+            };
+            var distinction = details.FirstOrDefault(detail => candidates.All(item => detail(item) is { Length: > 0 and <= 24 })
+                && candidates.Select(detail).Distinct(StringComparer.Ordinal).Count() == candidates.Length);
+            foreach (var option in group)
+            {
+                var item = results.ReadHabitItems[option.Id];
+                var label = item.Title.Length <= 20 ? item.Title : item.Title[..19] + "…";
+                options[Array.IndexOf(options, option)] = option with
+                {
+                    Label = label,
+                    Description = distinction?.Invoke(item) ?? (LocaleHelper.IsPortuguese(language) ? "Mesmos dados" : "Same details")
+                };
+            }
+        }
+        return definition with { Options = options };
     }
 
     private static bool CanPrepareBesideAsk(AiToolCall call, AiToolCall ask, IReadOnlyList<Habit> habits)

@@ -324,12 +324,17 @@ and read the account data named there. Astra does not ask which message or remin
 meant. Every `ask.input` form requires `missing_input`: `habit_setup`, `preference`,
 `check_in`, `record_selection` or `bulk_selection`. Record selection and the log/skip
 pickList actions require a successful `query_habits` result earlier in the current turn,
-including reads completed before ask in the same batch. Use `for_selection=true` for
+including reads completed in the same batch regardless of model-emitted call order. The
+server completes those reads before validating ask against the resulting turn state. Use `for_selection=true` for
 selection lookups; a completed listing read can also supply the records. Indexes,
 history, failed reads and other account tools cannot satisfy this requirement. Missing
 or unknown reasons and unread selections return through failed-ask validation feedback
 so the model can continue the original request. Before a successful typed account read,
-the declared schema permits only `habit_setup` for input needed to create new habit drafts.
+the declared schema permits only `habit_setup` for input needed to create new habit drafts,
+and requires `proposed_habit_title` naming the concrete new draft being completed. Runtime
+validation requires that title for every habit-setup question, including create pick lists;
+it must be nonempty, single-line and at most 200 characters. Generic questions about existing
+habits, advice and reminders cannot omit the draft and use this exception.
 Preferences, check-ins and selections become available after a successful account read;
 the server refreshes the existing ask declaration before the normal continuation. Complete
 reads still finish without continuation or an additional model call. Failed reads, feature
@@ -337,6 +342,13 @@ help, indexes, conversation history and write previews do not unlock those reaso
 validation applies the same prerequisite if a model emits an undeclared reason. Record
 selection retains its narrower habit-read requirement. Selecting records still does not
 approve or execute a write, and habit setup cannot substitute for an account read or check-in.
+Multiple write targets sharing a normalized title require a successful fresh habit read that
+contains all those targets before any preview. A name-search result remains an unanswered
+selection; an explicitly requested full set can use a listing without a name search.
+Duplicate-title choice options keep the returned record IDs and derive labels and details
+from the successful read. Parent, start date, emoji or tags can distinguish the records when
+the returned values fit the option contract. When those facts cannot distinguish them, every
+option says that its details are the same. The server never invents an occurrence order.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without

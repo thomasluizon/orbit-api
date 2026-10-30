@@ -172,7 +172,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Fact]
     public void G13_AskReadGuidanceLimitsTheInitialExceptionToNewHabitDrafts()
     {
-        const string guidance = "Before a successful account read in this turn, ask accepts only habit_setup for missing input to create new habit drafts. Never use habit_setup for a reminder, an existing record, a preference or a check-in. Other reasons become available after a successful account read. When that read answers the request, return it with orbit_read_complete=true and do not ask.";
+        const string guidance = "Before a successful account read in this turn, ask accepts only habit_setup with proposed_habit_title naming the concrete new habit draft being completed. Never invent a draft to ask a generic question. Never use habit_setup for a reminder, an existing record, a preference or a check-in. Other reasons become available after a successful account read. When that read answers the request, return it with orbit_read_complete=true and do not ask.";
         var tool = RealAskTool();
         tool.Description.Should().Contain(guidance);
         var forms = JsonSerializer.SerializeToElement(tool.GetParameterSchema(false)).GetProperty("properties")

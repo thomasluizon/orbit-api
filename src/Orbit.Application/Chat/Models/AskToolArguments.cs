@@ -13,4 +13,6 @@ public sealed record AskToolArguments(
     string? Action = null,
     IReadOnlyList<AstraQuestion>? Questions = null,
     string? Intro = null,
-    AstraQuestionProgress? Progress = null);
+    AstraQuestionProgress? Progress = null,
+    [property: System.Text.Json.Serialization.JsonPropertyName("missing_input")] string? MissingInput = null,
+    [property: System.Text.Json.Serialization.JsonPropertyName("proposed_habit_title")] string? ProposedHabitTitle = null);

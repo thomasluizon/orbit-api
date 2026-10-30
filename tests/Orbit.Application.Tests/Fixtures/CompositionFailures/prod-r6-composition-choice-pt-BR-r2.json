@@ -1,0 +1,117 @@
+{
+  "caseId": "composition-choice-pt-BR",
+  "repeat": 2,
+  "reason": "Block kind outside the expected set: question.",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "question",
+          "missing_input": "habit_setup",
+          "questions": [
+            {
+              "type": "singleChoice",
+              "id": "target",
+              "prompt": "Qual hábito você quer mudar?",
+              "options": [
+                {
+                  "id": "agua",
+                  "label": "Beber água",
+                  "recommended": null
+                },
+                {
+                  "id": "caminhada",
+                  "label": "Caminhada",
+                  "recommended": null
+                }
+              ],
+              "allowFreeText": true
+            },
+            {
+              "type": "yesNo",
+              "id": "change",
+              "prompt": "O que você quer mudar nele?",
+              "allowFreeText": true
+            }
+          ],
+          "title": null,
+          "intro": null,
+          "progress": null
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 4901.191286,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 316.5472275,
+        "elapsedMilliseconds": 324.696241
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 8.1490135,
+        "elapsedMilliseconds": 16.298027
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.047251,
+        "elapsedMilliseconds": 0.047251
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 5.559045,
+        "elapsedMilliseconds": 5.559045
+      },
+      {
+        "name": "budget",
+        "milliseconds": 2.561282,
+        "elapsedMilliseconds": 2.561282
+      },
+      {
+        "name": "budget",
+        "milliseconds": 14.087344,
+        "elapsedMilliseconds": 14.087344
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 4489.623049,
+        "elapsedMilliseconds": 4489.623049
+      },
+      {
+        "name": "budget",
+        "milliseconds": 4.386407,
+        "elapsedMilliseconds": 4.386407
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 18.658225,
+        "elapsedMilliseconds": 18.658225
+      },
+      {
+        "name": "save",
+        "milliseconds": 13.049388,
+        "elapsedMilliseconds": 13.049388
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.123854,
+        "elapsedMilliseconds": 0.123854
+      },
+      {
+        "name": "other",
+        "milliseconds": 28.399200000000004,
+        "elapsedMilliseconds": 28.399200000000004
+      }
+    ]
+  }
+}
