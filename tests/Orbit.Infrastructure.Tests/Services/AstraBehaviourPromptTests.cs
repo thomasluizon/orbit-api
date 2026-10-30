@@ -7,6 +7,23 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AstraBehaviourPromptTests
 {
+    [Fact]
+    public void FeatureHelp_RequiresShortCompleteSentencesOnSeparateLines()
+    {
+        Build(true).Should().Contain("Use the least text needed: one complete sentence per line, at most 180 characters per line.")
+            .And.Contain("Split steps across lines rather than chaining sentences on one line; never cut a word or sentence to fit.");
+        Build(false).Should().Contain("Use bullet points with newlines for readability.")
+            .And.NotContain("at most 180 characters per line");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EarlierAstraMessage_ResolvesReadScopeFromConversationHistory(bool composition)
+    {
+        Build(composition).Should().Contain("A request referring to an earlier Astra message takes its scope from conversation history. Perform the account read that history names; never ask which message, reminder or notification the person means.");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

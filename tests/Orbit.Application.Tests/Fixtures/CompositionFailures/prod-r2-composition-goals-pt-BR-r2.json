@@ -1,0 +1,43 @@
+{
+  "caseId": "composition-goals-pt-BR",
+  "repeat": 2,
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"goalList\",\"block\":{\"title\":\"Suas metas\",\"items\":[{\"title\":\"Hidratação constante\",\"progress\":\"0 / 10 sessões\"}],\"window\":\"30 de out. de 2026\"}},{\"type\":\"text\",\"text\":\"Não consegui concluir isso. Tente novamente.\"}]}",
+  "toolCalls": [
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": null,
+        "include_completed": true,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    },
+    {
+      "name": "get_habit_metrics",
+      "arguments": {
+        "relative_period": null,
+        "period_count": null,
+        "habit_id": "[redacted]",
+        "date_from": null,
+        "date_to": null,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Denied",
+      "result": {
+        "success": false,
+        "error": "Policy denied: target_not_owned:get_habit_metrics:habit",
+        "payload": null
+      }
+    }
+  ]
+}

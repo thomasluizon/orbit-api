@@ -17,7 +17,7 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
-    private const string ChoiceArguments = """{"form":"choice","question":"When?","options":[{"id":"a","label":"Morning"},{"id":"b","label":"Evening"}]}""";
+    private const string ChoiceArguments = """{"missing_input":"preference","form":"choice","question":"When?","options":[{"id":"a","label":"Morning"},{"id":"b","label":"Evening"}]}""";
     private AskTool RealAskTool()
     {
         var planner = new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork);
@@ -68,6 +68,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(new ToolResult(true));
         var options = JsonSerializer.SerializeToElement(new
         {
+            missing_input = "record_selection",
             form = "choice",
             question,
             options = new[] { new { id = "morning", label = first }, new { id = "evening", label = second } }
@@ -75,16 +76,18 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
-            ToolCalls = [new(write.Name, "before", ParseArguments("{}")), new("ask", "question", options),
+            ToolCalls = [AskSelectionRead(), new(write.Name, "before", ParseArguments("{}")), new("ask", "question", options),
                 new(write.Name, "after", ParseArguments("{}"))]
         });
 
-        var result = await CreateHandler(RealAskTool(), write).Handle(new(UserId,
+        SetupSelectionHabits(CreateHabit("Walk"), CreateHabit("Walk"));
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var result = await CreateHandler(RealAskTool(), write, query).Handle(new(UserId,
             language == "pt-BR" ? "Exclua Caminhada" : "Delete Walk",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId != query.Name), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
         var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which.Block

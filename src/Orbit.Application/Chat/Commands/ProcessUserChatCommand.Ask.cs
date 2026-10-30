@@ -67,6 +67,8 @@ public partial class ProcessUserChatCommandHandler
         var result = await tool.ExecuteAsync(call.Args, request.UserId, ct);
         if (!result.Success || result.Payload is not AstraBlockDefinition definition)
             return Failed(result.Error ?? "Invalid ask arguments.");
+        if (AskMissingInputError(call.Args, definition, results) is { } missingInputError)
+            return Failed(missingInputError);
         definition = AskBlockNegotiation.Definition(definition, request.ClientContext, call.Args);
         if (request.ClientContext.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("The client does not support this block kind.");
@@ -99,6 +101,25 @@ public partial class ProcessUserChatCommandHandler
         && form.ValueKind == JsonValueKind.String && client.PartKinds is { } kinds
         && (kinds.Contains(form.GetString()!, StringComparer.Ordinal)
             || form.GetString() == AstraBlockKinds.Question && kinds.Contains(AstraBlockKinds.Choice));
+
+    private static string? AskMissingInputError(JsonElement args, AstraBlockDefinition definition, ToolExecutionAccumulator results)
+    {
+        var missingInput = JsonArgumentParser.GetOptionalString(args, "missing_input");
+        if (missingInput is not ("habit_setup" or "preference" or "check_in" or "record_selection" or "bulk_selection"))
+            return "Set missing_input to habit_setup, preference, check_in, record_selection or bulk_selection to identify input only the person can supply.";
+        var selectsRecords = missingInput is "record_selection" or "bulk_selection"
+            || definition is { Form: AstraBlockKinds.PickList, Action: "log_habits" or "skip_habits" };
+        return selectsRecords && !results.HasSuccessfulSelectionRead
+            ? "Read the account records with query_habits(for_selection=true, orbit_read_complete=false) before asking the person to choose them. Resolve an earlier reminder from conversation history; when its read answers the request, return that result without ask."
+            : null;
+    }
+
+    private static void RecordSuccessfulAskRead(AiToolCall call, ToolCallOutcome outcome, ToolExecutionAccumulator results)
+    {
+        if (call.Name == "query_habits" && outcome.OperationResult is
+            { Status: AgentOperationStatus.Succeeded, Payload: HabitListCard })
+            results.HasSuccessfulSelectionRead = true;
+    }
 
     private sealed record AskSelectionOption(JsonElement Id);
 

@@ -193,7 +193,8 @@ public partial class ProcessUserChatCommandHandler
             : await ExecuteCorrectionsAsync(orderedCalls, correction, request, executionResults, cancellationToken);
         var toolResults = RecordToolRound(aiResponse, orderedCalls, outcomesByCallId, executionResults, correction is not null);
         executionResults.CapturePreviewDiscussionText(aiResponse.TextMessage);
-        var hadToolFailure = outcomesByCallId.Values.Any(outcome => outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation
+        var ownershipReadDenied = outcomesByCallId.Values.Any(IsOwnershipReadDenial);
+        var hadToolFailure = ownershipReadDenied || outcomesByCallId.Values.Any(outcome => outcome.OperationResult is { Status: AgentOperationStatus.Failed } operation
             && operation.ErrorCode != ErrorCodes.HabitLimitReached);
 
         if (correction is not null)
@@ -214,7 +215,7 @@ public partial class ProcessUserChatCommandHandler
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
         }
 
-        if (hadToolFailure && !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration))
+        if (hadToolFailure && (ownershipReadDenied || !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration)))
         {
             if (await TryRecoverFreshCreateAsync(aiResponse, orderedCalls, outcomesByCallId, toolResults,
                 request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
@@ -241,6 +242,14 @@ public partial class ProcessUserChatCommandHandler
                 return new ToolRoundResult(recovery);
             return new ToolRoundResult(aiResponse, ProviderError: new AppError(
                 continueResult.ErrorCode ?? ErrorMessages.AiUnavailable.Code, continueResult.Error));
+        }
+
+        if (correction is { IsReadOnly: true } && !continueResult.Value.HasToolCalls && !continueResult.Value.IsTruncated
+            && correction.CanOmitReads(executionResults))
+        {
+            correction.OmitReads(executionResults);
+            correction = null;
+            hadToolFailure = false;
         }
 
         return new ToolRoundResult(continueResult.Value,
@@ -378,7 +387,7 @@ public partial class ProcessUserChatCommandHandler
                 outcome.OperationResult,
                 outcome.PolicyDenial,
                 outcome.PendingOperation);
-            if (!isCorrection && ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
+            if (!isCorrection && (ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true || IsOwnershipReadDenial(outcome)))
                 executionResults.CorrectionOccurrences.Add(new CorrectionOccurrence(call, outcome));
         }
 
@@ -464,6 +473,7 @@ public partial class ProcessUserChatCommandHandler
         for (var index = 0; index < readOnlyCalls.Count; index++)
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
+            RecordSuccessfulAskRead(readOnlyCalls[index], readOnlyOutcomes[index], executionResults);
             if (readOnlyOutcomes[index].OperationResult is
                 {
                     Status: AgentOperationStatus.Succeeded,

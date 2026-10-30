@@ -86,6 +86,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var captured = AskRerunCalls("compound-update-skip-en-r1")[0];
         var args = JsonNode.Parse(captured.Args.GetRawText())!.AsObject();
         args["question"] = "Which Walk would you like to skip?";
+        args["missing_input"] = "record_selection";
         args["options"] = JsonSerializer.SerializeToNode(walks.Select((walk, index) => new
         {
             id = walk.Id.ToString(),
@@ -96,7 +97,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
-            ToolCalls = askFirst ? [ask, .. writes] : [.. writes, ask]
+            ToolCalls = askFirst ? [AskSelectionRead("Walk"), ask, .. writes] : [AskSelectionRead("Walk"), .. writes, ask]
         });
 
         var result = await handler.Handle(new(UserId, $"Rename Water ({water.Id}) to Drink water and skip Walk today.",

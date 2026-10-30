@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
@@ -51,13 +52,17 @@ public partial class ProcessUserChatCommandHandlerTests
             }
         }
         var replayArguments = JsonSerializer.SerializeToElement(arguments);
-        SetupAiResponse(response with { ToolCalls = [call with { Args = replayArguments }] });
+        SetupAiResponse(response with { ToolCalls = [AskSelectionRead(), AskWithMissingInput(call with { Args = replayArguments }, "bulk_selection")] });
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
                 Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Selection unavailable." }));
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId,
+        SetupSelectionHabits(habits);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(RealAskTool(), query);
+        UseProductionReadExecutor(query);
+        var result = await handler.Handle(new(UserId,
             language == "en" ? "Let me pick which of my habits to complete, without acting yet."
                 : "Deixe eu escolher quais dos meus hábitos concluir, sem agir ainda.",
             ClientContext: new(SupportsParts: true, PartKinds: ["pickList"])), default);
@@ -80,7 +85,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>());
         await _mediator.Received(items.Count + 1).Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>());
         _mediator.ReceivedCalls().Should().OnlyContain(invocation => invocation.GetArguments()[0] is CheckChatCommandQuery);
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 }

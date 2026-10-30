@@ -10,7 +10,9 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Read habit metrics: streaks, completion rate and total completions.";
+        "Read habit metrics: streaks, completion rate and total completions. "
+        + "This tool reads habit logs and does not report goal progress; use query_goals for goal progress. "
+        + "habit_id is a habit ID from the habit index; a goal ID is never a habit_id.";
 
     public object GetParameterSchema() => new
     {

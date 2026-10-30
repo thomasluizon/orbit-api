@@ -32,13 +32,13 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(pt ? "pt-BR" : "en");
         SetupUserAndPayGate(user);
         EnableComposition();
-        var call = GateEightAskCalls(capture)[callIndex];
-        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [call] });
+        var call = AskWithMissingInput(GateEightAskCalls(capture)[callIndex], "record_selection");
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [AskSelectionRead(), call] });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Which habit would you like to change?" }));
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId,
+        var result = await CreateRecordAskHandler().Handle(new(UserId,
             pt ? "Mude meu hábito, mas ainda não escolhi qual." : "Change my habit.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice", "question"])), default);
 
@@ -56,7 +56,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .EnumerateArray().Select(option => option.GetProperty("label").GetString()));
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
@@ -69,29 +69,29 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [GateEightAskCalls(capture)[0]] });
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [AskSelectionRead(), GateEightAskCalls(capture)[0]] });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse
             {
                 ConversationContext = TestConversationContext,
-                ToolCalls = [GateEightAskCalls(retryCapture)[retryIndex]]
+                ToolCalls = [AskWithMissingInput(GateEightAskCalls(retryCapture)[retryIndex], "record_selection")]
             }));
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Change my habit.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice", "question"])), default);
 
         result.IsSuccess.Should().BeTrue();
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(TestConversationContext,
-            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && !results[0].Success
-                && results[0].Error != null && results[0].Error!.Contains(errorPath)
-                && results[0].Error!.Contains("Retry ask once")),
+            Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 2 && results[0].Success && !results[1].Success
+                && results[1].Error != null && results[1].Error!.Contains(errorPath)
+                && results[1].Error!.Contains("Retry ask once")),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Kind.Should().Be("choice");
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
     }
 
     [Fact]
@@ -150,10 +150,10 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse
         {
             ConversationContext = TestConversationContext,
-            ToolCalls = [captured with { Args = JsonSerializer.SerializeToElement(args) }]
+            ToolCalls = [AskSelectionRead(), AskWithMissingInput(captured with { Args = JsonSerializer.SerializeToElement(args) }, "record_selection")]
         });
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Help me plan.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice", "question"])), default);
 
         result.IsSuccess.Should().BeTrue();

@@ -125,7 +125,7 @@ the unresolved targets; the server does not derive intent from message patterns.
 | Proactive chat turns | Corresponding read block or short no-data nudge | #1620 |
 | Empty, partial and stale | Relevant block retains completeness and supported recovery | #1619, #1620 |
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
-| Help, coaching and small talk | One to three complete lines, no headings or unsolicited bullets | #1620 |
+| Help, coaching and small talk | One to three short lines, one complete sentence per line, at most 180 characters per line; no headings or unsolicited bullets | #1620 |
 
 Moderation replies and localized chat errors use an explicit `clientContext.locale`,
 otherwise the account's profile language. `Accept-Language` does not become a client locale
@@ -301,9 +301,31 @@ acknowledgment in the person's language. This does not fabricate a UI route, exe
 tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
 The deterministic replay tests verify the tool result supplied to the narrative model and the
 resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
-Text composition preserves complete lines and limits their count; it never slices a word at
-an arbitrary character boundary. Goal-progress guidance belongs to `query_goals`; habit-log
-analytics and month tools explicitly identify that they do not report goal progress.
+The model must use the least text needed: one to three short lines with one complete
+sentence per line, at most 180 characters per line. Split help steps across lines instead
+of chaining sentences on one line. Text composition preserves complete lines and limits
+their count; it never slices a word or sentence to meet the character bound.
+Goal progress is the goal's current value against its
+target from `query_goals`; a goal-progress request uses that read alone with
+`orbit_read_complete=true`. Habit metrics, analytics, month and profile tools explicitly
+exclude goal progress, and goal IDs cannot be used as habit IDs. Linked habit IDs in the
+goal index support goal and link writes.
+A read denied with `target_not_owned` can use the existing single correction allowance
+to correct that read's owned target or omit it when successful typed reads already answer
+the request. Correction candidates cannot introduce writes or repeat successful reads.
+Other permission denials and failed corrections retain the concise failure status.
+Requests referring to an earlier Astra message take their scope from conversation history
+and read the account data named there. Astra does not ask which message or reminder was
+meant. Every `ask.input` form requires `missing_input`: `habit_setup`, `preference`,
+`check_in`, `record_selection` or `bulk_selection`. Record selection and the log/skip
+pickList actions require a successful `query_habits` result earlier in the current turn,
+including reads completed before ask in the same batch. Use `for_selection=true` for
+selection lookups; a completed listing read can also supply the records. Indexes,
+history, failed reads and other account tools cannot satisfy this requirement. Missing
+or unknown reasons and unread selections return through failed-ask validation feedback
+so the model can continue the original request. Habit setup, preferences, check-ins and
+creation drafts can ask without a prerequisite account read. Selecting records still
+does not approve or execute a write.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without
