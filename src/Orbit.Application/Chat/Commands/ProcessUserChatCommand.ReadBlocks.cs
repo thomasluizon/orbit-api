@@ -202,10 +202,21 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static bool ShouldComposeReadFallbacks(ProcessUserChatCommand request, ChatContext context,
-        ToolExecutionAccumulator results) => results.AskBlock is null && results.OperationResults.Count > 0
+        ToolExecutionAccumulator results) => results.AskBlock is null && results.PendingSelection is null
+        && !HasResolutionQuestion(results) && results.OperationResults.Count > 0
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
         && (request.ClientContext?.SupportsParts != true
             || results.QueryReads.Values.Any(read => !ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)));
+
+    private static async Task StreamReadFallbackAsync(ProcessUserChatCommand request, ChatContext context,
+        ToolExecutionAccumulator results, ResponseCards cards)
+    {
+        if (request.ClientContext?.SupportsParts == true || !cards.ServerComposedText
+            || !ShouldComposeReadFallbacks(request, context, results)
+            || request.StreamSink is not { } sink || string.IsNullOrWhiteSpace(cards.AiMessage)) return;
+        await sink(Orbit.Application.Chat.Models.ChatStreamEvent.Reset());
+        await sink(Orbit.Application.Chat.Models.ChatStreamEvent.Delta(cards.AiMessage));
+    }
 
     private static ResponseCards ComposeUnavailableReads(ResponseCards cards, ProcessUserChatCommand request,
         ChatContext context, ToolExecutionAccumulator results)

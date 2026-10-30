@@ -48,7 +48,7 @@ public partial class ProcessUserChatCommandHandlerTests
         else result.Value.AiMessage.Should().Contain(goal.Title).And.Contain("0/10");
         result.Value.AiMessage.Should().NotContain("[[orbit:").And.NotContain("**");
         AssertStoredComposition(result.Value, client, language);
-        events.Where(item => item.Type == "delta").Should().OnlyContain(item => item.Text == result.Value.AiMessage);
+        events.Where(item => item.Type == "delta").Should().ContainSingle().Which.Text.Should().Be(result.Value.AiMessage);
     }
 
     [Fact]

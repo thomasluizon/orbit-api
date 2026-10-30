@@ -152,6 +152,7 @@ public partial class ProcessUserChatCommandHandler
             AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,
                 context.User?.Plan.ToString(), "astra_composition_follow_ups", new Dictionary<string, object>
                 { ["count"] = followUps?.Count ?? 0 });
+        await StreamReadFallbackAsync(request, context, executionResults, cards);
         return (cards, followUps, groundedReply.Facts);
     }
 
