@@ -12,6 +12,7 @@ public partial class ProcessUserChatCommandHandler
         public DateTime CreatedAtUtc { get; } = DateTime.UtcNow;
         public string? UserContent { get; set; }
         public AstraChoiceSelection? ChoiceSelection { get; set; }
+        public HabitSetupAnswerContext? HabitDraft { get; set; }
         public bool Enabled { get; set; }
         public bool UsedModel { get; set; }
         public bool MessageAllowanceConsumed { get; set; }

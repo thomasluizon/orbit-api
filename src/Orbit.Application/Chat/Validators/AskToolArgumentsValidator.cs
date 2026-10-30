@@ -10,10 +10,6 @@ public sealed class AskToolArgumentsValidator : AbstractValidator<AskToolArgumen
 {
     public AskToolArgumentsValidator()
     {
-        RuleFor(value => value.ProposedHabitTitle).Must(title => !string.IsNullOrWhiteSpace(title)
-            && title.Length <= AppConstants.MaxHabitTitleLength && title.IndexOfAny(['\r', '\n']) < 0)
-            .WithMessage("habit_setup requires proposed_habit_title: the concrete new habit draft being completed, on one line with at most 200 characters. For an existing record or account question, read the account instead.")
-            .When(value => value.MissingInput == "habit_setup");
         RuleFor(value => value).Custom((value, context) =>
         {
             try

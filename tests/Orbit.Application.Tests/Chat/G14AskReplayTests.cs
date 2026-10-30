@@ -39,7 +39,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && !results[0].Success
-                && results[0].Error!.Contains("proposed_habit_title")), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+                && results[0].Error!.Contains("typed missing-field result")), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         AssertStoredComposition(result.Value, client, language);
     }
@@ -130,32 +130,17 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
-    public void G14_InitialAskSchemaRequiresConcreteNewHabitDraft()
+    public void G14_AskSchemaRequiresATypedDraftBeforeAccountRead()
     {
-        var forms = JsonSerializer.SerializeToElement(RealAskTool().GetParameterSchema(false))
-            .GetProperty("properties").GetProperty("input").GetProperty("anyOf");
-        foreach (var form in forms.EnumerateArray())
-        {
-            form.GetProperty("required").EnumerateArray().Select(field => field.GetString()).Should().Contain("proposed_habit_title");
-            form.GetProperty("properties").GetProperty("proposed_habit_title").GetProperty("pattern").GetString().Should().Be(@"\S");
-        }
+        var build = () => RealAskTool().GetParameterSchema(false);
+        build.Should().Throw<InvalidOperationException>();
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData(" ")]
-    [InlineData("Walk\nRun")]
-    public async Task G14_HabitSetupDraftMustHaveAConcreteSingleLineTitle(string? title)
+    [Fact]
+    public void G14_PostReadAskSchemaDoesNotUseAProposedTitleAsProof()
     {
-        var arguments = JsonNode.Parse(ChoiceArguments)!.AsObject();
-        arguments["missing_input"] = "habit_setup";
-        arguments["proposed_habit_title"] = title;
-
-        var result = await RealAskTool().ExecuteAsync(JsonSerializer.SerializeToElement(arguments), UserId, default);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("proposed_habit_title");
+        var schema = JsonSerializer.Serialize(RealAskTool().GetParameterSchema(true));
+        schema.Should().NotContain("proposed_habit_title");
     }
 
     [Theory]

@@ -45,39 +45,40 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("en", "habit_setup")]
     [InlineData("pt-BR", "habit_setup")]
-    public async Task G12_HabitSetupDoesNotRequireAnAccountRead(string language, string reason)
+    public async Task G12_HabitSetupAfterAnAccountReadUsesTheSupportedChoice(string language, string reason)
     {
         SetupExistingParents(language);
         EnableComposition();
         var call = AskWithMissingInput(ToolResponse("ask", "question", ChoiceArguments).ToolCalls!.Single(), reason);
-        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [call] });
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [AskSelectionRead(), call] });
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["choice"], Locale: language);
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan.", ClientContext: client), default);
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Help me plan.", ClientContext: client), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AstraChoiceBlock>();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         AssertStoredComposition(result.Value, client, language);
     }
 
     [Fact]
-    public async Task G12_HabitSetupCreationDraftDoesNotRequireAnAccountRead()
+    public async Task G12_HabitSetupCreationPickListAfterAccountReadPreparesNoWrite()
     {
         SetupUserAndPayGate();
         EnableComposition();
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        SetupAiResponse(ToolResponse("ask", "draft", """{"input":{"missing_input":"habit_setup","proposed_habit_title":"Walk","form":"pickList","title":"Choose drafts","action":"create_habits","items":[{"id":"walk","label":"Walk","arguments":{"title":"Walk","frequency_unit":"Day","frequency_quantity":1}}]}}"""));
+        var ask = ToolResponse("ask", "draft", """{"input":{"missing_input":"habit_setup","form":"pickList","title":"Choose drafts","action":"create_habits","items":[{"id":"walk","label":"Walk","arguments":{"title":"Walk","frequency_unit":"Day","frequency_quantity":1}}]}}""");
+        SetupAiResponse(ask with { ToolCalls = [AskSelectionRead(), ask.ToolCalls!.Single()] });
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Help me plan.",
             ClientContext: new(SupportsParts: true, PartKinds: ["pickList"])), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<AstraPickListBlock>();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         _mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);
     }
 
@@ -198,7 +199,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Is<IReadOnlyList<AiToolCallResult>>(results => results.Count == 1 && !results[0].Success
-                && results[0].Error!.Contains("Read the account records")), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+                && results[0].Error!.Contains("typed missing-field result")), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
         request.History.Should().BeEquivalentTo(history);
         events.Should().NotContain(item => item.Type == "delta");

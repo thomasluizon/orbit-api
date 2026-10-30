@@ -36,7 +36,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             if (rounds == 0)
             {
                 outcome.Success.Should().BeFalse();
-                outcome.Error.Should().Contain("proposed_habit_title");
+                outcome.Error.Should().Contain("typed missing-field result");
             }
             else
                 outcome.Payload.Should().BeOfType<HabitListCard>();

@@ -21,6 +21,7 @@ public partial class AstraBlockAnswerServiceTests
     private readonly IGenericRepository<User> _users = Substitute.For<IGenericRepository<User>>();
     private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
     private readonly IFeatureFlagService _featureFlags = Substitute.For<IFeatureFlagService>();
+    private readonly IPendingClarificationStore _clarifications = Substitute.For<IPendingClarificationStore>();
     private readonly IUserDateService _dates = Substitute.For<IUserDateService>();
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -33,7 +34,7 @@ public partial class AstraBlockAnswerServiceTests
     }
 
     private AstraBlockAnswerService Service => new(_store, _work, _quota, _executor, _users, _analytics, _featureFlags,
-        Substitute.For<IPendingAgentOperationStore>(), _dates);
+        Substitute.For<IPendingAgentOperationStore>(), _dates, clarifications: _clarifications);
     private IssuedAstraBlock Choice(bool multi = false, bool free = false)
     {
         var block = IssuedAstraBlock.Create(UserId, new("choice", "Which time?", [new("a", "Morning"), new("b", "Evening")], [], multi, free));
@@ -42,6 +43,34 @@ public partial class AstraBlockAnswerServiceTests
     }
     private static ProcessUserChatCommand Request(Guid id, string[] ids, string? text = null) => new(UserId, "Selection",
         BlockAnswer: new AstraBlockAnswer(id, ids, text));
+
+    [Theory]
+    [InlineData("missing", ErrorCodes.AstraBlockExpired)]
+    [InlineData("wrong-tool", ErrorCodes.AstraBlockInvalidSelection)]
+    [InlineData("wrong-field", ErrorCodes.AstraBlockInvalidSelection)]
+    [InlineData("malformed", ErrorCodes.AstraBlockInvalidSelection)]
+    [InlineData("non-object", ErrorCodes.AstraBlockInvalidSelection)]
+    public async Task BoundDraft_UnavailableOrInconsistentDraftCannotClaimOrCharge(string variant, string error)
+    {
+        var clarificationId = Guid.NewGuid();
+        var block = IssuedAstraBlock.Create(UserId, new("choice", "How often?",
+            [new("day", "Daily"), new("week", "Weekly")], [],
+            DraftClarification: new("create-call", "frequency_unit", clarificationId)));
+        _store.GetAsync(block.Id, UserId, Arg.Any<CancellationToken>()).Returns(block);
+        if (variant != "missing")
+            _clarifications.GetForResolutionAsync(clarificationId, UserId, Arg.Any<CancellationToken>()).Returns(
+                new PendingClarificationData(variant == "wrong-tool" ? "delete_habit" : "create_habit",
+                    variant == "malformed" ? "{" : variant == "non-object" ? "[]" : "{\"title\":\"Plant habit\"}",
+                    variant == "wrong-field" ? "due_time" : "frequency_unit", [], DateTime.UtcNow.AddMinutes(30)));
+
+        var result = await Service.PrepareAsync(Request(block.Id, ["day"]), default);
+
+        result.ErrorCode.Should().Be(error);
+        await _clarifications.Received(1).GetForResolutionAsync(clarificationId, UserId, Arg.Any<CancellationToken>());
+        await _store.DidNotReceiveWithAnyArgs().MarkAnsweredAsync(default, default, default, default);
+        await _quota.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
+        await _executor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+    }
 
     [Theory]
     [InlineData("en", true, "Today")]

@@ -90,8 +90,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
             var supportsAsk = index % 2 != 0;
-            names.Should().HaveCount(supportsAsk ? 71 : 70).And.Contain("suggest_habits");
-            names.Contains("ask").Should().Be(supportsAsk);
+            names.Should().HaveCount(70).And.Contain("suggest_habits").And.NotContain("ask");
             names.Where(name => name != "ask").Should().Equal(tools.Select(tool => tool.Name)
                 .Where(name => name != "ask").Order(StringComparer.Ordinal));
             var currentPrefix = CacheablePrefix(root);
@@ -110,7 +109,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             root.GetProperty("prompt_cache_key").GetString().Should().Be(user.Id.ToString("N"));
         }
         prefixes.Should().HaveCount(2);
-        prefixes[false].Should().NotBe(prefixes[true]);
+        prefixes[false].Should().Be(prefixes[true]);
     }
 
     [Theory]

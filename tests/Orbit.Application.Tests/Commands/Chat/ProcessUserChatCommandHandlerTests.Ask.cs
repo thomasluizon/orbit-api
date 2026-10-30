@@ -39,17 +39,17 @@ public partial class ProcessUserChatCommandHandlerTests
             TextMessage = text,
             ReportedTokenCount = tokenCount,
             ConversationContext = TestConversationContext,
-            ToolCalls = [new("ask", "ask1", nested ? JsonSerializer.SerializeToElement(new { input = setup }) : setup),
+            ToolCalls = [AskSelectionRead(), new("ask", "ask1", nested ? JsonSerializer.SerializeToElement(new { input = setup }) : setup),
                 new("ask", "ask2", setup)]
         });
-        var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk",
+        var response = await CreateRecordAskHandler().Handle(new(UserId, "Help me plan a walk",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
         response.IsSuccess.Should().BeTrue();
         var block = response.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Subject;
         block.Kind.Should().Be("choice");
         block.Block.Should().BeOfType<AstraChoiceBlock>().Which.Options.Should().HaveCount(2);
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_block_issued", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
     }

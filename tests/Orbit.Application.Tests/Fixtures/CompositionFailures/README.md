@@ -80,3 +80,22 @@ read arguments. Its replay checks account-local eligibility, ignored completed a
 habits, empty eligibility, stream withholding and persisted composition. The feature-help
 fixture retains the original describe_feature call; its narrative replay checks full lines
 from the real explanation and surface catalog rather than repeating the captured truncation.
+
+## Typed draft and shared-title captures
+
+The `prod-r7-` fixtures retain every failing attempt from production API `eb2c4cc2`
+and harness `cc06309d4`: case ID, repeat, reason, rendered answer, tool calls and
+request phase timing. Rendered answers are evidence, never model-authored text.
+The interrupted choice attempt contains no calls; it records one model phase of
+65,660.862266 ms and no per-model output or reasoning token counts.
+
+Replays reject the captured pre-read setup calls even when their proposed title is
+punctuation, and check the absence of ask from the initial model-service request.
+The create-draft replay obtains missing fields from the real CreateHabitTool producer,
+then checks the continuation declaration and rejection of a different draft or field.
+Duplicate-choice replays reuse the captured query and ask, replace only redacted IDs,
+and omit the refused write from the candidate corrected model output. They pin typed
+context and write guidance and retain the separate guard tests for captured writes.
+The smaller-step replay uses the single-contact baseline documented in the work order
+and pins the exact guidance sent beside it. These tests verify contracts and delivery;
+the coordinator's real-model probe establishes tool choice and semantic effort reduction.

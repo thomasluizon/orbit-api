@@ -47,6 +47,7 @@ public partial class ProcessUserChatCommandHandler
             Environment.NewLine,
             ai.PromptBuilder.BuildStatic(promptRequest),
             ai.CatalogService.BuildStaticSupplement());
+        var habitTargets = HabitTargetContext.Build(context.PromptHabits, context.UserHabits);
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildDynamic(promptRequest),
@@ -57,8 +58,11 @@ public partial class ProcessUserChatCommandHandler
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
+        if (habitTargets.HasSharedTargets)
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, habitTargets.Context);
+
         var availableTools = ai.ToolRegistry.GetAll()
-            .Where(tool => tool.Name != "ask" || AskEnabled(request, context)).ToArray();
+            .Where(tool => tool.Name != "ask").ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
         dynamicContext = AddAskContext(dynamicContext, request, context);
@@ -89,15 +93,19 @@ public partial class ProcessUserChatCommandHandler
             .Select(tool => (object)new
             {
                 name = tool.Name,
-                description = tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
-                    ? tool.Description + Environment.NewLine + HabitModelInstructions.Titles
-                    : tool.Description,
+                description = tool.IsReadOnly ? tool.Description : tool.Description
+                    + (habitTargets.HasSharedTargets ? Environment.NewLine + HabitTargetContext.Instruction : string.Empty)
+                    + (tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
+                        ? Environment.NewLine + HabitModelInstructions.Titles : string.Empty),
                 parameters = ChatToolSchema(tool, request, context)
             })
             .ToList();
 
         if (turn.ChoiceSelection is { } selection)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());
+
+        if (turn.HabitDraft is { } draft)
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, draft.ToModelContext());
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         promptPhase?.Dispose();
@@ -129,9 +137,9 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context,
-        bool hasAccountRead = false)
+        bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
     {
-        var schema = tool is AskTool ask ? ask.GetParameterSchema(hasAccountRead) : tool.GetParameterSchema();
+        var schema = tool is AskTool ask ? ask.GetParameterSchema(hasAccountRead, drafts) : tool.GetParameterSchema();
         return tool.IsReadOnly
             ? UsesComposition(request, context)
                 ? tool.Name == "revise_pending_changes"

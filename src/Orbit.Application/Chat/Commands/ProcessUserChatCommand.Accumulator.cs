@@ -50,6 +50,7 @@ public partial class ProcessUserChatCommandHandler
         public bool CanRetryAsk { get; set; }
         public bool HasSuccessfulSelectionRead { get; set; }
         public bool HasSuccessfulAccountRead { get; set; }
+        public Dictionary<string, HabitSetupDraft> MissingHabitDrafts { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, HabitListCardItem> ReadHabitItems { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HabitSelectionCandidates? PendingSelection { get; set; }
         public List<HabitSelectionCandidates> SelectionCandidates { get; } = [];

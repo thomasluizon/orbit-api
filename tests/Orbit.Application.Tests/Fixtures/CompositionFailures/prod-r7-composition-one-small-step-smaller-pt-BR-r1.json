@@ -1,0 +1,97 @@
+{
+  "caseId": "composition-one-small-step-smaller-pt-BR",
+  "repeat": 1,
+  "reason": "“Encostar um dedo na capa fechada” exige esforço equivalente a “Colocar um dedo sobre o material de estudo fechado”. É uma reformulação, não um passo significativamente menor.",
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"oneSmallStep\",\"block\":{\"step\":\"Encostar um dedo na capa fechada\",\"actions\":[\"Menor ainda\",\"Salvar como tarefa\",\"Salvar no checklist\"]}}]}",
+  "toolCalls": [
+    {
+      "name": "suggest_breakdown",
+      "arguments": {
+        "one_small_step": true,
+        "language": "pt-BR",
+        "title": "Estudar",
+        "suggested_sub_habits": [
+          {
+            "title": "Encostar um dedo na capa fechada",
+            "description": null,
+            "frequency_unit": null,
+            "frequency_quantity": null,
+            "days": null
+          }
+        ],
+        "orbit_write_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ],
+  "timing": {
+    "totalMilliseconds": 5290.79989,
+    "phases": [
+      {
+        "name": "moderation",
+        "milliseconds": 133.7669505,
+        "elapsedMilliseconds": 138.935826
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 5.1688755,
+        "elapsedMilliseconds": 10.337751
+      },
+      {
+        "name": "context_load",
+        "milliseconds": 0.031662,
+        "elapsedMilliseconds": 0.031662
+      },
+      {
+        "name": "prompt_build",
+        "milliseconds": 5.553646,
+        "elapsedMilliseconds": 5.553646
+      },
+      {
+        "name": "budget",
+        "milliseconds": 3.285325,
+        "elapsedMilliseconds": 3.285325
+      },
+      {
+        "name": "budget",
+        "milliseconds": 14.764795,
+        "elapsedMilliseconds": 14.764795
+      },
+      {
+        "name": "model_call",
+        "milliseconds": 5068.102556,
+        "elapsedMilliseconds": 5068.102556
+      },
+      {
+        "name": "budget",
+        "milliseconds": 5.152825,
+        "elapsedMilliseconds": 5.152825
+      },
+      {
+        "name": "tool_call",
+        "milliseconds": 12.762459,
+        "elapsedMilliseconds": 12.762459
+      },
+      {
+        "name": "save",
+        "milliseconds": 9.319556,
+        "elapsedMilliseconds": 9.319556
+      },
+      {
+        "name": "composition",
+        "milliseconds": 0.421362,
+        "elapsedMilliseconds": 0.421362
+      },
+      {
+        "name": "other",
+        "milliseconds": 32.469877999999994,
+        "elapsedMilliseconds": 32.469877999999994
+      }
+    ]
+  }
+}

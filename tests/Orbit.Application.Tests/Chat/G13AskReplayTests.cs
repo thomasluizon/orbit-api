@@ -16,9 +16,9 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     private static IEnumerable<string?> DeclaredAskReasons(AiToolRequest request) => request.ToolDeclarations
-        .Select(value => JsonSerializer.SerializeToElement(value)).Single(value => value.GetProperty("name").GetString() == "ask")
-        .GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf")
-        .EnumerateArray().SelectMany(form => form.GetProperty("properties").GetProperty("missing_input")
+        .Select(value => JsonSerializer.SerializeToElement(value)).Where(value => value.GetProperty("name").GetString() == "ask")
+        .SelectMany(value => value.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf")
+        .EnumerateArray()).SelectMany(form => form.GetProperty("properties").GetProperty("missing_input")
             .GetProperty("enum").EnumerateArray().Select(value => value.GetString()));
 
     [Theory]
@@ -54,8 +54,7 @@ public partial class ProcessUserChatCommandHandlerTests
             StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
-        var reason = plan.ToolCalls![0].Args.GetProperty("input").GetProperty("missing_input").GetString();
-        DeclaredAskReasons(request).Should().NotContain(reason).And.OnlyContain(value => value == "habit_setup");
+        DeclaredAskReasons(request).Should().BeEmpty();
         request.History.Should().BeEquivalentTo(history);
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<HabitListCard>();
@@ -172,10 +171,11 @@ public partial class ProcessUserChatCommandHandlerTests
     [Fact]
     public void G13_AskReadGuidanceLimitsTheInitialExceptionToNewHabitDrafts()
     {
-        const string guidance = "Before a successful account read in this turn, ask accepts only habit_setup with proposed_habit_title naming the concrete new habit draft being completed. Never invent a draft to ask a generic question. Never use habit_setup for a reminder, an existing record, a preference or a check-in. Other reasons become available after a successful account read. When that read answers the request, return it with orbit_read_complete=true and do not ask.";
+        const string guidance = "Before a successful typed account read in this turn, ask is unavailable unless a create tool returned a typed missing-field result for a new habit draft. Submit the requested draft to its create tool first, preserving unspecified fields as null; do not invent missing values to avoid that result. Then ask only for the returned missing_field of its draft_call_id. Never create a draft for advice, a reminder, an existing record, a preference or a check-in. Read account records to resolve those requests; when the read answers the request, return it with orbit_read_complete=true and do not ask.";
         var tool = RealAskTool();
         tool.Description.Should().Contain(guidance);
-        var forms = JsonSerializer.SerializeToElement(tool.GetParameterSchema(false)).GetProperty("properties")
+        var forms = JsonSerializer.SerializeToElement(tool.GetParameterSchema(false,
+            [new("draft", "Walk", "frequency_unit", Guid.NewGuid())])).GetProperty("properties")
             .GetProperty("input").GetProperty("anyOf");
         foreach (var form in forms.EnumerateArray())
             form.GetProperty("properties").GetProperty("missing_input").GetProperty("description").GetString().Should().Be(guidance);

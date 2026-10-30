@@ -86,7 +86,11 @@ public sealed partial class AiIntentService(
         foreach (var update in BuildToolCatalog(conversationContext.ToolDeclarationUpdates))
         {
             var existing = options.Tools.OfType<FunctionTool>().SingleOrDefault(tool => tool.FunctionName == update.Key);
-            if (existing is null) continue;
+            if (existing is null)
+            {
+                if (update.Key == "ask") options.Tools.Add(update.Value);
+                continue;
+            }
             var index = options.Tools.IndexOf(existing);
             options.Tools[index] = update.Value;
         }
@@ -313,7 +317,7 @@ public sealed partial class AiIntentService(
         options.StreamingEnabled = false;
         var completion = await client.ResponsesClient.CreateResponseAsync(options, cancellationToken);
         observation.Response = completion.Value;
-        return FinishRound(completion.Value, messages, "buffered");
+        return FinishRound(completion.Value, messages, options, "buffered");
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
@@ -367,7 +371,7 @@ public sealed partial class AiIntentService(
             throw new IOException("AI response stream ended before a terminal event.");
 
         observation.Response = response;
-        var round = FinishRound(response, messages, "streaming");
+        var round = FinishRound(response, messages, options, "streaming");
         if (round.ToolCalls.Count > 0 && contentEmitted)
             await streamSink(AiStreamEvent.Reset());
         return round;
@@ -383,6 +387,7 @@ public sealed partial class AiIntentService(
     private CompletedRound FinishRound(
         ResponseResult response,
         List<ResponseItem> messages,
+        CreateResponseOptions options,
         string phase)
     {
         LogChatUsage(response.Usage, phase);
@@ -394,7 +399,13 @@ public sealed partial class AiIntentService(
 
         var truncated = response.IncompleteStatusDetails?.Reason == ResponseIncompleteStatusReason.MaxOutputTokens;
         if (truncated && logger.IsEnabled(LogLevel.Warning))
-            LogResponseTruncated(logger);
+            LogResponseTruncated(logger, response.Usage?.OutputTokenCount,
+                response.Usage?.OutputTokenDetails?.ReasoningTokenCount, options.MaxOutputTokenCount,
+                options.Model, JsonSerializer.Serialize(response.OutputItems.Select(item => new
+                {
+                    kind = item.Kind.ToString(),
+                    characterLength = ModelReaderWriter.Write(item).ToString().Length
+                })));
 
         var toolCalls = response.OutputItems.OfType<FunctionCallResponseItem>().ToList();
         if (response.Status == ResponseStatus.Incomplete && !truncated && toolCalls.Count > 0)
@@ -576,8 +587,9 @@ public sealed partial class AiIntentService(
     [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "First content token after {ElapsedMs}ms")]
     private static partial void LogFirstContentToken(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); output may be incomplete")]
-    private static partial void LogResponseTruncated(ILogger logger);
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); OutputTokens={OutputTokens} ReasoningTokens={ReasoningTokens} MaxOutputTokens={MaxOutputTokens} Model={Model} OutputItems={OutputItems}")]
+    private static partial void LogResponseTruncated(ILogger logger, int? outputTokens, int? reasoningTokens,
+        int? maxOutputTokens, string model, string outputItems);
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "AI token usage ({Phase}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
     private static partial void LogAiTokenUsage(ILogger logger, string phase, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);

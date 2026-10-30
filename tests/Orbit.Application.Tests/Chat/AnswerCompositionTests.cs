@@ -225,10 +225,10 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse
         {
             TextMessage = "Choose a time.",
-            ToolCalls = [AskWithMissingInput(new("ask", "choice", ParseArguments(ChoiceArguments)), "habit_setup")],
+            ToolCalls = [AskSelectionRead(), AskWithMissingInput(new("ask", "choice", ParseArguments(ChoiceArguments)), "habit_setup")],
             ConversationContext = TestConversationContext
         });
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me choose", ClientContext: new(
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Help me choose", ClientContext: new(
             SupportsParts: true, PartKinds: ["choice"])), default);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("choice");
         result.Value.AiMessage.Should().BeNullOrEmpty();

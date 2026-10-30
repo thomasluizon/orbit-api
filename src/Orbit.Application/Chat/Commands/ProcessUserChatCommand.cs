@@ -241,9 +241,10 @@ public partial class ProcessUserChatCommandHandler(
                 {
                     recording.UserContent = prepared.Message;
                     recording.ChoiceSelection = prepared.ChoiceSelection;
+                    recording.HabitDraft = prepared.HabitDraft;
                     recording.Enabled = !prepared.IsReplay;
                     recording.MessageAllowanceConsumed = prepared.MessageAllowanceConsumed;
-                }, recording.ToolCalls.Add);
+                }, recording.ToolCalls.Add, execution.PendingClarificationStore);
             return await answerService.ExecuteAsync(request, prepared =>
             {
                 if (prepared.ModeratedInput is { } flaggedInput)

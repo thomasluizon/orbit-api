@@ -148,7 +148,7 @@ public class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ContinueWithToolResultsAsync_RefreshesAskSchemaWithoutChangingTheToolSet(bool streaming)
+    public async Task ContinueWithToolResultsAsync_DeclaresDeferredAskAfterTypedRead(bool streaming)
     {
         var tools = StrictChatToolSchemaTests.AllTools();
         var ask = tools.Single(tool => tool.Name == "ask").Should()
@@ -163,7 +163,7 @@ public class AiIntentServiceStreamingTests
         var (service, sink) = BuildService(handler);
         var streamSink = streaming ? sink.Handle : (Func<AiStreamEvent, Task>?)null;
         var first = await service.SendWithToolsAsync(new AiToolRequest("Continue.", "system",
-            [Declaration(false), new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
+            [new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
         first.IsSuccess.Should().BeTrue(first.Error);
         first.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true), new { name = "unadvertised_tool" }];
 
@@ -176,15 +176,15 @@ public class AiIntentServiceStreamingTests
         {
             using var document = JsonDocument.Parse(handler.RequestBodies[index]);
             var declarations = document.RootElement.GetProperty("tools").EnumerateArray().ToArray();
-            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal("ask", "query_habits");
-            var declaration = declarations[0];
+            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal(index == 0 ? ["query_habits"] : new[] { "query_habits", "ask" });
+            if (index == 0) continue;
+            var declaration = declarations[1];
             declaration.GetProperty("strict").GetBoolean().Should().BeTrue();
             StrictChatToolSchemaTests.AssertStrict(declaration.GetProperty("parameters"));
             var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
             foreach (var form in forms.EnumerateArray())
                 form.GetProperty("properties").GetProperty("missing_input").GetProperty("enum").EnumerateArray()
-                    .Select(value => value.GetString()).Should().BeEquivalentTo(index == 0
-                        ? ["habit_setup"] : new[] { "habit_setup", "preference", "check_in", "record_selection", "bulk_selection" });
+                    .Select(value => value.GetString()).Should().BeEquivalentTo("habit_setup", "preference", "check_in", "record_selection", "bulk_selection");
         }
     }
 
@@ -524,6 +524,44 @@ public class AiIntentServiceStreamingTests
         result.Value.TextMessage.Should().Be("partial");
         result.Value.IsTruncated.Should().BeTrue();
         logger.WarningEventIds.Should().Contain(8);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendWithToolsAsync_TruncationLogsOnlyTokenCountsAndOrderedItemSizes(bool streaming)
+    {
+        var response = ResponsesTestData.Response(inputTokens: 128, outputTokens: 8192);
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        response.Usage.OutputTokenDetails = new() { ReasoningTokenCount = 8100 };
+        response.OutputItems.Add(ResponseItem.CreateReasoningItem("private reasoning"));
+        response.OutputItems.Add(ResponseItem.CreateAssistantMessageItem("private completion"));
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("private-call-id", "private_tool",
+            BinaryData.FromString("{\"title\":\"private arguments\"}")));
+        var completion = ModelReaderWriter.Write(response).ToString();
+        var body = streaming ? ResponsesTestData.Stream(response) : completion;
+        var (service, logger) = BuildServiceWithRecordingLogger(streaming ? new SseHandler(body) : new JsonHandler(body));
+        var sink = new CollectingSink();
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("private person text", "private instructions", []),
+            streaming ? sink.Handle : null);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.IsTruncated.Should().BeTrue();
+        var properties = logger.WarningProperties.Should().ContainSingle(entry => entry.EventId == 8).Subject.Properties;
+        properties.Should().ContainKey("OutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("ReasoningTokens").WhoseValue.Should().Be(8100);
+        properties.Should().ContainKey("MaxOutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("Model").WhoseValue.Should().Be("gpt-6-luna");
+        properties.Should().ContainKey("OutputItems");
+        using var items = JsonDocument.Parse((string)properties["OutputItems"]!);
+        items.RootElement.EnumerateArray().Select(item => item.GetProperty("kind").GetString())
+            .Should().Equal("reasoning", "message", "function_call");
+        using var wire = JsonDocument.Parse(completion);
+        items.RootElement.EnumerateArray().Select(item => item.GetProperty("characterLength").GetInt32())
+            .Should().Equal(wire.RootElement.GetProperty("output").EnumerateArray().Select(item => item.GetRawText().Length));
+        JsonSerializer.Serialize(logger.WarningProperties.Select(entry => entry.Properties)).Should().NotContain("private");
     }
 
     [Theory]
