@@ -23964,6 +23964,16 @@
               "null",
               "string"
             ]
+          },
+          "nextAction": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AstraNextAction"
+              }
+            ]
           }
         }
       },
@@ -24302,6 +24312,15 @@
           },
           "field": {
             "type": "string"
+          },
+          "fields": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

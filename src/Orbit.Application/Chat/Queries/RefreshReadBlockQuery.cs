@@ -71,7 +71,7 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
         if (block is null || block.Kind != ticket.Kind)
             return Result.Failure<QueryReadBlock>("The exact query could not be refreshed. Retry this query.", errorCode: "READ_QUERY_REFRESH_FAILED");
         if (!Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler.ReadSubtypeEnabled(block.Block, request.ClientContext,
-            enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst)))
+            (enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(request.ClientContext))))
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
         if (request.Page && block.Read.Revision != ticket.Revision)
             return Result.Failure<QueryReadBlock>("The source changed. Refresh the original query before paging.", errorCode: "READ_QUERY_STALE");

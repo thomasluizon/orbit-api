@@ -15,7 +15,7 @@ public partial class ProcessUserChatCommandHandler
 {
     private static bool UsesComposition(ProcessUserChatCommand request, ChatContext context) =>
         request.ClientContext?.SupportsParts == true
-        && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraBlockFirst);
+        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(request.ClientContext));
 
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0

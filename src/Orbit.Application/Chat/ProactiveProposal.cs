@@ -9,7 +9,7 @@ public static class ProactiveProposal
 {
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
-    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in suggested_fields, separately from requested fields. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
+    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in suggested_fields, separately from requested fields. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
 
     public static bool Enabled(AgentClientContext? client) => client is
     {
@@ -109,13 +109,20 @@ public static class ProactiveProposal
         return root;
     }
 
+    internal static IReadOnlyList<string> RemovalFields(JsonObject suggestions, string field) =>
+        ReminderFields.Contains(field, StringComparer.Ordinal)
+            ? ReminderFields.Where(suggestions.ContainsKey).ToArray() : [field];
+
+    private static readonly string[] ReminderFields = ["reminder_enabled", "reminder_times", "scheduled_reminders", "relative_reminders", "repeat_reminder"];
+
     internal static bool Remove(JsonObject source, IReadOnlyList<string>? fields)
     {
         if (fields is null || fields.Count == 0) return true;
         if (source[Metadata]?["fields"] is not JsonObject suggestions) return false;
-        foreach (var field in fields)
+        if (fields.Any(field => !suggestions.ContainsKey(field))) return false;
+        var removed = fields.SelectMany(field => RemovalFields(suggestions, field)).Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var field in removed)
         {
-            if (!suggestions.ContainsKey(field)) return false;
             source.Remove(field);
             suggestions.Remove(field);
         }

@@ -17,6 +17,8 @@ public sealed record AstraOfferFact(string Id, string Family, string Evidence,
     AstraNextAction Action, Guid QueryId, string Revision, DateOnly LocalDate)
 {
     public ReadBlockMetadata? Source { get; init; }
+    public string? SourceKind { get; init; }
+    public Guid? PendingOperationId { get; init; }
 }
 
 public sealed record QueryReadBlock(string Kind, object Block, ReadBlockMetadata Read);

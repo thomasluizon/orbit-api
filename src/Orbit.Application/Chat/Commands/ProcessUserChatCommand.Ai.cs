@@ -69,6 +69,7 @@ public partial class ProcessUserChatCommandHandler
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, ProactiveProposal.Instruction,
                 "Dismissed offer keys: " + JsonSerializer.Serialize(request.ClientContext!.DismissedOfferKeys ?? []));
 
+        dynamicContext = AddSelectedOfferContext(dynamicContext, request.SelectedOffer);
         dynamicContext = AddAskContext(dynamicContext, request, context);
         dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
 
@@ -136,6 +137,18 @@ public partial class ProcessUserChatCommandHandler
             aiStreamSink,
             cancellationToken);
     }
+
+    private static string AddSelectedOfferContext(string context, AstraOfferFact? selected) => selected is null ? context
+        : string.Join(Environment.NewLine, context,
+            "The person selected this server-issued optional action. Use its typed target where applicable; the visible prompt defines the requested scope. Read current state through the ordinary app queries and prepare the normal approval preview.",
+            JsonSerializer.Serialize(new
+            {
+                selected.Family,
+                selected.Action.EntityId,
+                selected.Action.Date,
+                QueryScope = selected.Source?.Scope,
+                selected.PendingOperationId
+            }));
 
     private static string OfferToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, bool sharedTargets, AgentClientContext? client) =>
         tool.Description + (tool.IsReadOnly ? string.Empty

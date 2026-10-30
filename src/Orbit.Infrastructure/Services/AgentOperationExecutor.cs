@@ -115,8 +115,14 @@ public partial class AgentOperationExecutor(
     {
         if (!operation.IsMutation || !ProactiveProposal.Contains(arguments)) return Result.Success(arguments);
         var offered = await changePreviewer.PreviewAsync(request.UserId, operation.Id, arguments, ct, request.ClientContext);
-        return offered.IsSuccess && offered.Value?.ExecutionArguments is { } effective
-            ? Result.Success(effective) : Result.Failure<JsonElement>(offered.ErrorCode ?? "invalid_offer");
+        if (offered.IsFailure || offered.Value?.ExecutionArguments is not { } effective)
+            return Result.Failure<JsonElement>(offered.ErrorCode ?? "invalid_offer");
+        if (toolRegistry.GetTool(operation.Id) is IArgumentCheckTool check)
+        {
+            var validation = await check.CheckArgumentsAsync(effective, request.UserId, ct);
+            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode ?? validation.Error);
+        }
+        return Result.Success(effective);
     }
 
     private static bool HasUnsupportedPlacementApproval(AgentExecuteOperationRequest request, JsonElement arguments) =>

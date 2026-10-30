@@ -546,11 +546,18 @@ public sealed partial class PendingOperationRevisionService(
         PendingOperationChangePreview original, CancellationToken ct)
     {
         if (offerStore is null || !ProactiveProposal.Enabled(request.ClientContext)) return;
-        var keys = request.Items.SelectMany(item => original.Items!.Single(old => old.ItemId == item.ItemId).Fields
-            .Where(field => item.RemoveSuggestedFields?.Contains(field.Field, StringComparer.Ordinal) == true)
-            .Select(field => field.Removal!.OfferKey)).Distinct(StringComparer.Ordinal).ToArray();
+        var keys = request.Items.SelectMany(item => RemovedOfferKeys(item,
+            original.Items!.Single(old => old.ItemId == item.ItemId))).Distinct(StringComparer.Ordinal).ToArray();
         if (keys.Length > 0)
             await offerStore.DismissAsync(userId, request.ClientContext!.ConversationId!.Value, keys, ct);
+    }
+
+    private static IEnumerable<string> RemovedOfferKeys(RevisedPendingOperationItem selected, PendingOperationItem original)
+    {
+        var removed = original.Fields.Where(field => selected.RemoveSuggestedFields?.Contains(field.Field, StringComparer.Ordinal) == true)
+            .SelectMany(field => field.Removal?.Fields ?? [field.Field]).ToHashSet(StringComparer.Ordinal);
+        return original.Fields.Where(field => removed.Contains(field.Field) && field.Removal is not null)
+            .Select(field => field.Removal!.OfferKey);
     }
 
     private static PendingOperationRevisionResult Failure(string error) =>

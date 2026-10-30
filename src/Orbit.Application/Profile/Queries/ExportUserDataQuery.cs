@@ -29,7 +29,8 @@ public record ExportUserDataRepositories(
     IGenericRepository<ProactiveItem> ProactiveItems,
     IGenericRepository<NotionConnection> NotionConnections,
     IGenericRepository<NotionTask> NotionTasks,
-    IGenericRepository<ConversationTurn> ConversationTurns);
+    IGenericRepository<ConversationTurn> ConversationTurns,
+    IGenericRepository<ConversationOffer>? ConversationOffers = null);
 
 public class ExportUserDataQueryHandler(
     ExportUserDataRepositories repos,
@@ -77,6 +78,8 @@ public class ExportUserDataQueryHandler(
         var retentionCutoffAtUtc = exportedAtUtc.AddDays(-ConversationTurn.RetentionDays);
         var conversations = await repos.ConversationTurns.FindAsync(
             turn => turn.UserId == request.UserId && turn.CreatedAtUtc >= retentionCutoffAtUtc, cancellationToken);
+        var offers = repos.ConversationOffers is null ? [] : await repos.ConversationOffers.FindAsync(offer => offer.UserId == request.UserId, cancellationToken);
+
         var export = new UserDataExport(
             exportedAtUtc,
             new ExportedAccount(user.Name, user.Email, user.CreatedAtUtc, user.HasProAccess ? "pro" : "free"),
@@ -134,7 +137,8 @@ public class ExportUserDataQueryHandler(
             conversations.OrderBy(turn => turn.CreatedAtUtc).ThenBy(turn => turn.Role == "user" ? 0 : 1)
                 .Select(turn => new ExportedConversationTurn(turn.TurnId, turn.Role, turn.CreatedAtUtc,
                     turn.Model, turn.Content, System.Text.Json.JsonSerializer.Deserialize<
-                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [], turn.ResponseJson)).ToArray());
+                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [], turn.ResponseJson)).ToArray(),
+            offers.Select(offer => new ExportedConversationOffer(offer.ConversationId, offer.OfferKey, offer.Dismissed, offer.DefinitionJson)).ToArray());
 
         return Result.Success(export);
     }

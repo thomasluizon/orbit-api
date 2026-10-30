@@ -143,7 +143,8 @@ public record PendingAgentOperation(
     int? ChangeTargetCount = null,
     IReadOnlyList<PendingOperationItem>? Items = null,
     string? PreviewFingerprint = null,
-    string? ActionKey = null);
+    string? ActionKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraNextAction? NextAction = null);
 
 public record PendingOperationItem(
     string ItemId,
@@ -194,7 +195,8 @@ public record PendingOperationChange(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     PendingProposalRemoval? Removal = null);
 
-public sealed record PendingProposalRemoval(string OfferKey, string Field);
+public sealed record PendingProposalRemoval(string OfferKey, string Field,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Fields = null);
 
 public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,

@@ -94,11 +94,11 @@ public sealed partial class PendingOperationChangePreviewer
             if (targetId is not null) keySource["habit_id"] = targetId;
             foreach (var suggestion in suggestions)
             {
-                if (ExcludedSuggestion(suggestion.Key, source, suggestions, existing)) continue;
+                if (suggestion.Value is null || ExcludedSuggestion(suggestion.Key, source, suggestions, existing)) continue;
                 var key = ProactiveProposal.Key(operation, keySource, suggestion.Key);
                 if (source.ContainsKey(suggestion.Key) || IsExplicitlyCleared(source, suggestion.Key)
                     || client.DismissedOfferKeys?.Contains(key, StringComparer.Ordinal) == true) continue;
-                if (!ProactiveProposal.Eligible(suggestion.Key) || suggestion.Value is null || !AgentArgumentSchema.Accepts(schema, suggestion.Key,
+                if (!ProactiveProposal.Eligible(suggestion.Key) || !AgentArgumentSchema.Accepts(schema, suggestion.Key,
                     JsonSerializer.SerializeToElement(suggestion.Value))) return false;
                 var value = suggestion.Value.DeepClone();
                 value = MergeStoredSuggestion(suggestion.Key, value, existing.GetValueOrDefault(suggestion.Key));
@@ -122,9 +122,15 @@ public sealed partial class PendingOperationChangePreviewer
     {
         if (stored is null) return value;
         if (value is JsonArray added && stored is JsonArray previous)
-            return new JsonArray(previous.Concat(added)
-                .DistinctBy(item => field == "checklist_items" ? item?["text"]?.ToString().Trim().ToLowerInvariant() : item?.ToJsonString())
-                .Select(item => item?.DeepClone()).ToArray());
+        {
+            string Key(JsonNode? item) => field == "checklist_items" ? item?["text"]?.ToString().Trim().ToLowerInvariant() ?? ""
+                : field is "tag_names" or "items" ? item?.ToString().Trim().ToLowerInvariant() ?? "" : item?.ToJsonString() ?? "null";
+            var merged = new JsonArray(previous.Select(item => item?.DeepClone()).ToArray());
+            var seen = previous.Select(Key).ToHashSet(StringComparer.Ordinal);
+            foreach (var item in added)
+                if (seen.Add(Key(item))) merged.Add(item?.DeepClone());
+            return merged;
+        }
         return stored.ToString() is "" or "false" or "null" or "[]" ? value : null;
     }
 
@@ -190,6 +196,13 @@ public sealed partial class PendingOperationChangePreviewer
                     ["target_value"] = JsonValue.Create(goal.TargetValue)
                 };
         }
+        if (Guid.TryParse(source["template_id"]?.ToString(), out var templateId))
+        {
+            if (templateRepository is null) return new() { ["items"] = new JsonObject() };
+            var templates = await templateRepository.FindAsync(template => template.Id == templateId && template.UserId == userId && !template.IsDeleted, ct);
+            if (templates.SingleOrDefault() is { } template)
+                return new() { ["items"] = JsonSerializer.SerializeToNode(template.Items) };
+        }
         return [];
     }
 
@@ -200,8 +213,8 @@ public sealed partial class PendingOperationChangePreviewer
         {
             Fields = item.Fields.Where(field => field.Field != ProactiveProposal.Metadata).Select(field =>
                 suggestions?[field.Field]?.ToString() is { } key
-                    ? field with { Provenance = "suggested", IsEditable = true, Removal = new(key, field.Field) }
-                    : field with { Provenance = field.OldValue == field.NewValue ? "stored" : "requested" }).ToArray()
+                    ? field with { Provenance = "suggested", IsEditable = true, Removal = new(key, field.Field, ProactiveProposal.RemovalFields(suggestions!, field.Field)) }
+                    : field with { Provenance = source?.ContainsKey(field.Field) == true ? "requested" : "stored" }).ToArray()
         };
     }
 }

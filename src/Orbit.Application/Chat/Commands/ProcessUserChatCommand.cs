@@ -47,7 +47,11 @@ public record ProcessUserChatCommand(
     Func<ChatStreamEvent, Task>? StreamSink = null,
     AstraBlockAnswer? BlockAnswer = null,
     bool EvalTraceRequested = false,
-    Guid? TurnId = null) : IRequest<Result<ChatResponse>>;
+    Guid? TurnId = null) : IRequest<Result<ChatResponse>>
+{
+    [JsonIgnore]
+    public AstraOfferFact? SelectedOffer { get; init; }
+}
 
 public record ChatResponse(
     string? AiMessage,

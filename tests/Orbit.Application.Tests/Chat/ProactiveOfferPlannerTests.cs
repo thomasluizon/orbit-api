@@ -1,4 +1,8 @@
 using System.Text.Json;
+using System.Linq.Expressions;
+using NSubstitute;
+using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Goals.Services;
 using FluentAssertions;
 using Orbit.Application.Chat;
 using Orbit.Domain.Entities;
@@ -79,6 +83,34 @@ public sealed class ProactiveOfferPlannerTests
             .Should().NotContain(offer => offer.Family == "calendar");
         ProactiveOfferPlanner.Build([read], new(Today, 1, [], [], [], true, false), "en")
             .Single(offer => offer.Family == "calendar").Action.Surface.Should().Be("calendar-sync");
+    }
+
+    [Fact]
+    public void MissedActionKeepsTheActualOccurrenceDate()
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, user, "Task", null, null, Today.AddDays(-1))).Value;
+        var read = Read(new HabitListCard("today", [new(habit.Id.ToString(), habit.Title, null, 0, false, "overdue")], Today));
+        var offers = ProactiveOfferPlanner.Build([read], new(Today, 1, [habit], [], [], false, false), "en");
+        offers.Single(offer => offer.Family == "skip").Action.Date.Should().Be(habit.NextDueDate);
+    }
+
+    [Fact]
+    public async Task GoalEligibilityDoesNotCalculateOrExposeProjections()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(user, "Read", 1_000_000_000m, "pages", Deadline: Today.AddDays(3))).Value;
+        goal.UpdateProgress(1).IsSuccess.Should().BeTrue();
+        var goals = Substitute.For<IGenericRepository<Goal>>();
+        goals.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(), Arg.Any<CancellationToken>()).Returns([goal]);
+        var dates = Substitute.For<IUserDateService>();
+        dates.GetUserTodayAsync(user, Arg.Any<CancellationToken>()).Returns(Today);
+        var sync = Substitute.For<IGoalProgressReadSyncer>();
+        sync.ComputeFreshValuesAsync(user, Today, Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, int> { [goal.Id] = 1 });
+        var result = await new QueryGoalsTool(goals, dates, sync).ExecuteAsync(JsonSerializer.SerializeToElement(new { }), user, default);
+        result.Success.Should().BeTrue();
+        var card = result.Payload.Should().BeOfType<GoalListCard>().Subject;
+        card.OfferTracking![goal.Id].Should().Be("at_risk");
+        card.Items.Single().TrackingStatus.Should().BeNull();
+        card.Items.Single().ProjectedCompletionDate.Should().BeNull();
     }
 
     private static QueryReadBlock Read(object card, string completeness = "complete") => new("habitList", card,

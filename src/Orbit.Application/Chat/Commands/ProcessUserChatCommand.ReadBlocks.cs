@@ -185,7 +185,7 @@ public partial class ProcessUserChatCommandHandler
 
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client,
-            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst));
+            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(client));
 
     internal static string ReadFallback(object block, string? language, string? timeZone = null, DateOnly? userToday = null) =>
         new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone, userToday).Format(block);

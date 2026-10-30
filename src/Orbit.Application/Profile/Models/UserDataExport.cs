@@ -29,7 +29,10 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedProactiveItem>? ProactiveItems = null,
     ExportedNotionConnection? NotionConnection = null,
     IReadOnlyList<Orbit.Application.Connections.NotionTaskResponse>? NotionTasks = null,
-    IReadOnlyList<ExportedConversationTurn>? Conversations = null);
+    IReadOnlyList<ExportedConversationTurn>? Conversations = null,
+    IReadOnlyList<ExportedConversationOffer>? ConversationOffers = null);
+
+public sealed record ExportedConversationOffer(Guid ConversationId, string OfferKey, bool Dismissed, string DefinitionJson);
 
 public sealed record ExportedConversationTurn(Guid TurnId, string Role, DateTime CreatedAtUtc,
     string? Model, string? Content, IReadOnlyList<Orbit.Application.Chat.ConversationToolCall> ToolCalls,

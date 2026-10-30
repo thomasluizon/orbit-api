@@ -30,25 +30,43 @@ public partial class ProcessUserChatCommandHandler
         var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
         var selected = issued.SingleOrDefault(offer => offer.Action.OfferKey == key);
         var today = await execution.UserDateService.GetUserTodayAsync(request.UserId, ct);
-        if (selected?.Source is not { } source || selected.LocalDate != today
-            || selected.Action.Kind is not ("preparePreview" or "continueChat") || selected.Action.Prompt is null)
-            return Result.Failure<ProcessUserChatCommand>("stale_offer");
-        var fresh = await execution.Mediator.Send(new RefreshReadBlockQuery(request.UserId, source.RefreshToken,
-            request.ClientContext, AuthMethod: request.AuthMethod, GrantedScopes: request.GrantedScopes,
-            ReadOnlyCredential: request.IsReadOnlyCredential, GamificationOnly: source.QueryFamily == "get_gamification_overview"
-                && source.Scope.TryGetProperty("include_streak", out var include) && include.ValueKind == JsonValueKind.False,
-            HabitMonthOnly: source.QueryFamily == "get_habit_month"), ct);
-        if (fresh.IsFailure || fresh.Value.Read.Revision != selected.Revision
+        if (selected is null || selected.LocalDate != today
+            || selected.Action.Kind is not ("preparePreview" or "continueChat") || selected.Action.Prompt is null
+            || !await OfferSourceCurrentAsync(request, selected, ct)
             || (await offerStore.DismissedAsync(request.UserId, conversation, ct)).Contains(key))
             return Result.Failure<ProcessUserChatCommand>("stale_offer");
         await offerStore.DismissAsync(request.UserId, conversation, [key], ct);
-        return Result.Success(request with { Message = selected.Action.Prompt });
+        return Result.Success(request with { Message = selected.Action.Prompt, SelectedOffer = selected });
+    }
+
+    private async Task<bool> OfferSourceCurrentAsync(ProcessUserChatCommand request, AstraOfferFact selected, CancellationToken ct)
+    {
+        if (selected.PendingOperationId is { } pendingId)
+        {
+            var pending = execution.PendingOperationStore.GetExecution(request.UserId, pendingId);
+            if (pending is null || pending.RequiresReproposal || !execution.PendingOperationStore.IsAwaitingConfirmation(request.UserId, pendingId)) return false;
+            var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(data.HabitRepository,
+                data.GoalRepository, data.TagRepository, execution.UserDateService, ai.ToolRegistry);
+            var current = await previewer.PreviewAsync(request.UserId, pending.OperationId, pending.Arguments, ct, request.ClientContext);
+            return current.IsSuccess && current.Value?.PreviewFingerprint == selected.Revision;
+        }
+        if (selected.Source is not { } source) return false;
+        var fresh = await execution.Mediator.Send(new RefreshReadBlockQuery(request.UserId, source.RefreshToken,
+            request.ClientContext, AuthMethod: request.AuthMethod, GrantedScopes: request.GrantedScopes,
+            ReadOnlyCredential: request.IsReadOnlyCredential, GamificationOnly: selected.SourceKind == "gamification",
+            HabitMonthOnly: selected.SourceKind == "habitMonth"), ct);
+        return fresh.IsSuccess && fresh.Value.Read.Revision == selected.Revision;
     }
 
     private async Task<(ResponseCards Cards, bool Offered)> ComposeOfferAsync(ProcessUserChatCommand request,
         ChatContext context, ResponseCards cards, ToolExecutionAccumulator results, CancellationToken ct)
     {
-        try { return await ComposeOfferCoreAsync(request, context, cards, results, ct); }
+        try
+        {
+            return results.PendingOperations.Count > 0
+                ? await ComposePreviewOfferAsync(request, context, cards, results, ct)
+                : await ComposeOfferCoreAsync(request, context, cards, results, ct);
+        }
         catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             logger.LogWarning(exception, "Optional Astra offer selection failed");
@@ -120,7 +138,7 @@ public partial class ProcessUserChatCommandHandler
     private sealed record OfferSelection(string? CandidateId, string? Interpretation, IReadOnlyList<string>? DismissedOfferKeys);
 
     private async Task<OfferSelection?> SelectOfferAsync(ProcessUserChatCommand request, AstraOfferFact[] candidates,
-        IReadOnlyList<AstraOfferFact> issued, ChatContext context, CancellationToken ct)
+        IReadOnlyList<AstraOfferFact> issued, ChatContext context, CancellationToken ct, IReadOnlyList<PendingAgentOperation>? previews = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(3));
@@ -134,7 +152,8 @@ public partial class ProcessUserChatCommandHandler
                     Candidates = candidates.Select(candidate => new { candidate.Id, candidate.Family, candidate.Evidence, candidate.Action }),
                     PreviouslyIssued = issued.Select(offer => new { offer.Action.OfferKey, offer.Action.Label }),
                     ActiveGoals = context.ActiveGoals.Select(goal => new { goal.Id, goal.Title, goal.Description }),
-                    Language = context.Language
+                    Language = context.Language,
+                    PendingPreviews = previews
                 })
             }, cancellationToken: deadline.Token);
             if (response.IsFailure || response.Value.HasToolCalls || response.Value.IsTruncated
