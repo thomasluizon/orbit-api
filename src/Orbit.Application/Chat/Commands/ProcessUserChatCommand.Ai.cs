@@ -61,6 +61,7 @@ public partial class ProcessUserChatCommandHandler
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
         dynamicContext = AddAskContext(dynamicContext, request, context, toolNames);
+        dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
 
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(

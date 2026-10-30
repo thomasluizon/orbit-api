@@ -21,6 +21,11 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
         When(x => x.BlockAnswer is not null, () =>
             RuleFor(x => x.BlockAnswer!).SetValidator(new AstraBlockAnswerValidator()));
 
+        RuleFor(x => x.ClientContext)
+            .Must(context => context?.PreviousStartingStep is not { } step
+                || new StartingStepArgumentsValidator().Validate(new StartingStepArguments(step.Goal, step.Step, step.Language, 1)).IsValid)
+            .WithCopy(ErrorCodes.InvalidClientContext);
+
         RuleFor(x => x.History)
             .Must(history => history is null || history.Count <= AppConstants.MaxChatHistoryMessages)
             .WithCopy(ValidationErrorCodes.ChatHistoryLimit);

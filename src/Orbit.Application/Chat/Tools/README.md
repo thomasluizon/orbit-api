@@ -366,7 +366,11 @@ the failed outcome before the server composes the block.
 Prompt and tool descriptions route starting help and smaller refinements through
 this tool in both languages, independently of message patterns.
 The server composes the negotiated `oneSmallStep` block without a continuation.
-Its smaller and save actions submit ordinary chat requests. Save requests reuse
+For clients advertising `supportsStartingStepContext: true`, its smaller action
+carries typed `previousStep`; clients forward it as
+`clientContext.previousStartingStep` with the ordinary chat request. The model
+receives that JSON baseline and must return a proper part or first physical action
+requiring strictly less time and effort. Save requests reuse
 `create_habit` or `update_checklist`, with the existing approval preview and owned
 checklist target resolution. Checklist saves send only `item_to_add`; the server
 previews the full stored list plus the unchecked step, then appends on approval.

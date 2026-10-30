@@ -12,6 +12,28 @@ namespace Orbit.Application.Tests.Chat;
 public sealed class ChatResponseNegotiationTests
 {
     [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void Replay_StartingStepContextFollowsCurrentCapability(bool original, bool current)
+    {
+        var suggestion = new StartingStep("Study", "Open the book", "en");
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: ["oneSmallStep"], SupportsStartingStepContext: original);
+        var response = Replay(ChatResponseNegotiation.ForClient(new(null, [],
+            Parts: [new ChatBlockPart("oneSmallStep", OneSmallStepCard.Build(suggestion))]), client, []));
+
+        var negotiated = ChatResponseNegotiation.ForClient(response, client with { SupportsStartingStepContext = current }, []);
+
+        var card = negotiated.Parts!.OfType<ChatBlockPart>().Single().Block.Should().BeOfType<OneSmallStepCard>().Subject;
+        card.Actions[0].PreviousStep.Should().Be(current ? suggestion : null);
+        card.Actions.Skip(1).Should().OnlyContain(action => action.PreviousStep == null);
+        var wire = JsonSerializer.SerializeToElement(negotiated, ChatStreamEvent.SerializerOptions);
+        wire.GetProperty("parts")[0].GetProperty("block").GetProperty("actions")[0]
+            .TryGetProperty("previousStep", out _).Should().Be(current);
+    }
+
+    [Theory]
     [InlineData(null, false, false)]
     [InlineData(false, false, false)]
     [InlineData(true, false, false)]
