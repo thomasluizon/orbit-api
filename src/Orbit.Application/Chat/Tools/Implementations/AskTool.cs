@@ -202,7 +202,8 @@ public sealed class AskTool(
         foreach (var name in required.Concat(optional))
         {
             var field = fields[name]!.DeepClone();
-            if (required.Contains(name) && field["type"]?.GetValue<string>() == "string")
+            if (required.Contains(name) && field["type"]?.GetValue<string>() == "string"
+                && field["enum"] is null)
                 field["pattern"] = @"\S";
             properties[name] = field;
         }
