@@ -85,6 +85,16 @@ public sealed class ProactiveOfferPlannerTests
             .Single(offer => offer.Family == "calendar").Action.Surface.Should().Be("calendar-sync");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SummaryOfferUsesItsOwnAvailability(bool available)
+    {
+        var read = Read(new AccountRowsCard("profile", [new("aiSummary", "false", "boolean")]));
+        var facts = new ProactiveAccountFacts(Today, 1, [], [], [], true, false, available);
+        ProactiveOfferPlanner.Build([read], facts, "en").Any(offer => offer.Family == "summary").Should().Be(available);
+    }
+
     [Fact]
     public void MissedActionKeepsTheActualOccurrenceDate()
     {

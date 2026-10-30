@@ -1378,6 +1378,8 @@ of displayed projection fields. Empty-day offers require a complete current-day
 result. Goal and calendar gaps require the model's typed aim or dated-event
 interpretation as well as eligible account state. No message pattern selects tools,
 rewrites calls, initiates calls or replaces the answer.
+Calendar and daily-summary offers require their resolved account feature flags and
+plan access; a disabled integration or summary feature produces no offer.
 
 `get_notion_tasks` additionally supports `recordList` subtype `notionTasks` for
 offer-enabled clients advertising `recordList`. The block carries stored task rows

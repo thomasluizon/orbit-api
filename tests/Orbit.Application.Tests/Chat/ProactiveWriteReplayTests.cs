@@ -67,12 +67,17 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "goal")]
     [InlineData("en", "calendar")]
     [InlineData("pt-BR", "calendar")]
+    [InlineData("en", "calendar-disabled")]
+    [InlineData("pt-BR", "calendar-disabled")]
     public async Task ProactiveWriteReplay_RealExecutorStagesSuggestedFieldsInTheOnlyApprovalPreview(string locale, string mode)
     {
+        var calendar = mode.StartsWith("calendar", StringComparison.Ordinal);
         var owner = User.Create("Alex", "alex@test.com").Value;
-        if (mode == "calendar") owner.GrantLifetimePro();
+        if (calendar) owner.GrantLifetimePro();
         SetupUserAndPayGate(owner);
         EnableComposition();
+        if (mode == "calendar") _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(["astra_block_first", "astra_conversation_recording", "calendar_integration"]);
         _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
@@ -85,7 +90,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             var context = call.Arg<AgentPolicyEvaluationContext>();
             using var args = JsonDocument.Parse(context.OperationArgumentsJson!);
-            if (mode != "calendar")
+            if (!calendar)
                 args.RootElement.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(120);
             var capability = catalog.GetCapability(context.CapabilityId)!;
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
@@ -106,7 +111,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 outcome.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, JsonSerializer.Serialize(outcome));
                 return outcome;
             });
-        var draft = mode == "calendar" ? JsonSerializer.Serialize(new
+        var draft = calendar ? JsonSerializer.Serialize(new
         {
             title = locale == "en" ? "Appointment" : "Consulta",
             frequency_unit = "OneTime",
@@ -127,8 +132,8 @@ public partial class ProcessUserChatCommandHandlerTests
                 {
                     TextMessage = JsonSerializer.Serialize(new
                     {
-                        candidateId = mode == "calendar" ? "calendar:calendar-sync" : mode == "goal" ? "aim:account" : null,
-                        interpretation = mode == "calendar" ? "dated_event" : mode == "goal" ? "aim" : null,
+                        candidateId = calendar ? "calendar:calendar-sync" : mode == "goal" ? "aim:account" : null,
+                        interpretation = calendar ? "dated_event" : mode == "goal" ? "aim" : null,
                         dismissedOfferKeys = Array.Empty<string>()
                     })
                 }
@@ -136,11 +141,11 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(locale)), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
-        preview.Items!.Single().Fields.Should().Contain(field => field.Field == (mode == "calendar" ? "emoji" : "repeat_reminder")
+        preview.Items!.Single().Fields.Should().Contain(field => field.Field == (calendar ? "emoji" : "repeat_reminder")
             && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
         if (mode == "calendar") preview.NextAction!.Surface.Should().Be("calendar-sync");
         if (mode == "goal") preview.NextAction!.Kind.Should().Be("continueChat");
-        if (mode == "repeat") preview.NextAction.Should().BeNull();
+        if (mode is "repeat" or "calendar-disabled") preview.NextAction.Should().BeNull();
         result.Value.Parts.Should().BeEmpty();
         result.Value.AiMessage.Should().BeNullOrEmpty();
         await toolMediatorWasNotDispatched();

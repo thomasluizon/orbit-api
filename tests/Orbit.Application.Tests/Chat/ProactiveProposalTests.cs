@@ -164,17 +164,19 @@ public sealed class ProactiveProposalTests
         var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Routine", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 30))).Value;
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         var args = JsonSerializer.SerializeToElement(new
         {
             parent_habit_id = parent.Id,
             habits = new[]
-        { new { title = "Stretch", frequency_unit = "Day", frequency_quantity = 1, suggested_fields = new { parent_habit_id = Guid.NewGuid() } } }
+        { new { title = "Stretch", suggested_fields = new { parent_habit_id = Guid.NewGuid(), repeat_reminder = new { interval_minutes = 120 } } } }
         });
         var result = await previewer.PreviewAsync(user, "bulk_create_habits", args, clientContext: client);
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value!.ExecutionArguments!.Value.GetProperty("habits")[0].TryGetProperty("parent_habit_id", out var itemParent)
             .Should().BeFalse(itemParent.ToString());
         result.Value.Items![0].Fields.Should().NotContain(field => field.Field == "parent_habit_id" && field.Provenance == "suggested");
+        result.Value.ExecutionArguments.Value.GetProperty("habits")[0].GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(120);
     }
 
     [Fact]

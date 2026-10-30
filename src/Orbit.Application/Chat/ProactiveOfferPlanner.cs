@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat;
 
 public sealed record ProactiveAccountFacts(DateOnly Today, int WeekStartDay, IReadOnlyList<Habit> Habits,
     IReadOnlyList<Goal> Goals, IReadOnlyList<HabitScheduleLogDay> LogDays,
-    bool CalendarAvailable, bool CalendarConnected);
+    bool CalendarAvailable, bool CalendarConnected, bool SummaryAvailable = false);
 
 public static class ProactiveOfferPlanner
 {
@@ -160,7 +160,7 @@ public static class ProactiveOfferPlanner
 
         private void OtherOffers()
         {
-            if (account.CalendarAvailable && read.Block is AccountRowsCard { Kind: "profile" } profile
+            if (account.SummaryAvailable && read.Block is AccountRowsCard { Kind: "profile" } profile
                 && profile.Rows.Any(row => row is { Key: "aiSummary", Value: "false" }))
                 Add("summary", "Daily summaries are available and disabled in the profile read.", "Review Astra settings", "Ver configurações da Astra",
                     "", "", kind: "openSurface", surface: "ai-settings");

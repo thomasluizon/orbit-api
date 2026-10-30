@@ -132,7 +132,8 @@ public partial class ProcessUserChatCommandHandler
             context.UserToday.AddDays(-14), context.UserToday, ct);
         return new ProactiveAccountFacts(context.UserToday,
             await execution.UserDateService.GetUserWeekStartDayAsync(userId, ct), habits,
-            context.ActiveGoals, days, context.HasProAccess, context.User?.GoogleAccessToken is not null);
+            context.ActiveGoals, days, context.HasProAccess && context.EnabledFeatureFlags.Contains(Common.FeatureFlagKeys.CalendarIntegration),
+            context.User?.GoogleAccessToken is not null, context.HasProAccess && context.EnabledFeatureFlags.Contains("ai_summary"));
     }
 
     private sealed record OfferSelection(string? CandidateId, string? Interpretation, IReadOnlyList<string>? DismissedOfferKeys);

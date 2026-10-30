@@ -44,7 +44,8 @@ public partial class ProcessUserChatCommandHandler
             { PendingOperationId = preview.Id, SourceKind = "pendingOperation" };
         var offers = new List<AstraOfferFact>();
         var hasDate = preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "due_date" or "deadline" && field.ProposedValue is not null);
-        if (context.HasProAccess && context.User?.GoogleAccessToken is null && hasDate)
+        if (context.HasProAccess && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.CalendarIntegration)
+            && context.User?.GoogleAccessToken is null && hasDate)
             offers.Add(Offer("calendar:calendar-sync", "calendar", "An editable dated draft and an available disconnected Google Calendar connection; requires dated_event interpretation.",
                 new("calendar:calendar-sync", "openSurface", pt ? "Conectar Google Calendar" : "Connect Google Calendar", Surface: "calendar-sync")));
         if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite

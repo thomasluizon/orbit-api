@@ -63,11 +63,13 @@ public sealed partial class PendingOperationChangePreviewer
         {
             var itemSchema = schema.GetProperty("properties").GetProperty("habits").GetProperty("items");
             if (root.ContainsKey(ProactiveProposal.Argument)) return false;
+            var inherited = root["parent_habit_id"] is { } parent
+                ? await ExistingOfferValuesAsync(new JsonObject { ["habit_id"] = parent.DeepClone() }, null, userId, ct) : null;
             foreach (var habit in habits.OfType<JsonObject>())
             {
                 if (root.ContainsKey("parent_habit_id") && habit[ProactiveProposal.Argument] is JsonObject suggestions)
                     suggestions.Remove("parent_habit_id");
-                if (!await PrepareOfferNodeAsync(habit, itemSchema, userId, operation, client, ct)) return false;
+                if (!await PrepareOfferNodeAsync(habit, itemSchema, userId, operation, client, ct, inherited: inherited)) return false;
             }
             return true;
         }
