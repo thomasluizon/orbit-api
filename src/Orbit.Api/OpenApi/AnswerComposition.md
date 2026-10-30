@@ -550,6 +550,7 @@ No message pattern routes this behavior or rewrites the model's tool arguments.
 
 ```json
 {
+  "restart_plan": true,
   "revised_items": [
     { "habit_id": "owned habit UUID", "updates": { "due_date": "YYYY-MM-DD" } }
   ],
@@ -561,6 +562,36 @@ The model includes every selected habit, including today's choices whose date ma
 stay unchanged. It omits the shared `filter` and `due_date` when using this shape.
 The original shared-date shape remains supported. Stored revisions retain their
 existing precedence: `revised_items` overrides a shared filter/date.
+
+The model declares required boolean `restart_plan`: true for a restart, false for
+ordinary rescheduling. Before chat dispatch, a declared restart must have a successful
+`query_habits` in the same turn covering the complete current remaining due and overdue
+set. Pages must share their source revision and together cover the set. The server
+rechecks membership through the same query and schedule calculation, excluding completed
+and skipped entries. `revised_items` must match that set exactly, contain unique IDs and
+change only `due_date`. Dates stay between local today and seven days after it, with
+strictly fewer items today than the full set. A refusal produces validation feedback
+without staging a preview; missing and extra habits are named so the model can query
+again and correct its proposal.
+
+A validated single restart preview completes the turn even if the model emits
+`orbit_write_complete: false`. Ordinary reschedules and bulk updates retain their
+existing completion rules. Persisted operations without `restart_plan` retain their
+existing execution contract.
+
+The runtime additions below are model-facing English. Portuguese translations are
+for copy approval; the preview introduces no new user-facing text.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| Restart plan instruction | Call bulk_reschedule_habits once with restart_plan=true and revised_items containing every habit in the complete set and its proposed due_date, including today's choices. | Chame bulk_reschedule_habits uma vez com restart_plan=true e revised_items contendo cada hábito do conjunto completo e a due_date proposta, incluindo os escolhidos para hoje. |
+| `restart_plan` description | True for a restart plan covering every remaining due and overdue habit after a fresh query_habits in this turn. False for ordinary rescheduling. | True para um plano de recomeço que inclua todos os hábitos pendentes e atrasados após uma nova query_habits neste turno. False para reagendamentos comuns. |
+| Fresh read validation | Restart plans require a successful query_habits for the complete remaining due and overdue set in this turn. Read date=today with include_overdue=true, is_completed=false, for_selection=false and orbit_read_complete=false, including every page, then retry the complete plan. | Planos de recomeço exigem uma query_habits bem-sucedida para todo o conjunto pendente e atrasado neste turno. Consulte date=today com include_overdue=true, is_completed=false, for_selection=false e orbit_read_complete=false, incluindo todas as páginas, e tente novamente o plano completo. |
+| Item validation | Restart plans require revised_items with a unique habit_id and only updates.due_date in YYYY-MM-DD format for every habit. | Planos de recomeço exigem revised_items com um habit_id único e apenas updates.due_date no formato YYYY-MM-DD para cada hábito. |
+| Set validation | Restart plan does not match the current set. Missing habits: {missing}. Extra habits: {extra}. Read query_habits again and retry with exactly the returned set. | O plano de recomeço não corresponde ao conjunto atual. Hábitos ausentes: {missing}. Hábitos extras: {extra}. Consulte query_habits novamente e tente com exatamente o conjunto retornado. |
+| Empty missing or extra list | none | nenhum |
+| Today count validation | Restart plans must keep strictly fewer habits today than the complete remaining due and overdue set. | Planos de recomeço devem manter hoje uma quantidade de hábitos estritamente menor que o conjunto completo de pendentes e atrasados. |
+| Date validation | Restart dates must be today or within the next seven days, using the account's local today. | As datas do recomeço devem ser hoje ou nos próximos sete dias, usando a data local atual da conta. |
 
 The response uses one existing `pendingOperations` entry with action
 `rescheduleHabits`, complete `items`, editable `due_date` fields and

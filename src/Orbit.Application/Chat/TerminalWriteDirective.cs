@@ -23,7 +23,12 @@ public static class TerminalWriteDirective
     public static object WithCompletionArgument(object schema) => TerminalReadDirective.WithCompletionArgument(schema,
         CompleteArgument, "True only when every requested mutation has its matching write call in this round; a read status never fulfills a write. False when a lookup or dependent action is still needed.");
 
-    public static bool IsComplete(AiResponse response) => TerminalReadDirective.IsComplete(response, CompleteArgument);
+    public static bool IsComplete(AiResponse response) => TerminalReadDirective.IsComplete(response, CompleteArgument)
+        || response.ToolCalls is { Count: 1 } calls && IsRestartPlan(calls[0]);
+
+    internal static bool IsRestartPlan(AiToolCall call) => call.Name == "bulk_reschedule_habits"
+        && call.Args.ValueKind == JsonValueKind.Object
+        && call.Args.TryGetProperty("restart_plan", out var restart) && restart.ValueKind == JsonValueKind.True;
 
     public static JsonElement ExecutionArguments(JsonElement arguments) => TerminalReadDirective.ExecutionArguments(arguments, CompleteArgument);
 }

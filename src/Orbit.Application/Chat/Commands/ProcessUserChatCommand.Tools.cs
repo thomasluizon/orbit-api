@@ -481,6 +481,8 @@ public partial class ProcessUserChatCommandHandler
         await CoalesceLogCallsAsync(writeCalls, resolvedWrites, request.UserId, executionResults, cancellationToken);
         CoalesceTagCalls(resolvedWrites, executionResults);
         PrepareHabitProposals(resolvedWrites, request, executionResults, language);
+        await RejectInvalidRestartPlansAsync(resolvedWrites, request.UserId, executionResults,
+            readOnlyOutcomes.Select(outcome => outcome.ToolResult), outcomesByCallId, cancellationToken);
 
         foreach (var call in writeCalls)
         {

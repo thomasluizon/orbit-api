@@ -2067,6 +2067,11 @@
             "required": false
           },
           {
+            "name": "restart_plan",
+            "type": "boolean",
+            "required": true
+          },
+          {
             "name": "revised_items",
             "type": "array",
             "items": {

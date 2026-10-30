@@ -1,0 +1,124 @@
+{
+  "caseId": "composition-restart-approve-pt-BR",
+  "repeat": 1,
+  "pass": true,
+  "reason": "All assertions passed",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": null,
+        "date": "2026-10-30",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": false
+      }
+    },
+    {
+      "name": "bulk_reschedule_habits",
+      "arguments": {
+        "filter": null,
+        "due_date": null,
+        "revised_items": [
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-30"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-30"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-10-31"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-11-01"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-11-02"
+            }
+          },
+          {
+            "habit_id": "[redacted]",
+            "updates": {
+              "due_date": "2026-11-03"
+            }
+          }
+        ],
+        "orbit_write_complete": true
+      }
+    }
+  ],
+  "previewItems": [
+    {
+      "entityName": "Beber água",
+      "fields": [
+        {
+          "oldValue": "2026-10-28"
+        }
+      ]
+    },
+    {
+      "entityName": "Caminhada",
+      "fields": [
+        {
+          "oldValue": "2026-10-28"
+        }
+      ]
+    },
+    {
+      "entityName": "Hábito adicional 1",
+      "fields": [
+        {
+          "oldValue": "2026-10-28"
+        }
+      ]
+    },
+    {
+      "entityName": "Hábito adicional 2",
+      "fields": [
+        {
+          "oldValue": "2026-10-28"
+        }
+      ]
+    },
+    {
+      "entityName": "Hábito adicional 3",
+      "fields": [
+        {
+          "oldValue": "2026-10-30"
+        }
+      ]
+    },
+    {
+      "entityName": "Hábito adicional 4",
+      "fields": [
+        {
+          "oldValue": "2026-10-30"
+        }
+      ]
+    }
+  ]
+}

@@ -21,6 +21,11 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
         type = JsonSchemaTypes.Object,
         properties = new
         {
+            restart_plan = new
+            {
+                type = JsonSchemaTypes.Boolean,
+                description = "True for a restart plan covering every remaining due and overdue habit after a fresh query_habits in this turn. False for ordinary rescheduling."
+            },
             filter = BulkHabitToolArguments.FilterSchema(),
             due_date = new { type = JsonSchemaTypes.String, description = "New due date in YYYY-MM-DD format." },
             revised_items = new
@@ -45,7 +50,7 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
                 }
             }
         },
-        required = Array.Empty<string>()
+        required = new[] { "restart_plan" }
     };
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
