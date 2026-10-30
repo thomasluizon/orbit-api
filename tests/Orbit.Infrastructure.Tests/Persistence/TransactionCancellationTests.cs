@@ -2,6 +2,8 @@ using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
@@ -10,6 +12,35 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 public class TransactionCancellationTests
 {
+    [Fact]
+    public async Task CommitReceipt_DisconnectedCallerAndLostAcknowledgement_DoesNotRepeatWrite()
+    {
+        using var caller = new CancellationTokenSource();
+        var acknowledgement = new LostAcknowledgement();
+        using var factory = new SqliteOrbitDbContextFactory(
+            dependencies => new NpgsqlRetryingExecutionStrategy(dependencies, 1, TimeSpan.Zero, null), acknowledgement);
+        var db = factory.Context;
+        var work = new UnitOfWork(db, new DatabaseConnectionSettings());
+        var writes = 0;
+        acknowledgement.Enabled = true;
+
+        var result = await work.ExecuteInTransactionAsync(async token =>
+        {
+            writes++;
+            db.DistributedRateLimitBuckets.Add(DistributedRateLimitBucket.Create(
+                "auth", "commit-receipt", DateTime.UtcNow, DateTime.UtcNow.AddMinutes(1)));
+            await work.SaveChangesAsync(token);
+            caller.Cancel();
+            return "completed";
+        }, caller.Token);
+
+        result.Should().Be("completed");
+        writes.Should().Be(1);
+        acknowledgement.Failures.Should().Be(1);
+        db.Database.CurrentTransaction.Should().BeNull();
+        (await db.DistributedRateLimitBuckets.CountAsync()).Should().Be(1);
+    }
+
     [Theory]
     [InlineData("verified")]
     [InlineData("replayable")]
@@ -134,6 +165,23 @@ public class TransactionCancellationTests
             if (command.CommandText.StartsWith("INSERT INTO \"DistributedRateLimitBuckets\"", StringComparison.Ordinal))
                 caller.Cancel();
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
+    private sealed class LostAcknowledgement : DbTransactionInterceptor
+    {
+        public bool Enabled { get; set; }
+        public int Failures { get; private set; }
+
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            if (Enabled && Failures == 0)
+            {
+                Failures++;
+                throw new NpgsqlException("Commit acknowledgement lost after committing", new TimeoutException());
+            }
+            return Task.CompletedTask;
         }
     }
 }
