@@ -30,6 +30,15 @@ public class ProcessUserChatCommandValidatorTests
         result.ShouldNotHaveAnyValidationErrors();
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void Validate_PreviousStartingStep_AcceptsGuardedContext(string language)
+    {
+        var context = new AgentClientContext(PreviousStartingStep: new("Study", "Open the book", language));
+        _validator.TestValidate(ValidCommand() with { ClientContext = context }).ShouldNotHaveAnyValidationErrors();
+    }
+
     [Fact]
     public void Validate_EmptyUserId_HasError()
     {

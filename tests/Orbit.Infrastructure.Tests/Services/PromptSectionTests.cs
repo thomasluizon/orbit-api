@@ -116,6 +116,14 @@ public class EncouragingToneSectionTests
 public class GlobalRulesSectionTests
 {
     [Fact]
+    public void Build_SmallerStepRequiresStrictlyLessTimeAndEffort()
+    {
+        var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
+        new GlobalRulesSection().Build(ctx).Should().Contain(
+            "For a smaller refinement, use structured previousStartingStep as the baseline, keep its goal and return a proper part of its step or its first physical action, taking strictly less time and effort. A paraphrase or a different action of equal or greater effort is not smaller.");
+    }
+
+    [Fact]
     public void Build_RestartInstructionsAppearOnlyInToolDescription()
     {
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
