@@ -103,6 +103,9 @@ public sealed partial class ChatWriteHoldHandlerTests
     [InlineData("extra")]
     [InlineData("all_today")]
     [InlineData("outside_week")]
+    [InlineData("duplicate")]
+    [InlineData("malformed")]
+    [InlineData("other_field")]
     public async Task G12_RestartRejectsInvalidCurrentSetThenAcceptsCorrection(string defect)
     {
         var capture = FreshRestartCapture(1);
@@ -126,6 +129,9 @@ public sealed partial class ChatWriteHoldHandlerTests
                 foreach (var item in items) item!["updates"]!["due_date"] = "2026-10-30";
                 break;
             case "outside_week": items[5]!["updates"]!["due_date"] = "2026-11-07"; break;
+            case "duplicate": items[5]!["habit_id"] = habits[0].Id.ToString(); break;
+            case "malformed": items[5]!["updates"]!["due_date"] = "next week"; break;
+            case "other_field": items[5]!["updates"]!["title"] = "Changed title"; break;
         }
         var rounds = 0;
         SetupFreshRestartModel(calls[0], results =>
@@ -140,7 +146,8 @@ public sealed partial class ChatWriteHoldHandlerTests
                 "missing" => habits[5].Title,
                 "extra" => extra.Title,
                 "all_today" => "fewer",
-                _ => "seven days"
+                "outside_week" => "seven days",
+                _ => "revised_items"
             });
             _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
             return FreshRestartResponse(calls[1] with { Id = "corrected-set" });
@@ -153,8 +160,10 @@ public sealed partial class ChatWriteHoldHandlerTests
         AssertFreshRestartPreview(result.Value, habits);
     }
 
-    [Fact]
-    public async Task G12_OrdinaryRescheduleDoesNotRequireFreshRestartDataOrFinishEarly()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task G12_OrdinaryRescheduleDoesNotRequireFreshRestartDataOrFinishEarly(bool individualDates)
     {
         var habits = await SetupFreshRestartAsync(FreshRestartCapture(1));
         var write = new AiToolCall("bulk_reschedule_habits", "ordinary-reschedule", JsonSerializer.SerializeToElement(new
@@ -164,6 +173,16 @@ public sealed partial class ChatWriteHoldHandlerTests
             due_date = "2026-11-20",
             orbit_write_complete = false
         }));
+        if (individualDates)
+            write = write with
+            {
+                Args = JsonSerializer.SerializeToElement(new
+                {
+                    restart_plan = false,
+                    revised_items = new[] { new { habit_id = habits[0].Id, updates = new { due_date = "2026-11-20" } } },
+                    orbit_write_complete = false
+                })
+            };
         var rounds = 0;
         SetupFreshRestartModel(write, results =>
         {
@@ -179,6 +198,95 @@ public sealed partial class ChatWriteHoldHandlerTests
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items.Should().ContainSingle().Which.EntityId.Should().Be(habits[0].Id);
         preview.Items![0].Fields.Should().ContainSingle().Which.NewValue.Should().Be("2026-11-20");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task G12_RestartRequiresEveryFreshQueryPage(bool tryBeforeLastPage)
+    {
+        var capture = FreshRestartCapture(1);
+        var habits = await SetupFreshRestartAsync(capture);
+        var calls = FreshRestartCalls(capture, habits);
+        AiToolCall Page(int offset)
+        {
+            var arguments = JsonNode.Parse(calls[0].Args.GetRawText())!.AsObject();
+            arguments["limit"] = 2;
+            arguments["offset"] = offset;
+            return calls[0] with { Id = "page-" + offset, Args = JsonSerializer.SerializeToElement(arguments) };
+        }
+        var final = WithRestartArgument(calls[1], "orbit_write_complete", false) with { Id = "paged-restart" };
+        AiToolCall[] plan = tryBeforeLastPage
+            ? [Page(0), calls[1], Page(2), Page(4), final]
+            : [Page(0), Page(2), Page(4), final];
+        var rounds = 0;
+        SetupFreshRestartModel(plan[0], results =>
+        {
+            var feedback = results.Should().ContainSingle().Which;
+            var previous = plan[rounds++];
+            if (previous.Name == "query_habits")
+            {
+                feedback.Success.Should().BeTrue(feedback.Error);
+                var page = feedback.Payload.Should().BeOfType<HabitListCard>().Which;
+                page.TotalCount.Should().Be(6);
+                page.Items.Should().HaveCount(2);
+            }
+            else
+            {
+                feedback.Success.Should().BeFalse();
+                feedback.Error.Should().Contain("every page");
+            }
+            _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
+            return FreshRestartResponse(plan[rounds]);
+        });
+
+        var result = await RunFreshRestartAsync();
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        rounds.Should().Be(plan.Length - 1);
+        AssertFreshRestartPreview(result.Value, habits);
+    }
+
+    [Fact]
+    public async Task G12_RestartDetectsMembershipChangesAfterTheRead()
+    {
+        var capture = FreshRestartCapture(1);
+        var habits = await SetupFreshRestartAsync(capture);
+        var calls = FreshRestartCalls(capture, habits);
+        var added = RestartHabit("New due habit", FreshRestartToday);
+        var corrected = JsonNode.Parse(calls[1].Args.GetRawText())!.AsObject();
+        corrected["revised_items"]!.AsArray().Add(JsonSerializer.SerializeToNode(new
+        {
+            habit_id = added.Id,
+            updates = new { due_date = "2026-10-31" }
+        }));
+        var rounds = 0;
+        SetupFreshRestartModel(calls[0], results =>
+        {
+            ++rounds;
+            if (rounds == 1)
+            {
+                _dbContext.Habits.Add(added);
+                _dbContext.SaveChanges();
+                return FreshRestartResponse(calls[1]);
+            }
+            if (rounds == 2)
+            {
+                var feedback = results.Should().ContainSingle().Which;
+                feedback.Success.Should().BeFalse();
+                feedback.Error.Should().Contain("query_habits").And.Contain(added.Title);
+                _pendingOperationStore.GetAwaiting(_userId).Should().BeEmpty();
+                return FreshRestartResponse(calls[0] with { Id = "refreshed-set" });
+            }
+            results.Should().ContainSingle().Which.Success.Should().BeTrue();
+            return FreshRestartResponse(calls[1] with { Id = "current-set", Args = JsonSerializer.SerializeToElement(corrected) });
+        });
+
+        var result = await RunFreshRestartAsync();
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        rounds.Should().Be(3);
+        AssertFreshRestartPreview(result.Value, habits.Append(added).ToArray());
     }
 
     private static JsonElement FreshRestartCapture(int repeat)
