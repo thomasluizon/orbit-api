@@ -125,7 +125,7 @@ the unresolved targets; the server does not derive intent from message patterns.
 | Proactive chat turns | Corresponding read block or short no-data nudge | #1620 |
 | Empty, partial and stale | Relevant block retains completeness and supported recovery | #1619, #1620 |
 | Failure, quota, plan, offline and refusal | Existing typed terminal outcome or concise status | #1620 |
-| Help, coaching and small talk | One to three complete lines, no headings or unsolicited bullets | #1620 |
+| Help, coaching and small talk | One to three short lines, one complete sentence per line, at most 180 characters per line; no headings or unsolicited bullets | #1620 |
 
 Moderation replies and localized chat errors use an explicit `clientContext.locale`,
 otherwise the account's profile language. `Accept-Language` does not become a client locale
@@ -301,8 +301,11 @@ acknowledgment in the person's language. This does not fabricate a UI route, exe
 tool, replace the model's answer or add a model round. Public chat DTOs and enums are unchanged.
 The deterministic replay tests verify the tool result supplied to the narrative model and the
 resulting composition. #26's live bilingual gate verifies whether the model follows that scope.
-Text composition preserves complete lines and limits their count; it never slices a word at
-an arbitrary character boundary. Goal progress is the goal's current value against its
+The model must use the least text needed: one to three short lines with one complete
+sentence per line, at most 180 characters per line. Split help steps across lines instead
+of chaining sentences on one line. Text composition preserves complete lines and limits
+their count; it never slices a word or sentence to meet the character bound.
+Goal progress is the goal's current value against its
 target from `query_goals`; a goal-progress request uses that read alone with
 `orbit_read_complete=true`. Habit metrics, analytics, month and profile tools explicitly
 exclude goal progress, and goal IDs cannot be used as habit IDs. Linked habit IDs in the
