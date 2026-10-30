@@ -104,6 +104,9 @@ public partial class ProcessUserChatCommandHandler
         if (turn.ChoiceSelection is { } selection)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, selection.ToModelContext());
 
+        if (turn.HabitDraft is { } draft)
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, draft.ToModelContext());
+
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         promptPhase?.Dispose();
 

@@ -65,6 +65,11 @@ public partial class ProcessUserChatCommandHandler
         definition = GroundDuplicateRecordOptions(definition, results, ChatLocale.Resolve(request.ClientContext, user?.Language));
         if (request.ClientContext!.PartKinds?.Contains(definition.Form, StringComparer.Ordinal) != true)
             return Failed("The client does not support this block kind.");
+        if (HasBoundMissingField(call.Args, results))
+        {
+            var draft = results.MissingHabitDrafts[JsonArgumentParser.GetOptionalString(call.Args, "draft_call_id")!];
+            definition = definition with { DraftClarification = new(draft.CallId, draft.MissingField, draft.ClarificationId) };
+        }
         var block = IssuedAstraBlock.Create(request.UserId, definition);
         await execution.BlockStore.AddAsync(block, ct);
         object payload = definition.Form switch
@@ -78,7 +83,7 @@ public partial class ProcessUserChatCommandHandler
                 definition.Action!, block.ExpiresAtUtc)
         };
         results.AskBlock = new ChatBlockPart(definition.Form, payload);
-        RetireDraftClarification(call.Args, results);
+        RetireDraftClarification(definition, results);
         AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,
             user?.Plan.ToString() ?? "Free", "astra_block_issued", new Dictionary<string, object>
             {
@@ -105,11 +110,10 @@ public partial class ProcessUserChatCommandHandler
         return null;
     }
 
-    private static void RetireDraftClarification(JsonElement args, ToolExecutionAccumulator results)
+    private static void RetireDraftClarification(AstraBlockDefinition definition, ToolExecutionAccumulator results)
     {
-        if (JsonArgumentParser.GetOptionalString(args, "draft_call_id") is { } draftId
-            && results.MissingHabitDrafts.TryGetValue(draftId, out var answeredDraft))
-            results.ActionResults.RemoveAll(action => action.ClarificationRequest?.OperationId == answeredDraft.ClarificationId);
+        if (definition.DraftClarification is { } draft)
+            results.ActionResults.RemoveAll(action => action.ClarificationRequest?.OperationId == draft.ClarificationId);
     }
 
     private static bool CanAttemptAsk(JsonElement args, AgentClientContext client) =>

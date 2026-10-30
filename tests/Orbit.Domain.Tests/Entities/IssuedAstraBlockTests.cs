@@ -21,6 +21,28 @@ public class IssuedAstraBlockTests
     }
 
     [Theory]
+    [InlineData("call")]
+    [InlineData("field")]
+    [InlineData("clarification")]
+    [InlineData("question")]
+    [InlineData("pickList")]
+    public void Create_RejectsIncompleteOrUnrelatedDraftBindings(string variant)
+    {
+        var binding = new AstraDraftClarification(variant == "call" ? " " : "create-call",
+            variant == "field" ? " " : "frequency_unit", variant == "clarification" ? Guid.Empty : Guid.NewGuid());
+        var definition = Choice() with { DraftClarification = binding };
+        if (variant == "question")
+            definition = new("question", "", [], [], Questions: [new("unrelated", "yesNo", "Continue?")], DraftClarification: binding);
+        if (variant == "pickList")
+            definition = new("pickList", "Choose", [], [new("item", "Plant habit", JsonSerializer.SerializeToElement(new { title = "Plant habit" }))],
+                MultiSelect: true, Action: "create_habits", DraftClarification: binding);
+
+        Action create = () => IssuedAstraBlock.Create(Guid.NewGuid(), definition);
+
+        create.Should().Throw<ArgumentException>().WithParameterName("definition");
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(5)]
     public void Create_RejectsChoiceCount(int count) =>

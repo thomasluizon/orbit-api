@@ -52,6 +52,12 @@ public sealed class IssuedAstraBlock : Entity
 
     private static string? DefinitionError(AstraBlockDefinition definition)
     {
+        if (definition.DraftClarification is { } draft
+            && (string.IsNullOrWhiteSpace(draft.DraftCallId) || string.IsNullOrWhiteSpace(draft.MissingField)
+                || draft.ClarificationId == Guid.Empty || definition.Form == AstraBlockKinds.PickList
+                || definition.Form == AstraBlockKinds.Question
+                    && (definition.Questions is not [var question] || question.Id != draft.MissingField)))
+            return "Draft clarification requires a call id, missing field, stored clarification id and a matching question or choice.";
         if (definition.Options is null || definition.Items is null) return "options and items must be arrays.";
         if (definition.Form != AstraBlockKinds.Question
             && (definition.Questions is not null || definition.Intro is not null || definition.Progress is not null))

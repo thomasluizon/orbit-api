@@ -15,7 +15,7 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     private const string SharedTitleGuidance = "For an existing habit target with sharesTitle=true in habitTargets, read query_habits with for_selection=true and wait for the person's choice before calling any write tool. Never emit the write alongside that read or use every matching ID for a singular target. An explicitly requested full set uses a fresh unfiltered read with for_selection=false.";
-    private const string TouchRefinementGuidance = "If previousStartingStep.step already consists of a single touch or contact, another touch, tap or finger placement is equal effort and is not smaller. Reduce to looking at the same object without touching or moving it: 'Look at the closed study material' / 'Olhar para o material de estudo fechado'. Compare with the actual typed previous step, not with the earlier opening example. Do not repeat contact as a refinement of contact.";
+    private const string TouchRefinementGuidance = "If previousStartingStep.step already consists of a single touch or contact, another touch, tap or finger placement is equal effort and is not smaller. Reduce to looking at the same object without touching or moving it. Compare with the actual typed previous step. Do not repeat contact as a refinement of contact.";
 
     [Theory]
     [InlineData(1)]

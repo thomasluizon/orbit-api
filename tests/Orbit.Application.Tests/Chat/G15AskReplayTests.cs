@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
+using Orbit.Application.Tests.Common;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -64,6 +65,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var create = new CreateHabitTool(_userDateService, _mediator);
         var handler = CreateHandler(create, RealAskTool());
         var title = language == "en" ? "Walking habit" : "Hábito de caminhada";
+        _pendingClarificationStore.CreateAsync(UserId, create.Name, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Guid.NewGuid());
         SetupAiResponse(ToolResponse(create.Name, "new-draft", JsonSerializer.Serialize(new { title })) with { ConversationContext = new() });
         var rounds = 0;
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
@@ -118,6 +121,120 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         AssertStoredComposition(result.Value, client, language);
+    }
+
+    [Theory]
+    [InlineData("en", "choice")]
+    [InlineData("pt-BR", "choice")]
+    [InlineData("en", "singleChoice")]
+    [InlineData("pt-BR", "singleChoice")]
+    [InlineData("en", "freeText")]
+    [InlineData("pt-BR", "freeText")]
+    public async Task G15_BoundAnswerRecoversTheStoredImageDraftOnTheNextTurn(string language, string answerType)
+    {
+        SetupExistingParents(language);
+        EnableComposition();
+        var title = language == "en" ? "Plant watering habit" : "Hábito de regar as plantas";
+        var description = language == "en" ? "Use the small blue watering can" : "Usar o regador azul pequeno";
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            title,
+            description,
+            emoji = "🪴",
+            frequency_quantity = 2,
+            due_time = "08:30",
+            reminder_enabled = true,
+            tag_names = new[] { "Home" }
+        });
+        _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
+        var clarificationId = Guid.NewGuid();
+        PendingClarificationData? pending = null;
+        _pendingClarificationStore.CreateAsync(UserId, "create_habit", Arg.Any<string>(), "frequency_unit",
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var actions = JsonSerializer.Deserialize<QuickAction[]>(call.ArgAt<string>(5))!;
+                pending = new("create_habit", call.ArgAt<string>(2), "frequency_unit",
+                    actions.Select(action => action.Value).ToArray(), DateTime.UtcNow.AddMinutes(30));
+                return clarificationId;
+            });
+        _pendingClarificationStore.GetForResolutionAsync(clarificationId, UserId, Arg.Any<CancellationToken>())
+            .Returns(_ => pending);
+        Orbit.Domain.Entities.IssuedAstraBlock? issued = null;
+        _blockStore.When(store => store.AddAsync(Arg.Any<Orbit.Domain.Entities.IssuedAstraBlock>(), Arg.Any<CancellationToken>()))
+            .Do(call => issued = call.Arg<Orbit.Domain.Entities.IssuedAstraBlock>());
+        var prompt = language == "en" ? "How often?" : "Com que frequência?";
+        var options = new[] { new { id = "day", label = language == "en" ? "Daily" : "Todo dia" },
+            new { id = "week", label = language == "en" ? "Weekly" : "Toda semana" } };
+        var ask = answerType == "choice"
+            ? JsonSerializer.SerializeToElement(new { form = "choice", question = prompt, options })
+            : JsonSerializer.SerializeToElement(new
+            {
+                form = "question",
+                questions = new[] {
+                new { id = "frequency_unit", type = "singleChoice", prompt,
+                    options, allowFreeText = answerType == "freeText" } }
+            });
+        var askNode = System.Text.Json.Nodes.JsonNode.Parse(ask.GetRawText())!.AsObject();
+        askNode["missing_input"] = "habit_setup";
+        askNode["draft_call_id"] = "image-draft";
+        askNode["missing_field"] = "frequency_unit";
+        SetupAiResponse(ToolResponse("create_habit", "image-draft", arguments.GetRawText()) with { ConversationContext = new() });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse("ask", "setup", JsonSerializer.Serialize(new { input = askNode }))));
+        var client = new AgentClientContext(SupportsParts: true,
+            PartKinds: [answerType == "choice" ? "choice" : "question"], Locale: language);
+        var handler = CreateHandler(new CreateHabitTool(_userDateService, _mediator), RealAskTool());
+
+        var first = await handler.Handle(new(UserId, "Create the habit in this image.",
+            ImageData: [1, 2, 3], ImageMimeType: "image/png", ClientContext: client), default);
+
+        first.IsSuccess.Should().BeTrue(first.Error);
+        issued.Should().NotBeNull(JsonSerializer.Serialize(first.Value));
+        pending.Should().NotBeNull();
+        issued!.ReadDefinition().DraftClarification.Should().Be(new AstraDraftClarification("image-draft", "frequency_unit", clarificationId));
+        first.Value.Actions.Should().NotContain(action => action.Status == ActionStatus.NeedsClarification);
+        var visible = JsonSerializer.Serialize(first.Value, ChatStreamEvent.SerializerOptions);
+        visible.Should().NotContain(clarificationId.ToString()).And.NotContain(description).And.NotContain("draft_call_id");
+        _blockStore.GetAsync(issued!.Id, UserId, Arg.Any<CancellationToken>()).Returns(issued);
+        _blockStore.MarkAnsweredAsync(issued.Id, UserId, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        var freeText = language == "en" ? "Every day" : "Todos os dias";
+        var answer = answerType == "choice" ? new AstraBlockAnswer(issued.Id, ["day"])
+            : new AstraBlockAnswer(issued.Id, [], Answers: [new AstraQuestionAnswer("frequency_unit",
+                SelectedIds: answerType == "singleChoice" ? ["day"] : null,
+                FreeText: answerType == "freeText" ? freeText : null)]);
+        AiToolRequest? continuation = null;
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                continuation = call.Arg<AiToolRequest>();
+                return Result.Success(new AiResponse { TextMessage = "OK" });
+            });
+
+        var second = await handler.Handle(new(UserId, string.Empty, ClientContext: client, BlockAnswer: answer), default);
+
+        second.IsSuccess.Should().BeTrue(second.Error);
+        continuation.Should().NotBeNull();
+        continuation!.ImageData.Should().BeNull();
+        continuation.History.Should().BeNullOrEmpty();
+        const string prefix = "Validated habit draft: ";
+        continuation.DynamicContext.Should().Contain(prefix);
+        var draftJson = continuation.DynamicContext![(continuation.DynamicContext.IndexOf(prefix, StringComparison.Ordinal) + prefix.Length)..];
+        using var context = JsonDocument.Parse(draftJson);
+        var merged = context.RootElement.GetProperty("arguments");
+        context.RootElement.GetProperty("toolName").GetString().Should().Be("create_habit");
+        foreach (var supplied in arguments.EnumerateObject())
+            merged.GetProperty(supplied.Name).GetRawText().Should().Be(supplied.Value.GetRawText());
+        merged.GetProperty("frequency_unit").GetString().Should().Be(answerType == "freeText" ? freeText : "Day");
+        continuation.UserMessage.Should().NotContain(title).And.NotContain(description).And.NotContain(clarificationId.ToString());
+        continuation.DynamicContext.Should().Contain("Selection is not write approval");
+        await _pendingClarificationStore.Received(1).GetForResolutionAsync(clarificationId, UserId, Arg.Any<CancellationToken>());
+        await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _operationExecutor.ReceivedWithAnyArgs(1).ExecuteAsync(default!, default);
+        _mediator.ReceivedCalls().Should().BeEmpty();
+        var captured = _conversationRecorder.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<ConversationTurnCapture>()).Last();
+        captured.UserContent.Should().NotContain(title).And.NotContain(description).And.NotContain(clarificationId.ToString());
     }
 
     [Fact]

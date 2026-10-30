@@ -527,6 +527,44 @@ public class AiIntentServiceStreamingTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendWithToolsAsync_TruncationLogsOnlyTokenCountsAndOrderedItemSizes(bool streaming)
+    {
+        var response = ResponsesTestData.Response(inputTokens: 128, outputTokens: 8192);
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        response.Usage.OutputTokenDetails = new() { ReasoningTokenCount = 8100 };
+        response.OutputItems.Add(ResponseItem.CreateReasoningItem("private reasoning"));
+        response.OutputItems.Add(ResponseItem.CreateAssistantMessageItem("private completion"));
+        response.OutputItems.Add(ResponseItem.CreateFunctionCallItem("private-call-id", "private_tool",
+            BinaryData.FromString("{\"title\":\"private arguments\"}")));
+        var completion = ModelReaderWriter.Write(response).ToString();
+        var body = streaming ? ResponsesTestData.Stream(response) : completion;
+        var (service, logger) = BuildServiceWithRecordingLogger(streaming ? new SseHandler(body) : new JsonHandler(body));
+        var sink = new CollectingSink();
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("private person text", "private instructions", []),
+            streaming ? sink.Handle : null);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.IsTruncated.Should().BeTrue();
+        var properties = logger.WarningProperties.Should().ContainSingle(entry => entry.EventId == 8).Subject.Properties;
+        properties.Should().ContainKey("OutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("ReasoningTokens").WhoseValue.Should().Be(8100);
+        properties.Should().ContainKey("MaxOutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("Model").WhoseValue.Should().Be("gpt-6-luna");
+        properties.Should().ContainKey("OutputItems");
+        using var items = JsonDocument.Parse((string)properties["OutputItems"]!);
+        items.RootElement.EnumerateArray().Select(item => item.GetProperty("kind").GetString())
+            .Should().Equal("reasoning", "message", "function_call");
+        using var wire = JsonDocument.Parse(completion);
+        items.RootElement.EnumerateArray().Select(item => item.GetProperty("characterLength").GetInt32())
+            .Should().Equal(wire.RootElement.GetProperty("output").EnumerateArray().Select(item => item.GetRawText().Length));
+        JsonSerializer.Serialize(logger.WarningProperties.Select(entry => entry.Properties)).Should().NotContain("private");
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]

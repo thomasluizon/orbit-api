@@ -17,7 +17,7 @@ public sealed record PreparedAstraBlockAnswer(
     string Message, ChatResponse? Response = null, CrisisLocales Crisis = CrisisLocales.None,
     DateTime? AnsweredAtUtc = null, DateOnly? ReservedAllowanceDate = null, bool IsReplay = false,
     bool MessageAllowanceConsumed = false, ModerationResult? ModeratedInput = null, string? SafetyText = null,
-    AstraChoiceSelection? ChoiceSelection = null);
+    AstraChoiceSelection? ChoiceSelection = null, HabitSetupAnswerContext? HabitDraft = null);
 
 public sealed class AstraBlockAnswerService(
     IIssuedAstraBlockStore store,
@@ -33,7 +33,8 @@ public sealed class AstraBlockAnswerService(
     IPendingOperationChangePreviewer? previewer = null,
     TimeSpan? claimLifetime = null,
     Action<PreparedAstraBlockAnswer>? observePrepared = null,
-    Action<ConversationToolCall>? observeTool = null)
+    Action<ConversationToolCall>? observeTool = null,
+    IPendingClarificationStore? clarifications = null)
 {
     public async Task<Result<ChatResponse>> ExecuteAsync(ProcessUserChatCommand request,
         Func<PreparedAstraBlockAnswer, Task<Result<ChatResponse>>> produceResponse, CancellationToken ct,
@@ -172,16 +173,7 @@ public sealed class AstraBlockAnswerService(
             return await unitOfWork.ExecuteInTransactionAsync(async token =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync($"astra-blocks:{request.UserId}", token);
-                var block = await store.GetAsync(answer.BlockId, request.UserId, token);
-                if (block is { AnsweredAtUtc: { } claim, AnswerJson: not null, ResponseJson: null }
-                    && claimLifetime is { } lifetime && claim + lifetime < TimeProvider.System.GetUtcNow().UtcDateTime)
-                {
-                    if (block.CommittedResponseJson is { } committed)
-                        await store.CompleteAnswerAsync(block.Id, request.UserId, claim, committed, token);
-                    else
-                        await ReleaseClaimAsync(block.Id, request.UserId, claim, block.ReservedAllowanceDate, token);
-                    block = await store.GetAsync(answer.BlockId, request.UserId, token);
-                }
+                var block = await ReadCurrentBlockAsync(answer.BlockId, request.UserId, token);
                 if (await ReadReplayAsync(block, answer, request, token) is { } replay)
                     return Result.Success(new PreparedAstraBlockAnswer(string.Empty, replay, IsReplay: true));
                 var stateError = CheckState(block);
@@ -191,6 +183,9 @@ public sealed class AstraBlockAnswerService(
                 var answerError = CheckAnswer(definition, answer);
                 if (answerError is not null)
                     return answerError;
+                var draftContext = await ReadDraftAsync(request.UserId, definition, answer, token);
+                if (draftContext.IsFailure)
+                    return draftContext.PropagateError<PreparedAstraBlockAnswer>();
                 var isChoice = definition.Form != AstraBlockKinds.PickList;
                 var message = BuildMessage(definition, answer);
                 var safetyText = SafetyText(definition, answer, message);
@@ -232,13 +227,44 @@ public sealed class AstraBlockAnswerService(
                         response is null ? null : JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions), token);
                 return Result.Success(new PreparedAstraBlockAnswer(message, response, crisis,
                     answeredAtUtc, reservedAllowanceDate, MessageAllowanceConsumed: messageAllowanceConsumed, SafetyText: safetyText,
-                    ChoiceSelection: AstraChoiceSelection.FromValidatedAnswer(definition, answer)));
+                    ChoiceSelection: definition.DraftClarification is null
+                        ? AstraChoiceSelection.FromValidatedAnswer(definition, answer) : null, HabitDraft: draftContext.Value));
             }, ct);
         }
         catch (AnswerRejectedException exception)
         {
             return exception.Result;
         }
+    }
+
+    private async Task<IssuedAstraBlock?> ReadCurrentBlockAsync(Guid blockId, Guid userId, CancellationToken ct)
+    {
+        var block = await store.GetAsync(blockId, userId, ct);
+        if (block is { AnsweredAtUtc: { } claim, AnswerJson: not null, ResponseJson: null }
+            && claimLifetime is { } lifetime && claim + lifetime < TimeProvider.System.GetUtcNow().UtcDateTime)
+        {
+            if (block.CommittedResponseJson is { } committed)
+                await store.CompleteAnswerAsync(block.Id, userId, claim, committed, ct);
+            else
+                await ReleaseClaimAsync(block.Id, userId, claim, block.ReservedAllowanceDate, ct);
+            block = await store.GetAsync(blockId, userId, ct);
+        }
+        return block;
+    }
+
+    private async Task<Result<HabitSetupAnswerContext?>> ReadDraftAsync(Guid userId,
+        AstraBlockDefinition definition, AstraBlockAnswer answer, CancellationToken ct)
+    {
+        if (definition.DraftClarification is not { } draft)
+            return Result.Success<HabitSetupAnswerContext?>(null);
+        var pending = clarifications is null ? null
+            : await clarifications.GetForResolutionAsync(draft.ClarificationId, userId, ct);
+        if (pending is null)
+            return Failure(ErrorCodes.AstraBlockExpired).PropagateError<HabitSetupAnswerContext?>();
+        var context = HabitSetupAnswerContext.FromValidatedAnswer(pending, definition, answer);
+        return context is null
+            ? Failure(ErrorCodes.AstraBlockInvalidSelection).PropagateError<HabitSetupAnswerContext?>()
+            : Result.Success<HabitSetupAnswerContext?>(context);
     }
 
     private async Task<ChatResponse> BuildPickListResponseAsync(ProcessUserChatCommand request,
