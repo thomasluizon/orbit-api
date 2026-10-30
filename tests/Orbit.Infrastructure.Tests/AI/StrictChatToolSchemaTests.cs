@@ -8,6 +8,7 @@ using FluentAssertions;
 using Xunit.Abstractions;
 using NSubstitute;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using OpenAI.Responses;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -53,6 +54,29 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
             field.Value.TryGetProperty("description", out var description).Should().BeTrue(field.Name);
             description.GetString()!.ToLowerInvariant().Should().Contain("null", field.Name);
         }
+    }
+
+    [Fact]
+    public void SuggestHabits_WireSchemaRequiresExplicitBoundedCount()
+    {
+        var tool = new SuggestHabitsTool(Substitute.For<MediatR.IMediator>());
+        var source = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var sdkTool = (ResponseTool)method.Invoke(null, [new { name = tool.Name, parameters = source }])!;
+        using var wire = JsonDocument.Parse(ModelReaderWriter.Write(sdkTool).ToString());
+        var schema = wire.RootElement.GetProperty("parameters");
+        var count = schema.GetProperty("properties").GetProperty("count");
+        output.WriteLine(wire.RootElement.GetRawText());
+
+        wire.RootElement.GetProperty("strict").GetBoolean().Should().BeTrue();
+        count.GetProperty("type").ValueKind.Should().Be(JsonValueKind.String, "count must never allow null");
+        count.GetProperty("type").GetString().Should().Be("integer");
+        source.GetProperty("required").EnumerateArray().Select(value => value.GetString()).Should().Contain("count");
+        count.GetProperty("minimum").GetInt32().Should().Be(1);
+        count.GetProperty("maximum").GetInt32().Should().Be(HabitSuggestionsCard.MaxDrafts);
+        count.GetProperty("description").GetString().Should().Be(
+            "Number of habit drafts to return, from 1 to 5. Use the number requested by the person.");
+        AssertStrict(schema);
     }
 
     [Fact]

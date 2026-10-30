@@ -96,9 +96,9 @@ public partial class HabitSuggestionTests
     }
 
     [Theory]
-    [InlineData("{}", false)]
-    [InlineData("{\"excluded_activities\":null}", false)]
-    [InlineData("{\"excluded_activities\":[]}", true)]
+    [InlineData("{\"count\":1}", false)]
+    [InlineData("{\"count\":1,\"excluded_activities\":null}", false)]
+    [InlineData("{\"count\":1,\"excluded_activities\":[]}", true)]
     public async Task SuggestTool_PreservesOmittedNullAndEmptyExclusions(string json, bool supplied)
     {
         var mediator = Substitute.For<IMediator>();
@@ -124,7 +124,7 @@ public partial class HabitSuggestionTests
     public async Task SuggestTool_RejectsMalformedExclusionsBeforeDispatch(string value)
     {
         var mediator = Substitute.For<IMediator>();
-        using var args = JsonDocument.Parse("{\"excluded_activities\":" + value + "}");
+        using var args = JsonDocument.Parse("{\"count\":1,\"excluded_activities\":" + value + "}");
 
         var result = await new SuggestHabitsTool(mediator).ExecuteAsync(args.RootElement, _userId, default);
 

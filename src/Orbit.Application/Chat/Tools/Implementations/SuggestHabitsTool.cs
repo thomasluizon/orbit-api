@@ -27,7 +27,13 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
         {
             instruction = new { type = JsonSchemaTypes.String, maxLength = 1000 },
             language = new { type = JsonSchemaTypes.String, @enum = new[] { "en", "pt", "pt-BR" } },
-            count = new { type = JsonSchemaTypes.Integer, minimum = 1, maximum = HabitSuggestionsCard.MaxDrafts },
+            count = new
+            {
+                type = JsonSchemaTypes.Integer,
+                minimum = 1,
+                maximum = HabitSuggestionsCard.MaxDrafts,
+                description = $"Number of habit drafts to return, from 1 to {HabitSuggestionsCard.MaxDrafts}. Use the number requested by the person."
+            },
             excluded_activities = new
             {
                 type = JsonSchemaTypes.Array,
@@ -36,26 +42,28 @@ public sealed class SuggestHabitsTool(IMediator mediator) : IAiTool
                 items = new { type = JsonSchemaTypes.String, minLength = 1, maxLength = HabitSuggestionRequest.MaxExcludedActivityLength }
             }
         },
-        required = new[] { "instruction", "language" }
+        required = new[] { "instruction", "language", "count" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         var instruction = JsonArgumentParser.GetOptionalString(args, "instruction") ?? string.Empty;
         var language = JsonArgumentParser.GetOptionalString(args, "language") ?? "en";
-        var count = JsonArgumentParser.GetOptionalInt(args, "count") ?? 3;
+        if (!args.TryGetProperty("count", out var countValue) || countValue.ValueKind != JsonValueKind.Number
+            || !countValue.TryGetInt32(out var count) || !HabitSuggestionsCard.IsValidDraftCount(count))
+            return InvalidArguments(language);
         IReadOnlyList<string>? excluded = null;
         if (args.TryGetProperty("excluded_activities", out var values) && values.ValueKind != JsonValueKind.Null)
         {
             if (values.ValueKind != JsonValueKind.Array || values.EnumerateArray().Any(value => value.ValueKind != JsonValueKind.String))
-                return InvalidExclusions(language);
+                return InvalidArguments(language);
             excluded = values.EnumerateArray().Select(value => value.GetString()!).ToArray();
-            if (!HabitSuggestionRequest.HasValidExclusions(excluded)) return InvalidExclusions(language);
+            if (!HabitSuggestionRequest.HasValidExclusions(excluded)) return InvalidArguments(language);
         }
         var result = await mediator.Send(new SuggestHabitDraftsQuery(userId, instruction, language, count, excluded), ct);
         return result.IsSuccess ? new(true, Payload: result.Value) : ToolResult.FromFailure(result);
     }
 
-    private static ToolResult InvalidExclusions(string language) => new(false,
+    private static ToolResult InvalidArguments(string language) => new(false,
         Error: ErrorCopy.Resolve("HABIT_SUGGESTION_INVALID", LocaleHelper.IsPortuguese(language)), ErrorCode: "HABIT_SUGGESTION_INVALID");
 }
