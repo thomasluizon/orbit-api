@@ -308,7 +308,8 @@ composition separates the model's sentences into lines deterministically. A sent
 than 180 characters wraps at word boundaries and is included only when all its lines fit
 the three-line budget. Trailing sentences outside that budget are omitted as whole sentences;
 words and sentences are never truncated. This normalization uses the existing narrative
-response, adds no model round and leaves legacy text unchanged.
+response, adds no model round and leaves legacy text unchanged. If no complete sentence
+fits, the existing concise failure status replaces an empty answer.
 Goal progress is the goal's current value against its
 target from `query_goals`; a goal-progress request uses that read alone with
 `orbit_read_complete=true`. Habit metrics, analytics, month and profile tools explicitly
@@ -327,9 +328,15 @@ including reads completed before ask in the same batch. Use `for_selection=true`
 selection lookups; a completed listing read can also supply the records. Indexes,
 history, failed reads and other account tools cannot satisfy this requirement. Missing
 or unknown reasons and unread selections return through failed-ask validation feedback
-so the model can continue the original request. Habit setup, preferences, check-ins and
-creation drafts can ask without a prerequisite account read. Selecting records still
-does not approve or execute a write.
+so the model can continue the original request. Before a successful typed account read,
+the declared schema permits only `habit_setup` for input needed to create new habit drafts.
+Preferences, check-ins and selections become available after a successful account read;
+the server refreshes the existing ask declaration before the normal continuation. Complete
+reads still finish without continuation or an additional model call. Failed reads, feature
+help, indexes, conversation history and write previews do not unlock those reasons. Runtime
+validation applies the same prerequisite if a model emits an undeclared reason. Record
+selection retains its narrower habit-read requirement. Selecting records still does not
+approve or execute a write, and habit setup cannot substitute for an account read or check-in.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without

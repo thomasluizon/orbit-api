@@ -49,6 +49,7 @@ public partial class ProcessUserChatCommandHandler
         public int AskAttempts { get; set; }
         public bool CanRetryAsk { get; set; }
         public bool HasSuccessfulSelectionRead { get; set; }
+        public bool HasSuccessfulAccountRead { get; set; }
         public HabitSelectionCandidates? PendingSelection { get; set; }
         public List<HabitSelectionCandidates> SelectionCandidates { get; } = [];
         public bool HasBudgetRecovery { get; set; }

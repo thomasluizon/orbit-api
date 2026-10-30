@@ -38,8 +38,11 @@ feature-help corrections apply independently of `astra_block_first`. #26 owns th
 Verify legacy clients and clients without an ask kind have no `ask` declaration. JWT clients
 with an ask kind retain it unless `astra_ask_blocks_disabled` or `astra_parts_disabled` applies.
 Ask declarations require form-specific content and `missing_input` inside `input`;
-flat calls use the same required reason. Record selection requires a successful
-current-turn habit read; setup, preferences and check-ins can ask without that read.
+flat calls use the same required reason. Before a successful typed account read, the
+declared schema accepts only habit setup for new drafts. Other reasons unlock on the
+normal continuation after that read; complete reads add no model round. Failed reads,
+feature help, history and write previews do not unlock them. Record selection also
+requires a successful current-turn habit read. Selecting does not approve a write.
 No model or quota setting controls this negotiation.
 
 The streak response appends optional `firstEligibleDate` in the account's time zone. Deploy

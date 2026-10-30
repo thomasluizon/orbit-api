@@ -81,4 +81,29 @@ public partial class ProcessUserChatCommandHandlerTests
         else result.Value.Parts.Should().BeNull();
         AssertStoredComposition(result.Value, client, language);
     }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task G13_HelpThatCannotFitAWholeSentenceReturnsTheExistingFailureStatus(string language)
+    {
+        SetupExistingParents(language);
+        EnableComposition();
+        var tool = new DescribeFeatureTool(new FeatureExplanationService(), new AppSurfaceCatalog());
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        SetupAiResponse(CapturedCompositionPlan("prod-r4-composition-feature-help-en-r1"));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = string.Join(" ", Enumerable.Repeat("documented", 80)) + "." }));
+        var client = new AgentClientContext(SupportsParts: true, PartKinds: [], Locale: language);
+
+        var result = await handler.Handle(new(UserId, "Explain the requested setting.", ClientContext: client), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.AiMessage.Should().Be(language == "pt-BR"
+            ? "Não consegui concluir isso. Tente novamente." : "I couldn't complete that. Please try again.");
+        result.Value.Parts.Should().ContainSingle().Which.Should().Be(new ChatTextPart(result.Value.AiMessage));
+        AssertStoredComposition(result.Value, client, language);
+    }
 }

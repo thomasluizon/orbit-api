@@ -145,6 +145,49 @@ public class AiIntentServiceStreamingTests
             await File.WriteAllTextAsync(capturePath, wireTools.GetRawText());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ContinueWithToolResultsAsync_RefreshesAskSchemaWithoutChangingTheToolSet(bool streaming)
+    {
+        var tools = StrictChatToolSchemaTests.AllTools();
+        var ask = tools.Single(tool => tool.Name == "ask").Should()
+            .BeOfType<Orbit.Application.Chat.Tools.Implementations.AskTool>().Subject;
+        var query = tools.Single(tool => tool.Name == "query_habits");
+        object Declaration(bool hasRead) => new { name = ask.Name, description = ask.Description, parameters = ask.GetParameterSchema(hasRead) };
+        var read = ResponsesTestData.Response();
+        read.OutputItems.Add(ResponseItem.CreateFunctionCallItem("read", query.Name, BinaryData.FromString("{}")));
+        var reply = ResponsesTestData.Response("Ready.");
+        string Body(ResponseResult response) => streaming ? ResponsesTestData.Stream(response) : ModelReaderWriter.Write(response).ToString();
+        var handler = new SequenceSseHandler(Body(read), Body(reply));
+        var (service, sink) = BuildService(handler);
+        var streamSink = streaming ? sink.Handle : (Func<AiStreamEvent, Task>?)null;
+        var first = await service.SendWithToolsAsync(new AiToolRequest("Continue.", "system",
+            [Declaration(false), new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
+        first.IsSuccess.Should().BeTrue(first.Error);
+        first.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true), new { name = "unadvertised_tool" }];
+
+        var next = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext,
+            [new(query.Name, "read", true, null, null, null)], streamSink);
+
+        next.IsSuccess.Should().BeTrue(next.Error);
+        handler.RequestBodies.Should().HaveCount(2);
+        for (var index = 0; index < 2; index++)
+        {
+            using var document = JsonDocument.Parse(handler.RequestBodies[index]);
+            var declarations = document.RootElement.GetProperty("tools").EnumerateArray().ToArray();
+            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal("ask", "query_habits");
+            var declaration = declarations[0];
+            declaration.GetProperty("strict").GetBoolean().Should().BeTrue();
+            StrictChatToolSchemaTests.AssertStrict(declaration.GetProperty("parameters"));
+            var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
+            foreach (var form in forms.EnumerateArray())
+                form.GetProperty("properties").GetProperty("missing_input").GetProperty("enum").EnumerateArray()
+                    .Select(value => value.GetString()).Should().BeEquivalentTo(index == 0
+                        ? ["habit_setup"] : new[] { "habit_setup", "preference", "check_in", "record_selection", "bulk_selection" });
+        }
+    }
+
     [Fact]
     public async Task SendWithToolsAsync_StreamFailure_RecordsErrorWithoutUsage()
     {

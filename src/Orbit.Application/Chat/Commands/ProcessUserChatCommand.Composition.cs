@@ -89,9 +89,9 @@ public partial class ProcessUserChatCommandHandler
         else if (parts.Count == 0 && !hasOutcome)
         {
             var steps = Mentions(request.Message, "steps|passos|step by step|passo a passo");
-            var text = results.LastSuccessfulOperation(DescribeFeatureToolName)?.Payload is FeatureHelpResult
-                ? ComposeFeatureHelpText(parsed.VisibleText, steps)
-                : ShortText(parsed.VisibleText, 3, steps);
+            var help = results.LastSuccessfulOperation(DescribeFeatureToolName)?.Payload is FeatureHelpResult;
+            var text = help ? ComposeFeatureHelpText(parsed.VisibleText, steps) : ShortText(parsed.VisibleText, 3, steps);
+            if (help && string.IsNullOrWhiteSpace(text)) text = ToolFailureMessage(language);
             parts.Add(new ChatTextPart(text));
         }
 

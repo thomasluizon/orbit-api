@@ -33,13 +33,14 @@ public partial class ProcessUserChatCommandHandlerTests
     public async Task Ask_EmitsNegotiatedPartAndIgnoresRepeatedAsk(int tokenCount, string? text, bool nested)
     {
         SetupUserAndPayGate();
+        var setup = AskWithMissingInput(new("ask", "ask1", ParseArguments(ChoiceArguments)), "habit_setup").Args;
         SetupAiResponse(new AiResponse
         {
             TextMessage = text,
             ReportedTokenCount = tokenCount,
             ConversationContext = TestConversationContext,
-            ToolCalls = [new("ask", "ask1", nested ? JsonSerializer.SerializeToElement(new { input = ParseArguments(ChoiceArguments) }) : ParseArguments(ChoiceArguments)),
-                new("ask", "ask2", ParseArguments(ChoiceArguments))]
+            ToolCalls = [new("ask", "ask1", nested ? JsonSerializer.SerializeToElement(new { input = setup }) : setup),
+                new("ask", "ask2", setup)]
         });
         var response = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me plan a walk",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);

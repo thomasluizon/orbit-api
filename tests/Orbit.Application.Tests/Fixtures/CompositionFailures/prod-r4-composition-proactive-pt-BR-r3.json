@@ -1,0 +1,64 @@
+{
+  "caseId": "composition-proactive-pt-BR",
+  "repeat": 3,
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"habitList\",\"block\":{\"title\":\"Hábitos\",\"count\":\"2 de 2\",\"items\":[{\"title\":\"Beber água\",\"emoji\":null,\"isSkippedOnDate\":false},{\"title\":\"Caminhada\",\"emoji\":null,\"isSkippedOnDate\":false}],\"window\":\"30 de out. de 2026\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "record_selection",
+          "question": "Qual lembrete você quer dizer?",
+          "options": [
+            {
+              "id": "previous_astra_message",
+              "label": "O lembrete anterior",
+              "description": "Ver o que falta hoje"
+            },
+            {
+              "id": "other",
+              "label": "Outro lembrete",
+              "description": "Especifique qual"
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": true
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Failed",
+      "result": {
+        "success": false,
+        "error": "Read the account records with query_habits(for_selection=true, orbit_read_complete=false) before asking the person to choose them. Resolve an earlier reminder from conversation history; when its read answers the request, return that result without ask. A failed ask did not issue a question. Continue the original request with the appropriate tools when its inputs are clear; no ask is needed for an actionable request. Retry ask once with valid arguments and a supported form: choice, pickList, question. choice requires question and options; pickList requires title, action and items; question requires questions.",
+        "payload": null
+      }
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": null,
+        "date": null,
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ]
+}

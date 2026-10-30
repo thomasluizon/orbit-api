@@ -44,11 +44,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("en", "habit_setup")]
     [InlineData("pt-BR", "habit_setup")]
-    [InlineData("en", "preference")]
-    [InlineData("pt-BR", "preference")]
-    [InlineData("en", "check_in")]
-    [InlineData("pt-BR", "check_in")]
-    public async Task G12_PersonOnlyInputDoesNotRequireAnAccountRead(string language, string reason)
+    public async Task G12_HabitSetupDoesNotRequireAnAccountRead(string language, string reason)
     {
         SetupExistingParents(language);
         EnableComposition();

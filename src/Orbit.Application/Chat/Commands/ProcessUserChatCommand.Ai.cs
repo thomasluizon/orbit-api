@@ -125,14 +125,18 @@ public partial class ProcessUserChatCommandHandler
             cancellationToken);
     }
 
-    private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context) =>
-        tool.IsReadOnly
+    private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context,
+        bool hasAccountRead = false)
+    {
+        var schema = tool is AskTool ask ? ask.GetParameterSchema(hasAccountRead) : tool.GetParameterSchema();
+        return tool.IsReadOnly
             ? UsesComposition(request, context)
                 ? tool.Name == "revise_pending_changes"
-                    ? TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema(), description: RevisePendingChangesTool.CompletionArgumentDescription)
-                    : TerminalReadDirective.WithCompletionArgument(tool.GetParameterSchema())
-                : tool.GetParameterSchema()
-            : TerminalWriteDirective.WithCompletionArgument(tool.GetParameterSchema());
+                    ? TerminalReadDirective.WithCompletionArgument(schema, description: RevisePendingChangesTool.CompletionArgumentDescription)
+                    : TerminalReadDirective.WithCompletionArgument(schema)
+                : schema
+            : TerminalWriteDirective.WithCompletionArgument(schema);
+    }
 
     private static string AppendCardPromptInstructions(
         string prompt, ProcessUserChatCommand request, ChatContext context,

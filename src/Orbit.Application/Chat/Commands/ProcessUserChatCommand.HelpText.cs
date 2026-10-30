@@ -27,7 +27,7 @@ public partial class ProcessUserChatCommandHandler
         foreach (var word in sentence.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             if (word.Length > 180) return null;
-            if (current.Length + word.Length + 1 > 180)
+            if (current.Length > 0 && current.Length + word.Length + 1 > 180)
             {
                 lines.Add(current);
                 current = word;
