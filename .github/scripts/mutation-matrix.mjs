@@ -77,7 +77,7 @@ const shards = [
     ],
   },
   { project: "application", shard: "application-schedule", mutate: ["**/Habits/Services/HabitScheduleService.cs"] },
-  ...spanShards("application", "application-chat-processing", "**/Chat/Commands/ProcessUserChatCommand.Tools.cs", [18000, 32000])
+  ...spanShards("application", "application-chat-processing", "**/Chat/Commands/ProcessUserChatCommand.Tools.cs", [18000, 25000, 32000])
     .map((scope, index) => index === 1 ? { ...scope, mutate: [...scope.mutate, "**/Chat/Commands/ProcessUserChatCommand.Correction.cs"] } : scope),
   {
     project: "application", shard: "application-chat-context", mutate: [
