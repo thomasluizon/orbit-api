@@ -35,6 +35,28 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 
 public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    [Fact]
+    public async Task IndependentScopes_ReadPersistedTurnWhileAnotherReaderIsActive()
+    {
+        var userId = Guid.NewGuid();
+        using var services = new ChatTurnStreamTestServices(Substitute.For<IMediator>(), userId);
+        var store = services.Provider.GetRequiredService<IChatTurnStore>();
+        var command = new ProcessUserChatCommand(userId, "Hello");
+        var candidate = ChatTurn.Create(userId, ChatTurnIdentity.HashKey("active-reader"),
+            ChatTurnIdentity.Fingerprint(command), DateTime.UtcNow.AddMinutes(5));
+        (await store.ClaimAsync(candidate, default)).Claimed.Should().BeTrue();
+        await using var scope = services.Provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        await using var reader = db.Users.AsNoTracking().AsAsyncEnumerable().GetAsyncEnumerator();
+        (await reader.MoveNextAsync()).Should().BeTrue();
+        reader.Current.Id.Should().Be(userId);
+
+        var persisted = await store.ReadAsync(userId, candidate.Id, default);
+
+        persisted.Id.Should().Be(candidate.Id);
+        persisted.UserId.Should().Be(userId);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -362,7 +384,8 @@ public sealed class ChatTurnStreamTests(Xunit.Abstractions.ITestOutputHelper out
 
 internal sealed class ChatTurnStreamTestServices : IDisposable
 {
-    private readonly SqliteOrbitDbContextFactory _database = new();
+    private readonly SqliteOrbitDbContextFactory _database = new(
+        Path.Combine(Path.GetTempPath(), $"orbit-chat-stream-{Guid.NewGuid():N}.db"));
     internal ServiceProvider Provider { get; }
     internal IMediator Mediator { get; }
 
