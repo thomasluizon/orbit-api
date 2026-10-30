@@ -8,6 +8,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using System.Linq.Expressions;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Gamification;
 
@@ -15,6 +16,7 @@ public class GetStreakInfoQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
+    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
@@ -31,6 +33,7 @@ public class GetStreakInfoQueryHandlerTests
         _handler = new GetStreakInfoQueryHandler(
             _userRepo,
             _streakFreezeRepo,
+            _habitRepo,
             _userDateService,
             _userStreakService,
             _featureFlagService,
@@ -69,6 +72,58 @@ public class GetStreakInfoQueryHandlerTests
     {
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
+    }
+
+    [Theory]
+    [InlineData("America/Sao_Paulo", "2026-04-01", "active")]
+    [InlineData("Pacific/Auckland", "2026-04-02", "active")]
+    [InlineData("America/Sao_Paulo", null, "empty")]
+    [InlineData("America/Sao_Paulo", null, "deleted")]
+    [InlineData("America/Sao_Paulo", null, "completed")]
+    public async Task Handle_FirstEligibleDateUsesEarliestActiveHabitInAccountTimeZone(
+        string zoneId, string? expectedDate, string habitState)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateTestUser());
+        _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(TimeZoneInfo.FindSystemTimeZoneById(zoneId));
+        var habits = new List<Habit>();
+        if (habitState != "empty")
+        {
+            var first = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId,
+                "First task", null, null, Today,
+                CreatedAtUtc: new DateTime(2026, 4, 2, 1, 0, 0, DateTimeKind.Utc))).Value;
+            if (habitState == "deleted") first.SoftDelete();
+            if (habitState == "completed") first.Log(Today);
+            habits.Add(first);
+        }
+        if (habitState == "active")
+        {
+            habits.Insert(0, Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId,
+                "Later task", null, null, Today,
+                CreatedAtUtc: new DateTime(2026, 4, 3, 1, 0, 0, DateTimeKind.Utc))).Value);
+            var deleted = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId,
+                "Deleted task", null, null, Today, CreatedAtUtc: DateTime.UnixEpoch)).Value;
+            deleted.SoftDelete();
+            habits.Add(deleted);
+            var completed = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId,
+                "Completed task", null, null, Today, CreatedAtUtc: DateTime.UnixEpoch)).Value;
+            completed.Log(Today);
+            habits.Add(completed);
+        }
+        habits.Add(Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, Guid.NewGuid(),
+            "Another account", null, null, Today, CreatedAtUtc: DateTime.UnixEpoch)).Value);
+        _habitRepo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<DateTime>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => (IReadOnlyList<DateTime>)call.Arg<Func<IQueryable<Habit>, IQueryable<DateTime>>>()(
+                habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).AsQueryable()).ToArray());
+
+        var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.FirstEligibleDate.Should().Be(expectedDate is null ? null : DateOnly.Parse(expectedDate));
+        var json = JsonSerializer.SerializeToElement(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        json.TryGetProperty("firstEligibleDate", out var firstDate).Should().Be(expectedDate is not null);
+        if (expectedDate is not null) firstDate.GetString().Should().Be(expectedDate);
     }
 
     [Fact]

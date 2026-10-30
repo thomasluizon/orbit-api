@@ -8,6 +8,27 @@ public class StreakInfoContractTests
     [Theory]
     [InlineData("openapi.json")]
     [InlineData("openapi_v2.json")]
+    [InlineData("openapi_v1-r2.json")]
+    [InlineData("openapi_v2-r2.json")]
+    public void GeneratedOpenApi_StreakInfoAppendsOptionalNullableFirstEligibleDate(string documentName)
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "../../../../..", "src/Orbit.Api", documentName));
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var response = document.RootElement.GetProperty("components").GetProperty("schemas")
+            .GetProperty("StreakInfoResponse");
+
+        response.GetProperty("required").EnumerateArray()
+            .Select(item => item.GetString()).Should().NotContain("firstEligibleDate");
+        var firstEligibleDate = response.GetProperty("properties").GetProperty("firstEligibleDate");
+        firstEligibleDate.GetProperty("type").EnumerateArray()
+            .Select(item => item.GetString()).Should().BeEquivalentTo("string", "null");
+        firstEligibleDate.GetProperty("format").GetString().Should().Be("date");
+    }
+
+    [Theory]
+    [InlineData("openapi.json")]
+    [InlineData("openapi_v2.json")]
     public void GeneratedOpenApi_BulkLogResponseAppendsOptionalNullableStreaks(string documentName)
     {
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

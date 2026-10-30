@@ -2,15 +2,18 @@ using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Tests.Chat;
+using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Models;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
@@ -52,7 +55,12 @@ public partial class ProcessUserChatCommandHandlerTests
                 (IReadOnlyList<DateTime>)call.Arg<Func<IQueryable<Habit>, IQueryable<DateTime>>>()(
                     habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).AsQueryable()).ToArray());
         GamificationReadTestData.Configure(_mediator, day);
-        var tool = new GetGamificationOverviewTool(_mediator, _habitRepo, _userDateService);
+        var query = new GetStreakInfoQueryHandler(_userRepo, Substitute.For<IGenericRepository<StreakFreeze>>(),
+            _habitRepo, _userDateService, _userStreakService, _featureFlagService, _productAnalytics,
+            NullLogger<GetStreakInfoQueryHandler>.Instance);
+        _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call => query.Handle(call.Arg<GetStreakInfoQuery>(), call.Arg<CancellationToken>()));
+        var tool = new GetGamificationOverviewTool(_mediator);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         SetupAiResponse(CapturedCompositionPlan("prod-r1-composition-streaks-en-r2"));
@@ -65,6 +73,10 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var card = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Subject.Block
             .Should().BeOfType<StreakCard>().Subject;
+        var expected = expectedDate is null ? (DateOnly?)null : DateOnly.Parse(expectedDate);
+        card.State!.Streak!.FirstEligibleDate.Should().Be(expected);
+        card.State.FirstEligibleDate.Should().Be(expected);
+        card.FirstEligibleDate.Should().Be(expected);
         var json = JsonSerializer.SerializeToElement(card, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         json.TryGetProperty("firstEligibleDate", out var first).Should().Be(!noActiveHabits);
         if (!noActiveHabits) first.GetString().Should().Be(expectedDate);

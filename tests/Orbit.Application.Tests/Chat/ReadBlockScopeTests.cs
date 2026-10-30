@@ -521,7 +521,7 @@ public sealed class ReadBlockScopeTests
     {
         var mediator = Substitute.For<IMediator>();
         GamificationReadTestData.Configure(mediator, _day);
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), _dates);
+        var tool = new GetGamificationOverviewTool(mediator);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name, JsonSerializer.SerializeToElement(new
         { include_profile = true, include_achievements = false, include_streak = !gamification }),
@@ -568,7 +568,7 @@ public sealed class ReadBlockScopeTests
     {
         var mediator = Substitute.For<IMediator>();
         var source = GamificationReadTestData.Configure(mediator, _day);
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), _dates);
+        var tool = new GetGamificationOverviewTool(mediator);
         var executor = Executor(tool);
         var args = JsonSerializer.SerializeToElement(new
         {
@@ -637,7 +637,7 @@ public sealed class ReadBlockScopeTests
     {
         var mediator = Substitute.For<IMediator>();
         GamificationReadTestData.Configure(mediator, _day);
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), _dates);
+        var tool = new GetGamificationOverviewTool(mediator);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name,
             Json("""{"include_profile":false,"include_achievements":true,"include_streak":false}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
@@ -665,7 +665,7 @@ public sealed class ReadBlockScopeTests
     {
         var mediator = Substitute.For<IMediator>();
         GamificationReadTestData.Configure(mediator, _day);
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), _dates);
+        var tool = new GetGamificationOverviewTool(mediator);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name, JsonSerializer.SerializeToElement(new
         { include_profile = profile, include_achievements = achievements, include_streak = streak }),
@@ -687,7 +687,7 @@ public sealed class ReadBlockScopeTests
     {
         var mediator = Substitute.For<IMediator>();
         GamificationReadTestData.Configure(mediator, _day);
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), _dates);
+        var tool = new GetGamificationOverviewTool(mediator);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name,
             JsonSerializer.SerializeToElement(new { include_profile = true, include_achievements = false, include_streak = !page }),
@@ -720,7 +720,7 @@ public sealed class ReadBlockScopeTests
     {
         var mediator = Substitute.For<IMediator>();
         GamificationReadTestData.Configure(mediator, _day);
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), _dates);
+        var tool = new GetGamificationOverviewTool(mediator);
         var response = await Executor(tool).ExecuteAsync(new(_userId, tool.Name, Json("{}"), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
 
         response.Operation.ReadBlock!.Kind.Should().Be("streak");

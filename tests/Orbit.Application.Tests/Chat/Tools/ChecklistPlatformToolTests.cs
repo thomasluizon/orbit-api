@@ -37,7 +37,7 @@ public class ChecklistPlatformToolTests
         var checklistTemplatesTool = new GetChecklistTemplatesTool(mediator);
         var createChecklistTemplateTool = new CreateChecklistTemplateTool(mediator);
         var deleteChecklistTemplateTool = new DeleteChecklistTemplateTool(mediator);
-        var gamificationTool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var gamificationTool = new GetGamificationOverviewTool(mediator);
         var referralTool = new GetReferralOverviewTool(mediator);
         var subscriptionOverviewTool = new GetSubscriptionOverviewTool(mediator);
         var manageSubscriptionTool = new ManageSubscriptionTool(mediator);
@@ -218,7 +218,7 @@ public class ChecklistPlatformToolTests
     public async Task GetGamificationOverviewTool_SkipsQueriesWhenAllFlagsAreFalse()
     {
         var mediator = Substitute.For<IMediator>();
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(
             Parse("""{"include_profile":false,"include_achievements":false,"include_streak":false}"""),
@@ -253,7 +253,7 @@ public class ChecklistPlatformToolTests
             .Returns(Result.Success(new AchievementsResponse(achievements)));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(streak));
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(mediator);
         var options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -297,7 +297,7 @@ public class ChecklistPlatformToolTests
     [Fact]
     public void GetGamificationOverviewTool_DescribesFlagsAndStreakOnlyArguments()
     {
-        var tool = new GetGamificationOverviewTool(Substitute.For<IMediator>(), Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(Substitute.For<IMediator>());
         using var schema = JsonDocument.Parse(JsonSerializer.Serialize(tool.GetParameterSchema()));
         var properties = schema.RootElement.GetProperty("properties");
 
@@ -317,7 +317,7 @@ public class ChecklistPlatformToolTests
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<GamificationProfileResponse>("profile_failed"));
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
@@ -355,7 +355,7 @@ public class ChecklistPlatformToolTests
             .Returns(Result.Success(new StreakInfoResponse(
                 7, 10, new DateOnly(2026, 4, 14), 0, 3, 3, false, [], 3, 3, 0, 3, false,
                 false, null, 3)));
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
@@ -373,7 +373,7 @@ public class ChecklistPlatformToolTests
             .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", "starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AchievementsResponse>("achievements_failed"));
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 
@@ -391,7 +391,7 @@ public class ChecklistPlatformToolTests
             .Returns(Result.Success(new AchievementsResponse([])));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<StreakInfoResponse>("streak_failed"));
-        var tool = new GetGamificationOverviewTool(mediator, Substitute.For<IGenericRepository<Habit>>(), Substitute.For<IUserDateService>());
+        var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
 

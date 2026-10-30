@@ -644,7 +644,7 @@ public class StreakGapRepairTests
         _users.GetByIdAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(_user);
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(_user.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
-        var query = new GetStreakInfoQueryHandler(_users, _freezes, _dateService, _service,
+        var query = new GetStreakInfoQueryHandler(_users, _freezes, _habits, _dateService, _service,
             flags, Substitute.For<IProductAnalytics>(), NullLogger<GetStreakInfoQueryHandler>.Instance);
         return query.Handle(new GetStreakInfoQuery(_user.Id), CancellationToken.None);
     }
@@ -777,7 +777,7 @@ public class StreakGapRepairTests
     }
 
     private GetStreakInfoQueryHandler BuildStreakInfoHandler(IFeatureFlagService flags) =>
-        new(_users, _freezes, _dateService, _service, flags,
+        new(_users, _freezes, _habits, _dateService, _service, flags,
             Substitute.For<IProductAnalytics>(), NullLogger<GetStreakInfoQueryHandler>.Instance);
 
     private Habit SetHistory(DateOnly today, int gapLength, int frequencyQuantity = 1, int precedingCompletions = 3)
