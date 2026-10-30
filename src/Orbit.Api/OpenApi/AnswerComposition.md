@@ -356,7 +356,8 @@ activity for an adjustment. Editable suggestions with a resolved `existingHabitI
 habit's stored title, including in their approval arguments; the model's proposed title cannot
 rename it. A title match without an ID receives the same stored identity and title.
 
-A successful typed `HabitSuggestionsCard` supplies the suggestions answer directly. When
+A successful typed `HabitSuggestionsCard` supplies the suggestions answer directly when no
+ask block, pending operation or action result is present. When
 `habitSuggestions` is negotiated, it is the only part and `aiMessage` is empty; the server
 adds no introductory sentence. This applies with block-first composition enabled or disabled,
 including declared-complete reads and reads that continue through a narrative round. Legacy
@@ -366,6 +367,24 @@ the same composition. Suggestions remain drafts without pending writes or execut
 the existing preview routes still require approval. The captured tool-plan replays in
 `G7SuggestionCompositionTests` cover both languages and capability fallbacks. #26 owns the
 live bilingual gate rerun, including suggestion quality, and #1751/#1620 own rendering.
+
+`suggest_habits.count` is a required non-null integer from 1 through 5, with no default.
+The serialized strict SDK schema preserves that integer type; optional exclusions remain
+nullable. The tool rejects omitted, null, noninteger and out-of-range counts before query
+dispatch, using the existing `HABIT_SUGGESTION_INVALID` error. An accepted ask block takes
+precedence over the suggestion shortcut so the issued selection reaches normal composition.
+The server preserves the model's tools and arguments and prepares no unrequested write.
+The three `G11BrainDumpReplayTests` captures cover complete single-idea previews and the
+historical three-draft result followed by an issued pick list in both composition modes.
+The production pass^3 rerun remains with #26.
+
+The count description is model-facing English in both locales. The Portuguese translation
+is supplied for coordinator copy approval; the localized validation error is reused unchanged.
+
+| Source | en | pt-BR |
+| --- | --- | --- |
+| `suggest_habits.count` description | Number of habit drafts to return, from 1 to 5. Use the number requested by the person. | Quantidade de rascunhos de hábitos a retornar, de 1 a 5. Use a quantidade pedida pela pessoa. |
+| Existing `HABIT_SUGGESTION_INVALID`, reused for invalid counts | Review the suggestion's title, schedule and time. | Revise o título, a frequência e o horário da sugestão. |
 
 Ongoing avoid habits default to `frequency_unit: Day`, `frequency_quantity: 1` and
 `is_general: false` unless the person requested another cadence. Creation schemas expose

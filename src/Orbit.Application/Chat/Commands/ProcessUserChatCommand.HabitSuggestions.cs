@@ -23,7 +23,7 @@ public partial class ProcessUserChatCommandHandler
     private static ResponseCards? SuggestionAnswer(ToolExecutionAccumulator results,
         ProcessUserChatCommand request, ChatContext context)
     {
-        if (results.PendingOperations.Count > 0 || results.ActionResults.Count > 0) return null;
+        if (results.AskBlock is not null || results.PendingOperations.Count > 0 || results.ActionResults.Count > 0) return null;
         var card = results.OperationResults.LastOrDefault(operation => operation.Status == AgentOperationStatus.Succeeded
             && operation.Payload is HabitSuggestionsCard)?.Payload as HabitSuggestionsCard;
         if (card is null) return null;
