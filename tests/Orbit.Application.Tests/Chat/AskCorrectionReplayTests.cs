@@ -14,12 +14,16 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        SetupAiResponse(GateSevenReplay("composition-choice-en-r1"));
+        var original = GateSevenReplay("composition-choice-en-r1");
+        SetupAiResponse(original with { ToolCalls = [AskSelectionRead(), .. original.ToolCalls!] });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(HonestyReplay("unsupported-question-r1")));
+            .Returns(Result.Success(HonestyReplay("unsupported-question-r1") with
+            {
+                ToolCalls = HonestyReplay("unsupported-question-r1").ToolCalls!.Select(call => AskWithMissingInput(call, "record_selection")).ToArray()
+            }));
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Change my habit.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
@@ -30,7 +34,7 @@ public partial class ProcessUserChatCommandHandlerTests
         choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         result.Value.Actions.Should().BeEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());

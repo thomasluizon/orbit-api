@@ -87,7 +87,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(new AgentExecuteOperationResponse(new(suggest.Name, suggest.Name, AgentRiskClass.Low,
                 AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: card)));
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var calls = BrainDumpCalls(capture);
+        var calls = BrainDumpCalls(capture).Select(call => call.Name == "ask" ? AskWithMissingInput(call, "habit_setup") : call).ToArray();
         SetupGateTenRounds(calls);
 
         var result = await handler.Handle(new(UserId, "Prepare os itens solicitados para aprovação.",

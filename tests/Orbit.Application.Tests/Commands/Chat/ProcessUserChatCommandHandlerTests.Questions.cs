@@ -222,6 +222,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _unitOfWork.PassThroughTransactions<Result<PreparedAstraBlockAnswer>>();
         var arguments = JsonSerializer.Serialize(new
         {
+            missing_input = "check_in",
             form = "question",
             questions = new[] { new { id = "energy", type = "scale", prompt, lowLabel = low, highLabel = high } }
         });

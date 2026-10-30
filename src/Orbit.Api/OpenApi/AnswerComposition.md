@@ -311,6 +311,18 @@ A read denied with `target_not_owned` can use the existing single correction all
 to correct that read's owned target or omit it when successful typed reads already answer
 the request. Correction candidates cannot introduce writes or repeat successful reads.
 Other permission denials and failed corrections retain the concise failure status.
+Requests referring to an earlier Astra message take their scope from conversation history
+and read the account data named there. Astra does not ask which message or reminder was
+meant. Every `ask.input` form requires `missing_input`: `habit_setup`, `preference`,
+`check_in`, `record_selection` or `bulk_selection`. Record selection and the log/skip
+pickList actions require a successful `query_habits` result earlier in the current turn,
+including reads completed before ask in the same batch. Use `for_selection=true` for
+selection lookups; a completed listing read can also supply the records. Indexes,
+history, failed reads and other account tools cannot satisfy this requirement. Missing
+or unknown reasons and unread selections return through failed-ask validation feedback
+so the model can continue the original request. Habit setup, preferences, check-ins and
+creation drafts can ask without a prerequisite account read. Selecting records still
+does not approve or execute a write.
 Habit metrics retain their period log counts and lifetime totals. The optional completion
 series is emitted only when its scheduled-completion total represents the period's log count.
 Backdated logs can predate known schedule history; those figures remain available without

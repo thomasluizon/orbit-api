@@ -60,9 +60,11 @@ public partial class ProcessUserChatCommandHandlerTests
             ConversationContext = TestConversationContext,
             ToolCalls =
             [
+                AskSelectionRead("Walk"),
                 new(delete.Name, "delete", JsonSerializer.SerializeToElement(new { habit_id = target.Id })),
                 new("ask", "question", JsonSerializer.SerializeToElement(new
                 {
+                    missing_input = "record_selection",
                     form = "choice",
                     question,
                     options = walks.Select((walk, index) => new
@@ -88,7 +90,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             held.Should().BeEmpty("a write that affects an unresolved candidate's hierarchy must wait for clarification");
             result.Value.PendingOperations.Should().BeNullOrEmpty();
-            await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+            await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId != query.Name), Arg.Any<CancellationToken>());
         }
         var choice = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>()
             .Which.Block.Should().BeOfType<AstraChoiceBlock>().Subject;

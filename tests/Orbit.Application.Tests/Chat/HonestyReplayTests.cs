@@ -24,9 +24,10 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
-        SetupAiResponse(HonestyReplay("unsupported-question-r" + repeat));
+        var replay = HonestyReplay("unsupported-question-r" + repeat);
+        SetupAiResponse(replay with { ToolCalls = [AskSelectionRead(), .. replay.ToolCalls!.Select(call => AskWithMissingInput(call, "record_selection"))] });
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Change my habit.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
@@ -36,7 +37,7 @@ public partial class ProcessUserChatCommandHandlerTests
         choice.AllowFreeText.Should().BeTrue();
         choice.Options.Select(option => option.Label).Should().Equal("Water", "Walk");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
@@ -59,9 +60,10 @@ public partial class ProcessUserChatCommandHandlerTests
         const string question = "Which habit would you like to change?";
         SetupUserAndPayGate();
         EnableComposition();
-        SetupAiResponse(HonestyReplay("ambiguity-en-r1"));
+        var replay = HonestyReplay("ambiguity-en-r1");
+        SetupAiResponse(replay with { ToolCalls = [AskSelectionRead(), .. replay.ToolCalls!.Select(call => AskWithMissingInput(call, "record_selection"))] });
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Change my habit.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Change my habit.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -73,7 +75,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.Received(1).AddAsync(Arg.Is<IssuedAstraBlock>(block => block.ReadDefinition().Title == question
             && !block.ReadDefinition().AllowFreeText), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 
@@ -86,15 +88,17 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         EnableComposition();
-        SetupAiResponse(ToolResponse("ask", "clarification", JsonSerializer.Serialize(new
+        var askResponse = ToolResponse("ask", "clarification", JsonSerializer.Serialize(new
         {
+            missing_input = "record_selection",
             form = "choice",
             question,
             allowFreeText = true,
             options = new[] { new { id = "water", label = "Water" }, new { id = "walk", label = "Walk" } }
-        })));
+        }));
+        SetupAiResponse(askResponse with { ToolCalls = [AskSelectionRead(), .. askResponse.ToolCalls!] });
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me make a change.",
+        var result = await CreateRecordAskHandler().Handle(new(UserId, "Help me make a change.",
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"])), default);
 
         result.IsSuccess.Should().BeTrue();
@@ -103,7 +107,7 @@ public partial class ProcessUserChatCommandHandlerTests
         choice.Question.Should().Be(question);
         choice.AllowFreeText.Should().BeTrue();
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
+        await AssertOnlyAskSelectionRead();
         await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
     }
 

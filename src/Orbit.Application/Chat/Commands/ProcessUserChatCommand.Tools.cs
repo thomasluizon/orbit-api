@@ -472,6 +472,7 @@ public partial class ProcessUserChatCommandHandler
         for (var index = 0; index < readOnlyCalls.Count; index++)
         {
             outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
+            RecordSuccessfulAskRead(readOnlyCalls[index], readOnlyOutcomes[index], executionResults);
             if (readOnlyOutcomes[index].OperationResult is
                 {
                     Status: AgentOperationStatus.Succeeded,

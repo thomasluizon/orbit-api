@@ -1060,6 +1060,18 @@
             "required": true
           },
           {
+            "name": "input.missing_input",
+            "type": "string",
+            "required": true,
+            "values": [
+              "bulk_selection",
+              "check_in",
+              "habit_setup",
+              "preference",
+              "record_selection"
+            ]
+          },
+          {
             "name": "input.multiSelect",
             "type": "boolean",
             "required": false

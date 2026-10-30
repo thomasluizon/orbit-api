@@ -21,13 +21,13 @@ public partial class ProcessUserChatCommandHandlerTests
         user.SetLanguage("pt-BR");
         SetupUserAndPayGate(user);
         if (composition) EnableComposition();
-        var call = AskRerunCalls("composition-choice-pt-BR-r1")[0];
-        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [call] });
+        var call = AskWithMissingInput(AskRerunCalls("composition-choice-pt-BR-r1")[0], "record_selection");
+        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [AskSelectionRead(), call] });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Qual hábito você quer mudar?" }));
 
-        var result = await CreateHandler(RealAskTool()).Handle(new(UserId,
+        var result = await CreateRecordAskHandler().Handle(new(UserId,
             "Mude meu hábito, mas ainda não escolhi qual.",
             ClientContext: new(SupportsParts: true, PartKinds: choiceOnly ? ["choice"] : ["choice", "question"])), default);
 

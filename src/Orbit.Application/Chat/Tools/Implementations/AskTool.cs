@@ -43,6 +43,12 @@ public sealed class AskTool(
                     type = "object",
                     properties = new
                     {
+                        missing_input = new
+                        {
+                            type = "string",
+                            @enum = new[] { "habit_setup", "preference", "check_in", "record_selection", "bulk_selection" },
+                            description = "Identify input only the person can supply: habit_setup, preference, check_in, record_selection for one existing record, or bulk_selection for several existing records. Record and bulk selection require query_habits with for_selection=true earlier in this turn. Resolve an earlier Astra message from history; never ask which message it was."
+                        },
                         form = new { type = "string", @enum = new[] { "choice", "pickList", "question" }, description = "choice requires a nonempty question and 2 to 4 options; omit items, action, questions and progress. pickList requires nonempty title, action and 1 to 10 items; omit options, questions and progress, and set allowFreeText=false. question requires 1 to 10 questions; omit top-level options, items and action and set multiSelect=false. A single record selection uses choice; reserve question for multiple fields. Use only a supported form." },
                         question = new { type = "string", maxLength = 120, description = "Required nonempty question for choice, at most 120 characters. Use null for other forms." },
                         title = new { type = "string", description = "Required nonempty heading for pickList; optional heading of at most 120 characters for question. Null means absent." },
@@ -146,7 +152,7 @@ public sealed class AskTool(
                             }
                         }
                     },
-                    required = new[] { "form" }
+                    required = new[] { "form", "missing_input" }
                 }
             },
             required = new[] { "input" }
@@ -175,9 +181,9 @@ public sealed class AskTool(
                 ["input"] = new JsonObject
                 {
                     ["anyOf"] = new JsonArray(
-                        Variant(fields, "form", "choice", ["question", "options"], ["multiSelect", "allowFreeText"]),
-                        Variant(fields, "form", "pickList", ["title", "action", "items"], []),
-                        Variant(fields, "form", "question", ["questions"], ["title", "intro", "progress"]))
+                        Variant(fields, "form", "choice", ["missing_input", "question", "options"], ["multiSelect", "allowFreeText"]),
+                        Variant(fields, "form", "pickList", ["missing_input", "title", "action", "items"], []),
+                        Variant(fields, "form", "question", ["missing_input", "questions"], ["title", "intro", "progress"]))
                 }
             },
             ["required"] = new JsonArray("input")

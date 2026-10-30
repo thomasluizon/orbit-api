@@ -331,7 +331,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(ask with { ToolCalls = [call with { Args = JsonSerializer.SerializeToElement(arguments) }] }));
+            .Returns(Result.Success(ask with { ToolCalls = [AskWithMissingInput(call with { Args = JsonSerializer.SerializeToElement(arguments) }, "bulk_selection")] }));
 
         var result = await handler.Handle(new(UserId, "Deixe eu escolher quais dos meus hábitos concluir, sem agir ainda.",
             ClientContext: new(SupportsParts: true, PartKinds: ["habitList", "pickList"], SupportsHabitListCard: true,
