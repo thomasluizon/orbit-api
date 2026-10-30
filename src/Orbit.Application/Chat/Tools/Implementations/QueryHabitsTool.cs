@@ -72,6 +72,19 @@ public class QueryHabitsTool(
     private sealed record ScheduleContext(DateOnly Date, HabitTodaySnapshot Facts);
     private sealed record HabitQueryResult(IReadOnlyList<Habit> Habits, ScheduleContext? Schedule);
 
+    internal async Task<Orbit.Domain.Common.Result<(DateOnly Today, IReadOnlyList<Habit> Habits)>> ReadRestartSetAsync(
+        Guid userId, CancellationToken ct)
+    {
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+            return Orbit.Domain.Common.Result.Failure<(DateOnly, IReadOnlyList<Habit>)>(ErrorMessages.UserNotFound);
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var query = await QueryHabitsAsync(userId,
+            new HabitFilters(false, null, null, null, false, today, true, null, null),
+            today, user.WeekStartDay, false, ct);
+        return Orbit.Domain.Common.Result.Success((today, query.Habits));
+    }
+
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);

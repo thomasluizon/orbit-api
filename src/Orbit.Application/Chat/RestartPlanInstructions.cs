@@ -11,7 +11,7 @@ public static class RestartPlanInstructions
         + "Read further pages when needed before proposing the complete plan. Keep strictly fewer of those habits today than the complete missed and due set. "
         + "When the person gives a count for today, keep exactly that count; otherwise choose a smaller manageable set from the returned habits. "
         + "Assign every other habit a concrete due_date after today and within the next seven days, using the person's local today. Keeping the whole set today is not a restart plan. "
-        + "Call bulk_reschedule_habits once with revised_items containing every habit in the complete set and its proposed due_date, including today's choices. "
+        + "Call bulk_reschedule_habits once with restart_plan=true and revised_items containing every habit in the complete set and its proposed due_date, including today's choices. "
         + "Check the today count and every deferred date before calling the tool; never use one shared due_date for a restart plan. "
         + "Preserve titles, cadence, times, reminders, checklists and past records. Never mark missed habits done or skipped. "
         + "Use the existing preview for approval, editing or rejection; nothing changes before approval. "
