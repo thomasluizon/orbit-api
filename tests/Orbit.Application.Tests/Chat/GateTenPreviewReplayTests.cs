@@ -83,6 +83,77 @@ public partial class ProcessUserChatCommandHandlerTests
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("en", true, true)]
+    [InlineData("pt-BR", true, true)]
+    [InlineData("en", false, true)]
+    [InlineData("pt-BR", false, true)]
+    [InlineData("en", true, false)]
+    [InlineData("pt-BR", true, false)]
+    [InlineData("en", false, false)]
+    [InlineData("pt-BR", false, false)]
+    public async Task G10_CapacityRefusalKeepsIndependentHabitRead(string language, bool supportsParts, bool composition)
+    {
+        var parents = SetupExistingParents(language);
+        if (composition) EnableComposition();
+        var gate = new PayGateService(_habitRepo, _userRepo, _appConfig, _userDateService, _featureFlagService);
+        _appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, Arg.Any<CancellationToken>())
+            .Returns(2);
+        _habitRepo.CountAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => parents.Count(call.Arg<Expression<Func<Habit, bool>>>().Compile()));
+        var mediator = Orbit.Tests.Shared.HabitToolCommandMediator.Create(_habitRepo, _tagRepo, _goalRepo,
+            _userDateService, gate, _unitOfWork, users: _userRepo);
+        var create = new CreateHabitTool(_userDateService, mediator);
+        var query = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var handler = CreateHandler(query, create);
+        var blocks = UseProductionReadExecutor(query);
+        var outcomes = new List<AgentExecuteOperationResponse>();
+        UseCapacityReplayExecutor(create, outcomes);
+        var reader = Orbit.Application.Tests.Chat.ReadBlockScopeTests.CreateExecutor(query, blocks);
+        _operationExecutor.ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request => request.OperationId == query.Name),
+                Arg.Any<CancellationToken>())
+            .Returns(call => reader.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), call.Arg<CancellationToken>()));
+        SetupAiResponse(ToolResponse(query.Name, "habits", """{"include_metrics":false,"orbit_read_complete":false}"""));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse(create.Name, "create",
+                    """{"title":"Stretch","frequency_unit":"Day","frequency_quantity":1,"orbit_write_complete":true}""")),
+                Result.Success(new AiResponse { TextMessage = "Try again." }));
+
+        var result = await handler.Handle(new(UserId, "Show my existing habits and create Stretch.",
+            ClientContext: new(SupportsParts: supportsParts, SupportsHabitListCard: true,
+                PartKinds: ["habitList"], Locale: language)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var refusal = language == "pt-BR"
+            ? "Você chegou ao limite de 2 hábitos. Você pode adicionar um sub-hábito a um hábito existente."
+            : "You've reached the 2 habit limit. You can add a sub-habit to an existing habit.";
+        var read = result.Value.Operations.Should().ContainSingle(operation => operation.OperationId == query.Name)
+            .Which.ReadBlock!.Block.Should().BeOfType<HabitListCard>().Subject;
+        read.Items.Select(item => item.Id).Should().BeEquivalentTo(parents.Select(habit => habit.Id.ToString()));
+        if (supportsParts)
+        {
+            result.Value.Parts.Should().HaveCount(2);
+            var block = result.Value.Parts!.OfType<ChatBlockPart>().Should().ContainSingle().Which;
+            block.Kind.Should().Be("habitList");
+            block.Block.Should().BeOfType<HabitListCard>().Which.Items.Select(item => item.Id)
+                .Should().BeEquivalentTo(parents.Select(habit => habit.Id.ToString()));
+            result.Value.Parts.OfType<ChatTextPart>().Should().ContainSingle().Which.Text.Should().Be(refusal);
+            result.Value.AiMessage.Should().Be(refusal);
+        }
+        else
+        {
+            result.Value.Parts.Should().BeNull();
+            result.Value.AiMessage.Should().Contain("Post Lunch").And.Contain("Before Bed").And.Contain(refusal)
+                .And.NotContain("Try again.");
+        }
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        result.Value.Actions.Should().BeEmpty();
+        outcomes.Should().ContainSingle().Which.Operation.Status.Should().Be(AgentOperationStatus.Failed);
+        _pendingOperationStore.DidNotReceiveWithAnyArgs().Create(default, default!, default!, default!, default!, default!, default);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
     private static JsonDocument GateTenPreviewCapture(string name) => JsonDocument.Parse(File.ReadAllText(
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "GateTenPreviews", name + ".json")));
 

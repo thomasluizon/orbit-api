@@ -67,18 +67,22 @@ public partial class ProcessUserChatCommandHandler
     private ResponseCards ComposeAnswerCore(ParsedResponseDirectives parsed, bool truncated, string? language,
         ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results)
     {
-        if ((StartingStepAnswer(results, request, context) ?? SuggestionAnswer(results, request, context)) is { } suggestions) return suggestions;
+        var capacityRefusal = CapacityRefusalText(results, context);
+        if (capacityRefusal is null
+            && (StartingStepAnswer(results, request, context) ?? SuggestionAnswer(results, request, context)) is { } suggestions) return suggestions;
         var candidates = results.OperationResults
             .Where(operation => operation.Status == AgentOperationStatus.Succeeded && operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!)
+            .Where(read => capacityRefusal is null || read.Block is not (HabitListCard { Items.Count: 0 }
+                or GoalListCard { Items.Count: 0 } or RecordListCard { Items.Count: 0 }))
             .ToList();
         var hasOutcome = results.PendingOperations.Count > 0 || results.ActionResults.Count > 0;
-        var built = BuildCompositionParts(candidates, request, context, results, language);
+        var built = BuildCompositionParts(candidates, request, context, results, language, preserveReads: capacityRefusal is not null);
         var parts = built.Parts;
         var missingProjection = !hasOutcome && results.OperationResults.Any(operation =>
             operation.Status == AgentOperationStatus.Succeeded && ReadBlockFactory.Supports(operation.OperationId)
             && operation.ReadBlock is null);
-        var status = CompositionStatus(results, hasOutcome, missingProjection, truncated, language);
+        var status = capacityRefusal ?? CompositionStatus(results, hasOutcome, missingProjection, truncated, language);
         if (status is not null)
             parts.Add(new ChatTextPart(ShortText(status, 1)));
         else if (parts.Count == 0 && !hasOutcome)
@@ -114,11 +118,10 @@ public partial class ProcessUserChatCommandHandler
             cards = ApplyResolutionToCards(cards, executionResults, language);
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
         if (!composition)
-            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
-        if (!composition)
         {
             cards = ComposePeriodAnalytics(cards, request, context, executionResults);
             cards = ComposeUnavailableReads(cards, request, context, executionResults);
+            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
         }
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition && !executionResults.IsPreviewDiscussion ? request with { StreamSink = null } : request,
@@ -218,7 +221,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private static CompositionParts BuildCompositionParts(List<QueryReadBlock> candidates,
-        ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, string? language)
+        ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results, string? language, bool preserveReads = false)
     {
         var built = new CompositionParts();
         var parts = built.Parts;
@@ -229,7 +232,8 @@ public partial class ProcessUserChatCommandHandler
             return built;
         }
 
-        var selected = SelectCompositionReads(candidates, results).Select(read => read.Read.QueryId).ToHashSet();
+        var selected = (preserveReads ? candidates : SelectCompositionReads(candidates, results))
+            .Select(read => read.Read.QueryId).ToHashSet();
         var seenScopes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var operation in results.OperationResults.Where(operation => operation.Status == AgentOperationStatus.Succeeded))
         {
@@ -250,6 +254,8 @@ public partial class ProcessUserChatCommandHandler
                     built.Duplicates++;
                     continue;
                 }
+                if (RequestedDaySummaryNarrative(operation) is { } narrative)
+                    parts.Add(new ChatTextPart(narrative));
                 if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
                 {
                     if (IsCompleteEmptyList(read))

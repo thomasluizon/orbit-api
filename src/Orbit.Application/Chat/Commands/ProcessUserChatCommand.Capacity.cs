@@ -6,8 +6,17 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private static ResponseCards? CapacityRefusalAnswer(ToolExecutionAccumulator results,
+    private ResponseCards? CapacityRefusalAnswer(ToolExecutionAccumulator results,
         ProcessUserChatCommand request, ChatContext context)
+    {
+        if (CapacityRefusalText(results, context) is null) return null;
+        var cards = ComposeAnswer(FollowUpDirective.Parse(null), false, context.Language, request, context, results);
+        var response = ChatResponseNegotiation.ForClient(new ChatResponse(cards.AiMessage, [], Parts: cards.Parts),
+            request.ClientContext, context.EnabledFeatureFlags, context.Language, context.User?.TimeZone, context.UserToday);
+        return new ResponseCards(response.AiMessage, Parts: response.Parts) { ServerComposedText = true };
+    }
+
+    private static string? CapacityRefusalText(ToolExecutionAccumulator results, ChatContext context)
     {
         if (results.PendingOperations.Count > 0 || results.ActionResults.Count > 0 || results.AskBlock is not null)
             return null;
@@ -20,8 +29,6 @@ public partial class ProcessUserChatCommandHandler
         if (failure is null || !ErrorCopy.TryResolve(failure.ErrorCode, LocaleHelper.IsPortuguese(context.Language),
             failure.Arguments, out var reason))
             return null;
-        var text = reason + " " + ErrorCopy.Resolve("chat.answer.habitCapacityNextStep", LocaleHelper.IsPortuguese(context.Language));
-        return new ResponseCards(text, Parts: request.ClientContext?.SupportsParts == true ? [new ChatTextPart(text)] : null)
-        { ServerComposedText = true };
+        return reason + " " + ErrorCopy.Resolve("chat.answer.habitCapacityNextStep", LocaleHelper.IsPortuguese(context.Language));
     }
 }
