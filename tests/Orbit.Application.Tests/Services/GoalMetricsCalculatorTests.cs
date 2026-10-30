@@ -181,6 +181,72 @@ public class GoalMetricsCalculatorTests
         metrics.ProjectedCompletionDate!.Value.Should().BeOnOrAfter(Today);
     }
 
+    [Theory]
+    [InlineData(10, 9)]
+    [InlineData(10, 10)]
+    [InlineData(10, 11)]
+    [InlineData(0, 1)]
+    public void Calculate_ForecastAtDateLimit_OnlyReturnsRepresentableDates(int availableDays, int daysToComplete)
+    {
+        var goal = CreateGoal(targetValue: 10_000_000);
+        var userToday = DateOnly.MaxValue.AddDays(-availableDays);
+        var elapsedDays = userToday.DayNumber - DateOnly.FromDateTime(goal.CreatedAtUtc).DayNumber;
+        goal.Update(goal.Title, null, elapsedDays + daysToComplete, goal.Unit, null).IsSuccess.Should().BeTrue();
+        goal.UpdateProgress(elapsedDays).IsSuccess.Should().BeTrue();
+
+        var metrics = GoalMetricsCalculator.Calculate(goal, userToday, 1);
+
+        metrics.VelocityPerDay.Should().Be(1);
+        metrics.ProjectedCompletionDate.Should().Be(daysToComplete <= availableDays
+            ? userToday.AddDays(daysToComplete)
+            : null);
+    }
+
+    [Fact]
+    public void Calculate_FractionalDuration_RoundsUpToNextDay()
+    {
+        var goal = CreateGoal(targetValue: 9);
+        goal.UpdateProgress(2).IsSuccess.Should().BeTrue();
+        var userToday = DateOnly.FromDateTime(goal.CreatedAtUtc);
+
+        var metrics = GoalMetricsCalculator.Calculate(goal, userToday, 1);
+
+        metrics.ProgressPercentage.Should().Be(22.2m);
+        metrics.VelocityPerDay.Should().Be(2);
+        metrics.ProjectedCompletionDate.Should().Be(userToday.AddDays(4));
+    }
+
+    [Theory]
+    [InlineData(1_000_000_000)]
+    [InlineData(3_000_000_000)]
+    public void Calculate_DurationExceedsDateOrIntegerRange_ForecastIsUnavailable(long target)
+    {
+        var goal = CreateGoal(targetValue: target, deadline: Today.AddDays(3));
+        goal.UpdateProgress(1).IsSuccess.Should().BeTrue();
+
+        var metrics = GoalMetricsCalculator.Calculate(goal, Today, 1);
+
+        metrics.ProjectedCompletionDate.Should().BeNull();
+        metrics.ProgressPercentage.Should().Be(0);
+        metrics.VelocityPerDay.Should().Be(1);
+        metrics.DaysToDeadline.Should().Be(3);
+        metrics.TrackingStatus.Should().Be("at_risk");
+    }
+
+    [Fact]
+    public void Calculate_DurationExceedsDecimalRange_ForecastIsUnavailable()
+    {
+        var goal = CreateGoal(targetValue: decimal.MaxValue);
+        goal.UpdateProgress(0.01m).IsSuccess.Should().BeTrue();
+        var userToday = DateOnly.FromDateTime(goal.CreatedAtUtc);
+
+        var metrics = GoalMetricsCalculator.Calculate(goal, userToday, 1);
+
+        metrics.ProjectedCompletionDate.Should().BeNull();
+        metrics.VelocityPerDay.Should().Be(0.01m);
+        metrics.TrackingStatus.Should().Be("no_deadline");
+    }
+
     [Fact]
     public void Calculate_EmptyHabits_ReturnsEmptyHabitAdherence()
     {

@@ -21,8 +21,13 @@ public static class GoalMetricsCalculator
         if (velocityPerDay > 0 && goal.CurrentValue < goal.TargetValue)
         {
             var remaining = goal.TargetValue - goal.CurrentValue;
-            var daysToComplete = (int)Math.Ceiling(remaining / velocityPerDay);
-            projectedCompletionDate = userToday.AddDays(daysToComplete);
+            var availableDays = DateOnly.MaxValue.DayNumber - userToday.DayNumber;
+            if (availableDays > 0 && remaining / availableDays <= velocityPerDay)
+            {
+                var daysToComplete = Math.Ceiling(remaining / velocityPerDay);
+                if (daysToComplete <= availableDays)
+                    projectedCompletionDate = userToday.AddDays((int)daysToComplete);
+            }
         }
 
         int? daysToDeadline = goal.Deadline.HasValue

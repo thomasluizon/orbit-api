@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Goals.Services;
@@ -131,6 +132,47 @@ public class GoalReviewToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Read books");
         result.EntityName.Should().Contain("Save money");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LargeTargetReview_ReturnsAllGoalsWithUnavailableForecast(bool linkHabit)
+    {
+        var created = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Read a billion pages", 1_000_000_000, "pages", Deadline: Today.AddDays(3)));
+        created.IsSuccess.Should().BeTrue();
+        var goal = created.Value;
+        goal.UpdateProgress(1).IsSuccess.Should().BeTrue();
+        if (linkHabit)
+            goal.AddHabit(Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
+                UserId, "Read daily", FrequencyUnit.Day, 1, DueDate: Today)).Value);
+
+        var normalGoal = Goal.Create(UserId, "Read books", 12, "books").Value;
+        normalGoal.UpdateProgress(3).IsSuccess.Should().BeTrue();
+        SetupGoals(goal, normalGoal);
+
+        var result = await Execute("{}");
+
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("1/1000000000 pages (0.0%)");
+        result.EntityName.Should().Contain("Status: at_risk | Velocity: 1 pages/day");
+        result.EntityName.Should().Contain("Read books");
+        result.EntityName.Should().Contain($"Projected completion: {Today.AddDays(3):yyyy-MM-dd}");
+        var card = result.Payload.Should().BeOfType<GoalListCard>().Subject;
+        card.Items.Should().HaveCount(2);
+        var item = card.Items.Single(i => i.Id == goal.Id.ToString());
+        item.Current.Should().Be(1);
+        item.Target.Should().Be(1_000_000_000);
+        item.ProjectedCompletionDate.Should().BeNull();
+        if (linkHabit)
+        {
+            item.TrackingStatus.Should().Be("at_risk");
+            item.ProgressPercentage.Should().Be(0);
+            item.DaysToDeadline.Should().Be(3);
+            item.LinkedHabits.Should().ContainSingle().Which.Title.Should().Be("Read daily");
+            result.EntityName.Should().Contain("Linked habit: \"Read daily\" | Weekly: 0% | Streak: 0d");
+        }
     }
 
     [Fact]
