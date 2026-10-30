@@ -285,7 +285,7 @@ function assertOneOwner(scopes, file, start, end) {
 test("nightly and manual runs keep the configured file set and thresholds", () => {
   const matrix = select();
   assert.equal(matrix.filter(({ project }) => project === "domain").length, 13);
-  assert.equal(matrix.filter(({ project }) => project === "application").length, 12);
+  assert.equal(matrix.filter(({ project }) => project === "application").length, 13);
   for (const project of ["domain", "application"]) {
     const scopes = matrix.filter((scope) => scope.project === project);
     const config = JSON.parse(readFileSync(new URL(`../../stryker-config.${project}.json`, import.meta.url), "utf8"))["stryker-config"];
@@ -404,6 +404,28 @@ test("nightly chat habit spans split the measured slow prefix and retain the com
   }
 });
 
+test("nightly chat processing spans split the slow middle shard and retain companion coverage", () => {
+  const scopes = select().filter(({ shard }) => shard?.startsWith("application-chat-processing-"));
+  assert.deepEqual(scopes, [
+    {
+      project: "application", shard: "application-chat-processing-1",
+      mutate: ["**/Chat/Commands/ProcessUserChatCommand.Tools.cs{0..18000}"],
+    },
+    {
+      project: "application", shard: "application-chat-processing-2",
+      mutate: ["**/Chat/Commands/ProcessUserChatCommand.Tools.cs{0..25000}", "!**/Chat/Commands/ProcessUserChatCommand.Tools.cs{0..18000}", "**/Chat/Commands/ProcessUserChatCommand.Correction.cs"],
+    },
+    {
+      project: "application", shard: "application-chat-processing-3",
+      mutate: ["**/Chat/Commands/ProcessUserChatCommand.Tools.cs{0..32000}", "!**/Chat/Commands/ProcessUserChatCommand.Tools.cs{0..25000}"],
+    },
+    {
+      project: "application", shard: "application-chat-processing-4",
+      mutate: ["**/Chat/Commands/ProcessUserChatCommand.Tools.cs", "!**/Chat/Commands/ProcessUserChatCommand.Tools.cs{0..32000}"],
+    },
+  ]);
+});
+
 test("nightly scopes split each timed-out or near-limit shard", () => {
   const scopes = select();
   assert.ok(scopes.filter(({ shard }) => shard?.startsWith("domain-habit-update-freeze-")).length >= 3);
@@ -456,6 +478,7 @@ for (const [path, boundary] of [
   ["src/Orbit.Domain/Entities/Habit.cs", 31500],
   ["src/Orbit.Domain/Entities/HabitInvariants.cs", 2000],
   ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 18000],
+  ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 25000],
   ["src/Orbit.Application/Chat/Commands/ProcessUserChatCommand.Tools.cs", 32000],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 10500],
   ["src/Orbit.Application/Chat/Tools/Implementations/CreateHabitTool.cs", 15000],
