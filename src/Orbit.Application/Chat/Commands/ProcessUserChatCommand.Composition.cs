@@ -114,11 +114,10 @@ public partial class ProcessUserChatCommandHandler
             cards = ApplyResolutionToCards(cards, executionResults, language);
         cards = ApplyBudgetRecovery(cards, executionResults, aiResponse, request);
         if (!composition)
-            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
-        if (!composition)
         {
             cards = ComposePeriodAnalytics(cards, request, context, executionResults);
             cards = ComposeUnavailableReads(cards, request, context, executionResults);
+            cards = WithDaySummaryIntro(cards, language, context, aiResponse, executionResults);
         }
         var groundedReply = await ApplyGroundingAsync(cards.ServerComposedText ? null : cards.AiMessage, followUps, executionResults,
             composition && !executionResults.IsPreviewDiscussion ? request with { StreamSink = null } : request,
@@ -250,6 +249,8 @@ public partial class ProcessUserChatCommandHandler
                     built.Duplicates++;
                     continue;
                 }
+                if (RequestedDaySummaryNarrative(operation) is { } narrative)
+                    parts.Add(new ChatTextPart(narrative));
                 if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
                 {
                     if (IsCompleteEmptyList(read))

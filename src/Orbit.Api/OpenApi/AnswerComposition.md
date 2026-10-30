@@ -188,7 +188,9 @@ retain both dates. The shared formatter applies this to summaries, totals, compa
 metrics, recaps, habit calendars and history. A stored typed block downgraded on a later day
 uses its absolute date; an already composed text answer retains its original wording.
 Habit listings use `query_habits`, and compound habit-and-goal listings pair it with
-`query_goals`. `get_daily_summary` supplies requested completion totals or a narrative recap;
+`query_goals`. `get_daily_summary` supplies requested completion totals, a narrative recap
+or today's next pending step. A next-step read uses `relative_period: today`,
+`generate_narrative: true` and `orbit_read_complete: true`;
 it does not replace the habit query. Tool descriptions and read instructions establish this
 distinction without routing messages by keywords or rewriting the model's tool calls.
 
@@ -199,6 +201,14 @@ that request a narrative, and the MCP tool share this producer. The legacy
 `Insight` field stays empty. Proactive check-ins use
 `AiProactiveCheckinMessageService`; push reminders use `ReminderSchedulerService`
 and do not call this narrative producer.
+
+For a chat read with `generate_narrative: true`, composition retains the successful
+typed `DailySummaryResponse.Summary` as one text part beside its `daySummary` block.
+It does not replace that recommendation with a generic day intro or ask the chat
+model to paraphrase it. Clients without the block receive the same sentence with
+the readable summary facts. Stored-turn negotiation keeps the sentence once.
+Facts-only reads and exact refreshes retain their existing behavior. No new client
+field is required, and composition never infers this intent from message text.
 
 For the account's local today, the narrative receives the complete paged schedule
 as an ordered pending projection. It includes parent links, start and end times,
