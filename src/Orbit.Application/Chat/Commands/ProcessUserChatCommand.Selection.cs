@@ -41,7 +41,7 @@ public partial class ProcessUserChatCommandHandler
         {
             if (resolvedCalls[call.Id] is not { } resolved)
                 continue;
-            var ids = EffectiveWriteTargetIds(resolved, results).ToHashSet();
+            var ids = DuplicateWriteTargetIds(resolved, results).ToHashSet();
             var duplicateTargets = results.AllHabits.Where(habit => ids.Contains(habit.Id))
                 .GroupBy(habit => HabitNameMatcher.Normalize(habit.Title)).Where(group => group.Count() > 1);
             if (!duplicateTargets.Any(group => group.Any(habit => !results.ReadHabitItems.ContainsKey(habit.Id.ToString()))))
@@ -51,6 +51,20 @@ public partial class ProcessUserChatCommandHandler
                 null, null, null, null);
             resolvedCalls[call.Id] = null;
         }
+    }
+
+    private static IEnumerable<Guid> DuplicateWriteTargetIds(AiToolCall call, ToolExecutionAccumulator results)
+    {
+        if (call.Args.TryGetProperty("revised_items", out var items) && items.ValueKind == JsonValueKind.Array)
+            return items.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object
+                    && item.TryGetProperty("habit_id", out var id) && id.ValueKind == JsonValueKind.String)
+                .Select(item => Guid.TryParse(item.GetProperty("habit_id").GetString(), out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty);
+        if (call.Args.TryGetProperty("habit_ids", out var ids) && ids.ValueKind == JsonValueKind.Array)
+            return ids.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.String)
+                .Select(id => Guid.TryParse(id.GetString(), out var parsed) ? parsed : Guid.Empty)
+                .Where(id => id != Guid.Empty);
+        return BulkNoChangesOutcome.Supports(call.Name) ? EffectiveWriteTargetIds(call, results) : [];
     }
 
     private static HabitSelectionCandidates? SelectionForWrite(AiToolCall call, ToolExecutionAccumulator results)
