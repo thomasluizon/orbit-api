@@ -6,9 +6,23 @@ namespace Orbit.Application.Chat.Commands;
 public partial class ProcessUserChatCommandHandler
 {
     private static ResponseCards SuppressCreationReadCards(ResponseCards cards, ProcessUserChatCommand request,
-        ToolExecutionAccumulator results) => HasCombinedCreationPreview(results)
-            ? new ResponseCards(null, Parts: request.ClientContext?.SupportsParts == true ? [] : null)
-            { ServerComposedText = true } : cards;
+        ToolExecutionAccumulator results)
+    {
+        if (HasCombinedCreationPreview(results))
+            return new ResponseCards(null, Parts: request.ClientContext?.SupportsParts == true ? [] : null)
+            { ServerComposedText = true };
+        return HasPendingWritePreview(results) ? cards with
+        {
+            HabitList = cards.HabitList is { Items.Count: 0 } ? null : cards.HabitList,
+            GoalList = cards.GoalList is { Items.Count: 0 } ? null : cards.GoalList,
+            RecordLists = cards.RecordLists?.Where(card => card.Items.Count > 0).ToArray(),
+            Parts = cards.Parts?.Where(part => part is not ChatBlockPart
+            {
+                Block: HabitListCard { Items.Count: 0 }
+                or GoalListCard { Items.Count: 0 } or RecordListCard { Items.Count: 0 }
+            }).ToArray()
+        } : cards;
+    }
 
     private static bool HasCombinedCreationPreview(ToolExecutionAccumulator results) =>
         results.PendingOperations is [var pending]

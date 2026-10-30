@@ -10,6 +10,7 @@ public static partial class ErrorCopy
         ("chat.answer.truncated", "This response was cut off before completion, so the result is partial.", "Esta resposta foi interrompida antes do fim e pode estar incompleta."),
         ("chat.answer.selectHabit", "Which habit would you like to choose?", "Qual hábito você quer escolher?"),
         ("chat.answer.selectHabitReference", "Which habit would you like to use for “{0}”?", "Qual hábito você quer usar para “{0}”?"),
+        ("chat.answer.habitCapacityNextStep", "You can add a sub-habit to an existing habit.", "Você pode adicionar um sub-hábito a um hábito existente."),
         ("chat.read.habitsEmpty", "No habits match this request.", "Nenhum hábito encontrado para esta busca."),
         ("chat.read.goalsEmpty", "No goals match this request.", "Nenhuma meta encontrada para esta busca."),
         ("chat.read.recordsEmpty", "No records match this request.", "Nenhum registro encontrado para esta busca."),

@@ -883,18 +883,28 @@ Existing activities and children do not consume new root slots. Save commands
 retain their locked capacity checks to handle changes after preview preparation.
 
 `HABIT_LIMIT_REACHED` returns the existing localized error and its formatting
-arguments as a typed failure. The model explains it through ordinary continuation;
-the failure cannot offer approval or become a generic retry message. Grounding
+arguments as a typed failure. The server composes the localized limit and the
+available next step from that typed failure, even when prerequisite lookups are
+empty or the model's continuation omits the reason. The next step is adding a
+sub-habit to an existing habit, which does not consume a root slot. The refusal
+cannot offer approval or become a generic retry message. Grounding
 accepts the returned capacity as a refusal fact without treating it as a saved
 habit. No message keywords route this behavior.
 
 | Source | en | pt-BR |
 | --- | --- | --- |
 | Existing `HABIT_LIMIT_REACHED` copy, reused | You've reached the {0} habit limit. | Você chegou ao limite de {0} hábitos. |
+| `chat.answer.habitCapacityNextStep` | You can add a sub-habit to an existing habit. | Você pode adicionar um sub-hábito a um hábito existente. |
 | `TerminalWriteDirective` addition | If a write returns HABIT_LIMIT_REACHED, explain the returned limit in the person's language. It applies to every plan; do not propose upgrading, deleting data or bypassing it. | Se uma alteração retornar HABIT_LIMIT_REACHED, explique o limite retornado no idioma da pessoa. Ele vale para todos os planos; não proponha mudar de plano, excluir dados ou contornar o limite. |
 
 The instruction is English at runtime; its Portuguese version is for copy review.
-The error copy is unchanged in both languages. No fixed answer text is added.
+The limit copy is unchanged in both languages. The added next step is composed
+only from a typed capacity refusal, never from the person's message.
+
+An answer with a held write preview omits empty habit, goal and record lists,
+including lists returned by duplicate lookups. This applies to typed parts and
+legacy card properties. Nonempty read results remain eligible for composition;
+the combined creation preview continues to suppress all prerequisite read cards.
 
 The following server copy is retained verbatim and moved into the localization catalog.
 The model instruction is shared by the tool description and its result. Its Portuguese
