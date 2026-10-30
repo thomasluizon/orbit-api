@@ -1,0 +1,38 @@
+{
+  "caseId": "composition-proactive-pt-BR",
+  "repeat": 2,
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"choice\",\"block\":{\"title\":\"O que você quer fazer com o lembrete?\",\"options\":[{\"label\":\"Ver o que falta\"},{\"label\":\"Outra coisa\"}],\"freeText\":\"Sua resposta\",\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "choice",
+          "missing_input": "check_in",
+          "question": "O que você quer fazer com o lembrete?",
+          "options": [
+            {
+              "id": "show",
+              "label": "Ver o que falta",
+              "description": null
+            },
+            {
+              "id": "other",
+              "label": "Outra coisa",
+              "description": null
+            }
+          ],
+          "multiSelect": false,
+          "allowFreeText": true
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ]
+}

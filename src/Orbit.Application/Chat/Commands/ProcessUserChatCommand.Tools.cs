@@ -230,6 +230,7 @@ public partial class ProcessUserChatCommandHandler
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
                 "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
         RetireConsumedReads(aiResponse.ConversationContext, executionResults, toolResults);
+        RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
         cancellationToken.ThrowIfCancellationRequested();
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
             correction is null ? aiStreamSink : null, cancellationToken);

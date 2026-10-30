@@ -48,6 +48,8 @@ public sealed class AiConversationContext
     public AiTurnTelemetry Telemetry { get; init; } = new();
     /// <summary>Earlier reads whose full payload is retained by the handler after staging a preview.</summary>
     public IReadOnlyCollection<string> RetiredReadCallIds { get; set; } = [];
+    /// <summary>Declarations refreshed from successful typed tool results before continuation.</summary>
+    public IReadOnlyList<object> ToolDeclarationUpdates { get; set; } = [];
 }
 
 public record AiResponse

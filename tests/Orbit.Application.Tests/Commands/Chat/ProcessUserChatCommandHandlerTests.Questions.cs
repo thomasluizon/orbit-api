@@ -228,8 +228,11 @@ public partial class ProcessUserChatCommandHandlerTests
         });
         IssuedAstraBlock? issued = null;
         _blockStore.AddAsync(Arg.Do<IssuedAstraBlock>(block => issued = block), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        SetupAiResponse(ToolResponse("ask", "question1", arguments));
-        var handler = CreateHandler(RealAskTool());
+        var handler = CreateRecordAskHandler();
+        SetupAiResponse(ToolResponse("query_habits", "checkin-read", """{"for_selection":false,"orbit_read_complete":false}"""));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(ToolResponse("ask", "question1", arguments)));
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["question"], Locale: locale);
 
         var response = await handler.Handle(new(UserId, "Help me plan", ClientContext: client), default);

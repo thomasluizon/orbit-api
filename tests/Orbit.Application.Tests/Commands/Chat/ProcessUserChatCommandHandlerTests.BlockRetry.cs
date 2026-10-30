@@ -323,7 +323,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var user = User.Create("Alex", "retry@example.com").Value;
         var quota = CreateRealPayGate(user);
         var block = RetryChoice();
-        SetupAiResponse(ToolResponse("ask", "followup", ChoiceArguments));
+        var followup = ToolResponse("ask", "followup", ChoiceArguments);
+        SetupAiResponse(followup with { ToolCalls = [AskWithMissingInput(followup.ToolCalls!.Single(), "habit_setup")] });
         var handler = CreateHandler(quota, RealAskTool());
         var request = new ProcessUserChatCommand(UserId, "Evening", BlockAnswer: new(block.Id, ["b"]),
             ClientContext: new(SupportsParts: true, PartKinds: ["choice"]));

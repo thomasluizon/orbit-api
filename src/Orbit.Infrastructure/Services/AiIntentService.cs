@@ -83,6 +83,14 @@ public sealed partial class AiIntentService(
             conversationContext.Options is not CreateResponseOptions options)
             return Result.Failure<AiResponse>(ErrorMessages.AiNoActiveConversation);
 
+        foreach (var update in BuildToolCatalog(conversationContext.ToolDeclarationUpdates))
+        {
+            var existing = options.Tools.OfType<FunctionTool>().SingleOrDefault(tool => tool.FunctionName == update.Key);
+            if (existing is null) continue;
+            var index = options.Tools.IndexOf(existing);
+            options.Tools[index] = update.Value;
+        }
+
         foreach (var output in messages.OfType<FunctionCallOutputResponseItem>()
             .Where(output => conversationContext.RetiredReadCallIds.Contains(output.CallId)))
             output.FunctionOutput = JsonSerializer.Serialize(new

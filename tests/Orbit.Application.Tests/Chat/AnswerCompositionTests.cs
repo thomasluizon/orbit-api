@@ -225,7 +225,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse
         {
             TextMessage = "Choose a time.",
-            ToolCalls = [new("ask", "choice", ParseArguments(ChoiceArguments))],
+            ToolCalls = [AskWithMissingInput(new("ask", "choice", ParseArguments(ChoiceArguments)), "habit_setup")],
             ConversationContext = TestConversationContext
         });
         var result = await CreateHandler(RealAskTool()).Handle(new(UserId, "Help me choose", ClientContext: new(

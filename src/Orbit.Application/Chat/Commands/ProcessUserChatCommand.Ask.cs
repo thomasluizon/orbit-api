@@ -109,16 +109,35 @@ public partial class ProcessUserChatCommandHandler
             return "Set missing_input to habit_setup, preference, check_in, record_selection or bulk_selection to identify input only the person can supply.";
         var selectsRecords = missingInput is "record_selection" or "bulk_selection"
             || definition is { Form: AstraBlockKinds.PickList, Action: "log_habits" or "skip_habits" };
-        return selectsRecords && !results.HasSuccessfulSelectionRead
-            ? "Read the account records with query_habits(for_selection=true, orbit_read_complete=false) before asking the person to choose them. Resolve an earlier reminder from conversation history; when its read answers the request, return that result without ask."
-            : null;
+        if (selectsRecords && !results.HasSuccessfulSelectionRead)
+            return "Read the account records with query_habits(for_selection=true, orbit_read_complete=false) before asking the person to choose them. Resolve an earlier reminder from conversation history; when its read answers the request, return that result without ask.";
+        return missingInput != "habit_setup" && !results.HasSuccessfulAccountRead ? AskTool.AccountReadInstruction : null;
     }
 
     private static void RecordSuccessfulAskRead(AiToolCall call, ToolCallOutcome outcome, ToolExecutionAccumulator results)
     {
+        if (outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, ReadBlock: not null })
+            results.HasSuccessfulAccountRead = true;
         if (call.Name == "query_habits" && outcome.OperationResult is
             { Status: AgentOperationStatus.Succeeded, Payload: HabitListCard })
+        {
+            results.HasSuccessfulAccountRead = true;
             results.HasSuccessfulSelectionRead = true;
+        }
+    }
+
+    private void RefreshAskSchema(AiConversationContext? conversation, ProcessUserChatCommand request,
+        ChatContext context, ToolExecutionAccumulator results)
+    {
+        if (conversation is null || !results.HasSuccessfulAccountRead || !AskEnabled(request, context)
+            || ai.ToolRegistry.GetTool("ask") is not AskTool ask)
+            return;
+        conversation.ToolDeclarationUpdates = [new
+        {
+            name = ask.Name,
+            description = ask.Description,
+            parameters = ChatToolSchema(ask, request, context, hasAccountRead: true)
+        }];
     }
 
     private sealed record AskSelectionOption(JsonElement Id);

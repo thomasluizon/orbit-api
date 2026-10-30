@@ -53,7 +53,8 @@ public partial class ProcessUserChatCommandHandlerTests
         scope.GetString().Should().Contain("explicitly documented in markdown").And.Contain("not editing instructions")
             .And.Contain("does not cover it").And.Contain("person's language");
         scope.GetString().Should().Contain("app_surfaces comes from the same catalog as list_app_surfaces_v2")
-            .And.Contain("Never infer a habit edit screen or creation workflow from a related destination.");
+            .And.Contain("Never infer a habit edit screen or creation workflow from a related destination.")
+            .And.Contain("Use at most three short steps, one complete sentence per line, at most 180 characters per line. Do not join steps into a paragraph.");
         var modelRequest = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
         var declaration = modelRequest.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
             .Single(value => value.GetProperty("name").GetString() == tool.Name);

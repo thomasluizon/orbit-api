@@ -1,0 +1,34 @@
+{
+  "caseId": "composition-proactive-pt-BR",
+  "repeat": 1,
+  "answer": "{\"parts\":[{\"type\":\"block\",\"kind\":\"question\",\"block\":{\"title\":\"Você quer ver os hábitos que ainda faltam para hoje?\",\"progress\":\"0 de 1 pergunta respondida\",\"questions\":[{\"options\":[{\"label\":\"Sim\"},{\"label\":\"Não\"}]}],\"submit\":\"Enviar\"}}]}",
+  "toolCalls": [
+    {
+      "name": "ask",
+      "arguments": {
+        "input": {
+          "form": "question",
+          "missing_input": "check_in",
+          "questions": [
+            {
+              "type": "yesNo",
+              "id": "check",
+              "prompt": "Você quer ver os hábitos que ainda faltam para hoje?",
+              "allowFreeText": false
+            }
+          ],
+          "title": null,
+          "intro": null,
+          "progress": null
+        },
+        "orbit_read_complete": false
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": null
+      }
+    }
+  ]
+}

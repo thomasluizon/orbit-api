@@ -17,6 +17,7 @@ public sealed class AskTool(
     public const string TargetResolutionInstruction = "A habit identified by id or by an exact unique title is resolved. Different actions on different identified habits are not ambiguous. Ask only for input that is still missing after reading account data. In a compound request, call the independent write tools before ask so their approval preview appears beside the question; withhold only changes that depend on the answer. Never ask the person to choose again between already identified targets. A single pick uses choice even when it has a heading; use question for two or more fields.";
     public const string SingleSelectionInstruction = "A single discrete selection always uses ask form choice with top-level question and options, including when the question also requests a free-text change. Reserve form question for multiple separate input fields.";
     public const string DuplicateTargetsInstruction = "Duplicate targets: A singular name matching duplicate titles remains unresolved even when the account index contains every matching ID. Call query_habits with search and for_selection=true, then ask with form choice; never pass all matching IDs to bulk_log_habits or any other bulk write.";
+    public const string AccountReadInstruction = "Before a successful account read in this turn, ask accepts only habit_setup for missing input to create new habit drafts. Never use habit_setup for a reminder, an existing record, a preference or a check-in. Other reasons become available after a successful account read. When that read answers the request, return it with orbit_read_complete=true and do not ask.";
 
     public string Name => "ask";
     public string Description => "Ask for missing input with a choice, a pick list for a bulk preview, or a multi-field question form. Read account data first. Only a valid, accepted ask ends the reply. Never request approval or repeat a preview question. "
@@ -25,7 +26,7 @@ public sealed class AskTool(
         + "For a single choice among existing records, use form choice with top-level question and options, even when form question is supported. Reserve form question for multiple fields. If the change is also missing, ask for both target and change in the choice question with allowFreeText=true. Use only a form the client supports. "
         + "Put the selected form and its fields inside input. "
         + SingleSelectionInstruction + " " + DuplicateTargetsInstruction + " "
-        + TargetResolutionInstruction + " " + RestartPlanInstructions.ProposalBoundary;
+        + TargetResolutionInstruction + " " + RestartPlanInstructions.ProposalBoundary + " " + AccountReadInstruction;
     public bool IsReadOnly => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -158,6 +159,19 @@ public sealed class AskTool(
             required = new[] { "input" }
         };
         return BuildFormSchema(JsonSerializer.SerializeToNode(schema)!.AsObject());
+    }
+
+    public object GetParameterSchema(bool hasAccountRead)
+    {
+        var schema = (JsonObject)GetParameterSchema();
+        if (hasAccountRead) return schema;
+        foreach (var form in schema["properties"]!["input"]!["anyOf"]!.AsArray())
+        {
+            var reason = form!["properties"]!["missing_input"]!;
+            reason["enum"] = new JsonArray("habit_setup");
+            reason["description"] = AccountReadInstruction;
+        }
+        return schema;
     }
 
     private static JsonObject BuildFormSchema(JsonObject schema)

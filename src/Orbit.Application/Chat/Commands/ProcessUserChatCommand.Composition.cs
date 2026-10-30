@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Orbit.Application.Common;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Grounding;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
@@ -86,8 +87,13 @@ public partial class ProcessUserChatCommandHandler
         if (status is not null)
             parts.Add(new ChatTextPart(ShortText(status, 1)));
         else if (parts.Count == 0 && !hasOutcome)
-            parts.Add(new ChatTextPart(ShortText(parsed.VisibleText, 3,
-                Mentions(request.Message, "steps|passos|step by step|passo a passo"))));
+        {
+            var steps = Mentions(request.Message, "steps|passos|step by step|passo a passo");
+            var text = results.LastSuccessfulOperation(DescribeFeatureToolName)?.Payload is FeatureHelpResult
+                ? ComposeFeatureHelpText(parsed.VisibleText, steps)
+                : ShortText(parsed.VisibleText, 3, steps);
+            parts.Add(new ChatTextPart(text));
+        }
 
         CaptureComposition(request, context, results, candidates, built, missingProjection, hasOutcome);
         var cards = new ResponseCards(JoinPartText(parts), Parts: parts)
