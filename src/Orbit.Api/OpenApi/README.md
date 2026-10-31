@@ -9,13 +9,28 @@ share this code. Chat SSE uses the existing `error` event with `status: 424` and
 `code: "AI_PROVIDER_QUOTA_EXHAUSTED"` after the stream starts.
 
 Provider HTTP 429 bodies with `error.code` (or `error.type` when the code is absent or null) equal to
-`insufficient_quota` or `credit_balance_exhausted` stop after one attempt.
-A `Retry-After` header takes precedence and preserves the existing rate-limit retries;
-other or unrecognized 429 bodies also retain those retries. Error messages reuse the
+`insufficient_quota` or `credit_balance_exhausted` stop after one attempt, even when the
+response also carries a `Retry-After` header, because the body code states the failure is
+permanent. Other or unrecognized 429 bodies retain the existing rate-limit retries. Error messages reuse the
 existing localized `AI_UNAVAILABLE` copy. Deploy this producer before the paired web
 and Android consumer disables automatic query and chat retries for this code.
 The existing shared query retry helper retries generic failures, including HTTP 424,
 until that consumer change lands. Tracks thomasluizon/orbit-tickets#1915.
+
+Habit search (`GET /api/habits` with `search`) appends nullable optional
+`completedOn` and `isSkippedOnDate` to schedule rows and children.
+`completedOn` is the latest nondeleted positive log's account calendar `Date`
+for a completed OneTime task, including logs outside the schedule read window.
+Other items and completed tasks without a surviving completion log return null.
+`isSkippedOnDate` reports an unresolved skip on `dateFrom`, or the account's
+today when no range is supplied. A positive log on that day resolves the skip.
+Skip receipts without a log are included by the existing schedule read model.
+Search pages put other results before completed OneTime tasks, then order those
+tasks by descending completion date, with missing dates last. Position, creation instant and habit ID
+break ties. The shared query orders in SQL before paging; MCP and Astra reuse it.
+Deploy this API to production before the search sections and completion labels
+in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2271). Tracks
+thomasluizon/orbit-tickets#1933.
 
 The FCM data message and shared Android category for repeat reminder actions
 are documented in [RepeatReminderPush.md](RepeatReminderPush.md).

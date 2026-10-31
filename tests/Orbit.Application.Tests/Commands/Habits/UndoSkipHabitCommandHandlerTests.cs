@@ -253,7 +253,7 @@ public sealed class UndoSkipHabitCommandHandlerTests
 
     private static SkipHabitRepositories Repositories(OrbitDbContext context) => new(
         new GenericRepository<Habit>(context), new GenericRepository<HabitLog>(context),
-        new GenericRepository<HabitSkipUndo>(context));
+        new GenericRepository<HabitSkipUndo>(context), new GenericRepository<Notification>(context));
 
     private sealed record LogSnapshotData(Guid Id, DateOnly Date, decimal Value, string? Note,
         int CompletionOrdinal, DateTime CreatedAtUtc, DateTime UpdatedAtUtc, bool IsDeleted, DateTime? DeletedAtUtc);

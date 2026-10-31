@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -20,7 +21,7 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public sealed class ReminderDoneTests : IDisposable
+public sealed partial class ReminderDoneTests : IDisposable
 {
     private readonly SqliteOrbitDbContextFactory _factory = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
@@ -46,6 +47,8 @@ public sealed class ReminderDoneTests : IDisposable
         log.Value.Should().Be(1);
         log.ReminderAtUtc.Should().Be(_clock.GetUtcNow().UtcDateTime.AddMinutes(-30));
         await _mediator.Received(1).Send(Arg.Is<LogHabitCommand>(c => c.HabitId == habit.Id && !c.ToggleExisting), Arg.Any<CancellationToken>());
+        _factory.Context.ChangeTracker.Clear();
+        (await _factory.Context.Notifications.SingleAsync()).IsRead.Should().BeTrue();
     }
 
     [Theory]
@@ -281,6 +284,8 @@ public sealed class ReminderDoneTests : IDisposable
         db.Users.Add(user);
         db.Habits.Add(habit);
         db.SentReminders.Add(reminder);
+        db.Notifications.Add(Notification.Create(user.Id, habit.Title, "Next at 12:00", "/", habit.Id,
+            HabitReminderInbox.Key(habit.Id, today)));
         await db.SaveChangesAsync();
         _dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(today);
         _dates.GetUserTimeZoneAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
@@ -290,7 +295,7 @@ public sealed class ReminderDoneTests : IDisposable
         var goals = new GoalCompletionService(new GenericRepository<Goal>(db), gamification, unit, _dates);
         var habits = new GenericRepository<Habit>(db);
         var logHandler = new LogHabitCommandHandler(new(habits, new GenericRepository<HabitLog>(db), new GenericRepository<User>(db),
-                new GenericRepository<SentReminder>(db)),
+                new GenericRepository<SentReminder>(db), new GenericRepository<Notification>(db)),
             new(_dates, streaks, gamification, goals, _mediator, Substitute.For<IPayGateService>()),
             unit, _cache, NullLogger<LogHabitCommandHandler>.Instance);
         _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())

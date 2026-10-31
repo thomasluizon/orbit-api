@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Infrastructure.Persistence;
 
@@ -15,9 +16,14 @@ public sealed class HabitSchedulePageLoader(OrbitDbContext context) : IHabitSche
             return;
 
         var ids = habits.Select(habit => habit.Id).ToArray();
+        var completedTaskIds = habits
+            .Where(habit => habit.Schedule == HabitSchedule.OneTime && habit.IsCompleted)
+            .Select(habit => habit.Id).ToArray();
         var snapshots = await context.HabitLogs.AsNoTracking()
             .TagWith("HabitSchedulePageLogs")
-            .Where(log => ids.Contains(log.HabitId) && log.Date >= logFrom && log.Date <= logTo)
+            .Where(log => ids.Contains(log.HabitId)
+                && (log.Date >= logFrom && log.Date <= logTo
+                    || completedTaskIds.Contains(log.HabitId) && log.Value > 0))
             .Select(log => new
             {
                 log.Id,

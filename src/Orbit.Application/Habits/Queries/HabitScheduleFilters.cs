@@ -326,7 +326,9 @@ internal static class HabitScheduleFilters
             Schedule: h.Schedule,
             StartDate: h.StartDate,
             ParentHabitId: h.ParentHabitId,
-            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == h.ParentHabitId)?.Title);
+            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == h.ParentHabitId)?.Title,
+            CompletedOn: GetCompletedOn(h),
+            IsSkippedOnDate: IsSkippedOnDate(h, ctx));
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -528,7 +530,26 @@ internal static class HabitScheduleFilters
             RepeatReminder: c.RepeatReminder,
             SlipAlertEnabled: c.SlipAlertEnabled,
             ParentHabitId: c.ParentHabitId,
-            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == c.ParentHabitId)?.Title);
+            ParentTitle: ctx.ChildLookup.SelectMany(group => group).FirstOrDefault(parent => parent.Id == c.ParentHabitId)?.Title,
+            CompletedOn: GetCompletedOn(c),
+            IsSkippedOnDate: IsSkippedOnDate(c, ctx));
+    }
+
+    private static DateOnly? GetCompletedOn(Habit habit) =>
+        habit.Schedule == HabitSchedule.OneTime && habit.IsCompleted
+            ? habit.Logs.Where(log => !log.IsDeleted && log.Value > 0).Max(log => (DateOnly?)log.Date)
+            : null;
+
+    private static bool? IsSkippedOnDate(Habit habit, ScheduleMapContext ctx)
+    {
+        var date = ctx.DateFrom ?? ctx.UserToday;
+        if (!date.HasValue)
+            return null;
+        return ctx.LogFacts is not null
+            ? ctx.LogFacts.HasSkipped(habit.Id, date.Value)
+                && !ctx.LogFacts.HasCompleted(habit.Id, date.Value, date.Value)
+            : habit.Logs.Any(log => !log.IsDeleted && log.Date == date.Value && log.Value == 0)
+                && !habit.Logs.Any(log => !log.IsDeleted && log.Date == date.Value && log.Value > 0);
     }
 
     private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)

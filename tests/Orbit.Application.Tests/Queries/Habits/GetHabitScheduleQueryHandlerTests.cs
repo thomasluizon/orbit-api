@@ -83,7 +83,8 @@ public class GetHabitScheduleQueryHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(habitList);
+            .Returns(call => call.ArgAt<Func<IQueryable<Habit>, IQueryable<Habit>>>(1)(
+                habitList.AsQueryable().Where(call.ArgAt<Expression<Func<Habit, bool>>>(0))).ToList());
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(),
             Arg.Any<DateOnly>(),
@@ -1540,7 +1541,12 @@ public class GetHabitScheduleQueryHandlerTests
         runWeekly.SetPosition(4);
         var walk = CreateTestHabit(title: "Walk", frequencyUnit: FrequencyUnit.Day, dueDate: Today);
         walk.SetPosition(5);
-        SetupHabits(runA, runB, runC, runWeekly, walk);
+        var completedOld = CreateTestHabit(title: "Run old task", frequencyUnit: null, isCompleted: true);
+        completedOld.SetPosition(-2);
+        var completedNew = CreateTestHabit(title: "Run new task", frequencyUnit: null);
+        completedNew.Log(Today.AddDays(1)).IsSuccess.Should().BeTrue();
+        completedNew.SetPosition(-1);
+        SetupHabits(completedOld, completedNew, runA, runB, runC, runWeekly, walk);
 
         var query = new GetHabitScheduleQuery(
             UserId, Today, Today.AddDays(6),
@@ -1553,5 +1559,11 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Page.Should().Be(2);
         result.Value.Items.Should().ContainSingle();
         result.Value.Items[0].Title.Should().Be("Run C");
+
+        var search = query with { FrequencyUnitFilter = null, PageSize = 3, Page = 1 };
+        var first = await _handler.Handle(search, CancellationToken.None);
+        var second = await _handler.Handle(search with { Page = 2 }, CancellationToken.None);
+        first.Value.Items.Select(item => item.Id).Should().Equal(runA.Id, runB.Id, runC.Id);
+        second.Value.Items.Select(item => item.Id).Should().Equal(runWeekly.Id, completedNew.Id, completedOld.Id);
     }
 }

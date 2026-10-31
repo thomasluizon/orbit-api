@@ -1460,6 +1460,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("ReminderDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text");

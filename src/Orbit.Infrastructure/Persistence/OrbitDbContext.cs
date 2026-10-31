@@ -415,6 +415,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Notification>(entity =>
         {
+            entity.Property(n => n.ReminderDate).HasColumnType("date");
             entity.HasIndex(n => new { n.UserId, n.IsRead });
             entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");

@@ -58,20 +58,20 @@ public partial class ReminderSchedulerService
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone));
             var reminder = SentReminder.CreateRepeat(habit.Id, today, plan.ReminderAtUtc, plan.ExpiresAtUtc,
                 plan.DoseAnchorAtUtc, plan.Parent?.Id);
-            if (await RecordRepeat(habit, user, reminder, plan.Parent ?? reminder, zone, db, pending, ct))
+            if (await RecordRepeat(habit, user, reminder, plan.Parent ?? reminder, zone, db, pending, nowAtUtc, ct))
                 snapshot.RepeatSent.Add(reminder);
         }
     }
 
     private async Task<bool> RecordRepeat(Habit habit, User user, SentReminder reminder, SentReminder actionReminder,
-        TimeZoneInfo zone, OrbitDbContext db, List<PendingReminderPush> pending, CancellationToken ct)
+        TimeZoneInfo zone, OrbitDbContext db, List<PendingReminderPush> pending, DateTime sentAtUtc, CancellationToken ct)
     {
         var localNext = TimeZoneInfo.ConvertTimeFromUtc(actionReminder.ExpiresAtUtc!.Value, zone);
         var format = TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone) ? "HH:mm" : "h:mm tt";
         var time = localNext.ToString(format, CultureInfo.GetCultureInfo(LocaleHelper.IsPortuguese(user.Language) ? "pt-BR" : "en-US"));
         var body = LocaleHelper.IsPortuguese(user.Language) ? $"Próximo às {time}" : $"Next at {time}";
         var notification = Notification.Create(user.Id, habit.Title, body, NotificationUrls.Home, habit.Id);
-        if (!await TryRecordReminderAsync(habit, reminder, notification, db, ct))
+        if (!await TryRecordReminderAsync(habit, reminder, notification, db, zone, sentAtUtc, ct))
             return false;
         using var scope = scopeFactory.CreateScope();
         var tokens = scope.ServiceProvider.GetRequiredService<IReminderActionTokenService>();
