@@ -17,9 +17,12 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
-    public void R9b_DailySummaryCompositionGuidanceKeepsFiguresAndStatusesInTheBlock()
+    public void R9b_DailySummaryCompositionGuidanceKeepsFiguresAndStatusesInTheBlock(string language)
     {
         var prompt = AiSummaryService.SystemPrompt;
+        var facts = AiSummaryService.BuildSummaryPrompt([], new(Today, Today, Today, language,
+            new TimeOnly(11, 0), 0, 0, new Dictionary<Guid, DateOnly>()));
+        facts.Should().Contain(language == "en" ? "English" : "Brazilian Portuguese");
         prompt.Should().Contain("Summarize the day across the person's routines in words");
         prompt.Should().Contain("End the sentence by naturally naming the server-selected next step");
         prompt.Should().Contain("Digits are allowed only inside an exact supplied stored title");

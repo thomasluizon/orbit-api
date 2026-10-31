@@ -103,6 +103,18 @@ public sealed class DailySummaryNarrativeCacheTests : IDisposable
         await summaries.Received(2).GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Cache_ExplicitEditInvalidationClearsSelectedStepVariant()
+    {
+        Add("Psyllium 5g", new TimeOnly(10, 30));
+        summaries.GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DailySummaryContent("Your day is open, starting with psyllium.", string.Empty)));
+        await Read();
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
+        (await Read()).Value.FromCache.Should().BeFalse();
+        await summaries.Received(2).GenerateSummaryAsync(Arg.Any<IEnumerable<Habit>>(), Arg.Any<DailySummaryContext>(), Arg.Any<CancellationToken>());
+    }
+
     private Habit Add(string title, TimeOnly time)
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, userId, title,

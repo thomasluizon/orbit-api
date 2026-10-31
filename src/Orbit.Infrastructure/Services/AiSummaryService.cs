@@ -71,11 +71,12 @@ public sealed partial class AiSummaryService(
                     userId: context.UserId);
 
                 if (content is null || string.IsNullOrWhiteSpace(content.Summary)
-                    || content.NextStepHabitId != nextStep?.Id)
+                    || content.NextStepHabitId != nextStep?.Id
+                    || NarrativeText.WithoutTitles(content.Summary, names).Any(char.IsDigit))
                     continue;
 
                 var summary = AiPlainText.Normalize(content.Summary, names);
-                if (string.IsNullOrWhiteSpace(summary) || summary.Length > MaxSummaryChars
+                if (!summary.Any(char.IsLetterOrDigit) || summary.Length > MaxSummaryChars
                     || NarrativeText.WithoutTitles(summary, names).Any(char.IsDigit))
                     continue;
 

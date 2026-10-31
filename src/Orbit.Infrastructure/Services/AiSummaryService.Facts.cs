@@ -51,8 +51,15 @@ public sealed partial class AiSummaryService
         private IEnumerable<Habit> Leaves(Habit habit) => children[habit.Id].Any()
             ? children[habit.Id].SelectMany(Leaves) : [habit];
 
-        private string State(Habit habit) => HasSkipLogInRange(habit, context.DateFrom, context.DateTo) ? "skipped"
-            : IsDoneInRange(habit, context.DateFrom, context.DateTo) ? "done" : "pending";
+        private string State(Habit habit)
+        {
+            if (HasSkipLogInRange(habit, context.DateFrom, context.DateTo))
+                return "skipped";
+            var open = pending.FirstOrDefault(item => item.Id == habit.Id);
+            if (open is not null)
+                return open.CompletedCount > 0 ? "in progress" : "pending";
+            return IsDoneInRange(habit, context.DateFrom, context.DateTo) ? "done" : "pending";
+        }
 
         private SummaryItem Item(Habit habit) => new(habit.Id, habit.Title, State(habit));
 
@@ -62,10 +69,11 @@ public sealed partial class AiSummaryService
             var completed = steps.Count(step => State(step) == "done");
             var skipped = steps.Count(step => State(step) == "skipped");
             var ids = steps.Select(step => step.Id).ToHashSet();
-            var state = completed == steps.Count ? "done"
+            var state = steps.Count == 0 ? "no open steps"
+                : completed == steps.Count ? "done"
                 : skipped == steps.Count ? "skipped"
                 : completed + skipped == steps.Count ? "closed with skips"
-                : completed == 0 ? "not started"
+                : completed == 0 ? steps.Any(step => State(step) == "in progress") ? "in progress" : "not started"
                 : completed + skipped == steps.Count - 1 ? "nearly done" : "in progress";
             var openSteps = pending.Where(item => !item.HasPendingChildren && ids.Contains(item.Id))
                 .Select(item => new PendingStep(item.Id, item.Title, item.ParentTitle, item.DayOrder,

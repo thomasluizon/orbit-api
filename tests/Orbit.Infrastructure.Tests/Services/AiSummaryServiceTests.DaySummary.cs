@@ -155,7 +155,31 @@ public partial class AiSummaryServiceTests
         (await service.GenerateSummaryAsync([habit], context)).IsSuccess.Should().BeTrue();
     }
 
-    private static async Task<(List<Habit> Habits, DailySummaryContext Context)> OwnerDay(string language, string wakingTitle = "Waking up")
+    [Theory]
+    [InlineData("99. Meals are open, starting with Psyllium 5g.")]
+    [InlineData("** **")]
+    public async Task DailySummary_NormalizationCannotHideInvalidContent(string sentence)
+    {
+        var (habits, context) = await OwnerDay("en");
+        var next = DailySummaryPendingProjection.SelectNextStep(context.PendingHabits)!;
+        var service = BuildSummaryService(JsonSerializer.Serialize(new { nextStepHabitId = next.Id, summary = sentence }));
+        (await service.GenerateSummaryAsync(habits, context)).IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DailySummary_PartialFlexibleQuotaIsStillInProgress()
+    {
+        var (habits, context) = await OwnerDay("en", includeFlexible: true);
+        context.PendingHabits!.Single(item => item.Title == "Gym").CompletedCount.Should().Be(1);
+        using var facts = ReadFacts(AiSummaryService.BuildSummaryPrompt(habits, context));
+        var exercise = facts.RootElement.GetProperty("routines").EnumerateArray()
+            .Single(item => item.GetProperty("title").GetString() == "Exercise");
+        exercise.GetProperty("state").GetString().Should().Be("in progress");
+        exercise.GetProperty("completedSteps").GetInt32().Should().Be(0);
+        exercise.GetProperty("pendingSteps").EnumerateArray().Should().ContainSingle();
+    }
+
+    private static async Task<(List<Habit> Habits, DailySummaryContext Context)> OwnerDay(string language, string wakingTitle = "Waking up", bool includeFlexible = false)
     {
         var habits = new List<Habit>();
         Habit Add(string title, Guid? parent = null, TimeOnly? time = null, bool bad = false)
@@ -183,6 +207,15 @@ public partial class AiSummaryServiceTests
         Add("Psyllium 5g", waking.Id, new TimeOnly(10, 30));
         var bad = Add("Tobacco", bad: true);
         Add("Smoking", bad.Id, bad: true);
+
+        if (includeFlexible)
+        {
+            var exercise = Add("Exercise");
+            var gym = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, ValidUserId, "Gym",
+                FrequencyUnit.Week, 3, DueDate: Today, ParentHabitId: exercise.Id)).Value;
+            gym.Log(Today).IsSuccess.Should().BeTrue();
+            habits.Add(gym);
+        }
 
         var repo = Substitute.For<IGenericRepository<Habit>>();
         repo.ProjectAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
