@@ -45,6 +45,14 @@ feature help, history and write previews do not unlock them. Record selection al
 requires a successful current-turn habit read. Selecting does not approve a write.
 No model or quota setting controls this negotiation.
 
+For composition clients with an ask kind, verify a tool-free clarification continues
+through a typed read and one choice block. Complete text answers use an internal
+terminal envelope without an extra model call; invalid envelopes get one bounded
+correction and never appear in answer deltas or history. Combined suggestion
+previews restore issued draft values, including disabled reminders and empty arrays;
+later requested edits still use the ordinary pending-preview revision. These
+contracts require no new flag, model setting or quota change.
+
 The streak response appends optional `firstEligibleDate` in the account's time zone. Deploy
 the API before the separate UI change uses that date to draw earlier days as neutral. Check
 the local date across midnight and omission for an account without active habits. Frequency

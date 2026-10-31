@@ -1,0 +1,8 @@
+{
+  "caseId": "composition-choice-pt-BR",
+  "repeat": 1,
+  "reason": "Data answer leads with prose.",
+  "answer": "Qual hábito você quer mudar e o que quer mudar nele?",
+  "toolCalls": [],
+  "source": "production gate r9b, API 63a6a33b, harness 1c8210815"
+}

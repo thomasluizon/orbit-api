@@ -463,6 +463,7 @@ public sealed partial class PendingOperationChangePreviewer(
         [IntervalWeeks] = AgentArgumentPreview.Format(habit.IntervalWeeks),
         ["days"] = string.Join(", ", habit.Days),
         [DueDate] = AgentArgumentPreview.Format(habit.NextDueDate),
+        [StartDate] = AgentArgumentPreview.Format(habit.StartDate),
         [EndDate] = AgentArgumentPreview.Format(habit.EndDate),
         [DueTime] = AgentArgumentPreview.Format(habit.DueTime),
         [DueEndTimeField] = AgentArgumentPreview.Format(habit.DueEndTime),

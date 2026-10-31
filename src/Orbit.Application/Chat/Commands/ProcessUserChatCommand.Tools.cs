@@ -29,6 +29,7 @@ public partial class ProcessUserChatCommandHandler
         var tokenBudgetExceeded = !unmetered && totalBudgetTokens > AppConstants.MaxAiRequestTotalTokens;
         var hadToolFailure = false;
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
+        var terminalAnswerCorrectionAttempted = false;
         RejectedCallCorrection? correction = null;
 
         if (tokenBudgetExceeded)
@@ -41,15 +42,23 @@ public partial class ProcessUserChatCommandHandler
                 iteration);
         }
 
-        while (aiResponse.HasToolCalls && !aiResponse.IsTruncated
+        while ((aiResponse.HasToolCalls || RequiresTerminalAnswer(aiResponse, request, context, executionResults)) && !aiResponse.IsTruncated
             && iteration < ChatTurnLimits.MaxToolIterations && !tokenBudgetExceeded)
         {
+            if (!aiResponse.HasToolCalls && TerminalAnswerDirective.TryRead(aiResponse.TextMessage, out var answer))
+            {
+                aiResponse = aiResponse with { TextMessage = answer, ConversationContext = null };
+                break;
+            }
             iteration++;
             if (request.StreamSink is not null)
                 await request.StreamSink(ChatStreamEvent.Round(iteration));
 
             hasUnexecutedCalls = false;
-            var roundResult = await ProcessToolCallsAsync(
+            var roundResult = !aiResponse.HasToolCalls
+                ? await CorrectTerminalAnswerAsync(aiResponse, request, context, executionResults,
+                    terminalAnswerCorrectionAttempted, iteration, totalBudgetTokens, cancellationToken)
+                : await ProcessToolCallsAsync(
                 aiResponse,
                 request,
                 context,
@@ -60,6 +69,7 @@ public partial class ProcessUserChatCommandHandler
                 language,
                 aiStreamSink,
                 cancellationToken);
+            if (!aiResponse.HasToolCalls) terminalAnswerCorrectionAttempted = true;
 
             if (roundResult.ProviderError is not null)
                 return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
@@ -99,12 +109,12 @@ public partial class ProcessUserChatCommandHandler
             aiResponse = MessageResponse(language);
         }
 
-        return new ToolLoopResult(
+        return ValidateTerminalAnswer(new ToolLoopResult(
             aiResponse,
             iteration,
             tokenBudgetExceeded,
             hadToolFailure,
-            executionResults.RequiresCreationProposal ? ErrorMessages.AiUnavailable : null);
+            executionResults.RequiresCreationProposal ? ErrorMessages.AiUnavailable : null), request, context, executionResults);
     }
 
     private static bool MustFailToolTurn(ProcessUserChatCommand request, ToolLoopResult result) =>
@@ -460,7 +470,8 @@ public partial class ProcessUserChatCommandHandler
             executionResults.HasMutationContext = true;
         }
         var bulkRedirects = BulkToolRepeatGuard.FindRedirects(writeCalls, executionResults.PreviousWriteCalls);
-        var resolvedWrites = writeCalls.ToDictionary(call => call.Id, call => ResolveHabitCall(call, executionResults));
+        var resolvedWrites = writeCalls.ToDictionary(call => call.Id,
+            call => ResolveSuggestedHabitCall(call, executionResults));
 
         var readOnlyTasks = readOnlyCalls
             .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, executionResults, cancellationToken))

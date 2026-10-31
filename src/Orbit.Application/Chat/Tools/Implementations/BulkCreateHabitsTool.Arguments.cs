@@ -14,6 +14,27 @@ public partial class BulkCreateHabitsTool
         return JsonSerializer.SerializeToElement(root);
     }
 
+    private static string? PrepareSchemaItems(JsonArray items)
+    {
+        foreach (var item in items.OfType<JsonObject>())
+        {
+            item.Remove("preview_item_id");
+            item.Remove(HabitHeadingParents.CandidateIdsField);
+            item.Remove(HabitHeadingParents.SuggestedParentField);
+            item.Remove(HabitHeadingParents.ExistingCandidatesField);
+            if (item.ContainsKey("habit_id"))
+            {
+                var (_, error) = OptionalToolArguments.ResolveClears(JsonSerializer.SerializeToElement(item),
+                    OptionalToolArguments.BulkHabitClearFields);
+                if (error is not null) return error;
+                item.Remove("clear_fields");
+            }
+            if (item["sub_habits"] is JsonArray children && PrepareSchemaItems(children) is { } childError)
+                return childError;
+        }
+        return null;
+    }
+
     private static void PrepareItems(JsonArray items)
     {
         foreach (var item in items.OfType<JsonObject>())

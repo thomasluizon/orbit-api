@@ -50,6 +50,8 @@ public sealed class AiConversationContext
     public IReadOnlyCollection<string> RetiredReadCallIds { get; set; } = [];
     /// <summary>Declarations refreshed from successful typed tool results before continuation.</summary>
     public IReadOnlyList<object> ToolDeclarationUpdates { get; set; } = [];
+    /// <summary>Server-authored feedback for an invalid tool-free terminal answer.</summary>
+    public string? ResponseValidationFeedback { get; set; }
 }
 
 public record AiResponse

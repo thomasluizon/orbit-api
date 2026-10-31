@@ -1,5 +1,16 @@
 # Composition regression evidence
 
+The `prod-r9b-` fixtures retain rendered answers, executed tool arguments and the
+typed results used by the regressions from production API `63a6a33b`, harness
+`1c8210815`. Sources are the coordinator's read-only
+`eval-gate-prod-r9b/evals/astra/reports/attempts/<case>-r<n>.json` files. These are
+internal model-service-port replays, not raw provider responses. Daily-summary
+narratives are the recorded typed tool result. Redacted IDs, dates and times in
+suggestion results are replaced explicitly by deterministic test values; the
+original capture stays unchanged. Question recovery uses the passing captured
+read and choice plan in separate rounds with owned test IDs. It does not claim
+that the live model already emits that correction.
+
 These are unmodified case IDs, rendered answers and executed tool-call evidence from
 #26's gate 6 failing-case rerun on API `43886600`, harness `be8ab21e9`.
 The source is `eval-g6rerun/evals/astra/reports/attempts/<case>-r<n>.json`

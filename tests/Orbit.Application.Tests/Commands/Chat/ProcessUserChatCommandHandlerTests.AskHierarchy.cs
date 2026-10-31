@@ -126,7 +126,18 @@ public partial class ProcessUserChatCommandHandlerTests
         var held = HoldAskRerunWrites(query, delete);
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new AiResponse { ConversationContext = TestConversationContext, TextMessage = "Which Walk?" }));
+            .Returns(Result.Success(new AiResponse
+            {
+                ConversationContext = TestConversationContext,
+                ToolCalls = [AskSelectionRead("Walk"), new("ask", "resolved-question", JsonSerializer.SerializeToElement(new
+                {
+                    input = new
+                    {
+                        form = "choice", missing_input = "record_selection", question = "Which Walk?",
+                        options = walks.Select((walk, index) => new { id = walk.Id.ToString(), label = index == 0 ? "Morning walk" : "Evening walk" }).ToArray()
+                    }
+                }))]
+            }));
         var targetId = shape switch
         {
             "question-overlap" => fitness.Id,

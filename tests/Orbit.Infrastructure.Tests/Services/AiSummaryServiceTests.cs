@@ -252,7 +252,7 @@ public partial class AiSummaryServiceTests
         result.Should().Contain("EXACTLY ONE sentence");
         result.Should().Contain("Lead with the insight");
         result.Should().Contain("Name the specific habit");
-        result.Should().Contain("A recap of completed activities is not an insight");
+        result.Should().Contain("Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.");
         result.Should().NotContain("LEAD with a specific, genuine acknowledgment");
         result.Should().NotContain("TWO short sentences");
         result.Should().Contain("friend who actually knows you");
@@ -279,8 +279,12 @@ public partial class AiSummaryServiceTests
         var prompt = request.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!;
         prompt.Should().Contain("EXACTLY ONE sentence").And.Contain("Lead with the insight");
         prompt.Should().Contain("Name the specific habit").And.Contain("Read (pending)");
-        prompt.Should().Contain("A recap of completed activities is not an insight");
-        prompt.Should().Contain("Never invent numbers");
+        prompt.Should().Contain("Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.");
+        prompt.Should().Contain("Never include figures, times, dates, counts, durations, rates or quantities, even when supplied; the daySummary block already shows them.");
+        prompt.Should().Contain("Never invent habit or goal names; use only supplied facts");
+        prompt.Should().Contain("An overdue or time-bound item in another group may take priority only when clearly more urgent; explain the priority in one short clause based on its order, without figures or times");
+        prompt.Should().Contain("Use supplied timing and progress only to choose the next item, never in the sentence. This applies equally to English and Brazilian Portuguese.");
+        prompt.Should().NotContain("using supplied timing or order");
         prompt.Should().Contain("Never praise consistency when skipped or missed is nonzero");
         prompt.Should().Contain("Never attribute the app-wide streak to a single habit");
         prompt.Should().Contain("never congratulate it").And.Contain("Never praise a skip or nudge it again");
