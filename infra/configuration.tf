@@ -16,6 +16,7 @@ locals {
     "TEST_ACCOUNTS",
     "Vapid__PrivateKey",
     "Waitlist__SigningKey",
+    "Wns__ClientSecret",
   ])
 
   api_eval_secret_keys = {
@@ -77,6 +78,8 @@ locals {
     Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
     Vapid__PublicKey                    = "BCotrosa_VZSere_khAKbxMVRj-NZIuHs4lK4sep1Fv5N6fx8z-99q9-pDPeEs0GwKiwOwf44SiI4NN5XX-htow"
     Vapid__Subject                      = "mailto:hello@useorbit.org"
+    Wns__ClientId                       = "d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db"
+    Wns__TenantId                       = "d0a72506-23da-4004-afff-9c077a5b72a5"
   }
 
   staging_api_values = merge(local.production_api_values, {

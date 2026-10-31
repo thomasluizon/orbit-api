@@ -105,3 +105,103 @@ run "evaluation_keys_present" {
     error_message = "Existing evaluation keys must reach only their own API group, without importing unrelated parameters."
   }
 }
+
+run "only_production_evaluation_key_present" {
+  command = plan
+
+  plan_options {
+    target = [render_env_group.production_api, render_env_group.staging_api]
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.onboarding_platform["production"]
+    values = {
+      names  = ["/orbit/production/api/AI__EvalApiKey"]
+      values = ["unused-path-eval-key"]
+    }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.onboarding_platform["staging"]
+    values = {
+      names  = ["/orbit/production/api/AI__EvalApiKey"]
+      values = ["unused-wrong-environment-key"]
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      render_env_group.production_api.env_vars["AI__EvalApiKey"].value == "test-secret",
+      !contains(keys(data.aws_ssm_parameter.staging_api), "AI__EvalApiKey"),
+      !contains(keys(render_env_group.staging_api.env_vars), "AI__EvalApiKey"),
+    ])
+    error_message = "A production evaluation key must not require or populate a staging key."
+  }
+}
+
+run "only_staging_evaluation_key_present" {
+  command = plan
+
+  plan_options {
+    target = [render_env_group.production_api, render_env_group.staging_api]
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.onboarding_platform["staging"]
+    values = {
+      names  = ["/orbit/staging/api/AI__EvalApiKey"]
+      values = ["unused-path-eval-key"]
+    }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameters_by_path.onboarding_platform["production"]
+    values = {
+      names  = ["/orbit/staging/api/AI__EvalApiKey"]
+      values = ["unused-wrong-environment-key"]
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      render_env_group.staging_api.env_vars["AI__EvalApiKey"].value == "test-secret",
+      !contains(keys(data.aws_ssm_parameter.production_api), "AI__EvalApiKey"),
+      !contains(keys(render_env_group.production_api.env_vars), "AI__EvalApiKey"),
+    ])
+    error_message = "A staging evaluation key must not require or populate a production key."
+  }
+}
+
+run "wns_credentials_without_evaluation_keys" {
+  command = plan
+
+  plan_options {
+    target = [render_env_group.production_api, render_env_group.staging_api]
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.production_api["Wns__ClientSecret"]
+    values = { value = "production-wns-test-secret" }
+  }
+
+  override_data {
+    target = data.aws_ssm_parameter.staging_api["Wns__ClientSecret"]
+    values = { value = "staging-wns-test-secret" }
+  }
+
+  assert {
+    condition = alltrue([
+      render_env_group.production_api.env_vars["Wns__TenantId"].value == "d0a72506-23da-4004-afff-9c077a5b72a5",
+      render_env_group.staging_api.env_vars["Wns__TenantId"].value == "d0a72506-23da-4004-afff-9c077a5b72a5",
+      render_env_group.production_api.env_vars["Wns__ClientId"].value == "d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db",
+      render_env_group.staging_api.env_vars["Wns__ClientId"].value == "d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db",
+      render_env_group.production_api.env_vars["Wns__ClientSecret"].value == "production-wns-test-secret",
+      render_env_group.staging_api.env_vars["Wns__ClientSecret"].value == "staging-wns-test-secret",
+      data.aws_ssm_parameter.production_api["Wns__ClientSecret"].name == "/orbit/production/api/Wns__ClientSecret",
+      data.aws_ssm_parameter.staging_api["Wns__ClientSecret"].name == "/orbit/staging/api/Wns__ClientSecret",
+      !contains(keys(render_env_group.production_api.env_vars), "AI__EvalApiKey"),
+      !contains(keys(render_env_group.staging_api.env_vars), "AI__EvalApiKey"),
+    ])
+    error_message = "Both API groups need the public WNS identifiers and their own required SSM secret even without evaluation keys."
+  }
+}

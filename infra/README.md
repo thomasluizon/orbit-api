@@ -70,6 +70,27 @@ After release, record the daily chat cost per call and cache hit fraction on
 ordinary chat call. The coordinator owns the launch-only live gate and its recorded cost;
 repository tests use captured provider output or fake transports without paid calls.
 
+## Windows push credentials
+
+Both API environment groups use the multitenant Orbit Windows Push application:
+`Wns__TenantId` is `d0a72506-23da-4004-afff-9c077a5b72a5` and `Wns__ClientId` is
+`d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db`. These are public identifiers. Staging inherits
+them from the production values; each environment reads its own `Wns__ClientSecret`.
+
+Before planning, the coordinator copies the macOS Keychain service
+`orbit-wns-client-secret` to AWS Systems Manager Parameter Store in `us-east-2` as
+SecureStrings named `/orbit/production/api/Wns__ClientSecret` and
+`/orbit/staging/api/Wns__ClientSecret`, without printing the secret. Terraform reads
+these required parameters and does not create them. Check their names and SecureString
+types in the Parameter Store console without revealing their values.
+
+After merge, review and apply only `render_env_group.production_api` and
+`render_env_group.staging_api` from API `main`. In Render's Environment Groups screen,
+confirm `orbit-production-api` and `orbit-staging-api` contain the two public identifiers
+and a masked `Wns__ClientSecret`. Release the production API through the normal workflow.
+The coordinator owns Windows live push acceptance under `thomasluizon/orbit-tickets#1861`.
+The desktop channel Object ID remains a separate GitHub environment setting.
+
 ## Astra answer composition activation
 
 Deploy the query-bound read and ranking producers before this composition producer. Startup
