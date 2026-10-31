@@ -88,14 +88,16 @@ public class BulkSkipHabitsCommandHandler(
                 await HabitReminderInbox.MarkReadAsync(notifications, request.UserId, result.HabitId,
                     habitMap[result.HabitId].Schedule is HabitSchedule.OneTime or HabitSchedule.General
                         ? today : request.Items[result.Index].Date ?? today, ct);
-            await unitOfWork.SaveChangesAsync(ct);
+            if (results.Any(result => result.Status == BulkItemStatus.Success))
+                await unitOfWork.SaveChangesAsync(ct);
             return true;
         }, cancellationToken);
 
         if (!refreshed)
             return Result.Failure<BulkSkipResult>(ErrorMessages.ConcurrentUpdateConflict);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
+        if (results.Any(result => result.Status == BulkItemStatus.Success))
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(new BulkSkipResult(results));
     }
@@ -112,14 +114,20 @@ public class BulkSkipHabitsCommandHandler(
             return ownership;
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, selected, today.AddDays(-AppConstants.MaxRangeDays), ct);
         var byId = selected.ToDictionary(h => h.Id);
+        Result? generalRejection = null;
+        var hasEligibleItem = false;
         foreach (var item in request.Items)
         {
             var result = SkipHabitArgumentChecks.Check(byId[item.HabitId], item.Date ?? today, today, weekStart,
                 allowOverdue: true, resolution.Contains(item.HabitId), enforceWindow: true);
-            if (result.IsFailure)
+            if (result.ErrorCode == DomainErrors.CannotSkipGeneralHabit.Code)
+                generalRejection = result;
+            else if (result.IsFailure)
                 return result;
+            else
+                hasEligibleItem = true;
         }
-        return Result.Success();
+        return hasEligibleItem ? Result.Success() : generalRejection ?? Result.Success();
     }
 
     private async Task<BulkSkipItemResult> ProcessSkipItem(
@@ -128,6 +136,15 @@ public class BulkSkipHabitsCommandHandler(
         IReadOnlySet<Guid> dueDateResolution,
         CancellationToken cancellationToken)
     {
+        if (!habitMap.TryGetValue(habitId, out var habit))
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
+
+        var eligibility = habit.CheckSkipEligibility();
+        if (eligibility.IsFailure)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: eligibility.Error, ErrorCode: eligibility.ErrorCode);
+
         if (targetDate > today)
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.CannotSkipFutureDate.Message, ErrorCode: ErrorMessages.CannotSkipFutureDate.Code);
@@ -136,15 +153,11 @@ public class BulkSkipHabitsCommandHandler(
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.BeyondOverdueWindow.Message, ErrorCode: ErrorMessages.BeyondOverdueWindow.Code);
 
-        if (!habitMap.TryGetValue(habitId, out var habit))
-            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
-
         if (habit.IsCompleted)
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.CannotSkipCompletedHabit.Message, ErrorCode: ErrorMessages.CannotSkipCompletedHabit.Code);
 
-        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
+        if (habit.Schedule == HabitSchedule.OneTime)
         {
             habit.PostponeTo(today.AddDays(1));
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);

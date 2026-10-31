@@ -47,6 +47,22 @@ public class SkipHabitToolTests
     }
 
     [Fact]
+    public async Task GeneralHabit_ReturnsTypedRejectionWithoutMutation()
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Read", null, null, Today)).Value;
+        SetupHabitFound(habit);
+        var before = JsonSerializer.Serialize(habit);
+
+        var result = await _tool.ExecuteAsync(ArgsFor(habit.Id), UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be(DomainErrors.CannotSkipGeneralHabit.Code);
+        result.Error.Should().Be(DomainErrors.CannotSkipGeneralHabit.Message);
+        JsonSerializer.Serialize(habit).Should().Be(before);
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SuccessfulSkip_RecurringHabit_AdvancesDueDate()
     {
         var habit = CreateHabit("Water", FrequencyUnit.Day, 1, Today);

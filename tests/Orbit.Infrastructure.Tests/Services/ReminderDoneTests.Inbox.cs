@@ -19,10 +19,8 @@ public sealed partial class ReminderDoneTests
     [Theory]
     [InlineData(HabitSchedule.Recurring, false)]
     [InlineData(HabitSchedule.Flexible, false)]
-    [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.Recurring, true)]
     [InlineData(HabitSchedule.Flexible, true)]
-    [InlineData(HabitSchedule.General, true)]
     public async Task Skip_MarksOnlyTheMatchingDailyReminderRead(HabitSchedule schedule, bool bulk)
     {
         var (_, habit, _) = await Seed(schedule);

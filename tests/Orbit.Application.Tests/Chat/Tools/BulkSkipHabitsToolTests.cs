@@ -39,6 +39,50 @@ public class BulkSkipHabitsToolTests
             });
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task GeneralMembers_RealHandler_ExposesRejectionAndAccurateCounts(bool mixed, bool revised)
+    {
+        var general = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Read", null, null, Today)).Value;
+        var dated = CreateHabit("Daily", FrequencyUnit.Day, 1, Today);
+        Habit[] habits = mixed ? [general, dated] : [general];
+        SetupHabitLookup(habits);
+        var before = (general.NextDueDate, general.UpdatedAtUtc);
+        var logs = Substitute.For<IGenericRepository<HabitLog>>();
+        var unit = Substitute.For<IUnitOfWork>();
+        unit.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
+        _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits.ToList());
+        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var handler = new BulkSkipHabitsCommandHandler(_habitRepo, logs, _userDateService, unit, cache, Substitute.For<IGenericRepository<Notification>>());
+        _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => handler.Handle(call.Arg<BulkSkipHabitsCommand>(), call.Arg<CancellationToken>()));
+
+        var arguments = revised
+            ? JsonSerializer.Serialize(new { revised_items = habits.Select(habit => new { habit_id = habit.Id, date = Today.ToString("yyyy-MM-dd") }) })
+            : JsonSerializer.Serialize(new { habit_ids = habits.Select(habit => habit.Id) });
+        var result = await Execute(arguments);
+
+        result.Success.Should().Be(mixed);
+        if (!mixed)
+            result.ErrorCode.Should().Be(DomainErrors.CannotSkipGeneralHabit.Code);
+        var payload = JsonSerializer.SerializeToElement(result.Payload);
+        payload.GetProperty("applied_count").GetInt32().Should().Be(mixed ? 1 : 0);
+        payload.GetProperty("total_matched").GetInt32().Should().Be(habits.Length);
+        payload.GetProperty("skipped_count").GetInt32().Should().Be(1);
+        var rejected = payload.GetProperty("results").EnumerateArray().Single(item => item.GetProperty("habit_id").GetGuid() == general.Id);
+        rejected.GetProperty("error_code").GetString().Should().Be(DomainErrors.CannotSkipGeneralHabit.Code);
+        (general.NextDueDate, general.UpdatedAtUtc).Should().Be(before);
+        if (mixed)
+            dated.NextDueDate.Should().BeAfter(Today);
+        await unit.Received(mixed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task SkipMultiple_ReturnsSkippedNames()
     {

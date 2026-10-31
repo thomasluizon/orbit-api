@@ -76,6 +76,10 @@ public class SkipHabitCommandHandler(
         if (!await repos.Habits.TryRefreshAsync(habit, cancellationToken))
             return Result.Failure<SkipHabitResponse>(ErrorMessages.ConcurrentUpdateConflict);
 
+        var eligibility = habit.CheckSkipEligibility();
+        if (eligibility.IsFailure)
+            return eligibility.PropagateError<SkipHabitResponse>();
+
         if (habit.IsCompleted)
             return Result.Failure<SkipHabitResponse>(ErrorMessages.CannotSkipCompletedHabit);
 
@@ -84,7 +88,7 @@ public class SkipHabitCommandHandler(
             return receipt.PropagateError<SkipHabitResponse>();
         var previousLogIds = habit.Logs.Select(log => log.Id).ToHashSet();
 
-        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
+        if (habit.Schedule == HabitSchedule.OneTime)
         {
             habit.PostponeTo(today.AddDays(1));
             await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, today, cancellationToken);
@@ -152,9 +156,12 @@ public class SkipHabitCommandHandler(
         var habit = matches.FirstOrDefault();
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
+        var eligibility = habit.CheckSkipEligibility();
+        if (eligibility.IsFailure)
+            return eligibility;
         if (habit.IsCompleted)
             return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
-        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
+        if (habit.Schedule == HabitSchedule.OneTime)
             return Result.Success();
 
         var today = await dates.GetUserTodayAsync(request.UserId, ct);

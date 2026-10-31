@@ -78,6 +78,7 @@ public static class DomainErrors
     public static readonly AppError OnlyFlexibleHabitsSkippable = new("NOT_FLEXIBLE_HABIT", "Only flexible habits can be skipped this way.");
     public static readonly AppError SkipNotFound = new("SKIP_NOT_FOUND", "Skip not found for this habit.");
     public static readonly AppError SkipUndoConflict = new("SKIP_UNDO_CONFLICT", "Cannot undo this skip because the habit changed afterward.");
+    public static readonly AppError CannotSkipGeneralHabit = new("CANNOT_SKIP_GENERAL_HABIT", "Anytime (General schedule) habits have no scheduled occurrence to skip.");
     public static readonly AppError CannotSkipOneTimeTask = new("CANNOT_SKIP_ONE_TIME", "Cannot skip a one-time task.");
     public static readonly AppError LogNotFoundForDate = new("LOG_NOT_FOUND", "No log found for this date.");
     public static readonly AppError GeneralHabitHasFrequency = new("GENERAL_HABIT_HAS_FREQUENCY", "General habits cannot have a frequency.");
