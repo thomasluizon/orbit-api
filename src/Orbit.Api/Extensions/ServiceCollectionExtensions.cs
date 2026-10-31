@@ -154,7 +154,8 @@ public static partial class ServiceCollectionExtensions
             new Orbit.Application.Habits.Commands.SkipHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitSkipUndo>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitSkipUndo>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories>(sp =>
             new Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),

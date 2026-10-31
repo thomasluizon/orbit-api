@@ -85,6 +85,7 @@ public sealed partial class BulkCreateAgentOperationTests : IDisposable
             .AddSingleton<IGenericRepository<Habit>>(new GenericRepository<Habit>(context))
             .AddSingleton<IGenericRepository<HabitLog>>(new GenericRepository<HabitLog>(context))
             .AddSingleton<IGenericRepository<SentReminder>>(new GenericRepository<SentReminder>(context))
+            .AddSingleton<IGenericRepository<Notification>>(new GenericRepository<Notification>(context))
             .AddSingleton<IGenericRepository<Goal>>(new GenericRepository<Goal>(context))
             .AddSingleton<IGenericRepository<Tag>>(new GenericRepository<Tag>(context))
             .AddSingleton(Substitute.For<Orbit.Application.Goals.Services.IGoalCompletionService>())

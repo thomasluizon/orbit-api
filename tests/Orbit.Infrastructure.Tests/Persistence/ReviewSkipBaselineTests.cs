@@ -209,7 +209,7 @@ public sealed class ReviewSkipBaselineTests
                 .Handle(new SkipHabitCommand(userId, habitId, SkipId: skipId), default);
 
         var result = await new BulkSkipHabitsCommandHandler(new GenericRepository<Habit>(context),
-            new GenericRepository<HabitLog>(context), Dates(userId, today), unit, cache)
+            new GenericRepository<HabitLog>(context), Dates(userId, today), unit, cache, new GenericRepository<Notification>(context))
             .Handle(new BulkSkipHabitsCommand(userId, [new BulkSkipItem(habitId)]), default);
         if (result.IsFailure)
             return result;
@@ -223,5 +223,5 @@ public sealed class ReviewSkipBaselineTests
 
     private static SkipHabitRepositories Repositories(OrbitDbContext context) => new(
         new GenericRepository<Habit>(context), new GenericRepository<HabitLog>(context),
-        new GenericRepository<HabitSkipUndo>(context));
+        new GenericRepository<HabitSkipUndo>(context), new GenericRepository<Notification>(context));
 }

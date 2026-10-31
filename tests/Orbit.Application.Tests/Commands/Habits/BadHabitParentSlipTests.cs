@@ -56,10 +56,10 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
                 return (IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>();
             });
         _single = new LogHabitCommandHandler(new LogHabitRepositories(_habits, logs,
-                new GenericRepository<User>(_context), new GenericRepository<SentReminder>(_context)),
+                new GenericRepository<User>(_context), new GenericRepository<SentReminder>(_context), new GenericRepository<Notification>(_context)),
             new LogHabitServices(_dates, _streaks, _gamification, _goals, mediator, payGate),
             _work, _cache, NullLogger<LogHabitCommandHandler>.Instance);
-        _bulk = new BulkLogHabitsCommandHandler(_habits, logs, new BulkLogServices(_dates, _streaks, _gamification),
+        _bulk = new BulkLogHabitsCommandHandler(_habits, logs, new BulkLogServices(_dates, _streaks, _gamification, new GenericRepository<Notification>(_context)),
             _goals, _work, _cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
         mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => _single.Handle(call.Arg<LogHabitCommand>(), call.Arg<CancellationToken>()));
@@ -239,7 +239,7 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
                 Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<Habit?>(new InvalidOperationException("Parent read failed")));
         var handler = new BulkLogHabitsCommandHandler(repository, new GenericRepository<HabitLog>(_context),
-            new BulkLogServices(_dates, _streaks, _gamification), _goals, _work, _cache,
+            new BulkLogServices(_dates, _streaks, _gamification, new GenericRepository<Notification>(_context)), _goals, _work, _cache,
             NullLogger<BulkLogHabitsCommandHandler>.Instance);
 
         var result = await handler.Handle(new BulkLogHabitsCommand(_userId,

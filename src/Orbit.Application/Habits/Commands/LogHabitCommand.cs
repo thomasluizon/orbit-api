@@ -7,6 +7,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -41,7 +42,8 @@ public record LogHabitRepositories(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<HabitLog> HabitLogRepository,
     IGenericRepository<User> UserRepository,
-    IGenericRepository<SentReminder> ReminderRepository);
+    IGenericRepository<SentReminder> ReminderRepository,
+    IGenericRepository<Notification> Notifications);
 
 /// <summary>
 /// Groups supporting services for habit logging to reduce constructor parameter count (S107).
@@ -355,6 +357,8 @@ public partial class LogHabitCommandHandler(
                         cancellationToken: cancellationToken);
                     reminder?.TryConsume(logEntity.CreatedAtUtc);
                 }
+                await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id,
+                    targetDate, cancellationToken);
                 var parentLogs = await BadHabitParentSlipService.LogAsync(
                     habit, targetDate, today, weekStartDay, repos.HabitRepository, cancellationToken);
                 if (parentLogs.IsFailure)

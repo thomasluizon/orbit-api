@@ -58,11 +58,11 @@ public sealed class BadHabitParentSlipMcpTests
         });
         var mediator = Substitute.For<IMediator>();
         var singleHandler = new LogHabitCommandHandler(new LogHabitRepositories(habits, logs,
-                new GenericRepository<User>(context), new GenericRepository<SentReminder>(context)),
+                new GenericRepository<User>(context), new GenericRepository<SentReminder>(context), new GenericRepository<Notification>(context)),
             new LogHabitServices(dates, streaks, gamification, goals, mediator, payGate), work, cache,
             NullLogger<LogHabitCommandHandler>.Instance);
         var bulkHandler = new BulkLogHabitsCommandHandler(habits, logs,
-            new BulkLogServices(dates, streaks, gamification), goals, work, cache,
+            new BulkLogServices(dates, streaks, gamification, new GenericRepository<Notification>(context)), goals, work, cache,
             NullLogger<BulkLogHabitsCommandHandler>.Instance);
         mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => singleHandler.Handle(call.Arg<LogHabitCommand>(), call.Arg<CancellationToken>()));

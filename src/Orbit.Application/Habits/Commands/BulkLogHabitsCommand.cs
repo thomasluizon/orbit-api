@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -39,7 +40,8 @@ public record BulkLogItemResult(
 public record BulkLogServices(
     IUserDateService UserDateService,
     IUserStreakService UserStreakService,
-    IGamificationService GamificationService);
+    IGamificationService GamificationService,
+    IGenericRepository<Notification> Notifications);
 
 public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -123,6 +125,9 @@ public partial class BulkLogHabitsCommandHandler(
                 .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
                 .Select(r => r.HabitId)
                 .ToHashSet();
+            foreach (var result in results.Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
+                await HabitReminderInbox.MarkReadAsync(services.Notifications, request.UserId, result.HabitId,
+                    request.Items[result.Index].Date ?? today, ct);
             var goalIds = habitMap.Values
                 .Where(h => changedHabitIds.Contains(h.Id))
                 .SelectMany(h => h.Goals)

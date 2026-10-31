@@ -37,7 +37,7 @@ public class BulkLogHabitsCommandHandlerTests
 
     public BulkLogHabitsCommandHandlerTests()
     {
-        var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService);
+        var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService, Substitute.For<IGenericRepository<Notification>>());
         _handler = new BulkLogHabitsCommandHandler(
             _habitRepo, _habitLogRepo, services, _goalCompletionService, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
@@ -679,7 +679,7 @@ public class BulkLogHabitsCommandHandlerTests
         var handler = new BulkLogHabitsCommandHandler(
             habitRepo,
             habitLogRepo,
-            new BulkLogServices(userDateService, userStreakService, gamification),
+            new BulkLogServices(userDateService, userStreakService, gamification, Substitute.For<IGenericRepository<Notification>>()),
             new GoalCompletionService(goalRepo, gamification, unitOfWork, userDateService),
             unitOfWork,
             cache,
