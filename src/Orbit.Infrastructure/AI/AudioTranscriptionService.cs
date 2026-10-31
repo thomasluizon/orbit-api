@@ -7,6 +7,9 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
+using System.ClientModel.Primitives;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 
 namespace Orbit.Infrastructure.AI;
 
@@ -15,17 +18,25 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
     private readonly AudioClient _audioClient;
     private readonly ILogger<AudioTranscriptionService> _logger;
 
-    public AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger)
+    public AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger,
+        IConfiguration? configuration = null, IHttpContextAccessor? http = null)
+        : this(options, logger, null, configuration, http)
+    {
+    }
+
+    internal AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger,
+        PipelineTransport? transport, IConfiguration? configuration = null, IHttpContextAccessor? http = null)
     {
         _logger = logger;
         var settings = options.Value;
 
         _audioClient = new AudioClient(
             model: settings.TranscriptionModel,
-            credential: new ApiKeyCredential(settings.ApiKey),
+            credential: new ApiKeyCredential(AiEvalCredentials.Resolve(settings, configuration, http)),
             options: new OpenAIClientOptions
             {
                 Endpoint = new Uri(settings.BaseUrl),
+                Transport = transport,
                 NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
                 RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
             });

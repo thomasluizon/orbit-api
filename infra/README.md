@@ -1,5 +1,52 @@
 # Orbit infrastructure
 
+## Astra cost controls and evaluation credentials
+
+The owner creates a separate evaluation project in OpenAI Platform, configures its budget,
+and creates a project API key. Store that key as a SecureString in AWS Systems Manager
+Parameter Store under both `/orbit/production/api/AI__EvalApiKey` and
+`/orbit/staging/api/AI__EvalApiKey` before planning Terraform. Terraform reads these
+parameters; it does not create them. Review and apply only the targeted environment groups
+`render_env_group.production_api` and `render_env_group.staging_api`. Confirm the masked
+`AI__EvalApiKey` setting reaches `orbit-production-api` and `orbit-staging-api` in Render,
+then release the API through the normal workflow. Parameters absent from SSM block the
+Terraform plan, while an absent or empty runtime key falls back to `AI__ApiKey`.
+
+`StagingEval__AccountIds` selects the accounts that use the evaluation key. Buffered and
+streamed chat, auxiliary completions, moderation and audio transcription select that key
+for those accounts. Completion usage is labeled `eval_<purpose>` even during fallback,
+so it remains visible separately from ordinary usage. This routing does not change account
+quotas. Verify project attribution in OpenAI Platform using the launch gate evidence;
+do not send an extra paid probe to verify the setting.
+
+The additive `AddAiReasoningUsage` migration retains reasoning-token totals. Take the
+required completed Render database export before a production release carrying it.
+The daily `AI cost` line includes every purpose's calls, dollar cost per call, cached
+input, uncached input, output and reasoning totals, plus per-call token averages.
+Uncached input includes cache writes; reasoning is a subset of output and is billed once.
+The cache hit fraction is `cached_input / (cached_input + uncached_input)`.
+Historical rows default reasoning to zero because past reasoning usage cannot be recovered.
+
+The system message and full tool catalog are static across users and conversation states.
+Offer data, account context, preview constraints and history follow that prefix. Tool
+execution still validates client capabilities, account reads and draft bindings. The
+serialized static prefix measures 396,280 characters, approximately 99,070 tokens using
+characters divided by four. Provider tokenization can differ.
+
+Output caps include reasoning: chat allows 4,096 tokens; offer selection, tag suggestions
+and emoji inference allow 1,024; proactive messages and slip alerts allow 512; date
+interpretation retains 128; habit drafts allow at most 4,096; other auxiliary purposes
+allow at most 2,048. A caller's smaller limit is preserved. The largest captured bulk-create
+payload in `g9i-composition-medical-batch-pt-BR-r3.json` measures 1,189 `o200k_base` tokens,
+leaving 2,907 tokens for reasoning and framing under the chat cap. Auxiliary caps follow
+their bounded response contracts where no real output capture is available. No captured
+successful output requires an 8,192-token cap.
+
+After release, record the daily chat cost per call and cache hit fraction on
+`thomasluizon/orbit-tickets#1916`. The release acceptance target is at most $0.0009 per
+ordinary chat call. The coordinator owns the launch-only live gate and its recorded cost;
+repository tests use captured provider output or fake transports without paid calls.
+
 ## Astra answer composition activation
 
 Deploy the query-bound read and ranking producers before this composition producer. Startup

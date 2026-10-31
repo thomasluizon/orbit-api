@@ -6,13 +6,17 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 
 namespace Orbit.Infrastructure.AI;
 
 public partial class ContentModerationService(
     HttpClient httpClient,
     IOptions<AiSettings> aiSettings,
-    ILogger<ContentModerationService> logger) : IContentModerationService
+    ILogger<ContentModerationService> logger,
+    IConfiguration? configuration = null,
+    IHttpContextAccessor? http = null) : IContentModerationService
 {
     public static readonly HttpRequestOptionsKey<bool> HandlesFailedResponse = new("Orbit.ContentModeration.HandlesFailedResponse");
     private const string ModerationModel = "omni-moderation-latest";
@@ -28,7 +32,7 @@ public partial class ContentModerationService(
             {
                 Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
             };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, configuration, http));
             request.Options.Set(HandlesFailedResponse, true);
 
             using var response = await httpClient.SendAsync(request, cancellationToken);
