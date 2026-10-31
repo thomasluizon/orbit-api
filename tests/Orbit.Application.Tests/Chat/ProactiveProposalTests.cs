@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
@@ -69,14 +70,18 @@ public sealed class ProactiveProposalTests
         refreshed.Items![0].Fields.Should().NotContain(field => field.Field == "repeat_reminder");
     }
 
-    [Fact]
-    public async Task RequestedValuesAndStoredValuesWinOverSuggestions()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RequestedValuesAndStoredValuesWinOverSuggestions(bool fieldNames)
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Read", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 30), Description: "Stored", Emoji: "📖")).Value;
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([habit]);
-        var args = JsonSerializer.SerializeToElement(new { habit_id = habit.Id, due_time = "07:00", suggested_fields = new { due_time = "08:00", description = "Replacement", emoji = "X" } });
+        var args = fieldNames
+            ? JsonSerializer.SerializeToElement(new { habit_id = habit.Id, due_time = "07:00", description = "Replacement", emoji = "X", suggested_fields = new[] { "description", "emoji" } })
+            : JsonSerializer.SerializeToElement(new { habit_id = habit.Id, due_time = "07:00", suggested_fields = new { due_time = "08:00", description = "Replacement", emoji = "X" } });
         var result = await previewer.PreviewAsync(user, "update_habit", args, clientContext: client);
         result.IsSuccess.Should().BeTrue(result.Error);
         var effective = result.Value!.ExecutionArguments!.Value;
@@ -92,7 +97,7 @@ public sealed class ProactiveProposalTests
     [InlineData("\"frequency_unit\":\"Day\",\"frequency_quantity\":1,\"scheduled_reminders\":[{\"when\":\"same_day\",\"time\":\"08:00\"},{\"when\":\"same_day\",\"time\":\"20:00\"}]")]
     public async Task RepeatSuggestionsNeverReplaceFixedRemindersOrUnsupportedSchedules(string fields)
     {
-        var args = Parse("{\"title\":\"Requested activity\"," + fields + ",\"suggested_fields\":{\"repeat_reminder\":{\"interval_minutes\":120}}}");
+        var args = Parse("{\"title\":\"Requested activity\"," + fields + ",\"repeat_reminder\":{\"interval_minutes\":120},\"suggested_fields\":[\"repeat_reminder\"]}");
         var result = await previewer.PreviewAsync(user, "create_habit", args, clientContext: client);
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value!.Items![0].Fields.Should().NotContain(field => field.Field == "repeat_reminder");
@@ -121,10 +126,14 @@ public sealed class ProactiveProposalTests
         result.Value!.ExecutionArguments!.Value.GetProperty("items").EnumerateArray().Select(item => item.GetString()).Should().Equal("Stored", "Stored", "New");
     }
 
-    [Fact]
-    public async Task NestedSuggestionsCanBeEditedAndRemovedWithoutChangingSiblingDrafts()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NestedSuggestionsCanBeEditedAndRemovedWithoutChangingSiblingDrafts(bool fieldNames)
     {
-        var args = Parse("""{"habits":[{"title":"Daily routine","frequency_unit":"Day","frequency_quantity":1,"sub_habits":[{"title":"Stretch","suggested_fields":{"repeat_reminder":{"interval_minutes":120},"reminder_enabled":true,"emoji":"🌱"}},{"title":"Read","due_time":"20:00"}]}]}""");
+        var args = fieldNames
+            ? Parse("""{"habits":[{"title":"Daily routine","frequency_unit":"Day","frequency_quantity":1,"sub_habits":[{"title":"Stretch","repeat_reminder":{"interval_minutes":120},"reminder_enabled":true,"emoji":"🌱","suggested_fields":["repeat_reminder","reminder_enabled","emoji"]},{"title":"Read","due_time":"20:00"}]}]}""")
+            : Parse("""{"habits":[{"title":"Daily routine","frequency_unit":"Day","frequency_quantity":1,"sub_habits":[{"title":"Stretch","suggested_fields":{"repeat_reminder":{"interval_minutes":120},"reminder_enabled":true,"emoji":"🌱"}},{"title":"Read","due_time":"20:00"}]}]}""");
         var preview = (await previewer.PreviewAsync(user, "bulk_create_habits", args, clientContext: client)).Value!;
         var row = preview.Items!.Single().Fields.Single(field => field.Field == "sub_habits/0/repeat_reminder");
         row.NewValue.Should().Be("Every 2 hours");
@@ -158,14 +167,21 @@ public sealed class ProactiveProposalTests
         refreshed.Items![0].Fields.Should().NotContain(field => field.Field == row.Field);
     }
 
-    [Fact]
-    public async Task ExplicitSharedParentWinsOverAnOptionalItemParent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExplicitSharedParentWinsOverAnOptionalItemParent(bool fieldNames)
     {
         var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Routine", FrequencyUnit.Day, 1,
             new DateOnly(2026, 10, 30))).Value;
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
         habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
-        var args = JsonSerializer.SerializeToElement(new
+        var args = fieldNames ? JsonSerializer.SerializeToElement(new
+        {
+            parent_habit_id = parent.Id,
+            habits = new[]
+            { new { title = "Stretch", parent_habit_id = Guid.NewGuid(), repeat_reminder = new { interval_minutes = 120 }, suggested_fields = new[] { "parent_habit_id", "repeat_reminder" } } }
+        }) : JsonSerializer.SerializeToElement(new
         {
             parent_habit_id = parent.Id,
             habits = new[]
@@ -191,4 +207,82 @@ public sealed class ProactiveProposalTests
     }
 
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    [Fact]
+    public async Task FieldNameOffersAtMaximumDepthKeepTheirRevisionAndRemovalPaths()
+    {
+        JsonObject child = new()
+        {
+            ["title"] = "Water",
+            ["repeat_reminder"] = new JsonObject { ["interval_minutes"] = 120 },
+            ["reminder_enabled"] = true,
+            ["suggested_fields"] = new JsonArray("repeat_reminder", "reminder_enabled")
+        };
+        var path = "repeat_reminder";
+        for (var depth = 1; depth < Orbit.Application.Common.AppConstants.MaxHabitDepth; depth++)
+        {
+            child = new JsonObject
+            {
+                ["title"] = "Routine " + depth,
+                ["frequency_unit"] = "Day",
+                ["frequency_quantity"] = 1,
+                ["emoji"] = "🌱",
+                ["sub_habits"] = new JsonArray(child),
+                ["suggested_fields"] = new JsonArray("emoji", "sub_habits")
+            };
+            path = "sub_habits/0/" + path;
+        }
+        var args = JsonSerializer.SerializeToElement(new JsonObject { ["habits"] = new JsonArray(child) });
+        var prepared = await previewer.PreviewAsync(user, "bulk_create_habits", args, clientContext: client);
+        prepared.IsSuccess.Should().BeTrue(prepared.Error);
+        var preview = prepared.Value!;
+        var row = preview.Items!.Single().Fields.Single(field => field.Field == path);
+        row.Provenance.Should().Be("suggested");
+        row.Removal!.Fields.Should().BeEquivalentTo(path, path.Replace("repeat_reminder", "reminder_enabled", StringComparison.Ordinal));
+        var store = Substitute.For<IPendingAgentOperationStore>();
+        var pending = Guid.NewGuid();
+        var execution = preview.ExecutionArguments!.Value;
+        store.GetExecution(user, pending).Returns(_ => new PendingAgentOperationExecution(pending, "habits.write", "bulk_create_habits",
+            execution, AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation));
+        store.Revise(user, pending, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(call => { execution = Parse(call.ArgAt<string>(3)); return true; });
+        var service = new PendingOperationRevisionService(store, previewer, new RevisePendingOperationRequestValidator(), tools);
+        var edited = await service.ReviseAsync(user, pending, new(preview.PreviewFingerprint!,
+            [new(preview.Items![0].ItemId, JsonSerializer.SerializeToElement(new Dictionary<string, object>
+                { [path] = new { interval_minutes = 180 } }))], client), default);
+        edited.IsSuccess.Should().BeTrue(edited.Error);
+        edited.Preview!.Items![0].Fields.Single(field => field.Field == path).NewValue.Should().Be("Every 3 hours");
+        var removed = await service.ReviseAsync(user, pending, new(edited.Preview.PreviewFingerprint!,
+            [new(edited.Preview.Items[0].ItemId, RemoveSuggestedFields: [path])], client), default);
+        removed.IsSuccess.Should().BeTrue(removed.Error);
+        removed.Preview!.Items![0].Fields.Should().NotContain(field => field.Field == path
+            || field.Field == path.Replace("repeat_reminder", "reminder_enabled", StringComparison.Ordinal));
+        execution.GetProperty("habits")[0].GetProperty("emoji").GetString().Should().Be("🌱");
+        execution.GetProperty("habits")[0].GetProperty("frequency_unit").GetString().Should().Be("Day");
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public async Task EmptyFieldNameOffersLeaveTheRequestedDraftIntact(string names)
+    {
+        var result = await previewer.PreviewAsync(user, "create_habit",
+            Parse("{\"title\":\"Read\",\"is_general\":true,\"suggested_fields\":" + names + "}"), clientContext: client);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.Items![0].Fields.Should().NotContain(field => field.Provenance == "suggested");
+        result.Value.ExecutionArguments!.Value.GetProperty("title").GetString().Should().Be("Read");
+    }
+
+    [Theory]
+    [InlineData("[\"title\"]")]
+    [InlineData("[\"unknown\"]")]
+    [InlineData("[\"emoji\",\"emoji\"]")]
+    [InlineData("[\"description\"]")]
+    [InlineData("[123]")]
+    public async Task InvalidFieldNameOffersAreRejected(string names)
+    {
+        var result = await previewer.PreviewAsync(user, "create_habit",
+            Parse("{\"title\":\"Read\",\"is_general\":true,\"emoji\":\"📖\",\"suggested_fields\":" + names + "}"), clientContext: client);
+        result.IsFailure.Should().BeTrue();
+    }
 }

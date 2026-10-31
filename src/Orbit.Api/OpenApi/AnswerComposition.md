@@ -1415,8 +1415,11 @@ flag is off; existing rendering kill flags still apply. This capability requires
 one read-block action, and persisting the conversation identity.
 
 For enabled clients, supported habit, goal and checklist-template create/edit
-schemas append optional `suggested_fields`. Its properties come from the same
-operation's schema. Requested arguments stay outside that object and take priority.
+schemas append optional `suggested_fields`, an array of eligible field names from
+the same operation's schema. Proposed values stay in the ordinary operation fields;
+the array identifies which values are optional offers. Requested field names stay
+outside that array. This avoids duplicating nested draft schemas inside offers.
+The preview also accepts the earlier value-object representation for pending drafts.
 The API resolves effective values before ordinary tool validation and command
 preparation. Stored scalars remain intact; checklist, tag and goal additions retain
 stored entries. Every accepted proposal passes the existing tool, command, domain,
