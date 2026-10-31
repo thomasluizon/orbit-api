@@ -113,6 +113,34 @@ public sealed class ProactiveProposalTests
         result.IsFailure.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public async Task UnsupportedClients_EmptySuggestionPlaceholdersDoNotSelectOfferExecution(string placeholder)
+    {
+        var args = Parse("{\"habits\":[{\"title\":\"Read\",\"is_general\":true,\"suggested_fields\":" + placeholder
+            + ",\"sub_habits\":[{\"title\":\"Page\",\"suggested_fields\":" + placeholder + "}]}]}");
+        var normalized = ProactiveProposal.ForModelCall(args);
+
+        ProactiveProposal.Contains(normalized).Should().BeFalse();
+        var result = await previewer.PreviewAsync(user, "bulk_create_habits", args,
+            clientContext: client with { SupportsProactiveOffers = false });
+        result.IsSuccess.Should().BeTrue(result.Error);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public async Task OfferClients_EmptySuggestionPlaceholdersKeepRequestedFieldProvenance(string placeholder)
+    {
+        var result = await previewer.PreviewAsync(user, "create_habit",
+            Parse("{\"title\":\"Read\",\"is_general\":true,\"suggested_fields\":" + placeholder + "}"), clientContext: client);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.Items!.Single().Fields.Should().Contain(field => field.Field == "title" && field.Provenance == "requested");
+    }
+
     [Fact]
     public async Task TemplateSuggestionsAppendToStoredContents()
     {

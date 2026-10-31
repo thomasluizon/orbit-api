@@ -35,6 +35,58 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
 
+    [Fact]
+    public async Task EvalCeiling_IsSharedAcrossAccountsAndCannotBeBypassedByUnmetered()
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: true, listed: true);
+        var other = User.Create("Other", "other-eval@example.com").Value;
+        other.GrantLifetimePro();
+        fixture.Database.Context.Users.Add(other);
+        fixture.Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraEvalUnmetered, other.Id));
+        await fixture.Database.Context.SaveChangesAsync();
+        fixture.AccountConfiguration[EvalAccountAccess.AccountIdsKey] = $"{fixture.User.Id},{other.Id}";
+        await fixture.Budget.ReserveAsync(fixture.User.Id, 500_000, default);
+
+        var blocked = () => fixture.Budget.ReserveAsync(other.Id, 1, default);
+
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Locks.Where(key => key.StartsWith("ai-eval-budget:", StringComparison.Ordinal))
+            .Should().Equal("ai-eval-budget:2026-01-02", "ai-eval-budget:2026-01-02");
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(0.01)]
+    public async Task EvalCeiling_UsesConfiguredDollarsAndResetsAtUtcMidnight(double dollars)
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: true, listed: true, evalDailyBudgetUsd: (decimal)dollars);
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 1, 2, 23, 59, 59, TimeSpan.Zero);
+        fixture.Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today.AddDays(1));
+        var ceiling = (long)((decimal)dollars * 1_000_000m);
+        if (ceiling > 0) await fixture.Budget.ReserveAsync(fixture.User.Id, ceiling, default);
+        var blocked = () => fixture.Budget.ReserveAsync(fixture.User.Id, 1, default);
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Clock.UtcNow = fixture.Clock.UtcNow.AddSeconds(1);
+        if (ceiling == 0)
+            await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        else
+            (await blocked()).Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task EvalCeiling_CountsAlreadyReportedUtcUsageDuringRollout()
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: true, listed: true);
+        var row = AiUsageDaily.Create(Today, "gpt-6-luna", "eval_chat", new(1, 0, 0, 0, 0, 0.50m), fixture.User.Id);
+        fixture.Database.Context.AiUsageDaily.Add(row);
+        await fixture.Database.Context.SaveChangesAsync();
+
+        var blocked = () => fixture.Budget.ReserveAsync(fixture.User.Id, 1, default);
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+    }
+
     [Theory]
     [InlineData(1, 0, "2026-08-03", "2026-08-16", true)]
     [InlineData(1, 0, "2026-08-03", "2026-08-16", false)]
@@ -265,7 +317,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
 
         await fixture.Client.CompleteTextAsync("system", "write");
 
-        reserved.Should().Be(6546);
+        reserved.Should().Be(3474);
         using var read = fixture.Database.CreateContext();
         var call = read.AiBudgetCalls.Single();
         call.ChargedMicroDollars.Should().Be(2644);
@@ -274,7 +326,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         JsonElement.DeepEquals(fixture.EstimatedRequests.Single().GetProperty("input"),
             fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
         fixture.Handler.CountedRequests.Should().BeEmpty();
-        fixture.Handler.CompletionRequests.Single().GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+        fixture.Handler.CompletionRequests.Single().GetProperty("max_output_tokens").GetInt32().Should().Be(2048);
     }
 
     [Fact]
@@ -300,11 +352,11 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             loops.Should().BeLessThan(10);
         }
 
-        loops.Should().Be(3, $"provider calls: {fixture.Handler.Completions}");
-        fixture.Handler.Completions.Should().Be(18);
+        loops.Should().Be(4, $"provider calls: {fixture.Handler.Completions}");
+        fixture.Handler.Completions.Should().Be(26);
         using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Count().Should().Be(18);
-        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(117_828);
+        read.AiBudgetCalls.Count().Should().Be(26);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(116_948);
     }
 
     [Fact]
@@ -378,7 +430,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         fixture.Handler.OmitUsage = true;
         await fixture.Client.CompleteTextAsync("system", "write");
         using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(6546);
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(3474);
     }
 
     [Theory]
@@ -416,7 +468,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         using var read = fixture.Database.CreateContext();
         read.AiUsageDaily.Should().BeEmpty();
         var charged = read.AiBudgetCalls.Single();
-        charged.ChargedMicroDollars.Should().Be(6546);
+        charged.ChargedMicroDollars.Should().Be(4498);
         charged.IsSettled.Should().BeTrue();
     }
 
@@ -428,7 +480,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         fixture.Handler.OmitTerminalEvent = true;
         var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
         var deltas = 0;
-        for (var attempt = 0; attempt < 3; attempt++)
+        for (var attempt = 0; attempt < 4; attempt++)
         {
             var result = await service.SendWithToolsAsync(new AiToolRequest("write", "system", [], fixture.User.Id),
                 _ =>
@@ -444,18 +496,18 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             _ => Task.CompletedTask);
 
         blocked.ErrorCode.Should().Be(AiBudgetExceededException.Error.Code);
-        fixture.Handler.Completions.Should().Be(3);
-        deltas.Should().Be(3);
+        fixture.Handler.Completions.Should().Be(4);
+        deltas.Should().Be(4);
         using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(19_638);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(17_992);
     }
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, 0)]
     [InlineData(HttpStatusCode.TooManyRequests, 0)]
-    [InlineData(HttpStatusCode.InternalServerError, 6546)]
-    [InlineData(HttpStatusCode.BadGateway, 6546)]
-    [InlineData(HttpStatusCode.GatewayTimeout, 6546)]
+    [InlineData(HttpStatusCode.InternalServerError, 3474)]
+    [InlineData(HttpStatusCode.BadGateway, 3474)]
+    [InlineData(HttpStatusCode.GatewayTimeout, 3474)]
     public async Task UnreportedProviderFailure_ChargesUnlessExplicitlyRejected(HttpStatusCode status, long expectedSpend)
     {
         using var fixture = new BudgetFixture();
@@ -585,11 +637,16 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         internal IAiUsageRecorder Recorder { get; }
         internal IAiRequestCostEstimator Estimator { get; }
         internal List<JsonElement> EstimatedRequests { get; } = [];
+        internal IConfiguration AccountConfiguration => _provider.GetRequiredService<IConfiguration>();
+        internal IServiceScope CreateScope() => _provider.CreateScope();
+        internal BudgetClock Clock { get; } = new();
+        internal List<string> Locks { get; } = [];
         private readonly ServiceProvider _provider;
         private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _estimateCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
         internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185,
-            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging", bool listed = false)
+            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging", bool listed = false,
+            decimal evalDailyBudgetUsd = 0.50m)
         {
             User = User.Create("Writer", "writer@example.com").Value;
             User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
@@ -604,7 +661,22 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
             _provider = new ServiceCollection()
                 .AddScoped(_ => Database.CreateContext())
-                .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
+                .AddScoped<IUnitOfWork>(scope =>
+                {
+                    var real = new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings());
+                    var work = Substitute.For<IUnitOfWork>();
+                    work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Guid>>>(), Arg.Any<CancellationToken>())
+                        .Returns(call => real.ExecuteInTransactionAsync(call.Arg<Func<CancellationToken, Task<Guid>>>(), call.Arg<CancellationToken>()));
+                    work.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => real.SaveChangesAsync(call.Arg<CancellationToken>()));
+                    work.AcquireAdvisoryLockAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+                    {
+                        Locks.Add(call.Arg<string>());
+                        return real.AcquireAdvisoryLockAsync(call.Arg<string>(), call.Arg<CancellationToken>());
+                    });
+                    return work;
+                })
+                .AddSingleton<TimeProvider>(Clock)
+                .AddSingleton<IOptions<AiSettings>>(Options.Create(new AiSettings { EvalDailyBudgetUsd = evalDailyBudgetUsd }))
                 .AddSingleton<IHostEnvironment>(Host.CreateApplicationBuilder(
                     new HostApplicationBuilderSettings { EnvironmentName = environmentName }).Environment)
                 .AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(
@@ -656,6 +728,12 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         }
     }
 
+    private sealed class BudgetClock : TimeProvider
+    {
+        internal DateTimeOffset UtcNow { get; set; } = new(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+    }
+
     /// <summary>
     /// Count payload follows TokenCountsResource in the provider schema:
     /// https://github.com/openai/openai-openapi/blob/main/openapi.json
@@ -688,7 +766,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             Completions++;
             if (Fail && !ReportFailedUsage)
                 return Response(request, FailureStatus, "{}");
-            var response = ResponsesTestData.Response("{\"value\":\"ok\"}", InputTokens, FullToolLoops ? 8192 : 500,
+            var response = ResponsesTestData.Response("{\"value\":\"ok\"}", InputTokens, FullToolLoops ? body.RootElement.GetProperty("max_output_tokens").GetInt32() : 500,
                 FullToolLoops || Completions == 1 ? 0 : 17_350);
             response.Model = model;
             response.Usage.InputTokenDetails.CacheWriteTokenCount = FullToolLoops ? InputTokens : Completions == 1 ? 17_350 : 0;

@@ -23,7 +23,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
-public sealed class ProviderToolControlOrderTests
+public sealed partial class ProviderToolControlOrderTests
 {
     private static readonly HashSet<string> Controls = new(StringComparer.Ordinal)
     {
@@ -104,7 +104,7 @@ public sealed class ProviderToolControlOrderTests
             declarations.AddRange(conversation.ToolDeclarationUpdates);
         }
         var sdkCatalog = (IDictionary<string, ResponseTool>)typeof(AiIntentService)
-            .GetMethod("BuildToolCatalog", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [declarations])!;
+            .GetMethod("BuildToolCatalog", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [declarations.GroupBy(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString()).Select(group => group.Last()).ToArray()])!;
         sdkCatalog.Should().NotBeEmpty();
         var violations = new List<string>();
         foreach (var (name, tool) in sdkCatalog)
@@ -113,7 +113,7 @@ public sealed class ProviderToolControlOrderTests
             var parameters = wire.RootElement.GetProperty("parameters");
             AssertControlOrder(parameters, name, violations);
             var source = registry.GetTool(name) is AskTool ask
-                ? ask.GetParameterSchema(phase == "post-read", phase == "draft-revision" ? [draft] : null)
+                ? phase == "initial" || client == "legacy" ? ask.GetCacheableParameterSchema() : ask.GetParameterSchema(phase == "post-read", phase == "draft-revision" ? [draft] : null)
                 : registry.GetTool(name)!.GetParameterSchema();
             AssertPayloadOrder(JsonSerializer.SerializeToElement(source), parameters, name);
         }

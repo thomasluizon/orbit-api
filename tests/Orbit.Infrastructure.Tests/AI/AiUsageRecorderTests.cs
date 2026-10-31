@@ -12,6 +12,8 @@ using Orbit.Infrastructure.Persistence;
 using System.Data.Common;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
+using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Http;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
@@ -30,21 +32,55 @@ public class AiUsageRecorderTests
             Options.Create(new AiSettings { Pricing = new Dictionary<string, AiModelPrice> { ["priced"] = SamplePrice } }),
             NullLogger<AiUsageRecorder>.Instance);
 
-        await recorder.RecordAsync("summary", "priced", 200_000, 1_000_000, 500_000, 1_500_000);
+        await recorder.RecordAsync("summary", "priced", 200_000, 1_000_000, 500_000, 1_500_000, reasoningTokens: 123);
 
         commandCapture.Costs.Should().ContainSingle().Which.Should().Be(1.14m);
+        commandCapture.ReasoningTokens.Should().ContainSingle().Which.Should().Be(123);
         analytics.Received(1).CaptureAggregateEvent("$ai_generation", Arg.Any<IReadOnlyDictionary<string, object>>());
     }
 
     private sealed class UpsertCapture : DbCommandInterceptor
     {
         public List<decimal> Costs { get; } = [];
+        public List<long> ReasoningTokens { get; } = [];
+        public List<string> Purposes { get; } = [];
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             Costs.Add(Convert.ToDecimal(command.Parameters.Cast<DbParameter>().Last().Value, System.Globalization.CultureInfo.InvariantCulture));
+            command.CommandText.Should().Contain("\"ReasoningTokens\" = \"AiUsageDaily\".\"ReasoningTokens\" + EXCLUDED.\"ReasoningTokens\"");
+            ReasoningTokens.Add(Convert.ToInt64(command.Parameters.Cast<DbParameter>().Reverse().Skip(1).First().Value));
+            Purposes.Add((string)command.Parameters[3].Value!);
             return ValueTask.FromResult(InterceptionResult<int>.SuppressWithResult(1));
         }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task BudgetAwareRecorder_LabelsEvalUsageEvenWithoutAnEvalKey(bool eval)
+    {
+        var userId = Guid.NewGuid();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["StagingEval:AccountIds"] = (eval ? userId : Guid.NewGuid()).ToString()
+        }).Build();
+        var capture = new UpsertCapture();
+        using var services = new ServiceCollection()
+            .AddDbContext<OrbitDbContext>(options => options.UseSqlite("Data Source=:memory:").AddInterceptors(capture))
+            .BuildServiceProvider();
+        var settings = Options.Create(new AiSettings { Pricing = new() { ["priced"] = SamplePrice } });
+        var inner = new AiUsageRecorder(services.GetRequiredService<IServiceScopeFactory>(), settings,
+            Substitute.For<IProductAnalytics>(), NullLogger<AiUsageRecorder>.Instance);
+        var recorder = new BudgetAwareAiUsageRecorder(inner, new HttpContextAccessor(), settings, config);
+        using var context = AiCallContext.Begin(userId);
+
+        await recorder.RecordAsync("chat", "priced", 40, 100, 30, 130, reasoningTokens: 20);
+        await recorder.RecordAsync("habit_suggest", "priced", 0, 100, 30, 130, userId: userId, reasoningTokens: 20);
+
+        capture.Purposes.Should().Equal(eval ? ["eval_chat", "eval_habit_suggest"] : ["chat", "habit_suggest"]);
+        capture.ReasoningTokens.Should().Equal(20, 20);
+        context.ChargedMicroDollars.Should().BeGreaterThan(0);
     }
 
     [Theory]

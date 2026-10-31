@@ -160,6 +160,26 @@ public sealed class AskTool(
         return BuildFormSchema(JsonSerializer.SerializeToNode(schema)!.AsObject());
     }
 
+    public object GetCacheableParameterSchema()
+    {
+        var schema = (JsonObject)GetParameterSchema();
+        foreach (var form in schema["properties"]!["input"]!["anyOf"]!.AsArray())
+        {
+            var fields = form!["properties"]!.AsObject();
+            fields["draft_call_id"] = new JsonObject
+            {
+                ["type"] = "string",
+                ["description"] = "Copy the typed missing-field result's draft_call_id when asking about a new habit draft; otherwise null."
+            };
+            fields["missing_field"] = new JsonObject
+            {
+                ["type"] = "string",
+                ["description"] = "Copy that draft's missing_field exactly and ask only for that field; otherwise null."
+            };
+        }
+        return schema;
+    }
+
     public object GetParameterSchema(bool hasAccountRead, IReadOnlyList<HabitSetupDraft>? drafts = null)
     {
         var schema = (JsonObject)GetParameterSchema();
