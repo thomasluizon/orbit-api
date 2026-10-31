@@ -262,7 +262,7 @@ public partial class ProcessUserChatCommandHandler
                     built.Duplicates++;
                     continue;
                 }
-                if (RequestedDaySummaryNarrative(operation) is { } narrative)
+                if (RequestedDaySummaryNarrative(operation) is { } narrative && !narrative.Any(char.IsDigit))
                     parts.Add(new ChatTextPart(narrative));
                 if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
                 {

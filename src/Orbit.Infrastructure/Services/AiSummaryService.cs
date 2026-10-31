@@ -154,9 +154,10 @@ public sealed partial class AiSummaryService(
             - Choose the first actionable pending item in day order: due date, then DueTime (or DueEndTime for a deadline without a start time), then DayOrder from the person's own ordering. Untimed items follow timed items. Never derive priority from words in titles
             - An overdue or time-bound item in another group may take priority only when clearly more urgent; explain the priority in one short clause using supplied timing or order
             - Never choose a later pending sibling while an earlier sibling is pending, even when the later sibling has an urgent deadline. For a pending day list, choose this next step before a history pattern or a nearly completed routine
-            - A recap of completed activities is not an insight. Mention a completion only as the reason for the observation or next step, within the same sentence
+            - Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.
             - When history is too thin for a pattern, choose a concrete pending habit instead; never invent a pattern, a cause, a benefit, or the person's feelings
-            - Never invent numbers, durations, rates, habit or goal names; use only supplied facts
+            - Never include figures, times, dates, counts, durations, rates or quantities, even when supplied; the daySummary block already shows them.
+            - Use supplied timing and progress only to choose the next item, never in the sentence. This applies equally to English and Brazilian Portuguese.
             - If a habit is marked pending, gently point at at most ONE as an easy next move. Only nudge pending habits in the supplied list; never suggest an unlisted or skipped habit
             - Lines marked "overdue" are the most worth a gentle nudge, but raise at most one and never with guilt
             - A line tagged "bad habit, slipped" is a slip on something they are trying to QUIT: never congratulate it, never count it as a win; acknowledge it briefly and kindly, or simply focus elsewhere

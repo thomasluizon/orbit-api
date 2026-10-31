@@ -1,0 +1,164 @@
+{
+  "caseId": "composition-hoje-next-step-pt-BR",
+  "repeat": 3,
+  "reason": "A frase repete que o café da manhã está feito, informação já exibida no bloco em Breakfast com status Feito.",
+  "answer": "{\"parts\":[{\"type\":\"text\",\"text\":\"Seu próximo passo é o almoço, previsto para as 12h; o café da manhã já está marcado como feito.\"},{\"type\":\"block\",\"kind\":\"daySummary\",\"block\":{\"title\":\"Resumo\",\"items\":[{\"title\":\"Meals\",\"emoji\":null},{\"title\":\"Breakfast\",\"emoji\":null,\"status\":\"Feito\"},{\"title\":\"Lunch\",\"emoji\":null},{\"title\":\"Afternoon snack\",\"emoji\":null},{\"title\":\"Dinner\",\"emoji\":null},{\"title\":\"Water\",\"emoji\":null},{\"title\":\"Water - 710ml\",\"emoji\":null},{\"title\":\"Water - 710ml\",\"emoji\":null},{\"title\":\"Water - 710ml\",\"emoji\":null},{\"title\":\"Water - 710ml\",\"emoji\":null},{\"title\":\"Water - 710ml\",\"emoji\":null},{\"title\":\"Water - 710ml\",\"emoji\":null}],\"overdue\":{\"label\":\"Atrasados\",\"value\":0},\"progress\":\"1 de 12 concluído\",\"window\":\"31 de out. de 2026\"}}]}",
+  "toolCalls": [
+    {
+      "name": "get_daily_summary",
+      "arguments": {
+        "relative_period": "today",
+        "period_count": null,
+        "generate_narrative": true,
+        "date_from": null,
+        "date_to": null,
+        "language": "pt-BR",
+        "orbit_read_complete": true
+      },
+      "resultStatus": "Succeeded",
+      "result": {
+        "success": true,
+        "error": null,
+        "payload": {}
+      }
+    }
+  ],
+  "source": "production gate r9b, API 63a6a33b, harness 1c8210815",
+  "summaryResult": {
+    "summary": "Seu próximo passo é o almoço, previsto para as 12h; o café da manhã já está marcado como feito.",
+    "insight": "",
+    "fromCache": false,
+    "readCard": {
+      "date": "2026-10-31",
+      "due": 12,
+      "done": 1,
+      "completionRate": 8,
+      "overdueCount": 0,
+      "currentStreak": 1,
+      "rows": [
+        {
+          "title": "Meals",
+          "emoji": null,
+          "depth": 0,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-23",
+          "parentTitle": null,
+          "tags": []
+        },
+        {
+          "title": "Breakfast",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "done",
+          "startDate": "2026-10-31",
+          "parentTitle": "Meals",
+          "tags": []
+        },
+        {
+          "title": "Lunch",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Meals",
+          "tags": []
+        },
+        {
+          "title": "Afternoon snack",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Meals",
+          "tags": []
+        },
+        {
+          "title": "Dinner",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Meals",
+          "tags": []
+        },
+        {
+          "title": "Water",
+          "emoji": null,
+          "depth": 0,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-23",
+          "parentTitle": null,
+          "tags": []
+        },
+        {
+          "title": "Water - 710ml",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Water",
+          "tags": []
+        },
+        {
+          "title": "Water - 710ml",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Water",
+          "tags": []
+        },
+        {
+          "title": "Water - 710ml",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Water",
+          "tags": []
+        },
+        {
+          "title": "Water - 710ml",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Water",
+          "tags": []
+        },
+        {
+          "title": "Water - 710ml",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Water",
+          "tags": []
+        },
+        {
+          "title": "Water - 710ml",
+          "emoji": null,
+          "depth": 1,
+          "isBadHabit": false,
+          "status": "[redacted]",
+          "startDate": "2026-10-31",
+          "parentTitle": "Water",
+          "tags": []
+        }
+      ],
+      "totalRows": 12,
+      "dateTo": "2026-10-31"
+    }
+  }
+}
