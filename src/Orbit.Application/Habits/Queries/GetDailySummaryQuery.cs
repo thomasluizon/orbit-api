@@ -53,13 +53,7 @@ public class GetDailySummaryQueryHandler(
         if (request.GenerateNarrative && !user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>(ErrorMessages.AiSummaryDisabled);
 
-        string effectiveLanguage;
-        if (!string.IsNullOrWhiteSpace(user.Language))
-            effectiveLanguage = user.Language!;
-        else if (!string.IsNullOrWhiteSpace(request.Language))
-            effectiveLanguage = request.Language;
-        else
-            effectiveLanguage = "en";
+        var effectiveLanguage = EffectiveLanguage(user.Language, request.Language);
 
         var nowAtUtc = DateTime.UtcNow;
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
@@ -68,16 +62,6 @@ public class GetDailySummaryQueryHandler(
         var currentLocalTime = request.DateFrom == userToday && request.DateTo == request.DateFrom
             ? TimeOnly.FromDateTime(userNow)
             : (TimeOnly?)null;
-
-        var cacheKey = CacheKey(
-            request.UserId,
-            request.DateFrom,
-            effectiveLanguage,
-            SummaryTimeBucket(currentLocalTime));
-
-        cache.TryGetValue(cacheKey, out ScopedSummary? cached);
-        var fromCache = request.GenerateNarrative && cached is not null
-            && cached.From == request.DateFrom && cached.To == request.DateTo;
 
         var scheduleItems = new List<HabitScheduleItem>();
         var page = 1;
@@ -100,6 +84,13 @@ public class GetDailySummaryQueryHandler(
                 request.DateTo, userTimeZone, user.WeekStartDay, user.CurrentStreak, scheduleItems);
             return Result.Success(new DailySummaryResponse(string.Empty, string.Empty, false, dayCard, dayRevision));
         }
+
+        var pendingHabits = PendingHabitsForToday(request, scheduleItems, userToday);
+        var nextStepId = DailySummaryPendingProjection.SelectNextStep(pendingHabits)?.Id;
+        var cacheScopeKey = CacheKey(request.UserId, request.DateFrom, effectiveLanguage, SummaryTimeBucket(currentLocalTime));
+        var cacheKey = $"{cacheScopeKey}:{nextStepId?.ToString("N") ?? "none"}";
+        var cached = ReadCachedSummary(request, cacheKey);
+        var fromCache = cached is not null;
 
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.Schedule != HabitSchedule.General,
@@ -144,11 +135,14 @@ public class GetDailySummaryQueryHandler(
                 user.WeekStartDay,
                 dueDateResolution,
                 UserId: request.UserId,
-                PendingHabits: PendingHabitsForToday(request, scheduleItems, userToday)),
+                PendingHabits: pendingHabits),
             cancellationToken);
 
         if (summaryResult.IsFailure)
             return summaryResult.PropagateError<DailySummaryResponse>();
+
+        if (string.IsNullOrWhiteSpace(summaryResult.Value.Summary))
+            return Result.Failure<DailySummaryResponse>(ErrorMessages.AiSummaryUnavailable);
 
         var localEndOfDay = DateTime.SpecifyKind(request.DateFrom.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Unspecified);
         var endOfDay = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEndOfDay, userTimeZone), TimeSpan.Zero);
@@ -159,10 +153,29 @@ public class GetDailySummaryQueryHandler(
             AbsoluteExpiration = expiry
         };
 
-        cache.Set(cacheKey, new ScopedSummary(request.DateFrom, request.DateTo, summaryResult.Value), cacheOptions);
+        StoreSummary(cacheScopeKey, cacheKey, new ScopedSummary(request.DateFrom, request.DateTo, summaryResult.Value), cacheOptions);
 
         return Result.Success(new DailySummaryResponse(
             summaryResult.Value.Summary, string.Empty, FromCache: false, readCard, revision));
+    }
+
+    private static string EffectiveLanguage(string? profileLanguage, string requestLanguage) =>
+        !string.IsNullOrWhiteSpace(profileLanguage) ? profileLanguage
+        : !string.IsNullOrWhiteSpace(requestLanguage) ? requestLanguage : "en";
+
+    private ScopedSummary? ReadCachedSummary(GetDailySummaryQuery request, string key)
+    {
+        cache.TryGetValue(key, out ScopedSummary? cached);
+        return request.GenerateNarrative && cached is not null && !string.IsNullOrWhiteSpace(cached.Content.Summary)
+            && cached.From == request.DateFrom && cached.To == request.DateTo ? cached : null;
+    }
+
+    private void StoreSummary(string scopeKey, string key, ScopedSummary summary, MemoryCacheEntryOptions options)
+    {
+        if (cache.TryGetValue(scopeKey, out object? previous) && previous is string previousKey && previousKey != key)
+            cache.Remove(previousKey);
+        cache.Set(scopeKey, key, options);
+        cache.Set(key, summary, options);
     }
 
     private sealed record ScopedSummary(DateOnly From, DateOnly To, DailySummaryContent Content);

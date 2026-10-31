@@ -59,7 +59,9 @@ public record HabitScheduleItem(
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
     RepeatReminderOptions? RepeatReminder = null,
-    DateTime? NextReminderAtUtc = null);
+    DateTime? NextReminderAtUtc = null,
+    DateOnly? CompletedOn = null,
+    bool? IsSkippedOnDate = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -104,7 +106,9 @@ public record HabitScheduleChildItem(
     Guid? ParentHabitId = null,
     string? ParentTitle = null,
     RepeatReminderOptions? RepeatReminder = null,
-    DateTime? NextReminderAtUtc = null);
+    DateTime? NextReminderAtUtc = null,
+    DateOnly? CompletedOn = null,
+    bool? IsSkippedOnDate = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -211,9 +215,8 @@ public class GetHabitScheduleQueryHandler(
             IncludeOverdue: request.IncludeOverdue,
             UserToday: completionDate,
             Search: request.Search);
-        var pagedItems = filtered
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
+        var pageHabits = await SelectPageAsync(filtered, request, page, cancellationToken);
+        var pagedItems = pageHabits
             .Select(h => HabitScheduleFilters.MapToScheduleItem(h, [], false, ctx))
             .ToList();
 
@@ -322,10 +325,10 @@ public class GetHabitScheduleQueryHandler(
         foreach (var item in filtered)
             scheduledDatesCache[item.habit.Id] = item.scheduledDates;
 
-        var pageItems = filtered
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToList();
+        var selectedHabits = await SelectPageAsync(
+            filtered.Select(item => item.habit).ToList(), request, page, cancellationToken);
+        var filteredById = filtered.ToDictionary(item => item.habit.Id);
+        var pageItems = selectedHabits.Select(habit => filteredById[habit.Id]).ToList();
         var pageLogFrom = GetPageLogFrom(pageItems.Select(item => item.habit), lookup, dateFrom, weekStartDay);
         var pagedLookup = await LoadPageHabitLookup(
             pageItems.Select(x => x.habit),
@@ -455,10 +458,7 @@ public class GetHabitScheduleQueryHandler(
         var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);
         var allPage = Math.Max(1, Math.Min(request.Page, Math.Max(1, allTotalPages)));
 
-        var pageHabits = allFiltered
-            .Skip((allPage - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .ToList();
+        var pageHabits = await SelectPageAsync(allFiltered, request, allPage, cancellationToken);
         var pageLogFrom = GetPageLogFrom(pageHabits, lookup, today, weekStartDay);
         var pagedLookup = await LoadPageHabitLookup(
             pageHabits,
@@ -526,6 +526,22 @@ public class GetHabitScheduleQueryHandler(
 
     private static DateOnly GetCompletionDate(GetHabitScheduleQuery request, DateOnly today) =>
         request.DateFrom ?? request.DateTo ?? today;
+
+    private async Task<IReadOnlyList<Habit>> SelectPageAsync(
+        IReadOnlyList<Habit> habits, GetHabitScheduleQuery request, int page, CancellationToken cancellationToken)
+    {
+        var offset = (page - 1) * request.PageSize;
+        if (string.IsNullOrWhiteSpace(request.Search))
+            return habits.Skip(offset).Take(request.PageSize).ToList();
+        if (habits.Count == 0)
+            return [];
+
+        var pageHabits = await HabitSearchQuery.ReadPageAsync(
+            habitRepository, request.UserId, habits.Select(habit => habit.Id).ToArray(),
+            offset, request.PageSize, cancellationToken);
+        var byId = habits.ToDictionary(habit => habit.Id);
+        return pageHabits.Select(habit => byId[habit.Id]).ToList();
+    }
 
     private static DateOnly GetPageLogFrom(
         IEnumerable<Habit> pageHabits,

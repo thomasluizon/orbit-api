@@ -1,5 +1,20 @@
 # Selecting an OpenAPI artifact
 
+Habit search (`GET /api/habits` with `search`) appends nullable optional
+`completedOn` and `isSkippedOnDate` to schedule rows and children.
+`completedOn` is the latest nondeleted positive log's account calendar `Date`
+for a completed OneTime task, including logs outside the schedule read window.
+Other items and completed tasks without a surviving completion log return null.
+`isSkippedOnDate` reports an unresolved skip on `dateFrom`, or the account's
+today when no range is supplied. A positive log on that day resolves the skip.
+Skip receipts without a log are included by the existing schedule read model.
+Search pages put other results before completed OneTime tasks, then order those
+tasks by descending completion date, with missing dates last. Position, creation instant and habit ID
+break ties. The shared query orders in SQL before paging; MCP and Astra reuse it.
+Deploy this API to production before the search sections and completion labels
+in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2267). Tracks
+thomasluizon/orbit-tickets#1933.
+
 The FCM data message and shared Android category for repeat reminder actions
 are documented in [RepeatReminderPush.md](RepeatReminderPush.md).
 

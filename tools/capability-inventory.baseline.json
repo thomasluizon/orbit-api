@@ -26596,6 +26596,79 @@
           }
         },
         {
+          "name": "ReminderDate",
+          "type": "DateOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_notifications",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_notification",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_notifications",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Title",
           "type": "string",
           "surfaces": {

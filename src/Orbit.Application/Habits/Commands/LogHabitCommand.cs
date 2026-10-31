@@ -7,6 +7,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -41,7 +42,8 @@ public record LogHabitRepositories(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<HabitLog> HabitLogRepository,
     IGenericRepository<User> UserRepository,
-    IGenericRepository<SentReminder> ReminderRepository);
+    IGenericRepository<SentReminder> ReminderRepository,
+    IGenericRepository<Notification> Notifications);
 
 /// <summary>
 /// Groups supporting services for habit logging to reduce constructor parameter count (S107).
@@ -234,7 +236,7 @@ public partial class LogHabitCommandHandler(
             async ct => streakState = await services.UserStreakService.RecalculateAsync(
                 userId, awardFreezeIfEligible: false, ct),
             cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today, preserveDailyNarrative: true);
 
         return Result.Success(new LogHabitResponse(
             unlogId,
@@ -291,7 +293,7 @@ public partial class LogHabitCommandHandler(
         if (gamificationResult is null)
             await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
@@ -349,6 +351,8 @@ public partial class LogHabitCommandHandler(
                         cancellationToken: cancellationToken);
                     reminder?.TryConsume(logEntity.CreatedAtUtc);
                 }
+                await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id,
+                    targetDate, cancellationToken);
                 var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
                     request.UserId,
                     goalIds,
@@ -411,7 +415,7 @@ public partial class LogHabitCommandHandler(
         var streakState = await services.UserStreakService.CalculateAsync(habit.UserId, cancellationToken);
         var currentStreak = streakState?.CurrentStreak ?? 0;
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(new LogHabitResponse(
             winningLog.Id,

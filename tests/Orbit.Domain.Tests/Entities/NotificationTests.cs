@@ -27,6 +27,7 @@ public class NotificationTests
         notification.Url.Should().Be("/habits");
         notification.DedupeKey.Should().Be("reminder-key");
         notification.HabitId.Should().Be(habitId);
+        notification.ReminderDate.Should().BeNull();
         notification.IsRead.Should().BeFalse();
         notification.CreatedAtUtc.Should().BeOnOrAfter(before);
     }
@@ -40,6 +41,51 @@ public class NotificationTests
         notification.MarkAsRead();
 
         notification.IsRead.Should().BeTrue();
+    }
+
+    [Fact]
+    public void RefreshReminder_UpdatesTheRowAndMakesItUnread()
+    {
+        var habitId = Guid.NewGuid();
+        var row = Notification.Create(ValidUserId, "Title", "Old", "/", habitId);
+        row.MarkAsRead();
+        row.SoftDelete();
+        var reminder = Notification.Create(ValidUserId, "Updated", "Latest", "/", habitId);
+        var sentAtUtc = new DateTime(2027, 9, 26, 12, 0, 0, DateTimeKind.Utc);
+        var reminderDate = new DateOnly(2027, 9, 27);
+
+        row.RefreshReminder(reminder, "daily-key", sentAtUtc, reminderDate);
+
+        row.Title.Should().Be(reminder.Title);
+        row.Body.Should().Be(reminder.Body);
+        row.DedupeKey.Should().Be("daily-key");
+        row.ReminderDate.Should().Be(reminderDate);
+        row.CreatedAtUtc.Should().Be(sentAtUtc);
+        row.IsRead.Should().BeFalse();
+        row.IsDeleted.Should().BeFalse();
+        row.DeletedAtUtc.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("user")]
+    [InlineData("habit")]
+    [InlineData("key")]
+    [InlineData("time")]
+    [InlineData("date")]
+    public void RefreshReminder_RejectsMismatchedIdentityOrInvalidTime(string invalid)
+    {
+        var habitId = Guid.NewGuid();
+        var row = Notification.Create(ValidUserId, "Title", "Old", "/", habitId, "daily-key");
+        var reminder = Notification.Create(invalid == "user" ? Guid.NewGuid() : ValidUserId, "Title", "Latest",
+            "/", invalid == "habit" ? Guid.NewGuid() : habitId);
+        var sentAtUtc = new DateTime(2027, 9, 26, 12, 0, 0,
+            invalid == "time" ? DateTimeKind.Unspecified : DateTimeKind.Utc);
+
+        var act = () => row.RefreshReminder(reminder, invalid == "key" ? "different-key" : "daily-key", sentAtUtc,
+            invalid == "date" ? default : new(2027, 9, 26));
+
+        act.Should().Throw<ArgumentException>();
+        row.Body.Should().Be("Old");
     }
 
     [Theory]
