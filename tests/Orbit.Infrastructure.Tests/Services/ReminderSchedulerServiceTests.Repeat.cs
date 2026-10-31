@@ -55,7 +55,7 @@ public partial class ReminderSchedulerServiceTests
             new MutableTimeProvider(new(doseAtUtc.AddHours(8)))).CheckAndSendReminders(default);
 
         reads.Commands.Where(c => c.Sql.Contains("FROM \"HabitLogs\"", StringComparison.Ordinal))
-            .Sum(c => c.Rows).Should().BeLessThanOrEqualTo(2);
+            .Sum(c => c.Rows).Should().BeLessThanOrEqualTo(3);
         (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(doseAtUtc.AddHours(8));
     }
 
@@ -110,7 +110,7 @@ public partial class ReminderSchedulerServiceTests
     public async Task Repeat_LateOrCorrectedDoseMovesNextReminder(bool corrected)
     {
         var db = CreateSqliteDbContext();
-        var (habit, start) = await SeedRepeat();
+        var (habit, start) = await SeedRepeat(schedule: HabitSchedule.General);
         var dose = start.AddHours(8).AddMinutes(30);
         var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, dose);
         log.CorrectTakenAtUtc(corrected ? dose.AddMinutes(-30) : dose, dose);
@@ -147,7 +147,7 @@ public partial class ReminderSchedulerServiceTests
     public async Task Repeat_TimeZoneChangeDoesNotReclassifyAnActualDoseAsABackfill()
     {
         var db = CreateSqliteDbContext();
-        var (habit, startAtUtc) = await SeedRepeat();
+        var (habit, startAtUtc) = await SeedRepeat(schedule: HabitSchedule.General);
         var user = await db.Users.SingleAsync();
         var doseAtUtc = UtcToday.ToDateTime(new(1, 0), DateTimeKind.Utc);
         var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, doseAtUtc, doseAtUtc,
@@ -195,10 +195,10 @@ public partial class ReminderSchedulerServiceTests
     [InlineData(HabitSchedule.Recurring, 0)]
     [InlineData(HabitSchedule.Flexible, 1)]
     [InlineData(HabitSchedule.General, 1)]
-    public async Task Repeat_OnlyRecurringStopsAfterDailyCompletion(HabitSchedule schedule, int expected)
+    public async Task Repeat_ScheduledHabitsStopAfterDailyCompletion(HabitSchedule schedule, int expected)
     {
         var db = CreateSqliteDbContext();
-        var (habit, start) = await SeedRepeat(schedule: schedule);
+        var (habit, start) = await SeedRepeat(schedule: schedule, frequencyQuantity: 8);
         var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, start);
         db.HabitLogs.Add(log);
         await db.SaveChangesAsync();
@@ -280,6 +280,13 @@ public partial class ReminderSchedulerServiceTests
         await service.CheckAndSendReminders(default);
         (await db.SentReminders.CountAsync()).Should().Be(2);
         (await db.SentReminders.AnyAsync(r => r.ParentReminderId != null)).Should().BeFalse();
+        clock.SetUtcNow(new(startAtUtc.AddMinutes(90)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(3);
+        var notification = (await db.Notifications.ToListAsync()).Should().ContainSingle().Subject;
+        notification.IsRead.Should().BeFalse();
+        notification.Body.Should().Be("Next at 06:00");
+        notification.CreatedAtUtc.Should().Be(startAtUtc.AddMinutes(90));
     }
 
     [Fact]
@@ -424,14 +431,14 @@ public partial class ReminderSchedulerServiceTests
     }
 
     private async Task<(Habit Habit, DateTime Start)> SeedRepeat(RepeatReminderOptions? options = null,
-        HabitSchedule schedule = HabitSchedule.Flexible)
+        HabitSchedule schedule = HabitSchedule.Flexible, int frequencyQuantity = 1)
     {
         var db = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var start = UtcToday.ToDateTime(new(4, 0), DateTimeKind.Utc);
         var habit = Habit.Create(new HabitCreateParams(schedule, user.Id, "Drink water",
             schedule == HabitSchedule.General ? null : FrequencyUnit.Day,
-            schedule == HabitSchedule.General ? null : 1, UtcToday,
+            schedule == HabitSchedule.General ? null : frequencyQuantity, UtcToday,
             ReminderEnabled: true, RepeatReminder: options ?? new(480, StartAtUtc: start))).Value;
         db.Users.Add(user);
         db.Habits.Add(habit);

@@ -6,6 +6,13 @@ namespace Orbit.Application.Habits.Services;
 
 public static class DailySummaryPendingProjection
 {
+    public static DailySummaryPendingHabit? SelectNextStep(IReadOnlyList<DailySummaryPendingHabit>? pending) =>
+        pending?.Where(item => !item.HasPendingChildren)
+            .OrderBy(item => item.DueDate)
+            .ThenBy(item => item.DueTime ?? item.DueEndTime ?? TimeOnly.MaxValue)
+            .ThenBy(item => item.DayOrder)
+            .FirstOrDefault();
+
     public static IReadOnlyList<DailySummaryPendingHabit> Project(
         IReadOnlyList<HabitScheduleItem> schedule, DateOnly today)
     {

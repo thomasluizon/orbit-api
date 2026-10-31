@@ -22620,6 +22620,19 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "completedOn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "isSkippedOnDate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -22913,6 +22926,19 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "completedOn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "isSkippedOnDate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },

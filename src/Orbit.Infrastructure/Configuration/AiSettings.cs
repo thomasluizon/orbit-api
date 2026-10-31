@@ -4,6 +4,8 @@ public sealed class AiSettings
 {
     public const string SectionName = "AI";
     public string ApiKey { get; init; } = string.Empty;
+    public string EvalApiKey { get; init; } = string.Empty;
+    public decimal EvalDailyBudgetUsd { get; init; } = 0.50m;
     public string Model { get; init; } = "gpt-6-luna";
     public string SubTaskModel { get; init; } = "gpt-6-luna";
     public string TranscriptionModel { get; init; } = "whisper-1";

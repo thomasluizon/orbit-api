@@ -9,7 +9,7 @@ public static class CacheInvalidationHelper
     private static readonly int[] RetrospectiveWeekStartDays = [0, 1];
     private static readonly string[] SummaryTimeBuckets = ["morning", "afternoon", "evening", "night", "timeless"];
 
-    public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId, DateOnly today)
+    public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId, DateOnly today, bool preserveDailyNarrative = false)
     {
         for (int i = -2; i <= 2; i++)
         {
@@ -18,7 +18,16 @@ public static class CacheInvalidationHelper
             {
                 cache.Remove(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{lang}"));
                 foreach (var bucket in SummaryTimeBuckets)
-                    cache.Remove(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{lang}:{bucket}"));
+                {
+                    var scopeKey = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"summary:{userId}:{date:yyyy-MM-dd}:{lang}:{bucket}");
+                    if (cache.TryGetValue(scopeKey, out object? value) && value is string narrativeKey)
+                    {
+                        if (preserveDailyNarrative)
+                            continue;
+                        cache.Remove(narrativeKey);
+                    }
+                    cache.Remove(scopeKey);
+                }
             }
         }
     }
@@ -54,9 +63,9 @@ public static class CacheInvalidationHelper
     /// Convenience: invalidate the summary, retrospective, and goal-review caches for a user. Use
     /// this from any mutation command that affects habits, logs, or goals.
     /// </summary>
-    public static void InvalidateUserAiCaches(IMemoryCache cache, Guid userId, DateOnly today)
+    public static void InvalidateUserAiCaches(IMemoryCache cache, Guid userId, DateOnly today, bool preserveDailyNarrative = false)
     {
-        InvalidateSummaryCache(cache, userId, today);
+        InvalidateSummaryCache(cache, userId, today, preserveDailyNarrative);
         InvalidateRetrospectiveCache(cache, userId, today);
         InvalidateGoalReviewCache(cache, userId);
     }

@@ -191,6 +191,8 @@ public class OrbitDbContext : DbContext
             entity.Property<long>("ChargedTokens");
             entity.Property(call => call.ChargedMicroDollars).HasDefaultValue(0L);
             entity.HasIndex(call => new { call.UserId, call.LocalDate });
+            entity.Property(call => call.EvalDateUtc);
+            entity.HasIndex(call => call.EvalDateUtc).HasFilter("\"EvalDateUtc\" IS NOT NULL");
             entity.HasOne<User>().WithMany().HasForeignKey(call => call.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<OAuthState>(entity =>
@@ -415,6 +417,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Notification>(entity =>
         {
+            entity.Property(n => n.ReminderDate).HasColumnType("date");
             entity.HasIndex(n => new { n.UserId, n.IsRead });
             entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");

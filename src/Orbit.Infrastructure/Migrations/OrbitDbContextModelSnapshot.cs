@@ -189,6 +189,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<long>("ChargedTokens")
                         .HasColumnType("bigint");
 
+                    b.Property<DateOnly?>("EvalDateUtc")
+                        .HasColumnType("date");
+
                     b.Property<bool>("IsSettled")
                         .HasColumnType("boolean");
 
@@ -199,6 +202,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EvalDateUtc")
+                        .HasFilter("\"EvalDateUtc\" IS NOT NULL");
 
                     b.HasIndex("UserId", "LocalDate");
 
@@ -238,6 +244,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<long>("ReasoningTokens")
+                        .HasColumnType("bigint");
 
                     b.Property<long>("TotalTokens")
                         .HasColumnType("bigint");
@@ -1459,6 +1468,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("ReminderDate")
+                        .HasColumnType("date");
 
                     b.Property<string>("Title")
                         .IsRequired()

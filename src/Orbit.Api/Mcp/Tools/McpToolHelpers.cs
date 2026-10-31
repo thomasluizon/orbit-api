@@ -64,7 +64,8 @@ internal static class McpToolHelpers
         due_time = dto.DueTime,
         is_general = dto.IsGeneral,
         is_flexible = dto.IsFlexible,
-        sub_habits = dto.SubHabits?.Select(ToBulkHabitArgs)
+        sub_habits = dto.SubHabits?.Select(ToBulkHabitArgs),
+        repeat_reminder = dto.RepeatReminder
     };
 
     public static string FormatHabitLine(HabitLineData data, int indent)
@@ -160,7 +161,8 @@ internal static class McpToolHelpers
         bool IsGeneral = false,
         bool IsFlexible = false,
         List<BulkHabitItemDto>? SubHabits = null,
-        string? Emoji = null);
+        string? Emoji = null,
+        JsonElement? RepeatReminder = null);
 
     public sealed record HabitPositionDto(string HabitId, int Position);
 

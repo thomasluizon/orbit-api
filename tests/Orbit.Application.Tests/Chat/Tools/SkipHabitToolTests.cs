@@ -39,7 +39,7 @@ public class SkipHabitToolTests
         var unitOfWork = Substitute.For<IUnitOfWork>();
         unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
         var handler = new SkipHabitCommandHandler(
-            new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()),
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>(), Substitute.For<IGenericRepository<Notification>>()),
             _userDateService, Substitute.For<IGoalCompletionService>(), unitOfWork,
             new MemoryCache(new MemoryCacheOptions()));
         _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
@@ -194,7 +194,7 @@ public class SkipHabitToolTests
         using var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
         var handler = new SkipHabitCommandHandler(new SkipHabitRepositories(
             new GenericRepository<Habit>(context), new GenericRepository<HabitLog>(context),
-            new GenericRepository<HabitSkipUndo>(context)), userDateService,
+            new GenericRepository<HabitSkipUndo>(context), new GenericRepository<Notification>(context)), userDateService,
             Substitute.For<IGoalCompletionService>(), unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<SkipHabitCommand>(), call.Arg<CancellationToken>()));

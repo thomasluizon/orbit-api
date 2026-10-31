@@ -11,7 +11,7 @@ internal static class RepeatReminderToolArguments
     public static object RepeatReminderSchema(bool forUpdate = false) => new
     {
         type = JsonSchemaTypes.Object,
-        description = "Repeat from the latest dose across midnight. Replaces other reminders. Use only everyday Recurring, Flexible per day, or General habits. Recurring once a day stops after that day is done. The daily target does not stop Flexible or General reminders. When no daily target was requested, use General with no frequency, and do not derive a target from the reminder interval. Keep doctor-prescribed fixed clock times in scheduled_reminders."
+        description = "Repeat from the latest dose across midnight. Replaces other reminders. Allowed on every habit and task schedule. Notify only while due today or overdue, or while General. Stop scheduled reminders for the local day after completion or skip, and always respect the end date. General follows its own completion state. When no daily target was requested, use General with no frequency, and do not derive a target from the reminder interval. Keep doctor-prescribed fixed clock times in scheduled_reminders."
             + (forUpdate ? " Use clear_fields to clear repeat_reminder." : ""),
         properties = new
         {

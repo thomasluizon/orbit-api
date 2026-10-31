@@ -5,6 +5,7 @@ using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -24,7 +25,8 @@ public sealed record SkipHabitResponse(Guid SkipId);
 public record SkipHabitRepositories(
     IGenericRepository<Habit> Habits,
     IGenericRepository<HabitLog> HabitLogs,
-    IGenericRepository<HabitSkipUndo> SkipUndos);
+    IGenericRepository<HabitSkipUndo> SkipUndos,
+    IGenericRepository<Notification> Notifications);
 
 public class SkipHabitCommandHandler(
     SkipHabitRepositories repos,
@@ -89,8 +91,9 @@ public class SkipHabitCommandHandler(
         if (habit.Schedule == HabitSchedule.OneTime)
         {
             habit.PostponeTo(today.AddDays(1));
+            await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, today, cancellationToken);
             await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today, preserveDailyNarrative: true);
             return Result.Success(new SkipHabitResponse(receipt.Value.Id));
         }
 
@@ -111,6 +114,7 @@ public class SkipHabitCommandHandler(
         if (skipError is not null)
             return skipError.PropagateError<SkipHabitResponse>();
 
+        await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, targetDate, cancellationToken);
         var userId = habit.UserId;
         var streakGoalIds = habit.Goals
             .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
@@ -123,7 +127,7 @@ public class SkipHabitCommandHandler(
             cancellationToken: cancellationToken);
 
         await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today, preserveDailyNarrative: true);
 
         return Result.Success(new SkipHabitResponse(receipt.Value.Id));
     }

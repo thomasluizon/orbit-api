@@ -91,17 +91,21 @@ public sealed class ProactiveProposalTests
     }
 
     [Theory]
-    [InlineData("\"frequency_unit\":\"Week\",\"frequency_quantity\":1")]
-    [InlineData("\"frequency_unit\":\"OneTime\",\"due_date\":\"2026-10-30\"")]
-    [InlineData("\"frequency_unit\":\"Day\",\"frequency_quantity\":1,\"days\":[\"Monday\"]")]
-    [InlineData("\"frequency_unit\":\"Day\",\"frequency_quantity\":1,\"scheduled_reminders\":[{\"when\":\"same_day\",\"time\":\"08:00\"},{\"when\":\"same_day\",\"time\":\"20:00\"}]")]
-    public async Task RepeatSuggestionsNeverReplaceFixedRemindersOrUnsupportedSchedules(string fields)
+    [InlineData("\"frequency_unit\":\"Week\",\"frequency_quantity\":1", true)]
+    [InlineData("\"frequency_unit\":\"OneTime\",\"due_date\":\"2026-10-30\"", true)]
+    [InlineData("\"frequency_unit\":\"Day\",\"frequency_quantity\":1,\"days\":[\"Monday\"]", true)]
+    [InlineData("\"frequency_unit\":\"Day\",\"frequency_quantity\":1,\"scheduled_reminders\":[{\"when\":\"same_day\",\"time\":\"08:00\"},{\"when\":\"same_day\",\"time\":\"20:00\"}]", false)]
+    public async Task RepeatSuggestionsSupportEveryScheduleAndPreserveFixedReminders(string fields, bool acceptsRepeat)
     {
         var args = Parse("{\"title\":\"Requested activity\"," + fields + ",\"repeat_reminder\":{\"interval_minutes\":120},\"suggested_fields\":[\"repeat_reminder\"]}");
         var result = await previewer.PreviewAsync(user, "create_habit", args, clientContext: client);
         result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value!.Items![0].Fields.Should().NotContain(field => field.Field == "repeat_reminder");
-        result.Value.ExecutionArguments!.Value.TryGetProperty("repeat_reminder", out _).Should().BeFalse();
+        var rows = result.Value!.Items![0].Fields;
+        if (acceptsRepeat)
+            rows.Should().Contain(field => field.Field == "repeat_reminder" && field.Provenance == "suggested");
+        else
+            rows.Should().NotContain(field => field.Field == "repeat_reminder");
+        result.Value.ExecutionArguments!.Value.TryGetProperty("repeat_reminder", out _).Should().Be(acceptsRepeat);
         foreach (var field in Parse("{" + fields + "}").EnumerateObject())
             JsonElement.DeepEquals(result.Value.ExecutionArguments.Value.GetProperty(field.Name), field.Value).Should().BeTrue();
     }
@@ -111,6 +115,34 @@ public sealed class ProactiveProposalTests
     {
         var result = await previewer.PreviewAsync(user, "create_habit", Parse("""{"title":"Read","frequency_unit":"Day","frequency_quantity":1,"suggested_fields":{"emoji":"📖"}}"""));
         result.IsFailure.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public async Task UnsupportedClients_EmptySuggestionPlaceholdersDoNotSelectOfferExecution(string placeholder)
+    {
+        var args = Parse("{\"habits\":[{\"title\":\"Read\",\"is_general\":true,\"suggested_fields\":" + placeholder
+            + ",\"sub_habits\":[{\"title\":\"Page\",\"suggested_fields\":" + placeholder + "}]}]}");
+        var normalized = ProactiveProposal.ForModelCall(args);
+
+        ProactiveProposal.Contains(normalized).Should().BeFalse();
+        var result = await previewer.PreviewAsync(user, "bulk_create_habits", args,
+            clientContext: client with { SupportsProactiveOffers = false });
+        result.IsSuccess.Should().BeTrue(result.Error);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public async Task OfferClients_EmptySuggestionPlaceholdersKeepRequestedFieldProvenance(string placeholder)
+    {
+        var result = await previewer.PreviewAsync(user, "create_habit",
+            Parse("{\"title\":\"Read\",\"is_general\":true,\"suggested_fields\":" + placeholder + "}"), clientContext: client);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.Items!.Single().Fields.Should().Contain(field => field.Field == "title" && field.Provenance == "requested");
     }
 
     [Fact]

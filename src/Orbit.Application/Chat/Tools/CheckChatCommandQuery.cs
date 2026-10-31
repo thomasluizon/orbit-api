@@ -73,7 +73,7 @@ public sealed class CheckChatCommandQueryHandler(IServiceProvider services) : IR
         SkipHabitCommand skip => await SkipHabitCommandHandler.CheckArgumentsAsync(skip,
             Repository<Habit>(), Repository<HabitLog>(), services.GetRequiredService<IUserDateService>(), ct),
         UndoSkipHabitCommand undo => await UndoSkipHabitCommandHandler.CheckArgumentsAsync(undo,
-            new SkipHabitRepositories(Repository<Habit>(), Repository<HabitLog>(), Repository<HabitSkipUndo>()), ct),
+            new SkipHabitRepositories(Repository<Habit>(), Repository<HabitLog>(), Repository<HabitSkipUndo>(), Repository<Notification>()), ct),
         BulkCreateHabitsCommand create => await CheckBulkCreateAsync(create, ct),
         BulkUpdateHabitsCommand update => await CheckBulkUpdateAsync(update, ct),
         BulkLogHabitsCommand log => await CheckBulkLogsAsync(log, ct),

@@ -109,7 +109,7 @@ public partial class ReminderSchedulerService(
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        var (repeatAnchors, repeatLoggedDates, repeatSent) = await LoadRepeatSnapshot(
+        var (repeatAnchors, repeatEligibility, repeatSent) = await LoadRepeatSnapshot(
             dbContext, repeatHabits, users, nowUtc, minLocalDate, ct);
 
         var habitIds = relativeHabits.Select(h => h.Id).ToList();
@@ -158,7 +158,7 @@ public partial class ReminderSchedulerService(
             .ToHashSet();
 
         return new ReminderSnapshot(nowUtc, probe, relativeHabits, scheduledHabits,
-            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatLoggedDates, repeatSent);
+            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatEligibility, repeatSent);
     }
 
     private async Task ProcessRelativeReminders(ReminderSnapshot snapshot, OrbitDbContext dbContext,
@@ -259,7 +259,7 @@ public partial class ReminderSchedulerService(
                 var notification = Notification.Create(
                     habit.UserId, habit.Title, minutesText, NotificationUrls.Home, habit.Id);
 
-                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
                     continue;
 
                 sentReminderSet.Add((habit.Id, occurrenceDate, minutesBefore));
@@ -288,7 +288,7 @@ public partial class ReminderSchedulerService(
                 var body = FormatScheduledReminderText(reminder.When!.Value, lang);
                 var sentReminder = SentReminder.Create(habit.Id, sendDate, 0, reminder.Time, reminder.When);
                 var notification = Notification.Create(habit.UserId, habit.Title, body, NotificationUrls.Home, habit.Id);
-                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
                     continue;
 
                 sentClockSet.Add(clockKey);
@@ -341,7 +341,7 @@ public partial class ReminderSchedulerService(
             var notification = Notification.Create(
                 habit.UserId, habit.Title, text, NotificationUrls.Home, habit.Id);
 
-            if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+            if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
                 continue;
 
             sentScheduledSet.Add((habit.Id, userToday, sr.Time, sr.When));
@@ -364,13 +364,16 @@ public partial class ReminderSchedulerService(
 
     private async Task<bool> TryRecordReminderAsync(
         Habit habit, SentReminder sentReminder, Notification notification,
-        OrbitDbContext dbContext, CancellationToken ct)
+        OrbitDbContext dbContext, TimeZoneInfo zone, DateTime sentAtUtc, CancellationToken ct)
     {
         await dbContext.SentReminders.AddAsync(sentReminder, ct);
-        await dbContext.Notifications.AddAsync(notification, ct);
 
         try
         {
+            var reminderDate = sentReminder.When == ScheduledReminderWhen.DayBefore
+                ? sentReminder.Date.AddDays(1) : sentReminder.Date;
+            await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(dbContext),
+                notification, zone, sentAtUtc, reminderDate, ct);
             await dbContext.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
@@ -452,7 +455,7 @@ public partial class ReminderSchedulerService(
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> SentScheduledSet,
         List<Habit> RepeatHabits,
         Dictionary<Guid, DateTime> RepeatAnchors,
-        HashSet<(Guid HabitId, DateOnly Date)> RepeatLoggedDates,
+        RepeatReminderEligibility RepeatEligibility,
         List<SentReminder> RepeatSent);
 
     private static bool HasEnded(Habit habit, DateOnly today) =>

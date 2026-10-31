@@ -22,7 +22,7 @@ public partial class ReminderSchedulerService
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
 
-    private async Task<(Dictionary<Guid, DateTime> Anchors, HashSet<(Guid HabitId, DateOnly Date)> LoggedDates,
+    private async Task<(Dictionary<Guid, DateTime> Anchors, RepeatReminderEligibility Eligibility,
         List<SentReminder> Sent)> LoadRepeatSnapshot(OrbitDbContext dbContext, List<Habit> repeatHabits,
         Dictionary<Guid, User> users, DateTime nowUtc, DateOnly minLocalDate, CancellationToken ct)
     {
@@ -30,15 +30,11 @@ public partial class ReminderSchedulerService
         var zones = repeatHabits.Where(h => users.ContainsKey(h.UserId)).ToDictionary(h => h.Id,
             h => TimeZoneHelper.FindTimeZone(users[h.UserId].TimeZone, logger, h.UserId));
         var anchors = await RepeatReminderDoseLoader.LoadLatestAsync(new GenericRepository<HabitLog>(dbContext), zones, ct);
-        var recurringIds = repeatHabits.Where(h => h.Schedule == HabitSchedule.Recurring).Select(h => h.Id).ToList();
-        var maxLocalDate = minLocalDate.AddDays(2);
-        var loggedDates = (await dbContext.HabitLogs.AsNoTracking()
-            .Where(l => recurringIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= minLocalDate && l.Date <= maxLocalDate)
-            .Select(l => new { l.HabitId, l.Date }).Distinct()
-            .ToListAsync(ct)).Select(l => (l.HabitId, l.Date)).ToHashSet();
+        var eligibility = await RepeatReminderEligibility.LoadAsync(new HabitScheduleLogReader(dbContext),
+            repeatHabits, minLocalDate, minLocalDate.AddDays(2), ct);
         var repeatSent = await RepeatReminderSnapshotQueries.LoadSentAsync(dbContext, repeatIds, nowUtc, ct);
 
-        return (anchors, loggedDates, repeatSent);
+        return (anchors, eligibility, repeatSent);
     }
 
     private async Task ProcessRepeatReminders(ReminderSnapshot snapshot, OrbitDbContext db,
@@ -51,27 +47,27 @@ public partial class ReminderSchedulerService
             var zone = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var plan = RepeatReminderPlanner.Next(habit, nowAtUtc, zone, user.WeekStartDay,
                 snapshot.RepeatAnchors.TryGetValue(habit.Id, out var anchorAtUtc) ? anchorAtUtc : null,
-                snapshot.RepeatLoggedDates.Where(l => l.HabitId == habit.Id).Select(l => l.Date).ToHashSet(),
-                snapshot.RepeatSent.Where(r => r.HabitId == habit.Id).ToList());
+                snapshot.RepeatEligibility,
+                snapshot.RepeatSent.Where(r => r.HabitId == habit.Id).ToList(), nowAtUtc);
             if (plan is null || plan.DispatchAtUtc > nowAtUtc)
                 continue;
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone));
             var reminder = SentReminder.CreateRepeat(habit.Id, today, plan.ReminderAtUtc, plan.ExpiresAtUtc,
                 plan.DoseAnchorAtUtc, plan.Parent?.Id);
-            if (await RecordRepeat(habit, user, reminder, plan.Parent ?? reminder, zone, db, pending, ct))
+            if (await RecordRepeat(habit, user, reminder, plan.Parent ?? reminder, zone, db, pending, nowAtUtc, ct))
                 snapshot.RepeatSent.Add(reminder);
         }
     }
 
     private async Task<bool> RecordRepeat(Habit habit, User user, SentReminder reminder, SentReminder actionReminder,
-        TimeZoneInfo zone, OrbitDbContext db, List<PendingReminderPush> pending, CancellationToken ct)
+        TimeZoneInfo zone, OrbitDbContext db, List<PendingReminderPush> pending, DateTime sentAtUtc, CancellationToken ct)
     {
         var localNext = TimeZoneInfo.ConvertTimeFromUtc(actionReminder.ExpiresAtUtc!.Value, zone);
         var format = TimeFormatResolver.Uses24HourClock(user.Uses24HourClockPreference, user.TimeZone) ? "HH:mm" : "h:mm tt";
         var time = localNext.ToString(format, CultureInfo.GetCultureInfo(LocaleHelper.IsPortuguese(user.Language) ? "pt-BR" : "en-US"));
         var body = LocaleHelper.IsPortuguese(user.Language) ? $"Próximo às {time}" : $"Next at {time}";
         var notification = Notification.Create(user.Id, habit.Title, body, NotificationUrls.Home, habit.Id);
-        if (!await TryRecordReminderAsync(habit, reminder, notification, db, ct))
+        if (!await TryRecordReminderAsync(habit, reminder, notification, db, zone, sentAtUtc, ct))
             return false;
         using var scope = scopeFactory.CreateScope();
         var tokens = scope.ServiceProvider.GetRequiredService<IReminderActionTokenService>();

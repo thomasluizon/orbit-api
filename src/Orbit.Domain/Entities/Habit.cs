@@ -258,8 +258,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (relativeValidation is not null)
             return Result.Failure<Habit>(relativeValidation);
 
-        if (p.RepeatReminder is { } repeat && (!repeat.IsValid()
-            || !RepeatReminderOptions.SupportsSchedule(p.Schedule, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks)))
+        if (p.RepeatReminder is { } repeat && !repeat.IsValid())
             return Result.Failure<Habit>(DomainErrors.InvalidRepeatReminder);
 
         return CreateWithSchedule(p);
@@ -679,9 +678,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return result;
     }
 
-    public Result<HabitLog> Unlog(DateOnly date)
+    public Result<HabitLog> Unlog(DateOnly date) =>
+        Unlog(date, _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted));
+
+    public Result<HabitLog> Unlog(DateOnly date, Guid logId) =>
+        Unlog(date, _logs.Find(l => l.Id == logId && l.Date == date && l.Value > 0 && !l.IsDeleted));
+
+    private Result<HabitLog> Unlog(DateOnly date, HabitLog? log)
     {
-        var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
         if (log is null)
             return Result.Failure<HabitLog>(DomainErrors.LogNotFoundForDate);
 
@@ -822,8 +826,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private AppError? ValidateUpdatedRepeat(HabitUpdateParams p)
     {
         var effective = p.ClearRepeatReminder ? null : p.RepeatReminder ?? RepeatReminder;
-        return effective is { } repeat && (!repeat.IsValid()
-            || !RepeatReminderOptions.SupportsSchedule(p.Schedule, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks))
+        return effective is { } repeat && !repeat.IsValid()
             ? DomainErrors.InvalidRepeatReminder : null;
     }
 

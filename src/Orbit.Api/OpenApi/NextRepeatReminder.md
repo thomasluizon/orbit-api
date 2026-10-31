@@ -6,7 +6,9 @@ Tracks thomasluizon/orbit-tickets#1870.
 `HabitChildResponse` append optional nullable `nextReminderAtUtc`, a UTC
 `date-time`. Schedule, calendar, ordinary detail and full detail reads populate
 it recursively. An absent field identifies a producer without this capability;
-explicit null means no repeat notification remains under the current state.
+explicit null means no repeat notification is projected under the current state
+within the next 366 local days. Sparse schedules become visible when their next
+eligible dispatch enters this rolling horizon.
 
 The instant is the next eligible scheduler dispatch, including the single
 ignored-reminder follow-up. When an unsent occurrence is already overdue,
@@ -18,12 +20,17 @@ occurs on a scheduler tick and depends on successful notification delivery.
 It uses `RepeatReminderClock`, the original dose eligibility from
 `RepeatReminderDoseLoader`, saved consumption and follow-up state, the account
 timezone, active windows, daily stop and resume, and the local end date.
-Daily completion suppresses only recurring repeat reminders. General and
-flexible habits continue their repeat cadence. Dose correction and notification
+Every schedule accepts repeat reminders. Scheduled habits notify only while
+due today or overdue under the schedule read model, and stop for the local day
+after completion or skip. Flexible habits continue after partial completion until
+their period target is met, and a skip suppresses the rest of the local day.
+General habits follow their own completion state and a skip postpones reminders
+until their next due date. Scheduler ticks only plan dispatches due now; response
+reads project future dispatches within the bounded horizon. Dose correction and notification
 Done read back the resulting persisted anchor without a response cache.
 
 No input, enum or existing response field changes. Existing repeat-option
-validators and domain guards still govern the supported cadence and schedule.
+validators and domain guards still govern the supported cadence and active window.
 The reader batches state for the repeat habits visible in a response, with an
 ownership filter before loading their doses and reminder state.
 

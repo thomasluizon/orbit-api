@@ -33,7 +33,7 @@ public class SkipHabitCommandHandlerTests
         _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
         _unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
         _handler = new SkipHabitCommandHandler(
-            new SkipHabitRepositories(_habitRepo, _habitLogRepo, _skipUndoRepo), _userDateService,
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, _skipUndoRepo, Substitute.For<IGenericRepository<Notification>>()), _userDateService,
             _goalCompletionService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

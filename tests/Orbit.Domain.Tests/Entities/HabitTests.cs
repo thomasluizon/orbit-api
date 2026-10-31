@@ -452,6 +452,48 @@ public class HabitTests
         result.Error.Should().Contain("No log found for this date");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Unlog_TargetLogUnavailable_ReturnsFailureWithoutRemovingAnotherSlip(bool deleted)
+    {
+        var date = new DateOnly(2026, 10, 20);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Bad habit",
+            FrequencyUnit.Day, 1, date, IsBadHabit: true)).Value;
+        var unavailableId = Guid.NewGuid();
+        if (deleted)
+        {
+            var removed = habit.Log(date).Value;
+            habit.Unlog(date).IsSuccess.Should().BeTrue();
+            unavailableId = removed.Id;
+        }
+        var remaining = habit.Log(date).Value;
+
+        var result = habit.Unlog(date, unavailableId);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.LogNotFoundForDate.Code);
+        remaining.IsDeleted.Should().BeFalse();
+        habit.Logs.Should().ContainSingle(log => !log.IsDeleted);
+    }
+
+    [Fact]
+    public void Unlog_TargetLog_DeletesOnlyThatSlipAndRequiresMatchingDate()
+    {
+        var date = new DateOnly(2026, 10, 20);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, Guid.NewGuid(), "Bad habit",
+            FrequencyUnit.Day, 1, date, IsBadHabit: true)).Value;
+        var first = habit.Log(date).Value;
+        var second = habit.Log(date).Value;
+
+        habit.Unlog(date.AddDays(1), second.Id).IsFailure.Should().BeTrue();
+        habit.Unlog(date, second.Id).IsSuccess.Should().BeTrue();
+
+        first.IsDeleted.Should().BeFalse();
+        second.IsDeleted.Should().BeTrue();
+        habit.NextDueDate.Should().Be(date);
+    }
+
     [Fact]
     public void Unlog_OneTime_RevertsCompleted()
     {

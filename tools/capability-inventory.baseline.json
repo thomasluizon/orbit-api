@@ -6015,6 +6015,9 @@
             "name": "habitsJson[].isGeneral"
           },
           {
+            "name": "habitsJson[].repeatReminder"
+          },
+          {
             "name": "habitsJson[].subHabits"
           },
           {
@@ -6905,6 +6908,12 @@
             "default": "false"
           },
           {
+            "name": "repeatReminder",
+            "type": "string?",
+            "required": false,
+            "default": "null"
+          },
+          {
             "name": "title",
             "type": "string",
             "required": true
@@ -7041,6 +7050,12 @@
           {
             "name": "reminderTimes",
             "type": "int[]?",
+            "required": false,
+            "default": "null"
+          },
+          {
+            "name": "repeatReminder",
+            "type": "string?",
             "required": false,
             "default": "null"
           },
@@ -8205,6 +8220,12 @@
               "day_before",
               "same_day"
             ]
+          },
+          {
+            "name": "repeatReminder",
+            "type": "string?",
+            "required": false,
+            "default": "null"
           },
           {
             "name": "slipAlertEnabled",
@@ -26566,6 +26587,79 @@
                       "via": "execute_agent_operation_v2"
                     }
                   ]
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "ReminderDate",
+          "type": "DateOnly?",
+          "surfaces": {
+            "chat": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_notifications",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
+                },
+                "filterKeyedBulk": {
+                  "status": "absent"
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "inventoried",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "absent"
+                },
+                "read": {
+                  "status": "absent"
+                },
+                "update": {
+                  "status": "absent"
+                },
+                "delete": {
+                  "status": "covered",
+                  "direct": [
+                    {
+                      "tool": "delete_notification",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "delete_notifications",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "absent"
                 },
                 "filterKeyedBulk": {
                   "status": "absent"

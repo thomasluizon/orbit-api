@@ -84,7 +84,7 @@ public sealed class UndoSkipHabitCommandHandler(
             .Select(goal => goal.Id).ToList();
         await goalCompletionService.SyncDerivedGoalsAsync(request.UserId, streakGoalIds, today,
             cancellationToken: ct);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
         return Result.Success();
     }
 }

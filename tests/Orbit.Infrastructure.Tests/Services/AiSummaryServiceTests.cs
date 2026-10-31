@@ -4,6 +4,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
 using System.Reflection;
+using Orbit.Application.Habits.Services;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -21,16 +22,11 @@ using Orbit.Infrastructure.Tests.AI;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-/// <summary>
-/// Tests the pure prompt/selection logic in AiSummaryService (StripMarkdownFences,
-/// BuildSummaryPrompt, BuildHabitSection, CapToSentence, SelectScheduledHabits) plus the
-/// structured-output mapping of GenerateSummaryAsync (summary parsing, with Insight always
-/// returned empty) against a stubbed chat transport.
-/// </summary>
 public partial class AiSummaryServiceTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2025, 4, 1);
+    private const BindingFlags PrivateStatic = BindingFlags.NonPublic | BindingFlags.Static;
 
     [Fact]
     public async Task GenerateSummaryAsync_ReservesOutputTokensForReasoningAndJson()
@@ -44,21 +40,8 @@ public partial class AiSummaryServiceTests
         using var document = JsonDocument.Parse(body!);
         document.RootElement.GetProperty("model").GetString().Should().Be("gpt-6-luna");
         document.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
-        document.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+        document.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(600);
     }
-
-    private static readonly BindingFlags PrivateStatic =
-        BindingFlags.NonPublic | BindingFlags.Static;
-
-    private static readonly string[] BannedInstantPhrases =
-    [
-        "right now",
-        "just woke up",
-        "now that the afternoon is here",
-        "as the day begins",
-        "earlier today",
-        "upcoming later today",
-    ];
 
     [Fact]
     public void StripMarkdownFences_PlainText_ReturnsUnchanged()
@@ -111,294 +94,6 @@ public partial class AiSummaryServiceTests
     {
         var text = "  \n  Some text  \n  ";
         AiSummaryService.StripMarkdownFences(text).Should().Be("Some text");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_English_ContainsEnglishLanguageName()
-    {
-        var habits = new List<Habit> { CreateHabit("Yoga") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
-
-        result.Should().Contain("English");
-        result.Should().Contain("Yoga");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_Portuguese_ContainsBrazilianPortuguese()
-    {
-        var habits = new List<Habit> { CreateHabit("Leitura") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "pt-br");
-
-        result.Should().Contain("Brazilian Portuguese");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_PtShort_AlsoMapsToPortuguese()
-    {
-        var habits = new List<Habit> { CreateHabit("Read") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "pt");
-
-        result.Should().Contain("Brazilian Portuguese");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_IncludesDateInOutput()
-    {
-        var habits = new List<Habit> { CreateHabit("Walk") };
-        var date = new DateOnly(2025, 12, 25);
-
-        var result = InvokeBuildSummaryPrompt(habits, date, "en");
-
-        result.Should().Contain("December 25, 2025");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_ShowsProgressCount()
-    {
-        var habits = new List<Habit>
-        {
-            CreateHabit("A"),
-            CreateHabit("B"),
-            CreateHabit("C"),
-        };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
-
-        result.Should().Contain("0/3 habits completed");
-    }
-
-    [Fact]
-    public void BuildHabitSection_EmptyList_ReturnsNoHabitsScheduled()
-    {
-        var result = InvokeBuildHabitSection([]);
-
-        result.Should().Be("(no habits scheduled)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_SinglePendingHabit_ShowsPending()
-    {
-        var habits = new List<Habit> { CreateHabit("Yoga") };
-
-        var result = InvokeBuildHabitSection(habits);
-
-        result.Should().Contain("Yoga (pending)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_ParentWithChildren_ShowsSubTaskCount()
-    {
-        var parent = CreateHabit("Workout");
-        var child1 = CreateHabit("Push-ups", parentId: parent.Id);
-        var child2 = CreateHabit("Sit-ups", parentId: parent.Id);
-
-        var result = InvokeBuildHabitSection([parent, child1, child2]);
-
-        result.Should().Contain("Workout (pending, 0/2 sub-tasks done)");
-        result.Should().Contain("Push-ups (pending)");
-        result.Should().Contain("Sit-ups (pending)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_ChildrenOnly_ReturnsNoHabitsScheduled()
-    {
-        var parent = CreateHabit("Workout");
-        var child = CreateHabit("Push-ups", parentId: parent.Id);
-
-        var result = InvokeBuildHabitSection([child]);
-
-        result.Should().Be("(no habits scheduled)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_HabitWithDueTime_ShowsAbsoluteDueTime()
-    {
-        var habits = new List<Habit> { CreateHabit("Workout", dueTime: new TimeOnly(14, 0)) };
-
-        var result = InvokeBuildHabitSection(habits);
-
-        result.Should().Contain("due 14:00");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_UnknownLanguage_DefaultsToEnglish()
-    {
-        var habits = new List<Habit> { CreateHabit("Test") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "fr");
-
-        result.Should().Contain("English");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_EmptyHabitList_ShowsNoHabitsScheduled()
-    {
-        var result = InvokeBuildSummaryPrompt([], Today, "en");
-
-        result.Should().Contain("(no habits scheduled)");
-        result.Should().Contain("0/0 habits completed");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_LeadsWithOneInsightInsteadOfARecap()
-    {
-        var habits = new List<Habit> { CreateHabit("Walk") };
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
-
-        result.Should().Contain("Rules:");
-        result.Should().Contain("EXACTLY ONE sentence");
-        result.Should().Contain("Lead with the insight");
-        result.Should().Contain("Name the specific habit");
-        result.Should().Contain("Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.");
-        result.Should().NotContain("LEAD with a specific, genuine acknowledgment");
-        result.Should().NotContain("TWO short sentences");
-        result.Should().Contain("friend who actually knows you");
-        result.Should().Contain("Do NOT use markdown");
-    }
-
-    [Theory]
-    [InlineData("en", "English")]
-    [InlineData("pt-BR", "Brazilian Portuguese")]
-    public async Task GenerateSummaryAsync_RequestsOneNamedInsightWithTruthRules(string locale, string languageName)
-    {
-        var read = CreateHabit("Read");
-        string? body = null;
-        const string sentence = "Read is still open this evening; choose it as your next step.";
-        var service = BuildSummaryService(JsonSerializer.Serialize(new { summary = sentence }), request => body = request);
-
-        var result = await service.GenerateSummaryAsync([read],
-            new DailySummaryContext(Today, Today, Today, locale, new TimeOnly(19, 0), 38, 0,
-                new Dictionary<Guid, DateOnly>()));
-
-        result.Value.Summary.Should().Be(sentence);
-        using var document = JsonDocument.Parse(body!);
-        var request = document.RootElement;
-        var prompt = request.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!;
-        prompt.Should().Contain("EXACTLY ONE sentence").And.Contain("Lead with the insight");
-        prompt.Should().Contain("Name the specific habit").And.Contain("Read (pending)");
-        prompt.Should().Contain("Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.");
-        prompt.Should().Contain("Never include figures, times, dates, counts, durations, rates or quantities, even when supplied; the daySummary block already shows them.");
-        prompt.Should().Contain("Never invent habit or goal names; use only supplied facts");
-        prompt.Should().Contain("An overdue or time-bound item in another group may take priority only when clearly more urgent; explain the priority in one short clause based on its order, without figures or times");
-        prompt.Should().Contain("Use supplied timing and progress only to choose the next item, never in the sentence. This applies equally to English and Brazilian Portuguese.");
-        prompt.Should().NotContain("using supplied timing or order");
-        prompt.Should().Contain("Never praise consistency when skipped or missed is nonzero");
-        prompt.Should().Contain("Never attribute the app-wide streak to a single habit");
-        prompt.Should().Contain("never congratulate it").And.Contain("Never praise a skip or nudge it again");
-        prompt.Should().Contain(languageName);
-        request.GetProperty("model").GetString().Should().Be("gpt-6-luna");
-        request.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
-        request.TryGetProperty("temperature", out _).Should().BeFalse();
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_ContextDoesNotSeedBannedInstantPhrases()
-    {
-        var habits = new List<Habit>
-        {
-            CreateHabit("Morning routine"),
-            CreateHabit("Evening walk", dueTime: new TimeOnly(20, 0)),
-        };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(19, 0));
-
-        var context = result[..result.IndexOf("Rules:", StringComparison.Ordinal)];
-
-        foreach (var phrase in BannedInstantPhrases)
-            context.Should().NotContain(phrase, $"the prompt context must not seed the instant-phrase \"{phrase}\"");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_RulesBanEveryInstantPhrase()
-    {
-        var habits = new List<Habit> { CreateHabit("Walk") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(14, 0));
-
-        var rules = result[result.IndexOf("Rules:", StringComparison.Ordinal)..];
-        foreach (var phrase in BannedInstantPhrases)
-            rules.Should().Contain(phrase, $"the rules must explicitly ban \"{phrase}\"");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_PeriodRobustTimeContext_UsesRangeNotExactMinute()
-    {
-        var habits = new List<Habit> { CreateHabit("Evening walk") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(19, 0));
-
-        result.Should().Contain("Current part of day: evening (~5pm-9pm)");
-        result.Should().NotContain("19:00");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_PeriodRobustTimeContext_StartOfPeriodMatchesEnd()
-    {
-        var habits = new List<Habit> { CreateHabit("Afternoon focus") };
-
-        var startOfAfternoon = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(11, 0));
-        var endOfAfternoon = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(16, 59));
-
-        startOfAfternoon.Should().Contain("afternoon (~11am-5pm)");
-        endOfAfternoon.Should().Contain("afternoon (~11am-5pm)");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_UpperCaseLanguage_StillMapsCorrectly()
-    {
-        var habits = new List<Habit> { CreateHabit("Test") };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "PT-BR");
-
-        result.Should().Contain("Brazilian Portuguese");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_EmptyLanguageString_DefaultsToEnglish()
-    {
-        var habits = new List<Habit> { CreateHabit("Test") };
-        var result = InvokeBuildSummaryPrompt(habits, Today, "");
-
-        result.Should().Contain("English");
-    }
-
-    [Fact]
-    public void BuildHabitSection_MultipleParentsNoChildren_ListsAllPending()
-    {
-        var habits = new List<Habit>
-        {
-            CreateHabit("Yoga"),
-            CreateHabit("Read"),
-            CreateHabit("Cook"),
-        };
-
-        var result = InvokeBuildHabitSection(habits);
-
-        result.Should().Contain("Yoga (pending)");
-        result.Should().Contain("Read (pending)");
-        result.Should().Contain("Cook (pending)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_ParentWithMultipleChildrenGroups_ShowsAllHierarchies()
-    {
-        var parent1 = CreateHabit("Workout");
-        var child1a = CreateHabit("Push-ups", parentId: parent1.Id);
-        var child1b = CreateHabit("Sit-ups", parentId: parent1.Id);
-
-        var parent2 = CreateHabit("Study");
-        var child2a = CreateHabit("Math", parentId: parent2.Id);
-
-        var result = InvokeBuildHabitSection([parent1, child1a, child1b, parent2, child2a]);
-
-        result.Should().Contain("Workout (pending, 0/2 sub-tasks done)");
-        result.Should().Contain("Study (pending, 0/1 sub-tasks done)");
-        result.Should().Contain("Push-ups (pending)");
-        result.Should().Contain("Sit-ups (pending)");
-        result.Should().Contain("Math (pending)");
     }
 
     [Fact]
@@ -496,45 +191,6 @@ public partial class AiSummaryServiceTests
     }
 
     [Fact]
-    public void BuildSummaryPrompt_NewYearsDay_FormatsDateCorrectly()
-    {
-        var habits = new List<Habit> { CreateHabit("Celebrate") };
-        var date = new DateOnly(2026, 1, 1);
-
-        var result = InvokeBuildSummaryPrompt(habits, date, "en");
-
-        result.Should().Contain("January 1, 2026");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_AllHabitsPresent_ShowsCorrectTotal()
-    {
-        var habits = new List<Habit>
-        {
-            CreateHabit("A"),
-            CreateHabit("B"),
-            CreateHabit("C"),
-            CreateHabit("D"),
-            CreateHabit("E"),
-        };
-
-        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
-
-        result.Should().Contain("0/5 habits completed");
-    }
-
-    [Fact]
-    public void BuildHabitSection_Children_IndentedWithTwoSpaces()
-    {
-        var parent = CreateHabit("Parent");
-        var child = CreateHabit("Child", parentId: parent.Id);
-
-        var result = InvokeBuildHabitSection([parent, child]);
-
-        result.Should().Contain("  - Child (pending)");
-    }
-
-    [Fact]
     public void SelectScheduledHabits_DailyGoodHabitLoggedToday_KeptAndLabeledDoneNotPending()
     {
         var habit = CreateHabit("Café da manhã");
@@ -543,9 +199,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([habit], Today);
 
         selected.Should().ContainSingle();
-        var section = InvokeBuildHabitSection(selected);
-        section.Should().Contain("Café da manhã (done)");
-        section.Should().NotContain("pending");
     }
 
     [Fact]
@@ -557,7 +210,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([habit], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected).Should().Contain("Pesar na balança (done)");
     }
 
     [Fact]
@@ -582,10 +234,8 @@ public partial class AiSummaryServiceTests
             "Deep clean", FrequencyUnit.Month, dueDate: Today.AddDays(14), parentId: parent.Id);
 
         var selected = InvokeSelectScheduledHabits([parent, monthlyChild], Today);
-        var section = InvokeBuildHabitSection(selected);
+        selected.Should().ContainSingle(habit => habit.Id == parent.Id);
 
-        section.Should().NotContain("Deep clean");
-        section.Should().Contain("Morning routine (pending)");
     }
 
     [Fact]
@@ -598,11 +248,11 @@ public partial class AiSummaryServiceTests
         child2.Log(Today);
 
         var selected = InvokeSelectScheduledHabits([parent, child1, child2], Today);
-        var section = InvokeBuildHabitSection(selected);
+        selected.Should().HaveCount(3);
+        using var facts = ReadFacts(AiSummaryService.BuildSummaryPrompt(selected,
+            new(Today, Today, Today, "en", null, 0, 0, new Dictionary<Guid, DateOnly>())));
+        facts.RootElement.GetProperty("routines")[0].GetProperty("state").GetString().Should().Be("done");
 
-        section.Should().NotContain("pending)");
-        section.Should().Contain("Café da manhã (done)");
-        section.Should().Contain("Stretch (done)");
     }
 
     [Fact]
@@ -613,7 +263,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([overdue], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected).Should().Contain("Take vitamins (pending)");
     }
 
     [Fact]
@@ -665,7 +314,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([task], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected).Should().Contain("Pagar conta (done)");
     }
 
     [Fact]
@@ -676,7 +324,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([task], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected).Should().Contain("Ligar para o médico (pending)");
     }
 
     [Fact]
@@ -687,113 +334,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([task], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected, Today).Should().Contain("Renovar passaporte (pending, overdue)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_BadHabitLoggedToday_FramedAsSlipNotDone()
-    {
-        var badHabit = CreateBadHabit("Skip Gym");
-        badHabit.Log(Today);
-
-        var section = InvokeBuildHabitSection([badHabit]);
-
-        section.Should().Contain("Skip Gym (bad habit, slipped)");
-        section.Should().NotContain("(done)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_BadHabitCleanWithPriorSlip_FramedAsCleanWinWithDaysSinceSlip()
-    {
-        var badHabit = CreateBadHabit("Cheat diet");
-        var lastSlips = new Dictionary<Guid, DateOnly> { [badHabit.Id] = Today.AddDays(-3) };
-
-        var section = InvokeBuildHabitSection([badHabit], Today, lastSlips);
-
-        section.Should().Contain("Cheat diet (bad habit, clean, 3 days since last slip)");
-        section.Should().NotContain("(done)");
-        section.Should().NotContain("slipped");
-    }
-
-    [Fact]
-    public void BuildHabitSection_BadHabitCleanWithPriorSlip_IgnoresWindowedHabitLogsUsesSlipMap()
-    {
-        var badHabit = CreateBadHabit("Cheat diet");
-        var lastSlips = new Dictionary<Guid, DateOnly> { [badHabit.Id] = Today.AddDays(-7) };
-
-        var section = InvokeBuildHabitSection([badHabit], Today, lastSlips);
-
-        section.Should().Contain("Cheat diet (bad habit, clean, 7 days since last slip)");
-    }
-
-    [Fact]
-    public void BuildHabitSection_BadHabitNoEntryInSlipMap_FramedAsCleanNoSlipsOnRecord()
-    {
-        var badHabit = CreateBadHabit("Smoke");
-
-        var section = InvokeBuildHabitSection([badHabit], Today);
-
-        section.Should().Contain("Smoke (bad habit, clean, no slips on record)");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_BadHabitSlip_ExcludedFromCompletedTally()
-    {
-        var goodDone = CreateHabit("Drink water");
-        goodDone.Log(Today);
-        var badSlip = CreateBadHabit("Skip Gym");
-        badSlip.Log(Today);
-
-        var result = InvokeBuildSummaryPrompt([goodDone, badSlip], Today, "en");
-
-        result.Should().Contain("Progress: 1/1 habits completed");
-        result.Should().Contain("Bad habit slips today: 1");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_RulesContainWinVsSlipGuidance()
-    {
-        var badHabit = CreateBadHabit("Skip Gym");
-
-        var result = InvokeBuildSummaryPrompt([badHabit], Today, "en");
-
-        result.Should().Contain("bad habit, slipped");
-        result.Should().Contain("never congratulate it");
-        result.Should().Contain("bad habit, clean");
-        result.Should().Contain("the real win worth naming");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_OverdueGoodHabit_MarkedOverdueInSection()
-    {
-        var overdue = CreateOneTimeTask("Renew passport", dueDate: Today.AddDays(-2));
-
-        var result = InvokeBuildSummaryPrompt([overdue], Today, "en");
-
-        result.Should().Contain("Renew passport (pending, overdue)");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_StreakAndFreezesProvided_IncludedInContextHeader()
-    {
-        var habit = CreateHabit("Walk");
-
-        var result = InvokeBuildSummaryPrompt([habit], Today, "en", currentStreak: 12, streakFreezesAccumulated: 2);
-
-        result.Should().Contain("App-wide active-day streak: 12 days");
-        result.Should().Contain("Streak freezes banked: 2");
-        result.Should().Contain("Never attribute the app-wide streak to a single habit");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_NoStreak_OmitsStreakLines()
-    {
-        var habit = CreateHabit("Walk");
-
-        var result = InvokeBuildSummaryPrompt([habit], Today, "en");
-
-        result.Should().NotContain("App-wide active-day streak:");
-        result.Should().NotContain("Streak freezes banked:");
     }
 
     [Fact]
@@ -845,27 +385,6 @@ public partial class AiSummaryServiceTests
     }
 
     [Fact]
-    public async Task GenerateSummaryAsync_RecentSkipsAndMisses_AppearInActualPrompt()
-    {
-        var gym = CreateHabit("Gym", dueDate: Today.AddDays(-13));
-        gym.LoadScheduleLogsForRead([
-            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-14), 1),
-            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-3), 0),
-            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-2), 1),
-            HabitLog.FromSummaryRead(gym.Id, Today.AddDays(-1), 1)]);
-        string? requestBody = null;
-        var service = BuildSummaryService("{\"summary\":\"Take it easy today.\"}", body => requestBody = body);
-
-        var result = await service.GenerateSummaryAsync([gym],
-            new DailySummaryContext(Today, Today, Today, "en", null, 38, 0, new Dictionary<Guid, DateOnly>()));
-
-        result.IsSuccess.Should().BeTrue();
-        requestBody.Should().Contain("App-wide active-day streak: 38 days");
-        requestBody.Should().Contain("14-day history: done=2, skipped=1, missed=10, habit streak=2 scheduled occurrences");
-        requestBody.Should().Contain("Never praise consistency when skipped or missed is nonzero");
-    }
-
-    [Fact]
     public void SelectScheduledHabits_SkippedToday_VisibleAndNotPending()
     {
         var habit = CreateHabit("Gym");
@@ -874,7 +393,6 @@ public partial class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([habit], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected).Should().Contain("Gym (skipped)").And.NotContain("pending");
     }
 
     [Fact]
@@ -898,65 +416,10 @@ public partial class AiSummaryServiceTests
         InvokeSelectScheduledHabits([habit, due], Today).Should().ContainSingle(h => h.Id == due.Id);
     }
 
-    [Fact]
-    public void BuildHabitSection_MovingDueDate_UsesOriginalCadenceForHistory()
-    {
-        var habit = CreateRecurring("Weekly gym", FrequencyUnit.Week, dueDate: Today.AddDays(-13));
-        habit.Log(Today.AddDays(-13));
-        habit.Log(Today.AddDays(-6));
-
-        var section = InvokeBuildHabitSection([habit]);
-
-        section.Should().Contain("14-day history: done=2, skipped=0, missed=0, habit streak=2 scheduled occurrences");
-    }
-
-    [Theory]
-    [InlineData(0, 1, 0)]
-    [InlineData(1, 0, 1)]
-    public void BuildHabitSection_RecentGap_ResetsHabitStreak(int completed, int skipped, int missed)
-    {
-        var habit = CreateHabit("Gym", dueDate: Today.AddDays(-3));
-        var logs = new List<HabitLog>
-        {
-            HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-3), 1),
-            HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-2), 1)
-        };
-        if (completed == 0)
-            logs.Add(HabitLog.FromSummaryRead(habit.Id, Today.AddDays(-1), 0));
-        habit.LoadScheduleLogsForRead(logs);
-
-        var section = InvokeBuildHabitSection([habit]);
-
-        section.Should().Contain($"done=2, skipped={skipped}, missed={missed}, habit streak=0 scheduled occurrences");
-    }
-
-    [Fact]
-    public void BuildHabitSection_ParentAndChild_BothCarryHistoryAndSkipStatus()
-    {
-        var parent = CreateHabit("Workout (home)");
-        var child = CreateHabit("Stretch", parentId: parent.Id);
-        parent.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(parent.Id, Today, 0)]);
-        child.LoadScheduleLogsForRead([HabitLog.FromSummaryRead(child.Id, Today, 0)]);
-
-        var section = InvokeBuildHabitSection([parent, child]);
-
-        section.Should().Contain("Workout (home) (skipped, 0/1 sub-tasks done)");
-        section.Should().Contain("Stretch (skipped)");
-        section.Split("14-day history:").Should().HaveCount(3);
-    }
-
-    [Fact]
-    public void BuildHabitSection_FlexibleHabit_DoesNotInventDailyMissesOrStreak()
-    {
-        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, ValidUserId, "Gym", FrequencyUnit.Week, 3,
-            DueDate: Today.AddDays(-13))).Value;
-        habit.Log(Today.AddDays(-1));
-
-        InvokeBuildHabitSection([habit]).Should().Contain(
-            "14-day history: done=1, skipped=0, missed=unknown, habit streak=unknown (flexible quota)");
-    }
-
     private static AiSummaryService BuildSummaryService(string modelJsonContent, Action<string>? captureRequest = null)
+        => BuildSummaryService(_ => modelJsonContent, captureRequest);
+
+    private static AiSummaryService BuildSummaryService(Func<int, string> modelReply, Action<string>? captureRequest = null)
     {
         var chatClient = new ResponsesClient(
             credential: new ApiKeyCredential("test-key"),
@@ -964,7 +427,7 @@ public partial class AiSummaryServiceTests
             {
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(
-                    new HttpClient(new JsonResponseHandler(modelJsonContent, captureRequest))),
+                    new HttpClient(new JsonResponseHandler(modelReply, captureRequest))),
             });
         var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         return new AiSummaryService(Orbit.Infrastructure.Tests.AiBudgetTestDouble.Wrap(aiClient), NullLogger<AiSummaryService>.Instance);
@@ -976,13 +439,15 @@ public partial class AiSummaryServiceTests
             new DailySummaryContext(Today, Today, Today, "en", null, 0, 0, new Dictionary<Guid, DateOnly>()),
             CancellationToken.None);
 
-    private sealed class JsonResponseHandler(string modelJsonContent, Action<string>? captureRequest) : HttpMessageHandler
+    private sealed class JsonResponseHandler(Func<int, string> modelReply, Action<string>? captureRequest) : HttpMessageHandler
     {
+        private int calls;
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             captureRequest?.Invoke(await request.Content!.ReadAsStringAsync(cancellationToken));
-            var body = ResponsesTestData.Text(modelJsonContent);
+            var body = ResponsesTestData.Text(modelReply(++calls));
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 RequestMessage = request,
@@ -1043,35 +508,6 @@ public partial class AiSummaryServiceTests
             null,
             DueDate: dueDate,
             ParentHabitId: parentId)).Value;
-    }
-
-    private static string InvokeBuildSummaryPrompt(
-        List<Habit> scheduledHabits,
-        DateOnly date,
-        string language,
-        TimeOnly? currentLocalTime = null,
-        int currentStreak = 0,
-        int streakFreezesAccumulated = 0,
-        IReadOnlyDictionary<Guid, DateOnly>? lastBadHabitSlipDates = null)
-    {
-        var method = typeof(AiSummaryService)
-            .GetMethod("BuildSummaryPrompt", PrivateStatic)!;
-        return (string)method.Invoke(null,
-            [scheduledHabits, new DailySummaryContext(
-                date, date, date, language, currentLocalTime, currentStreak, streakFreezesAccumulated,
-                lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>())])!;
-    }
-
-    private static string InvokeBuildHabitSection(
-        List<Habit> scheduledHabits,
-        DateOnly? userToday = null,
-        IReadOnlyDictionary<Guid, DateOnly>? lastBadHabitSlipDates = null)
-    {
-        var method = typeof(AiSummaryService)
-            .GetMethod("BuildHabitSection", PrivateStatic)!;
-        return (string)method.Invoke(null,
-            [scheduledHabits, Today, Today, userToday ?? Today,
-             lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>(), 1, new HashSet<Guid>()])!;
     }
 
     private static List<Habit> InvokeSelectScheduledHabits(

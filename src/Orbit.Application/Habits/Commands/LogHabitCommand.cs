@@ -7,6 +7,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -41,7 +42,8 @@ public record LogHabitRepositories(
     IGenericRepository<Habit> HabitRepository,
     IGenericRepository<HabitLog> HabitLogRepository,
     IGenericRepository<User> UserRepository,
-    IGenericRepository<SentReminder> ReminderRepository);
+    IGenericRepository<SentReminder> ReminderRepository,
+    IGenericRepository<Notification> Notifications);
 
 /// <summary>
 /// Groups supporting services for habit logging to reduce constructor parameter count (S107).
@@ -81,7 +83,7 @@ public partial class LogHabitCommandHandler(
             return dateWindowValidation.PropagateError<LogHabitResponse>();
 
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
-        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && !habit.IsBadHabit)
+        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue))
         {
             if (!request.ToggleExisting)
                 return Result.Failure<LogHabitResponse>(DomainErrors.AlreadyLoggedForDate);
@@ -130,7 +132,7 @@ public partial class LogHabitCommandHandler(
         var window = ValidateDateWindow(habit, target, today);
         if (window.IsFailure)
             return window;
-        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && !habit.IsBadHabit)
+        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue))
             return request.ToggleExisting ? Result.Success() : Result.Failure(DomainErrors.AlreadyLoggedForDate);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit], today.AddDays(-AppConstants.MaxRangeDays), ct);
@@ -201,6 +203,10 @@ public partial class LogHabitCommandHandler(
             if (unlogResult.IsFailure)
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;
+            var parentUnlog = await BadHabitParentSlipService.RemoveIfIncompleteAsync(
+                habit, targetDate, repos.HabitRepository, cancellationToken);
+            if (parentUnlog.IsFailure)
+                return parentUnlog.PropagateError<LogHabitResponse>();
 
             var goalIds = habit.Goals.Select(g => g.Id).ToList();
 
@@ -234,7 +240,7 @@ public partial class LogHabitCommandHandler(
             async ct => streakState = await services.UserStreakService.RecalculateAsync(
                 userId, awardFreezeIfEligible: false, ct),
             cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today, preserveDailyNarrative: true);
 
         return Result.Success(new LogHabitResponse(
             unlogId,
@@ -245,7 +251,7 @@ public partial class LogHabitCommandHandler(
     }
 
     /// <summary>The rows a log persists, carried out of the lock so the derived work below can run outside it.</summary>
-    internal sealed record PersistedLog(Guid LogId, bool IsFirstCompletionToday, LinkedGoalSyncResult GoalSync, int PreviousStreak);
+    internal sealed record PersistedLog(Guid LogId, bool IsFirstCompletionToday, LinkedGoalSyncResult GoalSync, int PreviousStreak, IReadOnlyList<Guid>? DerivedParentHabitIds = null);
 
     private async Task<Result<LogHabitResponse>> HandleLogAsync(
         Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today, int weekStartDay,
@@ -286,12 +292,14 @@ public partial class LogHabitCommandHandler(
         var goalSync = persisted.Value.GoalSync;
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
+        foreach (var parentHabitId in persisted.Value.DerivedParentHabitIds ?? [])
+            await ProcessGamificationSafeAsync(request.UserId, parentHabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
 
         if (gamificationResult is null)
             await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
@@ -349,13 +357,22 @@ public partial class LogHabitCommandHandler(
                         cancellationToken: cancellationToken);
                     reminder?.TryConsume(logEntity.CreatedAtUtc);
                 }
+                await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id,
+                    targetDate, cancellationToken);
+                var parentLogs = await BadHabitParentSlipService.LogAsync(
+                    habit, targetDate, today, weekStartDay, repos.HabitRepository, cancellationToken);
+                if (parentLogs.IsFailure)
+                    return parentLogs.PropagateError<PersistedLog>();
+                foreach (var derivedLog in parentLogs.Value)
+                    await repos.HabitLogRepository.AddAsync(derivedLog, cancellationToken);
+
                 var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
                     request.UserId,
                     goalIds,
                     today,
                     cancellationToken: cancellationToken);
                 return Result.Success(new PersistedLog(
-                    logEntity.Id, isFirstCompletionToday, ToLinkedGoalSyncResult(updates), previousStreak?.CurrentStreak ?? 0));
+                    logEntity.Id, isFirstCompletionToday, ToLinkedGoalSyncResult(updates), previousStreak?.CurrentStreak ?? 0, parentLogs.Value.Select(log => log.HabitId).ToList()));
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
             {
@@ -411,7 +428,7 @@ public partial class LogHabitCommandHandler(
         var streakState = await services.UserStreakService.CalculateAsync(habit.UserId, cancellationToken);
         var currentStreak = streakState?.CurrentStreak ?? 0;
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(new LogHabitResponse(
             winningLog.Id,

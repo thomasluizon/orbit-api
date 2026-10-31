@@ -62,6 +62,24 @@ public class UpdateHabitCommandHandlerTests
         return habit;
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(FrequencyUnit.Week, false)]
+    [InlineData(null, true)]
+    public async Task Handle_RepeatReminderAcceptsEverySchedule(FrequencyUnit? unit, bool general)
+    {
+        var habit = Habit.Create(new HabitCreateParams(general ? HabitSchedule.General
+            : unit is null ? HabitSchedule.OneTime : HabitSchedule.Recurring,
+            UserId, "Reminder", unit, unit is null ? null : 1, Today)).Value;
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        var command = new UpdateHabitCommand(UserId, habit.Id, habit.Title, null, unit, unit is null ? null : 1,
+            IsGeneral: general, Options: new(ReminderEnabled: true, RepeatReminder: new(480)));
+        (await new Orbit.Application.Habits.Validators.UpdateHabitCommandValidator(_habitRepo).ValidateAsync(command)).IsValid.Should().BeTrue();
+        (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        habit.RepeatIntervalMinutes.Should().Be(480);
+    }
+
     [Fact]
     public async Task Handle_UnchangedStartWithChangedInterval_UsesAccountCalendar()
     {

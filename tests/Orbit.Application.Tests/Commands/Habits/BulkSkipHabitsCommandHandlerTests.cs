@@ -28,7 +28,7 @@ public class BulkSkipHabitsCommandHandlerTests
     {
         _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
         _handler = new BulkSkipHabitsCommandHandler(
-            _habitRepo, _habitLogRepo, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _habitLogRepo, _userDateService, _unitOfWork, _cache, Substitute.For<IGenericRepository<Notification>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
