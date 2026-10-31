@@ -140,7 +140,7 @@ public partial class ProcessUserChatCommandHandler
             foreach (var property in original.EnumerateObject())
             {
                 if (property.Value.ValueKind == JsonValueKind.Null) continue;
-                if (property.Name is "habit_id" or "goal_id" or "template_id" or "parent_habit_id" or "title" or "name" or "habit_ids")
+                if (property.Name is "habit_id" or "goal_id" or "template_id" or "parent_habit_id" or "title" or "name" or "habit_ids" or "filter")
                 {
                     if (!candidate.TryGetProperty(property.Name, out var value) || !JsonElement.DeepEquals(property.Value, value)) return false;
                 }

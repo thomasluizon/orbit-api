@@ -141,6 +141,45 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task R9f_ArgumentRepairCannotReplaceABulkTargetFilter()
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var tool = new BulkUpdateHabitsTool(_mediator);
+        var handler = CreateHandler(tool);
+        var captured = R9fCall("stored-en-r1", "update_habit").Args;
+        var updates = new { title = captured.GetProperty("title").GetString(), is_general = true, frequency_unit = "Day" };
+        var original = new AiToolCall(tool.Name, "original", JsonSerializer.SerializeToElement(new
+        {
+            filter = new { search = "Water" },
+            updates,
+            orbit_write_complete = true
+        }));
+        var repair = original with
+        {
+            Id = "repair",
+            Args = JsonSerializer.SerializeToElement(new
+            {
+                filter = new { search = "Walk" },
+                updates,
+                orbit_write_complete = true
+            })
+        };
+        SetupAiResponse(new AiResponse { ToolCalls = [original], ConversationContext = TestConversationContext });
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new RepairableArgumentResponse(new(new(tool.Name, tool.Name, AgentRiskClass.Low,
+                AgentConfirmationRequirement.FreshConfirmation, AgentOperationStatus.Failed,
+                PolicyReason: "Invalid schedule.", ErrorCode: "invalid_arguments", Access: "write"))));
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse
+            { ToolCalls = [repair], ConversationContext = TestConversationContext }));
+        var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient("en")), default);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        await _operationExecutor.Received(1).ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
     public void R9f_ToolGuidancePinsDirectIdsAndDaySummaryChoice()
     {
         new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader).Description.Should()

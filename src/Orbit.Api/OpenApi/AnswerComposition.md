@@ -1436,7 +1436,7 @@ write remain intact. Unknown names, invalid shapes and unusable values return
 repairable tool failures naming the affected field, rather than policy denials.
 Argument failures retain their domain code, including `GENERAL_HABIT_HAS_FREQUENCY`.
 A chat turn may repair such a rejection once before approval, using the same tool
-and preserving supplied target IDs, names and nested target structure. Successful
+and preserving supplied target IDs, names, bulk filters and nested target structure. Successful
 siblings are not replayed. The repaired arguments run through the ordinary checks
 and still require approval. Policy denials retain their policy status.
 This avoids duplicating nested draft schemas inside offers.
