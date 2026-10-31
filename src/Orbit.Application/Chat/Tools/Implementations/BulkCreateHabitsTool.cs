@@ -65,8 +65,8 @@ public partial class BulkCreateHabitsTool(
     {
         args = PrepareArguments(args);
         var schemaArguments = JsonNode.Parse(args.GetRawText());
-        if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits)
-            PrepareSchemaItems(habits);
+        if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits && PrepareSchemaItems(habits) is { } error)
+            return Task.FromResult(Orbit.Domain.Common.Result.Failure(error));
         return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
             () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
     }

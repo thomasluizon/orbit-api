@@ -1353,6 +1353,9 @@ Replacing a displayed removal through preview revision removes that field from
 `clear_fields` before validation and regenerates the approval fingerprint.
 Argument checks retain and validate the original execution clears, including
 nested reused items; the model's creation schema remains unchanged.
+Recursive schema preparation validates each reused item's clears against the
+shared clearable fields and rejects setting and clearing the same field before
+removing `clear_fields` from the schema-only copy.
 Creation and unchanged-cadence adjustments keep their existing behavior. These
 rows use the existing null-value presentation; no English or pt-BR user-facing
 or model-facing copy is added or changed.
