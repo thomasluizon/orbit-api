@@ -21,7 +21,7 @@ using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
-public class AiIntentServiceStreamingTests
+public partial class AiIntentServiceStreamingTests
 {
     [Theory]
     [InlineData("empty", false)]
@@ -81,7 +81,7 @@ public class AiIntentServiceStreamingTests
             : response.Status == ResponseStatus.Failed
                 ? ResponsesTestData.Event(new StreamingResponseFailedUpdate { Response = response })
                 : ResponsesTestData.Stream(response);
-        var handler = new SequenceSseHandler(Body(firstResponse), Body(emptyResponse));
+        var handler = new SequenceSseHandler(Body(firstResponse), Body(emptyResponse), Body(emptyResponse));
         var (service, logger) = BuildServiceWithRecordingLogger(handler);
         var sink = new CollectingSink();
         var first = await service.SendWithToolsAsync(new AiToolRequest("private user message", "private system instructions",
@@ -94,8 +94,8 @@ public class AiIntentServiceStreamingTests
         second.IsSuccess.Should().Be(kind == "truncated");
         if (kind != "truncated")
             second.ErrorCode.Should().Be(kind == "failed" ? ErrorCodes.AiUnavailable : ErrorCodes.AiEmptyResponse);
-        logger.WarningEventIds.Count(id => id == 14).Should().Be(1);
-        var metadata = logger.WarningProperties.Should().ContainSingle(item => item.EventId == 14).Which.Properties;
+        logger.WarningEventIds.Count(id => id == 14).Should().Be(kind == "truncated" ? 2 : 1);
+        var metadata = logger.WarningProperties.First(item => item.EventId == 14).Properties;
         metadata["RoundIndex"].Should().Be(2);
         metadata["ResponseStatus"].Should().Be(emptyResponse.Status.ToString());
         metadata["IncompleteReason"].Should().Be(emptyResponse.IncompleteStatusDetails?.Reason?.ToString() ?? "none");

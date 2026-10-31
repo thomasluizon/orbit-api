@@ -1403,6 +1403,19 @@ including its JSON envelope. Missing usage remains null. No output content,
 arguments, identifiers or user text enters these warning fields. Buffered and
 streamed responses use the same diagnostic path. Model, effort and cap are unchanged.
 
+The stream retains `response.output_item.done` items by output index and merges
+them with terminal output without duplication. The SDK parses these events
+independently; it does not reconstruct terminal output from earlier events.
+An incomplete `max_output_tokens` round with no assistant text or function calls
+is retried once with the identical input, tools, model, effort and cap. Each
+dispatch uses its own budget reservation and usage record. Warning event 15
+records only `ResponseId`, `InputTokens` and `IncompleteReason`. A second empty
+incomplete round remains truncated. Partial function arguments are never parsed
+or executed, and truncated output is never appended to continuation input.
+Every function call carried into a continuation has exactly one output. A call
+without an execution result receives `success: false` and a typed
+`payload.status: not_executed`; repeated supplied results cannot duplicate outputs.
+
 ## Fixed push subscription arguments
 
 Push subscription previews for `update_notifications` retain device arguments for
