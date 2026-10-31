@@ -1,6 +1,7 @@
 locals {
   api_secret_keys = toset([
     "AI__ApiKey",
+    "AI__EvalApiKey",
     "Encryption__Key",
     "Firebase__CredentialsJson",
     "GooglePlay__ServiceAccountJson",

@@ -346,7 +346,7 @@ public sealed partial class AiIntentService(
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = false;
-        var completion = await client.ResponsesClient.CreateResponseAsync(options, cancellationToken);
+        var completion = await client.GetResponsesClient().CreateResponseAsync(options, cancellationToken);
         observation.Response = completion.Value;
         return FinishRound(completion.Value, messages, options, "buffered");
     }
@@ -370,7 +370,7 @@ public sealed partial class AiIntentService(
         var argumentMonitor = new FunctionArgumentMonitor();
         using var streamCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        await foreach (var update in client.StreamingResponsesClient.CreateResponseStreamingAsync(options, streamCancellation.Token))
+        await foreach (var update in client.GetResponsesClient(streaming: true).CreateResponseStreamingAsync(options, streamCancellation.Token))
         {
             if (argumentMonitor.Observe(update, observation) is { } toolName)
             {
