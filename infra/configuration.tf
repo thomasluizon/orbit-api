@@ -1,7 +1,6 @@
 locals {
   api_secret_keys = toset([
     "AI__ApiKey",
-    "AI__EvalApiKey",
     "Encryption__Key",
     "Firebase__CredentialsJson",
     "GooglePlay__ServiceAccountJson",
@@ -17,7 +16,15 @@ locals {
     "TEST_ACCOUNTS",
     "Vapid__PrivateKey",
     "Waitlist__SigningKey",
+    "Wns__ClientSecret",
   ])
+
+  api_eval_secret_keys = {
+    for environment, parameters in data.aws_ssm_parameters_by_path.onboarding_platform : environment => (
+      contains(parameters.names, "/orbit/${environment}/api/AI__EvalApiKey")
+      ? toset(["AI__EvalApiKey"]) : toset([])
+    )
+  }
 
   staging_api_billing_keys = toset([
     "Stripe__MonthlyPriceIdBrl",
@@ -71,6 +78,8 @@ locals {
     Storage__S3__PublicBaseUrl          = "https://api.useorbit.org"
     Vapid__PublicKey                    = "BCotrosa_VZSere_khAKbxMVRj-NZIuHs4lK4sep1Fv5N6fx8z-99q9-pDPeEs0GwKiwOwf44SiI4NN5XX-htow"
     Vapid__Subject                      = "mailto:hello@useorbit.org"
+    Wns__ClientId                       = "d8d3802e-fed9-4d7e-a7b9-87fdfcf2d0db"
+    Wns__TenantId                       = "d0a72506-23da-4004-afff-9c077a5b72a5"
   }
 
   staging_api_values = merge(local.production_api_values, {
@@ -130,12 +139,12 @@ locals {
 }
 
 data "aws_ssm_parameter" "production_api" {
-  for_each = local.api_secret_keys
+  for_each = setunion(local.api_secret_keys, local.api_eval_secret_keys["production"])
   name     = "/orbit/production/api/${each.key}"
 }
 
 data "aws_ssm_parameter" "staging_api" {
-  for_each = local.api_secret_keys
+  for_each = setunion(local.api_secret_keys, local.api_eval_secret_keys["staging"])
   name     = "/orbit/staging/api/${each.key}"
 }
 
@@ -179,7 +188,7 @@ resource "render_env_group" "production_api" {
   name = "orbit-production-api"
   env_vars = merge(
     { for key, value in local.production_api_values : key => { value = value } },
-    { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.production_api[key].value } },
+    { for key, parameter in data.aws_ssm_parameter.production_api : key => { value = parameter.value } },
     { for key, value in local.production_api_database_values : key => { value = value } },
     { StagingEval__AccountIds = { value = data.aws_ssm_parameter.production_api_eval_account_ids.value } },
     {
@@ -199,7 +208,7 @@ resource "render_env_group" "staging_api" {
   name = "orbit-staging-api"
   env_vars = merge(
     { for key, value in local.staging_api_values : key => { value = value } },
-    { for key in local.api_secret_keys : key => { value = data.aws_ssm_parameter.staging_api[key].value } },
+    { for key, parameter in data.aws_ssm_parameter.staging_api : key => { value = parameter.value } },
     { for key in local.staging_api_billing_keys : key => { value = data.aws_ssm_parameter.staging_api_billing[key].value } },
     { StagingEval__AccountIds = { value = data.aws_ssm_parameter.staging_api_eval_account_ids.value } },
     {

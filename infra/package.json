@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test *.test.mjs"
+    "test": "node --test *.test.mjs && terraform test -filter=tests/api-credentials.tftest.hcl -no-color"
   }
 }
