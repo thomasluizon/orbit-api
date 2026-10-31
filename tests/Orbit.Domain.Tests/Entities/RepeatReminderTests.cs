@@ -54,13 +54,21 @@ public class RepeatReminderTests
     [InlineData(HabitSchedule.Recurring, FrequencyUnit.Week, 1)]
     [InlineData(HabitSchedule.Flexible, FrequencyUnit.Week, 3)]
     [InlineData(HabitSchedule.OneTime, null, null)]
-    public void NonDailySchedule_RejectsRepeat(HabitSchedule schedule, FrequencyUnit? unit, int? quantity) =>
-        Habit.Create(Parameters(new(480)) with { Schedule = schedule, FrequencyUnit = unit, FrequencyQuantity = quantity })
-            .IsFailure.Should().BeTrue();
+    [InlineData(HabitSchedule.General, null, null)]
+    public void EverySchedule_AcceptsRepeatOnCreateAndUpdate(HabitSchedule schedule, FrequencyUnit? unit, int? quantity)
+    {
+        var parameters = Parameters(new(480)) with { Schedule = schedule, FrequencyUnit = unit, FrequencyQuantity = quantity };
+        var result = Habit.Create(parameters);
+        result.IsSuccess.Should().BeTrue();
+        var habit = Habit.Create(parameters with { RepeatReminder = null }).Value;
+        habit.Update(new HabitUpdateParams(schedule, habit.Title, null, unit, quantity, [], false,
+            habit.NextDueDate, RepeatReminder: new(30))).IsSuccess.Should().BeTrue();
+        habit.RepeatReminder!.IntervalMinutes.Should().Be(30);
+    }
 
     [Fact]
-    public void WeekdayGate_RejectsRepeat() =>
-        Habit.Create(Parameters(new(30)) with { Days = [DayOfWeek.Monday] }).IsFailure.Should().BeTrue();
+    public void WeekdayAndIntervalGates_AcceptRepeat() =>
+        Habit.Create(Parameters(new(30)) with { Days = [DayOfWeek.Monday], IntervalWeeks = 2 }).IsSuccess.Should().BeTrue();
 
     [Fact]
     public void Repeat_ReplacesOtherReminders()
@@ -129,12 +137,13 @@ public class RepeatReminderTests
     }
 
     [Fact]
-    public void Update_RejectsAWeekdayGateUntilRepeatIsExplicitlyCleared()
+    public void Update_PreservesRepeatAcrossScheduleChangesAndCanClearIt()
     {
         var habit = Habit.Create(Parameters(new(30))).Value;
         var update = new HabitUpdateParams(habit.Schedule, habit.Title, null, FrequencyUnit.Day, 1,
             [DayOfWeek.Monday], false, habit.NextDueDate);
-        habit.Update(update).IsFailure.Should().BeTrue();
+        habit.Update(update).IsSuccess.Should().BeTrue();
+        habit.RepeatReminder!.IntervalMinutes.Should().Be(30);
         habit.Update(update with { ClearRepeatReminder = true, ScheduledReminders = [new(ScheduledReminderWhen.SameDay, new(8, 0))] })
             .IsSuccess.Should().BeTrue();
         habit.RepeatReminder.Should().BeNull();

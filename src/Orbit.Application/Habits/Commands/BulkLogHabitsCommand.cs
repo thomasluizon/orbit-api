@@ -73,6 +73,7 @@ public partial class BulkLogHabitsCommandHandler(
         {
             previousStreak = (await services.UserStreakService.CalculateAsync(request.UserId, ct))?.CurrentStreak ?? 0;
             currentStreak = previousStreak;
+            var derivedParentIds = new HashSet<Guid>();
 
             for (int i = 0; i < request.Items.Count; i++)
             {
@@ -81,7 +82,7 @@ public partial class BulkLogHabitsCommandHandler(
 
                 try
                 {
-                    results.Add(await ProcessLogItem(
+                    var result = await ProcessLogItem(
                         i,
                         item.HabitId,
                         targetDate,
@@ -89,7 +90,24 @@ public partial class BulkLogHabitsCommandHandler(
                         weekStartDay,
                         habitMap,
                         dueDateResolution,
-                        ct));
+                        ct);
+                    if (result.Status == BulkItemStatus.Success && result.LogId is not null)
+                    {
+                        var parentLogs = await BadHabitParentSlipService.LogAsync(
+                            habitMap[item.HabitId], targetDate, today, weekStartDay, habitRepository, ct);
+                        if (parentLogs.IsFailure)
+                        {
+                            results.Add(new BulkLogItemResult(i, BulkItemStatus.Failed, item.HabitId,
+                                Error: parentLogs.Error, ErrorCode: parentLogs.ErrorCode));
+                            continue;
+                        }
+                        foreach (var derivedLog in parentLogs.Value)
+                        {
+                            await habitLogRepository.AddAsync(derivedLog, ct);
+                            derivedParentIds.Add(derivedLog.HabitId);
+                        }
+                    }
+                    results.Add(result);
                 }
                 catch (Exception ex)
                 {
@@ -117,7 +135,7 @@ public partial class BulkLogHabitsCommandHandler(
                 .ToHashSet();
             await goalCompletionService.SyncDerivedGoalsAsync(request.UserId, goalIds, today, cancellationToken: ct);
 
-            var loggedHabitIds = changedHabitIds.ToList();
+            var loggedHabitIds = changedHabitIds.Union(derivedParentIds).ToList();
             if (loggedHabitIds.Count > 0)
             {
                 try
@@ -158,7 +176,7 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
-        if (habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && habit.Logs.Any(l => l.Date == targetDate))
+        if (habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && habit.Logs.Any(l => l.Date == targetDate && !l.IsDeleted && (!habit.IsBadHabit || l.Value > 0)))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
         if (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible

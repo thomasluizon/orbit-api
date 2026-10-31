@@ -149,7 +149,7 @@ public class AiProviderQuotaTests
         {
             ApiKey = "test-key",
             BaseUrl = "https://orbit.test/v1"
-        }), logger, new HttpClientPipelineTransport(new HttpClient(handler)));
+        }), logger, new HttpClientPipelineTransport(new HttpClient(handler)), Substitute.For<IFeatureFlagService>());
         using var audio = new MemoryStream([1, 2, 3]);
 
         var result = await service.TranscribeAsync(audio, "clip.webm", "en");

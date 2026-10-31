@@ -202,6 +202,7 @@ public partial class ProcessUserChatCommandHandler
             var response = await ai.IntentService.SendWithToolsAsync(new AiToolRequest(request.Message,
                 ProactiveOfferPlanner.SelectionInstruction, [], request.UserId, History: request.History)
             {
+                Purpose = "offer_selection",
                 DynamicContext = JsonSerializer.Serialize(new
                 {
                     Candidates = candidates.Select(candidate => new { candidate.Id, candidate.Family, candidate.Evidence, candidate.Action }),

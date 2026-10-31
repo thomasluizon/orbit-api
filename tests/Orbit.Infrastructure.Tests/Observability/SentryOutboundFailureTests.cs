@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Api.Observability;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
 using Sentry;
@@ -41,7 +42,8 @@ public class SentryOutboundFailureTests
         var logger = Substitute.For<ILogger<ContentModerationService>>();
         logger.IsEnabled(LogLevel.Warning).Returns(true);
         var moderation = new ContentModerationService(http,
-            Options.Create(new AiSettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1" }), logger);
+            Options.Create(new AiSettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1" }), logger,
+            Substitute.For<IFeatureFlagService>());
 
         var result = await moderation.CheckTextAsync("test text");
 

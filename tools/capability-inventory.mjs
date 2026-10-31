@@ -331,7 +331,8 @@ function registries(files, classMap) {
     const backing = chat.find(candidate => candidate.name === tool.name)
     if (!backing) continue
     for (const parameter of tool.parameters) {
-      const forwarded = tool.type.text.match(new RegExp(`(?:^|\\n)\\s*(\\w+)\\s*=\\s*${parameter.name}\\s*(?:,|\\n|})`))?.[1]
+      const assignment = tool.type.text.match(new RegExp(`(?:^|\\n)\\s*(?:(\\w+)|\\["(\\w+)"\\])\\s*=\\s*${parameter.name}\\s*(?:,|\\n|})`))
+      const forwarded = assignment?.[1] ?? assignment?.[2]
       if (forwarded && tool.type.text.includes(`"${tool.name}"`) && !backing.parameters.some(item => normalize(item.name) === normalize(forwarded))) {
         parameter.unsupportedByExecutorSchema = true
         parameter.forwardedAs = forwarded

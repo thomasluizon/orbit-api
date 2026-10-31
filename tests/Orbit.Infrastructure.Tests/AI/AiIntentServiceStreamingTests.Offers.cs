@@ -92,7 +92,7 @@ public partial class AiIntentServiceStreamingTests
     [Fact]
     public async Task OfferContinuation_PartialWriteAfterReadRemainsTruncatedWithoutRetryOrExecution()
     {
-        var partial = ResponsesTestData.Response(inputTokens: 50, outputTokens: 8192);
+        var partial = ResponsesTestData.Response(inputTokens: 50, outputTokens: 4096);
         partial.Status = ResponseStatus.Incomplete;
         partial.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
         partial.OutputItems.Add(ResponseItem.CreateFunctionCallItem("partial", "create_habit", BinaryData.FromString("{\"title\":")));

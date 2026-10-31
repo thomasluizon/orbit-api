@@ -7,6 +7,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Orbit.Application.Common;
 using Microsoft.Extensions.Options;
 using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
@@ -21,6 +23,10 @@ public sealed partial class AiCompletionClient
     private readonly ResponsesClient _responsesClient;
     private readonly ResponsesClient _streamingResponsesClient;
     private readonly ResponsesClient _onboardingResponsesClient;
+    private readonly ResponsesClient _evalResponsesClient;
+    private readonly ResponsesClient _evalStreamingResponsesClient;
+    private readonly string? _evalAccountIds;
+    private readonly bool _hasEvalKey;
     internal TimeSpan CompletionTimeout { get; }
     internal TimeSpan StreamingCompletionTimeout { get; }
     private readonly string _primaryModel;
@@ -39,8 +45,9 @@ public sealed partial class AiCompletionClient
         IOptions<AiSettings> options,
         ILogger<AiCompletionClient> logger,
         IAiUsageRecorder usageRecorder,
-        TimeProvider? timeProvider = null)
-        : this(options, logger, usageRecorder, null, timeProvider)
+        TimeProvider? timeProvider = null,
+        IConfiguration? configuration = null)
+        : this(options, logger, usageRecorder, null, timeProvider, configuration: configuration)
     {
     }
 
@@ -50,7 +57,8 @@ public sealed partial class AiCompletionClient
         IAiUsageRecorder usageRecorder,
         PipelineTransport? transport,
         TimeProvider? timeProvider = null,
-        ClientRetryPolicy? retryPolicy = null)
+        ClientRetryPolicy? retryPolicy = null,
+        IConfiguration? configuration = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
@@ -59,7 +67,7 @@ public sealed partial class AiCompletionClient
         CompletionTimeout = settings.CompletionTimeout;
         StreamingCompletionTimeout = settings.StreamingCompletionTimeout;
 
-        ResponsesClient CreateClient(int networkTimeoutSeconds, bool onboarding = false)
+        ResponsesClient CreateClient(int networkTimeoutSeconds, bool onboarding = false, string? apiKey = null)
         {
             var clientOptions = new ResponsesClientOptions
             {
@@ -70,14 +78,20 @@ public sealed partial class AiCompletionClient
             };
             if (!onboarding)
                 clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
-            return new ResponsesClient(new ApiKeyCredential(settings.ApiKey), clientOptions);
+            return new ResponsesClient(new ApiKeyCredential(apiKey ?? settings.ApiKey), clientOptions);
         }
 
+        _evalAccountIds = configuration?[EvalAccountAccess.AccountIdsKey];
+        _hasEvalKey = !string.IsNullOrWhiteSpace(settings.EvalApiKey);
         _primaryModel = settings.Model;
         _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);
         _streamingResponsesClient = CreateClient(settings.NetworkTimeoutSeconds);
         _onboardingResponsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds, onboarding: true);
 
+        _evalResponsesClient = string.IsNullOrWhiteSpace(settings.EvalApiKey) ? _responsesClient
+            : CreateClient(settings.BufferedNetworkTimeoutSeconds, apiKey: settings.EvalApiKey);
+        _evalStreamingResponsesClient = string.IsNullOrWhiteSpace(settings.EvalApiKey) ? _streamingResponsesClient
+            : CreateClient(settings.NetworkTimeoutSeconds, apiKey: settings.EvalApiKey);
         _subTaskModel = ResolveSubTaskModel(settings.SubTaskModel, settings.Model);
     }
 
@@ -109,18 +123,30 @@ public sealed partial class AiCompletionClient
         _responsesClient = responsesClient;
         _streamingResponsesClient = responsesClient;
         _onboardingResponsesClient = responsesClient;
+        _evalResponsesClient = responsesClient;
+        _evalStreamingResponsesClient = responsesClient;
         _primaryModel = primaryModel;
         _subTaskModel = ResolveSubTaskModel(subTaskModel, primaryModel);
         _logger = logger;
         _usageRecorder = usageRecorder;
     }
 
-    internal ResponsesClient ResponsesClient => _responsesClient;
-    internal ResponsesClient StreamingResponsesClient => _streamingResponsesClient;
+    internal ResponsesClient GetResponsesClient(bool streaming = false, Guid? userId = null)
+    {
+        userId ??= AiCallContext.Current?.UserId;
+        var eval = userId is { } id && EvalAccountAccess.Contains(_evalAccountIds, id);
+        if (eval && !_hasEvalKey)
+            throw new InvalidOperationException("Evaluation AI credentials are required.");
+        return (eval, streaming) switch
+        {
+            (true, true) => _evalStreamingResponsesClient,
+            (true, false) => _evalResponsesClient,
+            (false, true) => _streamingResponsesClient,
+            _ => _responsesClient
+        };
+    }
 
     internal string ChatModel => _primaryModel;
-
-    internal const int DefaultMaxOutputTokens = 8192;
 
     internal async Task<HabitSetupSuggestion?> CompleteOnboardingSetupAsync(string title, string language, CancellationToken cancellationToken)
     {
@@ -189,7 +215,7 @@ public sealed partial class AiCompletionClient
         if (userId is { } id && id != Guid.Empty)
         {
             options.SafetyIdentifier = id.ToString("N");
-            options.PromptCacheKey = id.ToString("N");
+            options.PromptCacheKey = "orbit:" + model;
         }
         return options;
     }
@@ -205,7 +231,7 @@ public sealed partial class AiCompletionClient
     {
         using var completionCancellation = CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
-        var options = CreateOptions(tier, temperature, maxOutputTokens);
+        var options = CreateOptions(tier, temperature, AiOutputTokenLimits.Resolve(purpose, maxOutputTokens));
         options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
         options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
 
@@ -234,7 +260,7 @@ public sealed partial class AiCompletionClient
     {
         using var completionCancellation = CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
-        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        var options = CreateOptions(tier, temperature, AiOutputTokenLimits.Resolve(purpose, maxOutputTokens), userId);
         options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
         options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
         options.TextOptions = new ResponseTextOptions
@@ -313,7 +339,7 @@ public sealed partial class AiCompletionClient
         var traceId = Guid.NewGuid().ToString("N");
         try
         {
-            var completion = await _responsesClient.CreateResponseAsync(options, cancellationToken);
+            var completion = await GetResponsesClient(userId: userId).CreateResponseAsync(options, cancellationToken);
             response = completion.Value;
             return response;
         }
@@ -321,6 +347,7 @@ public sealed partial class AiCompletionClient
         {
             stopwatch.Stop();
             var usage = response?.Usage;
+            LogTruncation(response, purpose, options.MaxOutputTokenCount);
             var failed = response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete);
             if (usage is not null)
                 LogAiTokenUsage(_logger, purpose, options.Model, usage.InputTokenDetails?.CachedTokenCount ?? 0,
@@ -334,7 +361,8 @@ public sealed partial class AiCompletionClient
                     new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
                         failed,
                         [], HasUsage: usage is not null),
-                    cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0);
+                    cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0,
+                    reasoningTokens: usage?.OutputTokenDetails?.ReasoningTokenCount ?? 0);
             }
             catch (Exception ex) when (failed || ex is not OperationCanceledException)
             {
@@ -366,5 +394,14 @@ public sealed partial class AiCompletionClient
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI JSON completion failed at {Stage} with {Reason}; status {Status}")]
     private static partial void LogJsonCompletionFailed(ILogger logger, string stage, string reason, string status);
+
+    private void LogTruncation(ResponseResult? response, string purpose, int? maxOutputTokens)
+    {
+        if (response?.IncompleteStatusDetails?.Reason == ResponseIncompleteStatusReason.MaxOutputTokens)
+            LogResponseTruncated(_logger, purpose, maxOutputTokens);
+    }
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); Purpose={Purpose} MaxOutputTokens={MaxOutputTokens}")]
+    private static partial void LogResponseTruncated(ILogger logger, string purpose, int? maxOutputTokens);
 
 }

@@ -831,7 +831,7 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_BadHabit_DoesNotToggleOnDuplicateDate()
+    public async Task Handle_BadHabit_TogglesExistingSlip()
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring,
             UserId, "Bad Habit", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
@@ -848,7 +848,8 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeTrue();
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -141,7 +141,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateHabit preserves eleven flat habit creation schema properties, including intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateHabit preserves flat habit creation schema properties, including repeat reminders, intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateHabit(
         ClaimsPrincipal user,
         [Description("Name of the habit")] string title,
@@ -155,22 +155,28 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Due time in HH:mm format")] string? dueTime = null,
         [Description("Repeat interval in weeks. Omit for every week.")] int? intervalWeeks = null,
         [Description("Emoji icon for the habit")] string? emoji = null,
+        [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "create_habit", new
+        var arguments = new Dictionary<string, object?>
         {
-            title,
-            due_date = dueDate,
-            description,
-            frequency_unit = frequencyUnit,
-            frequency_quantity = frequencyQuantity,
-            is_bad_habit = isBadHabit,
-            is_general = isGeneral,
-            is_flexible = isFlexible,
-            due_time = dueTime,
-            interval_weeks = intervalWeeks,
-            emoji
-        }, confirmationToken: null, cancellationToken);
+            ["title"] = title,
+            ["due_date"] = dueDate,
+            ["description"] = description,
+            ["frequency_unit"] = frequencyUnit,
+            ["frequency_quantity"] = frequencyQuantity,
+            ["is_bad_habit"] = isBadHabit,
+            ["is_general"] = isGeneral,
+            ["is_flexible"] = isFlexible,
+            ["due_time"] = dueTime,
+            ["interval_weeks"] = intervalWeeks,
+            ["emoji"] = emoji
+        };
+        var jsonError = McpToolHelpers.AddJsonArguments(arguments, ("repeat_reminder", repeatReminder));
+        if (jsonError is not null)
+            return jsonError;
+        var result = await executorBridge.ExecuteAsync(user, "create_habit", arguments,
+            confirmationToken: null, cancellationToken);
 
         if (!result.Succeeded)
             return result.Message;
@@ -197,6 +203,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Whether this is a general habit. Children must match their parent.")] bool? isGeneral = null,
         [Description("Enable slip alerts. Requires Pro.")] bool? slipAlertEnabled = null,
         [Description("JSON array of relative reminders: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.")] string? relativeReminders = null,
+        [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
         CancellationToken cancellationToken = default)
     {
         var arguments = new Dictionary<string, object?> { ["habit_id"] = habitId };
@@ -211,7 +218,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         if (dueEndTime != string.Empty) arguments["due_end_time"] = dueEndTime;
         if (isGeneral is not null) arguments["is_general"] = isGeneral;
         if (slipAlertEnabled is not null) arguments["slip_alert_enabled"] = slipAlertEnabled;
-        var jsonError = McpToolHelpers.AddJsonArguments(arguments, ("relative_reminders", relativeReminders));
+        var jsonError = McpToolHelpers.AddJsonArguments(arguments, ("relative_reminders", relativeReminders), ("repeat_reminder", repeatReminder));
         if (jsonError is not null)
             return jsonError;
 
@@ -419,6 +426,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("JSON array of relative reminders with minutes_before, or when and time")] string? relativeReminders = null,
         [Description("JSON array of checklist items with text and is_checked")] string? checklistItems = null,
         [Description("Existing tag IDs")] string[]? tagIds = null,
+        [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC).")] string? repeatReminder = null,
         CancellationToken cancellationToken = default)
     {
         var arguments = new Dictionary<string, object?>
@@ -445,9 +453,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             arguments["frequency_unit"] = frequencyUnit;
         var jsonError = McpToolHelpers.AddJsonArguments(arguments,
             ("scheduled_reminders", scheduledReminders), ("relative_reminders", relativeReminders),
-            ("checklist_items", checklistItems));
+            ("checklist_items", checklistItems), ("repeat_reminder", repeatReminder));
         if (jsonError is not null)
             return jsonError;
+        if (arguments.GetValueOrDefault("repeat_reminder") is System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Object })
+            arguments["reminder_enabled"] = true;
         var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", arguments,
             confirmationToken: null, cancellationToken);
 
@@ -473,7 +483,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     [McpServerTool(Name = "bulk_create_habits"), Description("Create multiple habits at once. Each habit can have sub-habits.")]
     public async Task<string> BulkCreateHabits(
         ClaimsPrincipal user,
-        [Description("JSON array of habit objects. Each with: title (required), description, emoji, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible")] string habitsJson,
+        [Description("JSON array of habit objects. Each with: title (required), description, emoji, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible, repeatReminder (object with interval_minutes and optional active_start, active_end, start_at_utc)")] string habitsJson,
         [Description("Confirmation token returned by confirm_agent_operation_v2 through the Claude connector; manual API keys must use the Claude connector or make this change in the Orbit app. (required: bulk create is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {

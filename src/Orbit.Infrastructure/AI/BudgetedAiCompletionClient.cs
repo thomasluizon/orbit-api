@@ -73,7 +73,7 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
     {
         using var completionCancellation = inner.CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
-        var outputTokens = maxOutputTokens ?? AiCompletionClient.DefaultMaxOutputTokens;
+        var outputTokens = AiOutputTokenLimits.Resolve(purpose, maxOutputTokens);
         var request = inner.SerializeTextRequest(systemPrompt, userPrompt, temperature, outputTokens, tier);
         return await RunAsync(null, client => client.CompleteTextAsync(systemPrompt, userPrompt, temperature,
             outputTokens, purpose, tier, cancellationToken), cancellationToken, request);
@@ -85,7 +85,7 @@ public sealed class BudgetedAiCompletionClient(AiCompletionClient inner, IAiDail
     {
         using var completionCancellation = inner.CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
-        var outputTokens = maxOutputTokens ?? AiCompletionClient.DefaultMaxOutputTokens;
+        var outputTokens = AiOutputTokenLimits.Resolve(purpose, maxOutputTokens);
         var request = inner.SerializeTextRequest(systemPrompt, userPrompt, temperature, outputTokens, tier, userId, json: true);
         return await RunAsync(userId, client => client.CompleteJsonAsync<T>(systemPrompt, userPrompt, temperature,
             outputTokens, purpose, tier, userId, cancellationToken, requireComplete), cancellationToken, request);

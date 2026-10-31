@@ -25,8 +25,6 @@ public partial class AiUsageSummaryService(
     IConfiguration configuration,
     IOptions<AiSettings> aiOptions) : ScheduledServiceBase, IScheduledJob
 {
-    private const int TopPurposeCount = 3;
-
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:AiUsageSummaryIntervalMinutes", 60));
 
@@ -95,8 +93,8 @@ public partial class AiUsageSummaryService(
     }
 
     /// <summary>
-    /// Builds the single human-readable cost line for a day: total cost and calls, the top purposes by
-    /// cost, and a trailing list of any models that appeared but have no configured price (cost = $0).
+    /// Builds the single human-readable cost line for a day: total cost and calls, all purposes by
+    /// cost with token totals and per-call averages, and a trailing list of any models that appeared but have no configured price (cost = $0).
     /// </summary>
     internal static string BuildSummaryLine(
         DateOnly date,
@@ -109,14 +107,24 @@ public partial class AiUsageSummaryService(
         var totalCostUsd = rows.Sum(row => row.CostUsd);
         var totalCalls = rows.Sum(row => row.Calls);
 
-        var topPurposes = rows
+        var purposes = rows
             .GroupBy(row => row.Purpose)
-            .Select(group => (Purpose: group.Key, Cost: group.Sum(row => row.CostUsd)))
-            .OrderByDescending(entry => entry.Cost)
-            .Take(TopPurposeCount)
-            .Select(entry => string.Create(CultureInfo.InvariantCulture, $"{entry.Purpose}=${entry.Cost:F4}"));
+            .OrderByDescending(group => group.Sum(row => row.CostUsd))
+            .ThenBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var calls = group.Sum(row => row.Calls);
+                var cost = group.Sum(row => row.CostUsd);
+                var cached = group.Sum(row => row.CachedTokens);
+                var uncached = group.Sum(row => row.PromptTokens) - cached;
+                var output = group.Sum(row => row.CompletionTokens);
+                var reasoning = group.Sum(row => row.ReasoningTokens);
+                var divisor = calls > 0 ? calls : 1;
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"{group.Key}=${cost:F4} calls={calls} cost_per_call=${cost / divisor:F6} uncached_input={uncached} cached_input={cached} output={output} reasoning={reasoning} uncached_per_call={(decimal)uncached / divisor:F1} cached_per_call={(decimal)cached / divisor:F1} output_per_call={(decimal)output / divisor:F1} reasoning_per_call={(decimal)reasoning / divisor:F1}");
+            });
 
-        var line = string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}: total=${totalCostUsd:F4} over {totalCalls} calls; top: {string.Join(", ", topPurposes)}");
+        var line = string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}: total=${totalCostUsd:F4} over {totalCalls} calls; purposes: {string.Join("; ", purposes)}");
 
         var unpricedModels = rows
             .Select(row => row.Model)

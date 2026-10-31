@@ -61,6 +61,7 @@ public class AiUsageSummaryServiceTests
         var line = AiUsageSummaryService.BuildSummaryLine(Date, rows, Pricing);
 
         line.Should().StartWith("AI cost 2026-06-29: total=$0.1500 over 5 calls;");
+        line.Should().Contain("chat=$0.1000 calls=3 cost_per_call=$0.033333 uncached_input=0 cached_input=0 output=0 reasoning=0");
     }
 
     [Fact]
@@ -75,11 +76,12 @@ public class AiUsageSummaryServiceTests
 
         var line = AiUsageSummaryService.BuildSummaryLine(Date, rows, Pricing);
 
-        line.Should().Contain("top: daily_summary=$0.5000, fact_extraction=$0.1000, chat=$0.0200");
+        line.IndexOf("daily_summary=$", StringComparison.Ordinal).Should().BeLessThan(line.IndexOf("fact_extraction=$", StringComparison.Ordinal));
+        line.IndexOf("fact_extraction=$", StringComparison.Ordinal).Should().BeLessThan(line.IndexOf("chat=$", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void BuildSummaryLine_TakesAtMostThreePurposes()
+    public void BuildSummaryLine_IncludesEveryPurpose()
     {
         var rows = new List<AiUsageDaily>
         {
@@ -91,8 +93,23 @@ public class AiUsageSummaryServiceTests
 
         var line = AiUsageSummaryService.BuildSummaryLine(Date, rows, Pricing);
 
-        line.Should().Contain("top: a=$0.4000, b=$0.3000, c=$0.2000");
-        line.Should().NotContain("d=$");
+        line.Should().Contain("d=$0.1000 calls=1");
+    }
+
+    [Fact]
+    public void BuildSummaryLine_AggregatesTokensAcrossModelsAndSeparatesEval()
+    {
+        var rows = new[]
+        {
+            AiUsageDaily.Create(Date, "gpt-4.1-mini", "chat", new(2, 600, 1000, 300, 1300, 0.002m, 100)),
+            AiUsageDaily.Create(Date, "gpt-6-luna", "chat", new(2, 400, 1000, 500, 1500, 0.002m, 200)),
+            AiUsageDaily.Create(Date, "gpt-6-luna", "eval_chat", new(1, 0, 100, 50, 150, 0.001m, 30))
+        };
+
+        var line = AiUsageSummaryService.BuildSummaryLine(Date, rows, Pricing);
+
+        line.Should().Contain("chat=$0.0040 calls=4 cost_per_call=$0.001000 uncached_input=1000 cached_input=1000 output=800 reasoning=300 uncached_per_call=250.0 cached_per_call=250.0 output_per_call=200.0 reasoning_per_call=75.0");
+        line.Should().Contain("eval_chat=$0.0010 calls=1 cost_per_call=$0.001000 uncached_input=100 cached_input=0 output=50 reasoning=30");
     }
 
     [Fact]

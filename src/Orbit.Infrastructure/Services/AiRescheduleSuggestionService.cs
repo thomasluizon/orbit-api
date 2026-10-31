@@ -16,7 +16,6 @@ public sealed partial class AiRescheduleSuggestionService(
     ILogger<AiRescheduleSuggestionService> logger) : IRescheduleSuggestionService
 {
     private const int MaxRationaleChars = 240;
-    private const int MaxOutputTokens = 8192;
     private const int RescheduleHistoryWindowDays = 60;
 
     public async Task<Result<RescheduleSuggestion>> GenerateAsync(
@@ -37,7 +36,6 @@ public sealed partial class AiRescheduleSuggestionService(
                 prompt,
                 temperature: 0.2,
                 cancellationToken: cancellationToken,
-                maxOutputTokens: MaxOutputTokens,
                 purpose: "reschedule_suggestion",
                 tier: AiModelTier.SubTask);
 

@@ -53,9 +53,7 @@ public partial class ProcessUserChatCommandHandlerTests
         foreach (var target in targets)
             target.GetProperty("sharesTitle").GetBoolean().Should().Be(target.GetProperty("title").GetString() == "Caminhada");
         targets.Select(target => target.GetProperty("id").GetString()).Should().BeEquivalentTo(habits.Take(2).Select(habit => habit.Id.ToString()));
-        var description = JsonSerializer.SerializeToElement(request.ToolDeclarations.Single(declaration =>
-            JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString() == write.Name)).GetProperty("description").GetString();
-        description.Should().Contain(SharedTitleGuidance);
+        request.DynamicContext.Should().Contain(SharedTitleGuidance);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should()
             .BeOfType<AstraChoiceBlock>().Which.Options.Select(option => option.Id).Should().Equal(habits.Take(2).Select(habit => habit.Id.ToString()));
         await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(value => value.OperationId == write.Name), Arg.Any<CancellationToken>());
