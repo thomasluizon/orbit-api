@@ -145,6 +145,9 @@ public partial class ProcessUserChatCommandHandlerTests
     {
         SetupUserAndPayGate();
         EnableComposition();
+        var water = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Water", FrequencyUnit.Day, 1, Today)).Value;
+        var walk = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Walk", FrequencyUnit.Day, 1, Today)).Value;
+        SetupOfferHabits(water, walk);
         var tool = new BulkUpdateHabitsTool(_mediator);
         var handler = CreateHandler(tool);
         var captured = R9fCall("stored-en-r1", "update_habit").Args;
@@ -173,7 +176,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse
             { ToolCalls = [repair], ConversationContext = TestConversationContext }));
-        var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient("en")), default);
+        var result = await handler.Handle(new(UserId, "Change the schedule and rename Water to Morning water.", ClientContext: OfferClient("en")), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         await _operationExecutor.Received(1).ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
