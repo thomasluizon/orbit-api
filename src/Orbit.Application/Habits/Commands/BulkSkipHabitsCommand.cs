@@ -89,7 +89,7 @@ public class BulkSkipHabitsCommandHandler(
         if (!refreshed)
             return Result.Failure<BulkSkipResult>(ErrorMessages.ConcurrentUpdateConflict);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today, preserveDailyNarrative: true);
 
         return Result.Success(new BulkSkipResult(results));
     }

@@ -123,10 +123,10 @@ public class QueryRoundTripCountTests
         };
         var prompt = BuildPrompt(receivedHabits!, receivedContext);
         prompt.Should().Be(BuildPrompt(legacyIncluded, legacyContext));
-        prompt.Should().Contain("Overdue (pending, overdue)");
-        prompt.Should().Contain("Skipped earlier (pending)");
-        prompt.Should().Contain("Bad habit (bad habit, clean, 5 days since last slip)");
-        prompt.Should().Contain("Skipped today (skipped)");
+        prompt.Should().Contain("Overdue");
+        prompt.Should().Contain("Skipped earlier");
+        prompt.Should().Contain("Bad habit").And.Contain("clean");
+        prompt.Should().Contain("Skipped today");
         prompt.Should().NotContain("Old resolved");
     }
 

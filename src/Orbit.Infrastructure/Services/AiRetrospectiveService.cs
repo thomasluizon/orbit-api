@@ -46,6 +46,9 @@ public sealed partial class AiRetrospectiveService(
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
             var narrative = ParseNarrative(trimmed, language, habits.Select(h => h.Title));
+            if (new[] { narrative.Highlights, narrative.Missed, narrative.Trends, narrative.Suggestion }
+                .All(string.IsNullOrWhiteSpace))
+                return Result.Failure<RetrospectiveNarrative>(ErrorMessages.AiRetrospectiveUnavailable);
 
             if (logger.IsEnabled(LogLevel.Debug))
                 LogRetrospectiveGenerated(logger, trimmed.Length);

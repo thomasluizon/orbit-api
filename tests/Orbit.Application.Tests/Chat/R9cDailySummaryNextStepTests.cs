@@ -38,15 +38,20 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", 1)]
     [InlineData("pt-BR", 2)]
     [InlineData("pt-BR", 3)]
+    [InlineData("en", 4)]
+    [InlineData("pt-BR", 4)]
     public async Task R9c_DailySummaryReplaysModelOutputThroughProducerAndComposition(string language, int repeat)
     {
         using var capture = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
-            "Fixtures", "CompositionFailures", $"prod-r9c-composition-hoje-next-step-pt-BR-r{repeat}.json")));
+            "Fixtures", "CompositionFailures", $"prod-r9c-composition-hoje-next-step-pt-BR-r{(repeat == 4 ? 1 : repeat)}.json")));
         var user = User.Create("Person", "person@example.com").Value;
         user.SetLanguage(language);
         SetupUserAndPayGate(user);
         EnableComposition();
         var habits = NextStepHabits();
+        if (repeat == 4)
+            habits.Add(Habit.Create(new HabitCreateParams(Orbit.Domain.Enums.HabitSchedule.Recurring, UserId,
+                "Psyllium 5g", Orbit.Domain.Enums.FrequencyUnit.Day, 1, DueDate: Today, DueTime: new TimeOnly(10, 30))).Value);
         var titles = habits.Select(habit => habit.Title).ToArray();
         var lunch = habits.Single(habit => habit.Title == "Lunch");
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -65,9 +70,12 @@ public partial class ProcessUserChatCommandHandlerTests
             sentence = repeat == 3
                 ? "Breakfast is behind you; lunch is the next step because it comes before the other timed items."
                 : "Lunch is the next step in your meal routine because it comes before the other items.";
+        if (repeat == 4)
+            sentence = language == "en" ? "Meals and water remain open, starting with Psyllium 5g."
+                : "As refeições e a hidratação seguem em aberto, começando por Psyllium 5g.";
         var modelJson = repeat == 3
             ? JsonSerializer.Serialize(new { summary = sentence })
-            : JsonSerializer.Serialize(new { habitId = lunch.Id, summary = sentence });
+            : JsonSerializer.Serialize(new { nextStepHabitId = repeat == 4 ? habits.Single(habit => habit.Title == "Psyllium 5g").Id : lunch.Id, summary = sentence });
         using var transport = new NextStepModelResponseHandler(modelJson);
         using var http = new HttpClient(transport);
         var ai = new AiCompletionClient(Options.Create(new AiSettings { ApiKey = "test-key", MaxRetries = 0 }),
@@ -78,6 +86,14 @@ public partial class ProcessUserChatCommandHandlerTests
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var query = new GetDailySummaryQueryHandler(_habitRepo, _userRepo, Substitute.For<IGenericRepository<HabitLog>>(),
             summaryLogs, _payGate, summaries, cache, _userDateService, _mediator);
+        if (repeat == 3)
+        {
+            var rejected = await query.Handle(new(UserId, Today, Today, language), default);
+            rejected.IsFailure.Should().BeTrue();
+            rejected.Error.Should().Be(ErrorMessages.AiSummaryUnavailable.Message);
+            transport.Requests.Should().Be(2);
+            return;
+        }
         _mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
             .Returns(call => query.Handle(call.Arg<GetDailySummaryQuery>(), call.Arg<CancellationToken>()));
         var tool = new GetDailySummaryTool(_mediator, _userDateService);
@@ -97,18 +113,10 @@ public partial class ProcessUserChatCommandHandlerTests
         var block = parts.OfType<ChatBlockPart>().Should().ContainSingle().Subject;
         block.Kind.Should().Be("daySummary");
         var day = block.Block.Should().BeOfType<DaySummaryCard>().Subject;
-        day.Rows.Should().HaveCount(12).And.Contain(row => row.Title == "Breakfast" && row.Status == "done")
+        day.Rows.Should().HaveCount(repeat == 4 ? 13 : 12).And.Contain(row => row.Title == "Breakfast" && row.Status == "done")
             .And.Contain(row => row.Title == "Lunch").And.Contain(row => row.Title == "Afternoon snack");
-        if (repeat == 3)
-        {
-            parts.Should().ContainSingle("the captured completed-status recap must be dropped, leaving the typed block");
-            result.Value.AiMessage.Should().BeNullOrEmpty();
-        }
-        else
-        {
-            parts.OfType<ChatTextPart>().Should().ContainSingle().Which.Text.Should().Be(sentence);
-            result.Value.AiMessage.Should().Be(sentence);
-        }
+        parts.OfType<ChatTextPart>().Should().ContainSingle().Which.Text.Should().Be(sentence);
+        result.Value.AiMessage.Should().Be(sentence);
         events.Where(item => item.Type == "delta").Should().BeEmpty();
         transport.Requests.Should().Be(1);
         await AssertNoCompositionContinuation();

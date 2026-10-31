@@ -86,7 +86,7 @@ public class SkipHabitCommandHandler(
         {
             habit.PostponeTo(today.AddDays(1));
             await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today, preserveDailyNarrative: true);
             return Result.Success(new SkipHabitResponse(receipt.Value.Id));
         }
 
@@ -119,7 +119,7 @@ public class SkipHabitCommandHandler(
             cancellationToken: cancellationToken);
 
         await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today, preserveDailyNarrative: true);
 
         return Result.Success(new SkipHabitResponse(receipt.Value.Id));
     }
