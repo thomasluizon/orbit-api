@@ -371,5 +371,41 @@ public sealed class ProactiveProposalTests
         var result = await previewer.PreviewAsync(user, "create_habit",
             Parse("{\"title\":\"Read\",\"is_general\":true,\"emoji\":\"📖\",\"suggested_fields\":" + names + "}"), clientContext: client);
         result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("invalid_offer");
+    }
+
+    [Theory]
+    [InlineData("unknown", false)]
+    [InlineData("title", false)]
+    [InlineData("deadline", false)]
+    [InlineData("unknown", true)]
+    [InlineData("title", true)]
+    [InlineData("deadline", true)]
+    public async Task UnsupportedOfferNamesReturnRepairableFieldErrorsAtEveryDepth(string field, bool nested)
+    {
+        var draft = new JsonObject
+        {
+            ["title"] = "Read",
+            ["is_general"] = true,
+            [field] = field == "deadline" ? "2026-11-30" : "Read",
+            ["suggested_fields"] = new JsonArray(field)
+        };
+        var args = nested
+            ? new JsonObject
+            {
+                ["habits"] = new JsonArray(new JsonObject
+                {
+                    ["title"] = "Routine",
+                    ["is_general"] = true,
+                    ["sub_habits"] = new JsonArray(draft)
+                })
+            }
+            : draft;
+        var result = await previewer.PreviewAsync(user, nested ? "bulk_create_habits" : "create_habit",
+            JsonSerializer.SerializeToElement(args), clientContext: client);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("invalid_offer");
+        result.Error.Should().Contain(field);
     }
 }

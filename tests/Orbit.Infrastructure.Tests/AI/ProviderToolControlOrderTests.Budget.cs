@@ -18,7 +18,7 @@ public sealed partial class ProviderToolControlOrderTests
         foreach (var client in new[] { "legacy", "composition", "offers" })
             foreach (var phase in new[] { "initial", "post-read", "draft-revision", "post-read-draft" })
             {
-                var (_, tools) = await BuildProviderCatalogAsync(client, phase);
+                var (registry, tools) = await BuildProviderCatalogAsync(client, phase);
                 var sizes = tools.Select(pair =>
                 {
                     using var wire = JsonDocument.Parse(ModelReaderWriter.Write(pair.Value).ToString());
@@ -30,11 +30,22 @@ public sealed partial class ProviderToolControlOrderTests
                 if (client == "offers" && phase == "post-read")
                     foreach (var tool in sizes.OrderByDescending(tool => tool.Size).Take(5))
                         output.WriteLine($"  {tool.Name}: S={tool.Size}");
-                tools.ContainsKey("ask").Should().Be(client != "legacy" && phase != "initial");
-                tools.Count.Should().Be((await BuildProviderCatalogAsync(client, "initial")).Tools.Count
-                    + (client != "legacy" && phase != "initial" ? 1 : 0));
+                var names = registry.GetAll().Where(tool => tool.Name != "ask").Select(tool => tool.Name);
+                if (client != "legacy" && phase != "initial") names = names.Append("ask");
+                tools.Keys.Should().BeEquivalentTo(names);
             }
         violations.Should().BeEmpty($"every initial and continuation catalog must have S <= {SchemaStringBudget}");
+    }
+
+    [Fact]
+    public void SchemaStringBudget_CountsOccurrencesAndEnumValuesWithoutDescriptionsOrRequiredCopies()
+    {
+        using var schema = JsonDocument.Parse("""
+            {"properties":{"a":{"enum":["Day",12,null],"description":"Ignored"},
+             "b":{"properties":{"a":{"enum":["Day"]}},"required":["a"]}},"required":["a","b"]}
+            """);
+
+        SchemaStringLength(schema.RootElement).Should().Be(15);
     }
 
     private static int SchemaStringLength(JsonElement schema)

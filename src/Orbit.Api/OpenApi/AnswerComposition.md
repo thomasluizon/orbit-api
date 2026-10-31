@@ -1474,7 +1474,9 @@ For enabled clients, supported habit, goal and checklist-template create/edit
 schemas append optional `suggested_fields`, an array of eligible field names from
 the same operation's schema. Proposed values stay in the ordinary operation fields;
 the array identifies which values are optional offers. Requested field names stay
-outside that array. List a name only after setting its value. Null optional values
+outside that array. The model-facing list is a bounded array of strings. The server
+checks every name and value against the operation's schema before preparing a
+preview. List a name only after setting its value. Null optional values
 and empty arrays are absent for offer eligibility and provenance. A listed name
 without a value returns a repairable failure naming that field; no preview is
 prepared from that call. Unknown names, invalid shapes and unusable values return
