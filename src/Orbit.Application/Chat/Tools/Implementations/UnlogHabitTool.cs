@@ -69,7 +69,9 @@ public sealed class UnlogHabitTool(
                 if (unlogged.IsFailure)
                     return unlogged.PropagateError<ToolResult>();
 
-                await BadHabitParentSlipService.RemoveIfIncompleteAsync(habit, targetDate, habitRepository, token);
+                var parentUnlog = await BadHabitParentSlipService.RemoveIfIncompleteAsync(habit, targetDate, habitRepository, token);
+                if (parentUnlog.IsFailure)
+                    return parentUnlog.PropagateError<ToolResult>();
                 await unitOfWork.SaveChangesAsync(token);
                 await goalCompletionService.SyncDerivedGoalsAsync(userId, habit.Goals.Select(goal => goal.Id).ToList(),
                     today, cancellationToken: token);

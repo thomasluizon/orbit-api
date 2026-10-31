@@ -201,8 +201,10 @@ public partial class LogHabitCommandHandler(
             if (unlogResult.IsFailure)
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;
-            await BadHabitParentSlipService.RemoveIfIncompleteAsync(
+            var parentUnlog = await BadHabitParentSlipService.RemoveIfIncompleteAsync(
                 habit, targetDate, repos.HabitRepository, cancellationToken);
+            if (parentUnlog.IsFailure)
+                return parentUnlog.PropagateError<LogHabitResponse>();
 
             var goalIds = habit.Goals.Select(g => g.Id).ToList();
 

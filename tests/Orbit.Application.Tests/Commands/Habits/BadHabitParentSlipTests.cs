@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
@@ -102,6 +103,157 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Log_CompletedParent_ContinuingChildSucceeds(bool bulk, bool oneTime)
+    {
+        var yesterday = Today.AddDays(-1);
+        var parent = Habit.Create(new HabitCreateParams(
+            oneTime ? HabitSchedule.OneTime : HabitSchedule.Recurring, _userId, "Completed parent",
+            oneTime ? null : FrequencyUnit.Day, oneTime ? null : 1, yesterday,
+            IsBadHabit: true, EndDate: oneTime ? null : yesterday)).Value;
+        _context.HabitLogs.Add(parent.Log(yesterday).Value);
+        parent.IsCompleted.Should().BeTrue();
+        var (_, first, second) = await SeedAsync(parent: parent);
+        _context.HabitLogs.Add(first.Log(Today).Value);
+        var unrelated = CreateHabit("Unrelated", false);
+        _context.Habits.Add(unrelated);
+        await _context.SaveChangesAsync();
+
+        if (bulk)
+        {
+            var result = await _bulk.Handle(new BulkLogHabitsCommand(_userId,
+                [new(second.Id), new(unrelated.Id)]), default);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Results.Should().HaveCount(2).And.OnlyContain(item => item.Status == BulkItemStatus.Success);
+            unrelated.Logs.Should().ContainSingle();
+        }
+        else
+            await LogAsync(second, false);
+
+        ActiveSlips(second).Should().ContainSingle();
+        ActiveSlips(parent).Should().BeEmpty();
+        parent.IsCompleted.Should().BeTrue();
+        _context.ChangeTracker.Clear();
+        (await _context.HabitLogs.CountAsync(log => log.HabitId == second.Id && log.Date == Today)).Should().Be(1);
+        (await _context.HabitLogs.CountAsync(log => log.HabitId == parent.Id && log.Date == Today)).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Log_ParentPastEndDateWithoutCompletion_ChildSucceeds(bool bulk)
+    {
+        var yesterday = Today.AddDays(-1);
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Expired parent",
+            FrequencyUnit.Day, 1, yesterday, IsBadHabit: true, EndDate: yesterday)).Value;
+        parent.IsCompleted.Should().BeFalse();
+        var (_, first, second) = await SeedAsync(parent: parent);
+        _context.HabitLogs.Add(first.Log(Today).Value);
+        await _context.SaveChangesAsync();
+
+        if (bulk)
+        {
+            var result = await _bulk.Handle(new BulkLogHabitsCommand(_userId, [new(second.Id)]), default);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
+        }
+        else
+            await LogAsync(second, false);
+
+        ActiveSlips(second).Should().ContainSingle();
+        ActiveSlips(parent).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Log_FlexibleParentQuotaAlreadyMet_ChildSucceedsWithoutParentSlip(bool bulk)
+    {
+        var yesterday = Today.AddDays(-1);
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, _userId, "Flexible parent",
+            FrequencyUnit.Week, 1, yesterday, IsBadHabit: true)).Value;
+        var (_, first, second) = await SeedAsync(parent: parent);
+        _context.HabitLogs.Add(parent.Log(yesterday).Value);
+        _context.HabitLogs.Add(first.Log(Today).Value);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+        _dates.GetUserWeekStartDayAsync(_userId, Arg.Any<CancellationToken>()).Returns(1);
+
+        if (bulk)
+        {
+            var result = await _bulk.Handle(new BulkLogHabitsCommand(_userId, [new(second.Id)]), default);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
+        }
+        else
+            await LogAsync(second, false);
+
+        (await _context.HabitLogs.CountAsync(log => log.HabitId == second.Id && log.Date == Today)).Should().Be(1);
+        (await _context.HabitLogs.CountAsync(log => log.HabitId == parent.Id && log.Date == Today)).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Unlog_DerivedSlipCompletedParent_ReopensParent(bool astra, bool oneTime)
+    {
+        var parent = Habit.Create(new HabitCreateParams(
+            oneTime ? HabitSchedule.OneTime : HabitSchedule.Recurring, _userId, "Parent",
+            oneTime ? null : FrequencyUnit.Day, oneTime ? null : 1, Today,
+            IsBadHabit: true, EndDate: oneTime ? null : Today)).Value;
+        var (_, first, second) = await SeedAsync(parent: parent);
+        await LogAsync(first, false);
+        await LogAsync(second, false);
+        parent.IsCompleted.Should().BeTrue();
+        ActiveSlips(parent).Should().ContainSingle();
+
+        if (astra)
+            (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
+        else
+            (await _single.Handle(new LogHabitCommand(_userId, first.Id), default)).IsSuccess.Should().BeTrue();
+
+        parent.IsCompleted.Should().BeFalse();
+        ActiveSlips(parent).Should().BeEmpty();
+        ActiveSlips(second).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BulkLog_ParentRepositoryFailure_DoesNotFailOtherItems()
+    {
+        var (parent, first, second) = await SeedAsync();
+        _context.HabitLogs.Add(first.Log(Today).Value);
+        var unrelated = CreateHabit("Unrelated", false);
+        _context.Habits.Add(unrelated);
+        await _context.SaveChangesAsync();
+        var repository = Substitute.For<IGenericRepository<Habit>>();
+        repository.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => _habits.FindTrackedAsync(call.Arg<Expression<Func<Habit, bool>>>(),
+                call.Arg<Func<IQueryable<Habit>, IQueryable<Habit>>>(), call.Arg<CancellationToken>()));
+        repository.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<Habit?>(new InvalidOperationException("Parent read failed")));
+        var handler = new BulkLogHabitsCommandHandler(repository, new GenericRepository<HabitLog>(_context),
+            new BulkLogServices(_dates, _streaks, _gamification), _goals, _work, _cache,
+            NullLogger<BulkLogHabitsCommandHandler>.Instance);
+
+        var result = await handler.Handle(new BulkLogHabitsCommand(_userId,
+            [new(second.Id), new(unrelated.Id)]), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(2);
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
+        result.Value.Results[1].Status.Should().Be(BulkItemStatus.Success);
+        unrelated.Logs.Should().ContainSingle();
+        ActiveSlips(parent).Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Unlog_ChildBreaksSet_RemovesParentSlip(bool astra)
@@ -170,6 +322,58 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Unlog_ChildBreaksSet_RemovesAllParentSlipsOnlyOnTargetDate(bool astra)
+    {
+        var (parent, first, second) = await SeedAsync();
+        _context.HabitLogs.Add(first.Log(Today).Value);
+        _context.HabitLogs.Add(second.Log(Today).Value);
+        _context.HabitLogs.Add(parent.Log(Today.AddDays(-1), advanceDueDate: false).Value);
+        _context.HabitLogs.Add(parent.Log(Today).Value);
+        _context.HabitLogs.Add(parent.Log(Today).Value);
+        await _context.SaveChangesAsync();
+
+        if (astra)
+            (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
+        else
+            (await _single.Handle(new LogHabitCommand(_userId, first.Id), default)).IsSuccess.Should().BeTrue();
+
+        ActiveSlips(parent).Should().BeEmpty();
+        parent.Logs.Should().ContainSingle(log => !log.IsDeleted).Which.Date.Should().Be(Today.AddDays(-1));
+        ActiveSlips(second).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NestedParents_IneligibleAncestor_StopsAfterEligibleParent(bool bulk)
+    {
+        var (parent, first, second) = await SeedAsync();
+        var yesterday = Today.AddDays(-1);
+        var root = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, _userId, "Completed root",
+            null, null, yesterday, IsBadHabit: true)).Value;
+        _context.HabitLogs.Add(root.Log(yesterday).Value);
+        _context.Habits.Add(root);
+        parent.SetParentHabitId(root.Id);
+        _context.HabitLogs.Add(first.Log(Today).Value);
+        await _context.SaveChangesAsync();
+
+        if (bulk)
+        {
+            var result = await _bulk.Handle(new BulkLogHabitsCommand(_userId, [new(second.Id)]), default);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
+        }
+        else
+            await LogAsync(second, false);
+
+        ActiveSlips(parent).Should().ContainSingle();
+        ActiveSlips(root).Should().BeEmpty();
+        ActiveSlips(second).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task NestedParents_LogAndUndo_ApplyAllChildrenRuleAtEachLevel(bool bulk)
     {
         var (parent, first, second) = await SeedAsync();
@@ -208,9 +412,9 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
             (await _single.Handle(new LogHabitCommand(_userId, habit.Id, ToggleExisting: false), default)).IsSuccess.Should().BeTrue();
     }
 
-    private async Task<(Habit Parent, Habit First, Habit Second)> SeedAsync(bool bad = true)
+    private async Task<(Habit Parent, Habit First, Habit Second)> SeedAsync(bool bad = true, Habit? parent = null)
     {
-        var parent = CreateHabit("Parent", bad);
+        parent ??= CreateHabit("Parent", bad);
         var first = CreateHabit("First child", bad, parent.Id);
         var second = CreateHabit("Second child", bad, parent.Id);
         _context.Habits.AddRange(parent, first, second);
