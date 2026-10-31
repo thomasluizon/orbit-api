@@ -1,6 +1,7 @@
 locals {
   api_secret_keys = toset([
     "AI__ApiKey",
+    "AI__EvalApiKey",
     "Encryption__Key",
     "Firebase__CredentialsJson",
     "GooglePlay__ServiceAccountJson",
@@ -28,6 +29,7 @@ locals {
 
   production_api_values = {
     AI__BaseUrl                         = "https://api.openai.com/v1"
+    AI__EvalDailyBudgetUsd              = "0.50"
     AI__Model                           = "gpt-6-luna"
     AI__SubTaskModel                    = "gpt-6-luna"
     ASPNETCORE_ENVIRONMENT              = "Production"
@@ -72,6 +74,7 @@ locals {
   }
 
   staging_api_values = merge(local.production_api_values, {
+    AI__EvalDailyBudgetUsd             = "0.50"
     Ses__TransactionalConfigurationSet = aws_sesv2_configuration_set.staging["transactional"].configuration_set_name
     Ses__MarketingConfigurationSet     = aws_sesv2_configuration_set.staging["marketing"].configuration_set_name
     Ses__TopicArn                      = aws_sns_topic.ses_events_staging.arn

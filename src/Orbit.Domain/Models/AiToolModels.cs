@@ -19,6 +19,7 @@ public sealed record AiToolRequest(
     string? ImageMimeType = null,
     IReadOnlyList<ChatHistoryMessage>? History = null)
 {
+    public string Purpose { get; init; } = "chat";
     public string? DynamicContext { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();
 }
@@ -45,10 +46,11 @@ public sealed class AiConversationContext
     public object Options { get; init; } = null!;
     /// <summary>User attributed to each model round in this conversation.</summary>
     public Guid? UserId { get; init; }
+    public string Purpose { get; init; } = "chat";
     public AiTurnTelemetry Telemetry { get; init; } = new();
     /// <summary>Earlier reads whose full payload is retained by the handler after staging a preview.</summary>
     public IReadOnlyCollection<string> RetiredReadCallIds { get; set; } = [];
-    /// <summary>Declarations refreshed from successful typed tool results before continuation.</summary>
+    /// <summary>Per-round ask constraints appended after the immutable provider tool catalog and system prompt.</summary>
     public IReadOnlyList<object> ToolDeclarationUpdates { get; set; } = [];
     /// <summary>Server-authored feedback for an invalid tool-free terminal answer.</summary>
     public string? ResponseValidationFeedback { get; set; }

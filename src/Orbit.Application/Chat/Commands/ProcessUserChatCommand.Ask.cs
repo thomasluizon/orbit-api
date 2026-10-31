@@ -194,7 +194,8 @@ public partial class ProcessUserChatCommandHandler
         {
             name = ask.Name,
             description = ask.Description,
-            parameters = ChatToolSchema(ask, request, context, results.HasSuccessfulAccountRead, results.MissingHabitDrafts.Values.ToArray())
+            parameters = ChatToolSchema(ask, request.ClientContext, UsesComposition(request, context), results.HasSuccessfulAccountRead, results.MissingHabitDrafts.Values.ToArray()),
+            cacheable_parameters = ChatToolSchema(ask, request.ClientContext, UsesComposition(request, context))
         }];
     }
 

@@ -9,7 +9,8 @@ public record AiUsageTotals(
     long PromptTokens,
     long CompletionTokens,
     long TotalTokens,
-    decimal CostUsd);
+    decimal CostUsd,
+    long ReasoningTokens = 0);
 
 /// <summary>
 /// Aggregated AI token usage and computed dollar cost for a single
@@ -27,6 +28,7 @@ public class AiUsageDaily : Entity
     public long PromptTokens { get; private set; }
     public long CompletionTokens { get; private set; }
     public long TotalTokens { get; private set; }
+    public long ReasoningTokens { get; private set; }
     public decimal CostUsd { get; private set; }
 
     private AiUsageDaily() { }
@@ -38,6 +40,9 @@ public class AiUsageDaily : Entity
         AiUsageTotals totals,
         Guid? userId = null)
     {
+        if (totals.ReasoningTokens < 0 || totals.ReasoningTokens > totals.CompletionTokens)
+            throw new ArgumentOutOfRangeException(nameof(totals), "Reasoning tokens must be between zero and output tokens.");
+
         return new AiUsageDaily
         {
             Date = date,
@@ -49,6 +54,7 @@ public class AiUsageDaily : Entity
             PromptTokens = totals.PromptTokens,
             CompletionTokens = totals.CompletionTokens,
             TotalTokens = totals.TotalTokens,
+            ReasoningTokens = totals.ReasoningTokens,
             CostUsd = totals.CostUsd
         };
     }

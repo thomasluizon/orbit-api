@@ -143,10 +143,30 @@ public static class ProactiveProposal
     public static bool Contains(JsonElement args) => ContainsNode(JsonNode.Parse(args.GetRawText()));
     private static bool ContainsNode(JsonNode? node) => node switch
     {
-        JsonObject obj => obj.ContainsKey(Argument) || obj.ContainsKey(Metadata) || obj.Any(p => ContainsNode(p.Value)),
+        JsonObject obj => obj.Any(p => (p.Key is Argument or Metadata && !EmptyPlaceholder(p.Value)) || ContainsNode(p.Value)),
         JsonArray array => array.Any(ContainsNode),
         _ => false
     };
+
+    private static bool EmptyPlaceholder(JsonNode? node) => node is null or JsonArray { Count: 0 } or JsonObject { Count: 0 };
+
+    public static JsonElement OmitEmptySuggestions(JsonElement args)
+    {
+        var node = JsonNode.Parse(args.GetRawText());
+        OmitEmptySuggestions(node);
+        return JsonSerializer.SerializeToElement(node);
+    }
+
+    private static void OmitEmptySuggestions(JsonNode? node)
+    {
+        if (node is JsonObject obj)
+        {
+            if (obj.TryGetPropertyValue(Argument, out var value) && EmptyPlaceholder(value)) obj.Remove(Argument);
+            foreach (var property in obj) OmitEmptySuggestions(property.Value);
+        }
+        else if (node is JsonArray array)
+            foreach (var item in array) OmitEmptySuggestions(item);
+    }
 
     public static JsonElement ForModelCall(JsonElement args)
     {
@@ -169,6 +189,7 @@ public static class ProactiveProposal
             obj.Remove(ProactiveOfferDismissal.Argument);
             obj.Remove(Metadata);
             if (suggestions) obj.Remove(Argument);
+            else if (obj.TryGetPropertyValue(Argument, out var proposed) && EmptyPlaceholder(proposed)) obj.Remove(Argument);
             foreach (var property in obj.ToArray()) Strip(property.Value, suggestions);
         }
         else if (node is JsonArray array) foreach (var item in array) Strip(item, suggestions);

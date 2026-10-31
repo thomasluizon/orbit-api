@@ -108,7 +108,7 @@ public partial class AiIntentServiceStreamingTests
         JsonSerializer.Serialize(metadata).Should().NotContain("private");
 
         var options = (CreateResponseOptions)first.Value.ConversationContext!.Options!;
-        options.MaxOutputTokenCount.Should().Be(8192);
+        options.MaxOutputTokenCount.Should().Be(4096);
         options.ReasoningOptions.ReasoningEffortLevel.Should().Be(ResponseReasoningEffortLevel.Low);
         options.ToolChoice.Should().BeNull();
         options.Tools.OfType<FunctionTool>().Select(tool => tool.FunctionName).Should().Equal(toolName);
@@ -148,7 +148,7 @@ public partial class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ContinueWithToolResultsAsync_DeclaresDeferredAskAfterTypedRead(bool streaming)
+    public async Task ContinueWithToolResultsAsync_KeepsCatalogAndAppendsTypedAskConstraints(bool streaming)
     {
         var tools = StrictChatToolSchemaTests.AllTools();
         var ask = tools.Single(tool => tool.Name == "ask").Should()
@@ -159,11 +159,11 @@ public partial class AiIntentServiceStreamingTests
         read.OutputItems.Add(ResponseItem.CreateFunctionCallItem("read", query.Name, BinaryData.FromString("{}")));
         var reply = ResponsesTestData.Response("Ready.");
         string Body(ResponseResult response) => streaming ? ResponsesTestData.Stream(response) : ModelReaderWriter.Write(response).ToString();
-        var handler = new SequenceSseHandler(Body(read), Body(reply));
+        var handler = new SequenceSseHandler(Body(read), Body(reply), Body(reply));
         var (service, sink) = BuildService(handler);
         var streamSink = streaming ? sink.Handle : (Func<AiStreamEvent, Task>?)null;
         var first = await service.SendWithToolsAsync(new AiToolRequest("Continue.", "system",
-            [new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
+            [Declaration(true), new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
         first.IsSuccess.Should().BeTrue(first.Error);
         first.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true), new { name = "unadvertised_tool" }];
 
@@ -171,14 +171,23 @@ public partial class AiIntentServiceStreamingTests
             [new(query.Name, "read", true, null, null, null)], streamSink);
 
         next.IsSuccess.Should().BeTrue(next.Error);
-        handler.RequestBodies.Should().HaveCount(2);
-        for (var index = 0; index < 2; index++)
+        next.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true)];
+        var last = await service.ContinueWithToolResultsAsync(next.Value.ConversationContext, [], streamSink);
+        last.IsSuccess.Should().BeTrue(last.Error);
+        handler.RequestBodies.Should().HaveCount(3);
+        for (var index = 0; index < 3; index++)
         {
             using var document = JsonDocument.Parse(handler.RequestBodies[index]);
             var declarations = document.RootElement.GetProperty("tools").EnumerateArray().ToArray();
-            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal(index == 0 ? ["query_habits"] : new[] { "query_habits", "ask" });
+            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal("ask", "query_habits");
             if (index == 0) continue;
-            var declaration = declarations[1];
+            document.RootElement.GetProperty("input").GetRawText().Should().Contain("Apply these ask constraints for this round");
+            document.RootElement.GetProperty("input").EnumerateArray()
+                .Count(item => item.GetRawText().Contains("Apply these ask constraints for this round", StringComparison.Ordinal))
+                .Should().Be(1);
+            using var initial = JsonDocument.Parse(handler.RequestBodies[0]);
+            document.RootElement.GetProperty("tools").GetRawText().Should().Be(initial.RootElement.GetProperty("tools").GetRawText());
+            var declaration = declarations[0];
             declaration.GetProperty("strict").GetBoolean().Should().BeTrue();
             StrictChatToolSchemaTests.AssertStrict(declaration.GetProperty("parameters"));
             var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
@@ -531,7 +540,7 @@ public partial class AiIntentServiceStreamingTests
     [InlineData(true)]
     public async Task SendWithToolsAsync_TruncationLogsOnlyTokenCountsAndOrderedItemSizes(bool streaming)
     {
-        var response = ResponsesTestData.Response(inputTokens: 128, outputTokens: 8192);
+        var response = ResponsesTestData.Response(inputTokens: 128, outputTokens: 4096);
         response.Status = ResponseStatus.Incomplete;
         response.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
         response.Usage.OutputTokenDetails = new() { ReasoningTokenCount = 8100 };
@@ -550,9 +559,9 @@ public partial class AiIntentServiceStreamingTests
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.IsTruncated.Should().BeTrue();
         var properties = logger.WarningProperties.Should().ContainSingle(entry => entry.EventId == 8).Subject.Properties;
-        properties.Should().ContainKey("OutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("OutputTokens").WhoseValue.Should().Be(4096);
         properties.Should().ContainKey("ReasoningTokens").WhoseValue.Should().Be(8100);
-        properties.Should().ContainKey("MaxOutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("MaxOutputTokens").WhoseValue.Should().Be(4096);
         properties.Should().ContainKey("Model").WhoseValue.Should().Be("gpt-6-luna");
         properties.Should().ContainKey("OutputItems");
         using var items = JsonDocument.Parse((string)properties["OutputItems"]!);
@@ -604,7 +613,7 @@ public partial class AiIntentServiceStreamingTests
 
         handler.LastRequestBody.Should().Contain(userId.ToString("N"));
         using var requestDocument = JsonDocument.Parse(handler.LastRequestBody!);
-        requestDocument.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        requestDocument.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         requestDocument.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         requestDocument.RootElement.TryGetProperty("user", out _).Should().BeFalse();
     }
@@ -636,7 +645,7 @@ public partial class AiIntentServiceStreamingTests
     }
 
     [Fact]
-    public async Task SendWithToolsAsync_CacheKey_IsStableForOneUserAndDiffersBetweenUsers()
+    public async Task SendWithToolsAsync_CacheKey_IsSharedAcrossUsers()
     {
         var handler = new JsonHandler(BufferedCompletion);
         var (service, _) = BuildService(handler);
@@ -648,9 +657,9 @@ public partial class AiIntentServiceStreamingTests
             using var document = JsonDocument.Parse(handler.LastRequestBody!);
             keys.Add(document.RootElement.GetProperty("prompt_cache_key").GetString());
         }
-        keys[0].Should().Be(userId.ToString("N"));
+        keys[0].Should().Be("orbit:gpt-6-luna");
         keys[1].Should().Be(keys[0]);
-        keys[2].Should().NotBe(keys[0]);
+        keys[2].Should().Be(keys[0]);
     }
 
     [Theory]
@@ -698,7 +707,7 @@ public partial class AiIntentServiceStreamingTests
         var root = document.RootElement;
         root.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         root.TryGetProperty("temperature", out _).Should().BeFalse();
-        root.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        root.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         root.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         root.TryGetProperty("user", out _).Should().BeFalse();
         root.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");

@@ -132,7 +132,7 @@ public class AiCompletionClientTests
             using var assertions = new AssertionScope();
             document.RootElement.TryGetProperty("prompt_cache_key", out var cacheKey).Should().BeTrue();
             if (cacheKey.ValueKind == JsonValueKind.String)
-                cacheKey.GetString().Should().Be(userId.ToString("N"));
+                cacheKey.GetString().Should().Be("orbit:gpt-6-luna");
             document.RootElement.TryGetProperty("safety_identifier", out var safetyIdentifier).Should().BeTrue();
             if (safetyIdentifier.ValueKind == JsonValueKind.String)
                 safetyIdentifier.GetString().Should().Be(userId.ToString("N"));
@@ -224,7 +224,7 @@ public class AiCompletionClientTests
             "json", "gpt-6-luna", 0, 1, 2, 3, Arg.Any<CancellationToken>(), userId, Arg.Any<AiCallTelemetry>());
         using var document = JsonDocument.Parse(handler.LastRequestBody!);
         document.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
-        document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        document.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         document.RootElement.TryGetProperty("user", out _).Should().BeFalse();
     }
 

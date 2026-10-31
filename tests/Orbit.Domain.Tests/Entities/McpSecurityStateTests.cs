@@ -16,6 +16,19 @@ public class McpSecurityStateTests
     }
 
     [Fact]
+    public void EvalReservation_KeepsUtcAccountingSeparateFromUserDate()
+    {
+        var localDate = new DateOnly(2026, 1, 3);
+        var utcDate = new DateOnly(2026, 1, 2);
+        var call = AiBudgetCall.Reserve(Guid.NewGuid(), localDate, 100, utcDate);
+        call.LocalDate.Should().Be(localDate);
+        call.EvalDateUtc.Should().Be(utcDate);
+        call.Settle(50);
+        call.EvalDateUtc.Should().Be(utcDate);
+        AiBudgetCall.Reserve(Guid.NewGuid(), localDate, 100).EvalDateUtc.Should().BeNull();
+    }
+
+    [Fact]
     public void BudgetSettlement_IsOnceOnlyAndRejectsNegativeSpend()
     {
         var call = AiBudgetCall.Reserve(Guid.NewGuid(), new DateOnly(2026, 1, 1), 120000);

@@ -18,9 +18,11 @@ public sealed partial class PendingOperationChangePreviewer
     public async Task<Result<PendingOperationChangePreview?>> PreviewAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken = default, AgentClientContext? clientContext = null)
     {
-        if (operationId == AccountChangeSet.OperationName || !ProactiveProposal.Contains(arguments))
+        arguments = ProactiveProposal.OmitEmptySuggestions(arguments);
+        var offersEnabled = ProactiveProposal.Enabled(clientContext) && ProactiveProposal.Supports(operationId);
+        if (operationId == AccountChangeSet.OperationName || (!ProactiveProposal.Contains(arguments) && !offersEnabled))
             return await PreviewCoreAsync(userId, operationId, arguments, clientContext, cancellationToken);
-        if (!ProactiveProposal.Enabled(clientContext) || !ProactiveProposal.Supports(operationId))
+        if (!offersEnabled)
             return Result.Failure<PendingOperationChangePreview?>("offers_not_supported");
         if (toolRegistry.GetTool(operationId) is not { } tool)
             return Result.Failure<PendingOperationChangePreview?>("preview_unavailable");
