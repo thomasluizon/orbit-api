@@ -141,7 +141,8 @@ public partial class ReminderSchedulerServiceTests
             dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);
             using var cache = new MemoryCache(new MemoryCacheOptions());
             var skip = new SkipHabitCommandHandler(new(new GenericRepository<Habit>(db),
-                    new GenericRepository<HabitLog>(db), new GenericRepository<HabitSkipUndo>(db)),
+                    new GenericRepository<HabitLog>(db), new GenericRepository<HabitSkipUndo>(db),
+                    new GenericRepository<Notification>(db)),
                 dates, Substitute.For<IGoalCompletionService>(), new UnitOfWork(db, new DatabaseConnectionSettings()), cache);
             (await skip.Handle(new(user.Id, habit.Id), default)).IsSuccess.Should().BeTrue();
         }
