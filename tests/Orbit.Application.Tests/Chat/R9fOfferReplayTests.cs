@@ -66,17 +66,31 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("dated-reminder-pt-BR-r2", "emoji", "suggested")]
     [InlineData("repeat-en-r1", "repeat_reminder", "suggested")]
     [InlineData("repeat-pt-BR-r3", "repeat_reminder", "suggested")]
-    public async Task R9f_StrictPlaceholdersPreserveTheWriteAndValidSuggestions(string capture, string field, string provenance)
+    public async Task R9f_StrictPlaceholdersPreserveValidSuggestionsAfterRequiredRepair(string capture, string field, string provenance)
     {
         SetupUserAndPayGate();
         EnableComposition();
         var tool = new CreateHabitTool(_userDateService, _mediator);
         var handler = CreateHandler(tool);
         var outcomes = R9fWriteExecutor(tool);
-        SetupAiResponse(new AiResponse { ToolCalls = [R9fCall(capture, tool.Name)], ConversationContext = TestConversationContext });
+        var original = R9fCall(capture, tool.Name);
+        var missing = original.Args.GetProperty("suggested_fields").EnumerateArray().Select(name => name.GetString()!)
+            .Where(name => !original.Args.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null
+                || value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 0).ToArray();
+        if (missing.Length > 0)
+        {
+            var corrected = JsonNode.Parse(original.Args.GetRawText())!.AsObject();
+            corrected["suggested_fields"] = new JsonArray(original.Args.GetProperty("suggested_fields").EnumerateArray()
+                .Select(name => name.GetString()!).Except(missing).Select(name => (JsonNode?)JsonValue.Create(name)).ToArray());
+            _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse
+                { ToolCalls = [original with { Id = "repair", Args = JsonSerializer.SerializeToElement(corrected) }], ConversationContext = TestConversationContext }));
+        }
+        SetupAiResponse(new AiResponse { ToolCalls = [original], ConversationContext = TestConversationContext });
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(capture.Contains("pt-BR") ? "pt-BR" : "en")), default);
         result.IsSuccess.Should().BeTrue(result.Error);
-        outcomes.Single().Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
+        outcomes.Select(outcome => outcome.Operation.Status).Should().Equal(missing.Length > 0
+            ? [AgentOperationStatus.Failed, AgentOperationStatus.PendingConfirmation] : new[] { AgentOperationStatus.PendingConfirmation });
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items!.Single().Fields.Should().Contain(value => value.Field == field && value.Provenance == provenance);
         if (R9fCall(capture, tool.Name).Args.GetProperty("due_date").ValueKind == JsonValueKind.Null)

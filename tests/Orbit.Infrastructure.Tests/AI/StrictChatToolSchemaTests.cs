@@ -84,12 +84,18 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
-    public void Ask_WireSchemaRequiresNonemptyContentForEveryForm()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Ask_WireSchemaRequiresNonemptyContentForEveryForm(bool offers)
     {
-        var tool = AllTools().Single(tool => tool is AskTool);
+        var tool = (AskTool)AllTools().Single(tool => tool is AskTool);
+        var source = tool.GetParameterSchema(true);
+        if (offers) source = typeof(AskTool).Assembly.GetType("Orbit.Application.Chat.ProactiveOfferDismissal", true)!
+            .GetMethod("Schema", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [source])!;
+        source = TerminalReadDirective.WithCompletionArgument(source);
         var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var sdkTool = (ResponseTool)method.Invoke(null, [new { name = tool.Name, description = tool.Description, parameters = tool.GetParameterSchema() }])!;
+        var sdkTool = (ResponseTool)method.Invoke(null, [new { name = tool.Name, description = tool.Description, parameters = source }])!;
         using var wire = JsonDocument.Parse(ModelReaderWriter.Write(sdkTool).ToString());
         output.WriteLine(wire.RootElement.GetRawText());
         var schema = wire.RootElement.GetProperty("parameters");
@@ -111,6 +117,13 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
             {
                 fields.GetProperty("title").GetProperty("pattern").GetString().Should().Be(@"\S");
                 fields.GetProperty("items").GetProperty("minItems").GetInt32().Should().Be(1);
+                var arguments = fields.GetProperty("items").GetProperty("items").GetProperty("properties").GetProperty("arguments");
+                arguments.GetProperty("description").GetString().Should().Be("For create_habits, a JSON string containing only the supplied fields of one bulk_create_habits item, including title; omit unspecified fields and nulls. For log_habits/skip_habits, an object with only habit_id and date (YYYY-MM-DD). Never repeat the full create schema or pad arguments with whitespace.");
+                var alternatives = arguments.GetProperty("anyOf");
+                alternatives[0].GetProperty("type").GetString().Should().Be("string",
+                    "a selection must not expand every nullable create field for each item");
+                alternatives[1].GetProperty("properties").EnumerateObject().Select(property => property.Name)
+                    .Should().BeEquivalentTo("habit_id", "date");
             }
             if (form == "question")
             {

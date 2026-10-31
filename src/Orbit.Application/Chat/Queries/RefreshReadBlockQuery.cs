@@ -55,10 +55,7 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
         if (request.Page && ticket.Offset <= 0)
             return Result.Failure<QueryReadBlock>("Use the exact query's next cursor.", errorCode: "READ_QUERY_PAGE_INVALID");
-        var args = JsonNode.Parse(ticket.Arguments.GetRawText())!.AsObject();
-        args["offset"] = request.Page ? ticket.Offset : 0;
-        if (ticket.Tool is "get_daily_summary" or "get_retrospective") args["generate_narrative"] = false;
-        var arguments = JsonSerializer.SerializeToElement(args);
+        var arguments = RefreshArguments(ticket, request.Page);
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(request.UserId, ticket.Tool,
             arguments, AgentExecutionSurface.Chat, request.AuthMethod, request.GrantedScopes, request.ReadOnlyCredential), ct);
         if (response.Operation.Status != AgentOperationStatus.Succeeded && response.Operation.ErrorCode is { } sourceError)
@@ -76,6 +73,16 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
         if (request.Page && block.Read.Revision != ticket.Revision)
             return Result.Failure<QueryReadBlock>("The source changed. Refresh the original query before paging.", errorCode: "READ_QUERY_STALE");
         return Result.Success(block);
+    }
+
+    private static JsonElement RefreshArguments(ReadQueryTicket ticket, bool page)
+    {
+        var args = JsonNode.Parse(ticket.Arguments.GetRawText())!.AsObject();
+        if (ticket.Tool == "get_habit_month" && ticket.Kind == HabitMonthCardBuilder.Kind)
+            args["window"] ??= "month";
+        args["offset"] = page ? ticket.Offset : 0;
+        if (ticket.Tool is "get_daily_summary" or "get_retrospective") args["generate_narrative"] = false;
+        return JsonSerializer.SerializeToElement(args);
     }
 
     private static bool MatchesContract(RefreshReadBlockQuery request, string kind) =>

@@ -11,7 +11,7 @@ public static class ProactiveProposal
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
     private const string Properties = "properties";
-    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in the ordinary operation fields and list their names in suggested_fields. List a name only after setting its non-null, non-empty value; never list unused options or null placeholders. Keep requested field names out of that list. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. To find a fitting parent, list the existing routines as well as checking for duplicates of the new item. Put an unrequested parent on the item and list parent_habit_id in its suggested_fields; leave the bulk container parent unset. Read active goals before proposing a useful owned goal link. For a dated task, consider a concrete reminder configuration, not just an emoji. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
+    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in the ordinary operation fields and list their names in suggested_fields. List a name only after setting its non-null, non-empty value; never list unused options or null placeholders. Keep requested field names out of that list. Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields. Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags from the supplied offer_account_facts first. To find a fitting parent, use its routine index as well as checking for duplicates of the new item; query only missing facts when that index is partial. When the message supplies a habit ID, pass it directly to the write tool; no query_habits lookup is needed. Put an unrequested parent on the item and list parent_habit_id in its suggested_fields; leave the bulk container parent unset. Use the supplied active goals before proposing a useful owned goal link; do not read those goals again. For a dated task, consider a concrete reminder configuration, not just an emoji. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
 
     public static bool Enabled(AgentClientContext? client) => client is
     {
@@ -36,9 +36,10 @@ public static class ProactiveProposal
 
     public static object RevisionSchema(object schema, bool enabled)
     {
-        if (enabled) return schema;
         var root = JsonSerializer.SerializeToNode(schema)!.AsObject();
-        (root[Properties]?[ToolArgumentNames.Items]?[ToolArgumentNames.Items]?[Properties] as JsonObject)?.Remove("remove_suggested_fields");
+        if (!enabled)
+            (root[Properties]?[ToolArgumentNames.Items]?[ToolArgumentNames.Items]?[Properties] as JsonObject)?.Remove("remove_suggested_fields");
+        ChatToolControlOrder.Apply(root);
         return root;
     }
 
@@ -79,6 +80,7 @@ public static class ProactiveProposal
                 ["enum"] = new JsonArray(eligible.Select(property => JsonValue.Create(property.Key)).ToArray())
             }
         };
+        ChatToolControlOrder.Apply(schema);
     }
 
     internal static bool NormalizeSuggestions(JsonNode? node, out string? invalidField)
@@ -99,7 +101,16 @@ public static class ProactiveProposal
             source.Remove(Argument);
             return true;
         }
-        if (proposed is JsonObject) return true;
+        if (proposed is JsonObject values)
+        {
+            foreach (var field in values)
+                if (!Eligible(field.Key) || !HasValue(field.Value))
+                {
+                    invalidField = field.Key;
+                    return false;
+                }
+            return true;
+        }
         if (proposed is not JsonArray names)
         {
             invalidField = Argument;
@@ -115,7 +126,11 @@ public static class ProactiveProposal
                 invalidField = name?.ToJsonString() ?? Argument;
                 return false;
             }
-            if (!source.Remove(field, out var configuration) || !HasValue(configuration)) continue;
+            if (!source.Remove(field, out var configuration) || !HasValue(configuration))
+            {
+                invalidField = field;
+                return false;
+            }
             suggestions[field] = configuration;
         }
         source[Argument] = suggestions;
@@ -151,6 +166,7 @@ public static class ProactiveProposal
     {
         if (node is JsonObject obj)
         {
+            obj.Remove(ProactiveOfferDismissal.Argument);
             obj.Remove(Metadata);
             if (suggestions) obj.Remove(Argument);
             foreach (var property in obj.ToArray()) Strip(property.Value, suggestions);

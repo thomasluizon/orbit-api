@@ -31,6 +31,7 @@ public partial class ProcessUserChatCommandHandler
         var hasUnexecutedCalls = aiResponse.HasToolCalls;
         var terminalAnswerCorrectionAttempted = false;
         RejectedCallCorrection? correction = null;
+        await RecordModelOfferDismissalsAsync(aiResponse, request, cancellationToken);
 
         if (tokenBudgetExceeded)
         {
@@ -75,6 +76,7 @@ public partial class ProcessUserChatCommandHandler
                 return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded, hadToolFailure, roundResult.ProviderError);
 
             aiResponse = roundResult.Response;
+            await RecordModelOfferDismissalsAsync(aiResponse, request, cancellationToken);
             correction = roundResult.Correction;
             hasUnexecutedCalls = aiResponse.HasToolCalls;
             if (roundResult.HadToolFailure)

@@ -114,8 +114,17 @@ public sealed partial class AiIntentService(
                 }
             });
 
-        foreach (var result in results)
+        var supplied = results.GroupBy(result => result.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var answered = messages.OfType<FunctionCallOutputResponseItem>().Select(output => output.CallId)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var call in messages.OfType<FunctionCallResponseItem>().ToArray())
         {
+            if (!answered.Add(call.CallId)) continue;
+            var result = supplied.GetValueOrDefault(call.CallId) ?? new AiToolCallResult(call.FunctionName,
+                call.CallId, false, null, null,
+                "This function call was not executed. Continue using the available typed results; do not assume it succeeded.",
+                new { status = "not_executed" });
             var payload = new Dictionary<string, object>
             {
                 ["success"] = result.Success,
@@ -185,6 +194,20 @@ public sealed partial class AiIntentService(
             var round = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
                 messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken),
                 cancellationToken, ModelReaderWriter.Write(options).ToString());
+            if (round.RetryableIncomplete)
+            {
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogRetryIncomplete(logger, round.ResponseId, round.InputTokenCount, round.IncompleteReason);
+                stopwatch.Restart();
+                var retry = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
+                    messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken),
+                    cancellationToken, ModelReaderWriter.Write(options).ToString());
+                round = retry with
+                {
+                    ReportedTokenCount = round.ReportedTokenCount + retry.ReportedTokenCount,
+                    RequestBudgetTokenCount = round.RequestBudgetTokenCount + retry.RequestBudgetTokenCount
+                };
+            }
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Debug))
@@ -343,11 +366,26 @@ public sealed partial class AiIntentService(
         var contentEmitted = false;
         int? lastTextOutputIndex = null;
         ResponseResult? response = null;
+        var completedItems = new SortedDictionary<int, ResponseItem>();
+        var argumentMonitor = new FunctionArgumentMonitor();
+        using var streamCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        await foreach (var update in client.StreamingResponsesClient.CreateResponseStreamingAsync(options, cancellationToken))
+        await foreach (var update in client.StreamingResponsesClient.CreateResponseStreamingAsync(options, streamCancellation.Token))
         {
+            if (argumentMonitor.Observe(update, observation) is { } toolName)
+            {
+                streamCancellation.Cancel();
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogArgumentWhitespace(logger, argumentMonitor.ResponseId, toolName);
+                if (contentEmitted) await streamSink(AiStreamEvent.Reset());
+                return new CompletedRound(null, [], 0, 0, true, true, argumentMonitor.ResponseId,
+                    observation.Response?.Usage?.InputTokenCount, "function_argument_whitespace");
+            }
             switch (update)
             {
+                case StreamingResponseOutputItemDoneUpdate done:
+                    completedItems[done.OutputIndex] = done.Item;
+                    break;
                 case StreamingResponseOutputTextDeltaUpdate delta when !string.IsNullOrEmpty(delta.Delta):
                     if (!firstTokenLogged)
                     {
@@ -378,11 +416,41 @@ public sealed partial class AiIntentService(
         if (response is null)
             throw new IOException("AI response stream ended before a terminal event.");
 
+        for (var index = 0; index < response.OutputItems.Count; index++)
+            completedItems[index] = response.OutputItems[index];
+        response.OutputItems.Clear();
+        foreach (var item in completedItems.Values) response.OutputItems.Add(item);
         observation.Response = response;
-        var round = FinishRound(response, messages, options, "streaming");
+        var round = FinishRound(response, messages, options, "streaming", contentEmitted);
         if (round.ToolCalls.Count > 0 && contentEmitted)
             await streamSink(AiStreamEvent.Reset());
         return round;
+    }
+
+    private sealed class FunctionArgumentMonitor
+    {
+        private readonly Dictionary<int, FunctionArgumentStream> _streams = [];
+        public string ResponseId { get; private set; } = "unknown";
+
+        public string? Observe(StreamingResponseUpdate update, ModelCallObservation observation)
+        {
+            switch (update)
+            {
+                case StreamingResponseCreatedUpdate created:
+                    ResponseId = created.Response.Id;
+                    observation.Response = created.Response;
+                    break;
+                case StreamingResponseOutputItemAddedUpdate { Item: FunctionCallResponseItem call } added:
+                    _streams[added.OutputIndex] = new FunctionArgumentStream(call.FunctionName);
+                    break;
+                case StreamingResponseFunctionCallArgumentsDeltaUpdate arguments:
+                    if (!_streams.TryGetValue(arguments.OutputIndex, out var stream))
+                        _streams[arguments.OutputIndex] = stream = new FunctionArgumentStream("unknown");
+                    if (stream.HasDegenerated(arguments.Delta.ToString())) return stream.ToolName;
+                    break;
+            }
+            return null;
+        }
     }
 
     private static void SetInputItems(CreateResponseOptions options, List<ResponseItem> messages)
@@ -396,16 +464,17 @@ public sealed partial class AiIntentService(
         ResponseResult response,
         List<ResponseItem> messages,
         CreateResponseOptions options,
-        string phase)
+        string phase,
+        bool assistantTextStreamed = false)
     {
         LogChatUsage(response.Usage, phase);
         AiCompletionClient.EnsureSuccessful(response);
 
-        foreach (var item in response.OutputItems)
-            if (item is not ReasoningResponseItem || AiCompletionClient.IsReasoningModel(aiClient.ChatModel))
-                messages.Add(item);
-
         var truncated = response.IncompleteStatusDetails?.Reason == ResponseIncompleteStatusReason.MaxOutputTokens;
+        if (!truncated)
+            foreach (var item in response.OutputItems)
+                if (item is not ReasoningResponseItem || AiCompletionClient.IsReasoningModel(aiClient.ChatModel))
+                    messages.Add(item);
         if (truncated && logger.IsEnabled(LogLevel.Warning))
             LogResponseTruncated(logger, response.Usage?.OutputTokenCount,
                 response.Usage?.OutputTokenDetails?.ReasoningTokenCount, options.MaxOutputTokenCount,
@@ -419,8 +488,12 @@ public sealed partial class AiIntentService(
         if (response.Status == ResponseStatus.Incomplete && !truncated && toolCalls.Count > 0)
             throw new InvalidOperationException("AI returned incomplete tool calls.");
 
-        return new CompletedRound(AiCompletionClient.GetAssistantOutputText(response), toolCalls,
-            GetReportedTokenCount(response.Usage), GetRequestBudgetTokenCount(response.Usage), truncated);
+        var text = AiCompletionClient.GetAssistantOutputText(response);
+        return new CompletedRound(text, toolCalls,
+            GetReportedTokenCount(response.Usage), GetRequestBudgetTokenCount(response.Usage), truncated,
+            response.Status == ResponseStatus.Incomplete && truncated && response.Usage?.OutputTokenCount is null or 0
+                && !assistantTextStreamed && string.IsNullOrWhiteSpace(text), response.Id,
+            response.Usage?.InputTokenCount, response.IncompleteStatusDetails?.Reason?.ToString() ?? "none");
     }
 
     private static List<AiToolCall> ToAiToolCalls(IReadOnlyList<FunctionCallResponseItem> toolCalls)
@@ -439,7 +512,11 @@ public sealed partial class AiIntentService(
         IReadOnlyList<FunctionCallResponseItem> ToolCalls,
         int ReportedTokenCount,
         int RequestBudgetTokenCount,
-        bool IsTruncated);
+        bool IsTruncated,
+        bool RetryableIncomplete,
+        string ResponseId,
+        int? InputTokenCount,
+        string IncompleteReason);
 
     private static ResponseTool? ConvertToSdkTool(object declaration)
     {
@@ -626,6 +703,12 @@ public sealed partial class AiIntentService(
     [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "AI round returned no assistant text or function calls. RoundIndex={RoundIndex} ResponseStatus={ResponseStatus} IncompleteReason={IncompleteReason} OutputItemKinds={OutputItemKinds} ContentPartKinds={ContentPartKinds} MessageRoles={MessageRoles} EarlierToolNames={EarlierToolNames}")]
     private static partial void LogAiEmptyRound(ILogger logger, int roundIndex, string responseStatus,
         string incompleteReason, string outputItemKinds, string contentPartKinds, string messageRoles, string earlierToolNames);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "Retrying incomplete AI round once. ResponseId={ResponseId} InputTokens={InputTokens} IncompleteReason={IncompleteReason}")]
+    private static partial void LogRetryIncomplete(ILogger logger, string responseId, int? inputTokens, string incompleteReason);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Warning, Message = "AI function argument whitespace limit exceeded. ResponseId={ResponseId} ToolName={ToolName}")]
+    private static partial void LogArgumentWhitespace(ILogger logger, string responseId, string toolName);
 
     private static Dictionary<string, ResponseTool> BuildToolCatalog(IReadOnlyList<object> declarations)
     {

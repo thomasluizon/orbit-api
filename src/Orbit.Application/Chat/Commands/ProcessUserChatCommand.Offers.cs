@@ -13,6 +13,17 @@ public partial class ProcessUserChatCommandHandler
 {
     private static readonly JsonSerializerOptions OfferSelectionJsonOptions = new(JsonSerializerDefaults.Web);
 
+    private async Task RecordModelOfferDismissalsAsync(AiResponse response, ProcessUserChatCommand request, CancellationToken ct)
+    {
+        if (!ProactiveProposal.Enabled(request.ClientContext) || offerStore is null || response.IsTruncated) return;
+        var keys = ProactiveOfferDismissal.Read(response);
+        if (keys.Count == 0) return;
+        var conversation = request.ClientContext!.ConversationId!.Value;
+        var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
+        var owned = keys.Where(key => issued.Any(offer => offer.Action.OfferKey == key)).ToArray();
+        if (owned.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, owned, ct);
+    }
+
     private async Task<ProcessUserChatCommand> LoadOfferDismissalsAsync(ProcessUserChatCommand request, CancellationToken ct)
     {
         if (!ProactiveProposal.Enabled(request.ClientContext) || offerStore is null) return request;
@@ -69,7 +80,7 @@ public partial class ProcessUserChatCommandHandler
         (PreparePreview, "reminder") => "Read the typed habit's current reminder configuration and propose a reminder without changing any other setting.",
         (PreparePreview, "goalLink") => "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.",
         (PreparePreview, "goalTarget") => "Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field.",
-        (ContinueChat, "smallStep") => "Help the person choose one small step for their local today.",
+        (ContinueChat, "smallStep") => "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview.",
         (ContinueChat, "notion") => "Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits.",
         (PreparePreview, "notification") => "Prepare a preview to mark the typed unread alert as read.",
         (ContinueChat, "reuse") when selected.Source?.QueryFamily == "list_tags" => "Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags.",
@@ -80,13 +91,14 @@ public partial class ProcessUserChatCommandHandler
     };
 
     private async Task<(ResponseCards Cards, bool Offered)> ComposeOfferAsync(ProcessUserChatCommand request,
-        ChatContext context, ResponseCards cards, ToolExecutionAccumulator results, CancellationToken ct)
+        ChatContext context, ResponseCards cards, ToolExecutionAccumulator results, bool truncated, CancellationToken ct)
     {
+        if (truncated) return (cards, false);
         try
         {
             return results.PendingOperations.Count > 0
                 ? await ComposePreviewOfferAsync(request, context, cards, results, ct)
-                : await ComposeOfferCoreAsync(request, context, cards, results, ct);
+                : await ComposeOfferCoreAsync(request, context, cards, results, truncated, ct);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -96,21 +108,23 @@ public partial class ProcessUserChatCommandHandler
     }
 
     private async Task<(ResponseCards Cards, bool Offered)> ComposeOfferCoreAsync(ProcessUserChatCommand request,
-        ChatContext context, ResponseCards cards, ToolExecutionAccumulator results, CancellationToken ct)
+        ChatContext context, ResponseCards cards, ToolExecutionAccumulator results, bool truncated, CancellationToken ct)
     {
-        if (!CanComposeOffer(request, results)) return (cards, false);
+        if (!CanComposeOffer(request, results, truncated)) return (cards, false);
         var blocks = cards.Parts?.OfType<ChatBlockPart>().ToArray() ?? [];
         var reads = results.OperationResults.Where(operation => operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!).Where(read => blocks.Any(block =>
                 ReadBlockTelemetry.Describe(block.Block).Read?.QueryId == read.Read.QueryId)).ToArray();
+        if (reads.Length == 0) return (cards, false);
         var conversation = request.ClientContext!.ConversationId!.Value;
         var issued = await offerStore!.IssuedAsync(request.UserId, conversation, ct);
-        if (reads.Length == 0 && issued.Count == 0) return (cards, false);
         var facts = await OfferFactsAsync(request.UserId, reads, context, ct);
         var dismissed = await offerStore.DismissedAsync(request.UserId, conversation, ct);
         var candidates = ProactiveOfferPlanner.Build(reads, facts, context.Language)
             .Where(candidate => !dismissed.Contains(candidate.Action.OfferKey)).Take(100).ToArray();
-        var selected = await SelectOfferAsync(request, candidates, issued, context, ct);
+        var concrete = PreferredTypedOffer(candidates);
+        var selected = concrete is not null ? new OfferSelection(concrete.Id, null, null)
+            : await SelectOfferAsync(request, candidates, issued, context, ct);
         if (selected is null) return (cards, false);
         var rejected = selected.DismissedOfferKeys?.Where(key => issued.Any(offer => offer.Action.OfferKey == key))
             .Distinct(StringComparer.Ordinal).ToArray() ?? [];
@@ -146,9 +160,14 @@ public partial class ProcessUserChatCommandHandler
         return candidate;
     }
 
-    private bool CanComposeOffer(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>
+    private static AstraOfferFact? PreferredTypedOffer(IEnumerable<AstraOfferFact> candidates) => candidates
+        .Where(candidate => candidate.Family is not ("aim" or "calendar" or "inspect"))
+        .OrderBy(candidate => candidate.Family switch { "reminder" => 0, "restart" => 1, "skip" => 2, "log" => 3, _ => 4 })
+        .FirstOrDefault();
+
+    private bool CanComposeOffer(ProcessUserChatCommand request, ToolExecutionAccumulator results, bool truncated) =>
         ProactiveProposal.Enabled(request.ClientContext) && offerStore is not null && results.AskBlock is null
-        && results.PendingOperations.Count == 0 && results.PolicyDenials.Count == 0 && !results.HasBudgetRecovery
+        && !truncated && results.PendingOperations.Count == 0 && results.PolicyDenials.Count == 0 && !results.HasBudgetRecovery
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
     private async Task<ProactiveAccountFacts> OfferFactsAsync(Guid userId, QueryReadBlock[] reads, ChatContext context, CancellationToken ct)

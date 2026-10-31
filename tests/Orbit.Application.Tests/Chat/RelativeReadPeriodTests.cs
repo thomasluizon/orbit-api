@@ -161,8 +161,10 @@ public sealed class RelativeReadPeriodTests
         foreach (var tool in tools)
         {
             var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
-            schema.GetProperty("properties").GetProperty("relative_period").GetProperty("enum")
-                .EnumerateArray().Select(value => value.GetString()).Should().Contain("this_week").And.Contain("last_week");
+            var periods = schema.GetProperty("properties").GetProperty("relative_period").GetProperty("enum")
+                .EnumerateArray().Select(value => value.GetString()).ToArray();
+            if (tool.Name == "get_habit_month") periods.Should().BeEquivalentTo("this_month", "last_month");
+            else periods.Should().Contain("this_week").And.Contain("last_week");
             if (schema.TryGetProperty("required", out var required))
                 required.EnumerateArray().Select(value => value.GetString()).Should().NotContain("date_from").And.NotContain("date_to");
         }

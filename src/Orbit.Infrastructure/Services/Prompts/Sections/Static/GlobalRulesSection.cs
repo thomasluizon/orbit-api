@@ -19,6 +19,7 @@ public class GlobalRulesSection : IPromptSection
     {
         var sb = new StringBuilder();
         sb.AppendLine(AnswerCompositionInstructions.ReadPlanning);
+        sb.AppendLine(Orbit.Application.Chat.Tools.Implementations.SuggestBreakdownTool.ReadAimInstruction);
 
         sb.AppendLine("""
             ## Core Rules

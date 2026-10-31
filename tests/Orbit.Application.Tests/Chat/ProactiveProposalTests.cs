@@ -198,9 +198,14 @@ public sealed class ProactiveProposalTests
     [Fact]
     public void GuidancePinsSemanticChoicesAndPreservation()
     {
+        ProactiveOfferDismissal.Instruction.Should().Contain("include its exact key from previously_issued_offers in orbit_dismissed_offer_keys on your tool call or tool-free final JSON answer.")
+            .And.Contain("Never infer dismissal from account labels or invent a key.")
+            .And.Contain("A dismissal alone needs no account read or write.");
         ProactiveProposal.Instruction.Should().Contain("List a name only after setting its non-null, non-empty value; never list unused options or null placeholders.")
-            .And.Contain("To find a fitting parent, list the existing routines as well as checking for duplicates of the new item.")
-            .And.Contain("Read active goals before proposing a useful owned goal link.")
+            .And.Contain("Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields.")
+            .And.Contain("Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested.")
+            .And.Contain("To find a fitting parent, use its routine index as well as checking for duplicates of the new item; query only missing facts when that index is partial.")
+            .And.Contain("Use the supplied active goals before proposing a useful owned goal link; do not read those goals again.")
             .And.Contain("For a dated task, consider a concrete reminder configuration, not just an emoji.")
             .And.Contain("Keep doctor-prescribed fixed times in scheduled_reminders;")
             .And.Contain("neither fixed medication times nor ordinary daily reading calls for a repeat reminder.")
@@ -300,13 +305,28 @@ public sealed class ProactiveProposalTests
     [Theory]
     [InlineData("[\"description\"]")]
     [InlineData("[\"tag_names\"]")]
-    public async Task UnfilledOfferNamesLeaveOtherValuesIntact(string names)
+    public async Task UnfilledOfferNamesReturnRepairableFailureNamingTheField(string names)
     {
         var result = await previewer.PreviewAsync(user, "create_habit",
             Parse("{\"title\":\"Read\",\"is_general\":true,\"tag_names\":[],\"emoji\":\"📖\",\"suggested_fields\":" + names + "}"), clientContext: client);
-        result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value!.Items![0].Fields.Should().NotContain(field => field.Provenance == "suggested");
-        result.Value.ExecutionArguments!.Value.GetProperty("emoji").GetString().Should().Be("📖");
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("invalid_offer");
+        result.Error.Should().Contain(names.Contains("description", StringComparison.Ordinal) ? "description" : "tag_names");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConflictingReminderSuggestionsFailRegardlessOfFieldOrder(bool repeatFirst)
+    {
+        var fixedReminder = "\"scheduled_reminders\":[{\"when\":\"same_day\",\"time\":\"09:00\"}]";
+        var repeatReminder = "\"repeat_reminder\":{\"interval_minutes\":120,\"active_start\":\"09:00\",\"active_end\":\"21:00\"}";
+        var result = await previewer.PreviewAsync(user, "create_habit", Parse("{\"title\":\"Water\",\"is_general\":true,\"suggested_fields\":{" +
+            (repeatFirst ? repeatReminder + "," + fixedReminder : fixedReminder + "," + repeatReminder) + "}}"), clientContext: client);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("invalid_offer");
+        result.Error.Should().Contain("repeat_reminder");
     }
 
     [Theory]

@@ -156,7 +156,8 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
         }
         cards = SuppressCreationReadCards(cards, request, executionResults);
-        var offered = await ComposeOfferAsync(request, context, cards, executionResults, cancellationToken);
+        cards = SuppressEmptyReadNarrative(cards, executionResults, aiResponse.IsTruncated, request, context);
+        var offered = await ComposeOfferAsync(request, context, cards, executionResults, aiResponse.IsTruncated, cancellationToken);
         cards = offered.Cards;
         if (ProactiveProposal.Enabled(request.ClientContext)) followUps = null;
         followUps = composition ? ContextualFollowUps(followUps, executionResults) : followUps;
@@ -265,14 +266,14 @@ public partial class ProcessUserChatCommandHandler
                     built.Duplicates++;
                     continue;
                 }
-                if (RequestedDaySummaryNarrative(operation) is { } narrative && !narrative.Any(char.IsDigit))
+                if (!CarriesEmptyReadState(read.Block) && RequestedDaySummaryNarrative(operation) is { } narrative && !narrative.Any(char.IsDigit))
                     parts.Add(new ChatTextPart(narrative));
                 if (ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags))
                 {
                     if (IsCompleteEmptyList(read))
                         results.AddRelatedSurface(SurfaceForRead(read));
                     parts.Add(new ChatBlockPart(read.Kind, ForClient(read, request.ClientContext, context.EnabledFeatureFlags).Block));
-                    if (read.Block is HabitListCard habit && HabitReadMessages.FilteredEmpty(habit, language) is { } empty
+                    if (!CarriesEmptyReadState(read.Block) && read.Block is HabitListCard habit && HabitReadMessages.FilteredEmpty(habit, language) is { } empty
                         && !parts.OfType<ChatTextPart>().Any())
                         parts.Add(new ChatTextPart(empty));
                 }
@@ -397,6 +398,32 @@ public partial class ProcessUserChatCommandHandler
         var text = string.Join("\n\n", parts.OfType<ChatTextPart>().Select(part => part.Text).Where(text => !string.IsNullOrWhiteSpace(text)));
         return text.Length == 0 ? null : text;
     }
+
+    private static ResponseCards SuppressEmptyReadNarrative(ResponseCards cards, ToolExecutionAccumulator results, bool truncated,
+        ProcessUserChatCommand request, ChatContext context)
+    {
+        var blocks = cards.Parts?.OfType<ChatBlockPart>().ToArray() ?? [];
+        return !truncated && blocks.Length > 0 && results.AskBlock is null && results.OperationResults.Count > 0
+            && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
+                && operation.ReadBlock is { } read && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
+                && blocks.Any(block => ReadBlockTelemetry.Describe(block.Block).Read?.QueryId == read.Read.QueryId))
+            && blocks.All(block => CarriesEmptyReadState(block.Block))
+            ? cards with { AiMessage = null, Parts = blocks, ServerComposedText = true } : cards;
+    }
+
+    private static bool CarriesEmptyReadState(object block) => block switch
+    {
+        DaySummaryCard { Due: 0, Done: 0, OverdueCount: 0 } => true,
+        HabitListCard { Items.Count: 0, TotalCount: null or 0, Read: { } read } => !HasReadFilter(read),
+        GoalListCard { Items.Count: 0, TotalCount: null or 0, Read: { } read } => !HasReadFilter(read),
+        RecordListCard { Items.Count: 0, TotalCount: 0 } => true,
+        _ => false
+    };
+
+    private static bool HasReadFilter(ReadBlockMetadata read) =>
+        read.Scope.ValueKind != JsonValueKind.Object
+        || read.Scope.TryGetProperty("search", out var search) && search.ValueKind == JsonValueKind.String
+        || read.Scope.TryGetProperty("tag", out var tag) && tag.ValueKind == JsonValueKind.String;
 
     private static bool IsCompleteEmptyList(QueryReadBlock read) =>
         read.Read.TotalCount == 0 && read.Read.Completeness == "complete" && read.Block switch

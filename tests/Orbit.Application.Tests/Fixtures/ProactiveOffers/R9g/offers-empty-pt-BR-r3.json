@@ -1,0 +1,17 @@
+{
+  "source": "offers-empty-pt-BR-r3.json",
+  "sha256": "9175bb4466bdcff8d6fb5ea385ae61fa1cdaecbc9c1c8a4fc0d61d7ff86921c0",
+  "toolCalls": [
+    {
+      "name": "get_habit_month",
+      "arguments": {
+        "relative_period": "today",
+        "period_count": null,
+        "date_from": null,
+        "date_to": null,
+        "language": "pt-BR",
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

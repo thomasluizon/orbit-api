@@ -148,7 +148,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", true)]
     [InlineData("en", false)]
     [InlineData("pt-BR", false)]
-    public async Task DaySummary_PutsOneLocalizedSentenceWithoutFiguresBeforeTheBlock(string language, bool composition)
+    public async Task DaySummary_EmptyBlockCarriesItsStateWithoutAnExtraSentence(string language, bool composition)
     {
         var user = Orbit.Domain.Entities.User.Create("Person", "person@example.com").Value;
         user.SetLanguage(language);
@@ -164,28 +164,14 @@ public partial class ProcessUserChatCommandHandlerTests
             SupportsParts: true, PartKinds: ["daySummary"], SupportsDaySummaryCard: true)), default);
 
         result.IsSuccess.Should().BeTrue();
-        if (composition)
-        {
-            result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("daySummary");
-            result.Value.AiMessage.Should().BeNullOrEmpty();
-            return;
-        }
-        result.Value.Parts.Should().HaveCount(2);
-        var sentence = result.Value.Parts![0].Should().BeOfType<ChatTextPart>().Subject.Text;
-        sentence.Should().Be(language == "pt-BR"
-            ? "Aqui está o que você concluiu e o que falta para hoje."
-            : "Here is what you finished and what is left for today.");
-        sentence.Should().NotMatchRegex(@"\d");
-        sentence.Count(c => c == '.').Should().Be(1);
-        result.Value.Parts[1].Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("daySummary");
-        result.Value.AiMessage.Should().Be(sentence);
+        result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("daySummary");
+        result.Value.AiMessage.Should().BeNullOrEmpty();
 
         var stored = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result.Value,
             ChatStreamEvent.SerializerOptions), ChatStreamEvent.SerializerOptions)!;
         var replay = ChatResponseNegotiation.ForClient(stored, new(SupportsParts: true, PartKinds: []), [], language);
 
-        replay.Parts.Should().HaveCount(2).And.AllBeOfType<ChatTextPart>();
-        replay.Parts![0].Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(sentence);
-        replay.AiMessage.Should().StartWith(sentence + "\n\n").And.Contain("0/0").And.NotContain("99");
+        replay.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>();
+        replay.AiMessage.Should().Contain("0/0").And.NotContain("99");
     }
 }

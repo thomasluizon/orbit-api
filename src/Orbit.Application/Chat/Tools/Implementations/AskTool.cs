@@ -33,7 +33,6 @@ public sealed class AskTool(
 
     public object GetParameterSchema()
     {
-        var createSchema = JsonSerializer.SerializeToElement(createTool.GetParameterSchema());
         var schema = new
         {
             type = "object",
@@ -141,10 +140,10 @@ public sealed class AskTool(
                                     detail = new { type = "string", maxLength = 24, description = "Supporting text, at most 24 characters. Null means absent." },
                                     arguments = new
                                     {
-                                        description = "One bulk item: a habit definition for create_habits, or {habit_id, date} for log_habits/skip_habits. Dates use YYYY-MM-DD.",
+                                        description = "For create_habits, a JSON string containing only the supplied fields of one bulk_create_habits item, including title; omit unspecified fields and nulls. For log_habits/skip_habits, an object with only habit_id and date (YYYY-MM-DD). Never repeat the full create schema or pad arguments with whitespace.",
                                         anyOf = new object[]
                                         {
-                                            createSchema.GetProperty("properties").GetProperty("habits").GetProperty("items"),
+                                            new { type = "string" },
                                             new { type = "object", properties = new { habit_id = new { type = "string" }, date = new { type = "string" } }, required = new[] { "habit_id", "date" } }
                                         }
                                     }
@@ -259,6 +258,7 @@ public sealed class AskTool(
         AskToolArguments? input;
         try
         {
+            args = ExpandPickListArguments(args);
             input = args.Deserialize<AskToolArguments>(JsonOptions);
         }
         catch (JsonException)
@@ -298,6 +298,22 @@ public sealed class AskTool(
                 return ToolResult.FromFailure(combined);
         }
         return new ToolResult(true, Payload: definition);
+    }
+
+    private static JsonElement ExpandPickListArguments(JsonElement args)
+    {
+        if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("items", out var items)
+            || items.ValueKind != JsonValueKind.Array) return args;
+        var expanded = JsonNode.Parse(args.GetRawText())!;
+        foreach (var item in expanded["items"]!.AsArray())
+            if (item is JsonObject fields && fields["arguments"] is JsonValue value
+                && value.TryGetValue<string>(out var json))
+            {
+                var arguments = JsonNode.Parse(json);
+                if (arguments is not JsonObject) throw new JsonException("Pick list arguments must be an object.");
+                fields["arguments"] = arguments;
+            }
+        return OptionalToolArguments.OmitNulls(JsonSerializer.SerializeToElement(expanded));
     }
 
     private IArgumentCheckTool GetCheck(string action) => action switch
