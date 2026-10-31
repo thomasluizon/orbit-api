@@ -49,6 +49,7 @@ public sealed class AiConversationContext
     /// <summary>Earlier reads whose full payload is retained by the handler after staging a preview.</summary>
     public IReadOnlyCollection<string> RetiredReadCallIds { get; set; } = [];
     /// <summary>Declarations refreshed from successful typed tool results before continuation.</summary>
+    /// <summary>Per-round ask constraints appended after the immutable provider tool catalog and system prompt.</summary>
     public IReadOnlyList<object> ToolDeclarationUpdates { get; set; } = [];
     /// <summary>Server-authored feedback for an invalid tool-free terminal answer.</summary>
     public string? ResponseValidationFeedback { get; set; }

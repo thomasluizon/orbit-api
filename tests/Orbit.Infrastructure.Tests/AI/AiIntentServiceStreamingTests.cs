@@ -148,7 +148,7 @@ public partial class AiIntentServiceStreamingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ContinueWithToolResultsAsync_DeclaresDeferredAskAfterTypedRead(bool streaming)
+    public async Task ContinueWithToolResultsAsync_KeepsCatalogAndAppendsTypedAskConstraints(bool streaming)
     {
         var tools = StrictChatToolSchemaTests.AllTools();
         var ask = tools.Single(tool => tool.Name == "ask").Should()
@@ -163,7 +163,7 @@ public partial class AiIntentServiceStreamingTests
         var (service, sink) = BuildService(handler);
         var streamSink = streaming ? sink.Handle : (Func<AiStreamEvent, Task>?)null;
         var first = await service.SendWithToolsAsync(new AiToolRequest("Continue.", "system",
-            [new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
+            [Declaration(true), new { name = query.Name, description = query.Description, parameters = query.GetParameterSchema() }]), streamSink);
         first.IsSuccess.Should().BeTrue(first.Error);
         first.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true), new { name = "unadvertised_tool" }];
 
@@ -176,9 +176,12 @@ public partial class AiIntentServiceStreamingTests
         {
             using var document = JsonDocument.Parse(handler.RequestBodies[index]);
             var declarations = document.RootElement.GetProperty("tools").EnumerateArray().ToArray();
-            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal(index == 0 ? ["query_habits"] : new[] { "query_habits", "ask" });
+            declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal("ask", "query_habits");
             if (index == 0) continue;
-            var declaration = declarations[1];
+            document.RootElement.GetProperty("input").GetRawText().Should().Contain("Apply these ask constraints for this round");
+            using var initial = JsonDocument.Parse(handler.RequestBodies[0]);
+            document.RootElement.GetProperty("tools").GetRawText().Should().Be(initial.RootElement.GetProperty("tools").GetRawText());
+            var declaration = declarations[0];
             declaration.GetProperty("strict").GetBoolean().Should().BeTrue();
             StrictChatToolSchemaTests.AssertStrict(declaration.GetProperty("parameters"));
             var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
@@ -604,7 +607,7 @@ public partial class AiIntentServiceStreamingTests
 
         handler.LastRequestBody.Should().Contain(userId.ToString("N"));
         using var requestDocument = JsonDocument.Parse(handler.LastRequestBody!);
-        requestDocument.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        requestDocument.RootElement.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         requestDocument.RootElement.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         requestDocument.RootElement.TryGetProperty("user", out _).Should().BeFalse();
     }
@@ -636,7 +639,7 @@ public partial class AiIntentServiceStreamingTests
     }
 
     [Fact]
-    public async Task SendWithToolsAsync_CacheKey_IsStableForOneUserAndDiffersBetweenUsers()
+    public async Task SendWithToolsAsync_CacheKey_IsSharedAcrossUsers()
     {
         var handler = new JsonHandler(BufferedCompletion);
         var (service, _) = BuildService(handler);
@@ -648,9 +651,9 @@ public partial class AiIntentServiceStreamingTests
             using var document = JsonDocument.Parse(handler.LastRequestBody!);
             keys.Add(document.RootElement.GetProperty("prompt_cache_key").GetString());
         }
-        keys[0].Should().Be(userId.ToString("N"));
+        keys[0].Should().Be("orbit:gpt-6-luna");
         keys[1].Should().Be(keys[0]);
-        keys[2].Should().NotBe(keys[0]);
+        keys[2].Should().Be(keys[0]);
     }
 
     [Theory]
@@ -698,7 +701,7 @@ public partial class AiIntentServiceStreamingTests
         var root = document.RootElement;
         root.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
         root.TryGetProperty("temperature", out _).Should().BeFalse();
-        root.GetProperty("prompt_cache_key").GetString().Should().Be(userId.ToString("N"));
+        root.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         root.GetProperty("safety_identifier").GetString().Should().Be(userId.ToString("N"));
         root.TryGetProperty("user", out _).Should().BeFalse();
         root.GetProperty("tools")[0].GetProperty("name").GetString().Should().Be("query_habits");

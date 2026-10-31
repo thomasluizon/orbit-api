@@ -90,9 +90,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
             var supportsAsk = index % 2 != 0;
-            names.Should().HaveCount(70).And.Contain("suggest_habits").And.NotContain("ask");
-            names.Where(name => name != "ask").Should().Equal(tools.Select(tool => tool.Name)
-                .Where(name => name != "ask").Order(StringComparer.Ordinal));
+            names.Should().HaveCount(tools.Count).And.Contain("suggest_habits").And.Contain("ask");
+            names.Should().Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
             var currentPrefix = CacheablePrefix(root);
             prefixes.TryAdd(supportsAsk, currentPrefix);
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefixes[supportsAsk]));
@@ -106,7 +105,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             input[3].GetProperty("role").GetString().Should().Be("user");
             currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");
-            root.GetProperty("prompt_cache_key").GetString().Should().Be(user.Id.ToString("N"));
+            root.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         }
         prefixes.Should().HaveCount(2);
         prefixes[false].Should().Be(prefixes[true]);

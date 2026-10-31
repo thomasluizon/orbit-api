@@ -61,8 +61,7 @@ public partial class ProcessUserChatCommandHandler
         if (habitTargets.HasSharedTargets)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, habitTargets.Context);
 
-        var availableTools = ai.ToolRegistry.GetAll()
-            .Where(tool => tool.Name != "ask").ToArray();
+        var availableTools = ai.ToolRegistry.GetAll().ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
 
         if (ProactiveProposal.Enabled(request.ClientContext))
@@ -77,6 +76,10 @@ public partial class ProcessUserChatCommandHandler
                     !context.IsPromptHabitIndexPartial),
                 "Dismissed offer keys: " + JsonSerializer.Serialize(request.ClientContext!.DismissedOfferKeys ?? []));
         }
+
+        if (!ProactiveProposal.Enabled(request.ClientContext))
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
+                "Proactive offers are unavailable for this client. Do not add unrequested configuration. Leave suggested_fields and orbit_dismissed_offer_keys empty and remove_suggested_fields unset.");
 
         dynamicContext = AddSelectedOfferContext(dynamicContext, request.SelectedOffer);
         dynamicContext = AddAskContext(dynamicContext, request, context);
@@ -107,8 +110,8 @@ public partial class ProcessUserChatCommandHandler
             .Select(tool => (object)new
             {
                 name = tool.Name,
-                description = OfferToolDescription(tool, habitTargets.HasSharedTargets, request.ClientContext),
-                parameters = ChatToolSchema(tool, request, context)
+                description = OfferToolDescription(tool),
+                parameters = ChatToolSchema(tool)
             })
             .ToList();
 
@@ -162,29 +165,30 @@ public partial class ProcessUserChatCommandHandler
                 Scope = SelectedOfferScope(selected)
             }));
 
-    private static string OfferToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, bool sharedTargets, AgentClientContext? client)
+    private static string OfferToolDescription(Orbit.Application.Chat.Tools.IAiTool tool)
     {
         if (tool.IsReadOnly) return tool.Description;
         var description = tool.Description;
-        if (sharedTargets) description += Environment.NewLine + HabitTargetContext.Instruction;
+        description += Environment.NewLine + HabitTargetContext.Instruction;
         if (tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
             description += Environment.NewLine + HabitModelInstructions.Titles;
-        if (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name))
+        if (ProactiveProposal.Supports(tool.Name))
             description += Environment.NewLine + ProactiveProposal.Instruction;
         return description;
     }
 
-    private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context,
+    private static object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool,
         bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
     {
-        var schema = tool is AskTool ask ? ask.GetParameterSchema(hasAccountRead, drafts) : tool.GetParameterSchema();
-        if (ProactiveProposal.Enabled(request.ClientContext) && ProactiveProposal.Supports(tool.Name))
+        var schema = tool is AskTool ask
+            ? hasAccountRead || drafts is { Count: > 0 } ? ask.GetParameterSchema(hasAccountRead, drafts) : ask.GetCacheableParameterSchema()
+            : tool.GetParameterSchema();
+        if (ProactiveProposal.Supports(tool.Name))
             schema = ProactiveProposal.Schema(schema);
         if (tool.Name == "revise_pending_changes")
-            schema = ProactiveProposal.RevisionSchema(schema, ProactiveProposal.Enabled(request.ClientContext));
-        if (ProactiveProposal.Enabled(request.ClientContext)) schema = ProactiveOfferDismissal.Schema(schema);
+            schema = ProactiveProposal.RevisionSchema(schema, true);
+        schema = ProactiveOfferDismissal.Schema(schema);
         if (!tool.IsReadOnly) return TerminalWriteDirective.WithCompletionArgument(schema);
-        if (!UsesComposition(request, context)) return schema;
         return tool.Name == "revise_pending_changes"
             ? TerminalReadDirective.WithCompletionArgument(schema, description: RevisePendingChangesTool.CompletionArgumentDescription)
             : TerminalReadDirective.WithCompletionArgument(schema);

@@ -213,7 +213,7 @@ public sealed partial class AiCompletionClient
         if (userId is { } id && id != Guid.Empty)
         {
             options.SafetyIdentifier = id.ToString("N");
-            options.PromptCacheKey = id.ToString("N");
+            options.PromptCacheKey = "orbit:" + model;
         }
         return options;
     }

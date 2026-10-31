@@ -89,17 +89,7 @@ public sealed partial class AiIntentService(
             conversationContext.ResponseValidationFeedback = null;
         }
 
-        foreach (var update in BuildToolCatalog(conversationContext.ToolDeclarationUpdates))
-        {
-            var existing = options.Tools.OfType<FunctionTool>().SingleOrDefault(tool => tool.FunctionName == update.Key);
-            if (existing is null)
-            {
-                if (update.Key == "ask") options.Tools.Add(update.Value);
-                continue;
-            }
-            var index = options.Tools.IndexOf(existing);
-            options.Tools[index] = update.Value;
-        }
+        AppendToolConstraints(messages, options, conversationContext.ToolDeclarationUpdates);
 
         foreach (var output in messages.OfType<FunctionCallOutputResponseItem>()
             .Where(output => conversationContext.RetiredReadCallIds.Contains(output.CallId)))
@@ -149,6 +139,32 @@ public sealed partial class AiIntentService(
             streamSink,
             cancellationToken,
             telemetry: conversationContext.Telemetry);
+    }
+
+    private static void AppendToolConstraints(List<ResponseItem> messages, CreateResponseOptions options,
+        IReadOnlyList<object> updates)
+    {
+        if (!options.Tools.OfType<FunctionTool>().Any(tool => tool.FunctionName == "ask")) return;
+        foreach (var update in updates)
+        {
+            var declaration = JsonSerializer.SerializeToElement(update, SerializeOptions);
+            if (declaration.GetProperty("name").GetString() != "ask") continue;
+            var forms = declaration.GetProperty("parameters").GetProperty("properties")
+                .GetProperty("input").GetProperty("anyOf").EnumerateArray().Select(form =>
+                {
+                    var fields = form.GetProperty("properties");
+                    return new
+                    {
+                        form = fields.GetProperty("form").GetProperty("enum"),
+                        missing_input = fields.GetProperty("missing_input").GetProperty("enum"),
+                        draft_call_id = fields.TryGetProperty("draft_call_id", out var draft) ? draft.GetProperty("enum") : (JsonElement?)null,
+                        missing_field = fields.TryGetProperty("missing_field", out var field) ? field.GetProperty("enum") : (JsonElement?)null
+                    };
+                }).ToArray();
+            messages.Add(ResponseItem.CreateSystemMessageItem(
+                "Apply these ask constraints for this round. Use only the listed forms and missing_input values. For a bound draft, copy draft_call_id and missing_field exactly and ask only for that field with one question. These constraints do not authorize writes. "
+                + JsonSerializer.Serialize(forms, SerializeOptions)));
+        }
     }
 
     private void AddToolPayload(Dictionary<string, object> payload, AiToolCallResult result)

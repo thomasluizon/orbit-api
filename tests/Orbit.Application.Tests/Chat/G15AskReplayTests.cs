@@ -37,7 +37,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
         request.ToolDeclarations.Select(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString())
-            .Should().NotContain("ask");
+            .Should().Contain("ask");
+        request.DynamicContext.Should().Contain(AskTool.AccountReadInstruction);
         result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
@@ -252,7 +253,8 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
         JsonSerializer.Serialize(request.ToolDeclarations).Should().NotContain("proposed_habit_title");
-        request.ToolDeclarations.Should().BeEmpty();
+        request.ToolDeclarations.Should().ContainSingle();
+        request.DynamicContext.Should().Contain(AskTool.AccountReadInstruction);
         result.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         await AssertNoCompositionContinuation();
