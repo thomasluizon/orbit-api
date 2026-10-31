@@ -10,13 +10,23 @@ parameters; it does not create them. Review and apply only the targeted environm
 `render_env_group.production_api` and `render_env_group.staging_api`. Confirm the masked
 `AI__EvalApiKey` setting reaches `orbit-production-api` and `orbit-staging-api` in Render,
 then release the API through the normal workflow. Parameters absent from SSM block the
-Terraform plan, while an absent or empty runtime key falls back to `AI__ApiKey`.
+Terraform plan. An absent or empty runtime key blocks evaluation calls before dispatch.
 
 `StagingEval__AccountIds` selects the accounts that use the evaluation key. Buffered and
 streamed chat, auxiliary completions, moderation and audio transcription select that key
-for those accounts. Completion usage is labeled `eval_<purpose>` even during fallback,
-so it remains visible separately from ordinary usage. This routing does not change account
-quotas. Verify project attribution in OpenAI Platform using the launch gate evidence;
+for those accounts. Completion usage is labeled `eval_<purpose>`,
+so it remains visible separately from ordinary usage. `AI__EvalDailyBudgetUsd` defaults to
+`0.50` in both environment groups. All evaluation accounts in an environment share one UTC
+daily ceiling, including unsettled reservations, regardless of `astra_eval_unmetered`.
+The reservation takes the UTC-day advisory lock before the account lock. Reservation
+errors prevent dispatch; settlement errors retain the reservation. Existing `eval_` usage
+provides a conservative floor during rollout. The additive `AddEvalDailyBudget` migration
+adds a nullable UTC accounting date and index without changing users' local quota dates.
+Evaluation transcription reserves a local duration estimate at the configured Whisper
+rate, rounds up with one second of headroom, disables automatic retries, and retains
+uncertain dispatch charges. Unreadable durations and unpriced transcription models fail
+before dispatch. Ordinary transcription retains its existing behavior.
+Verify project attribution in OpenAI Platform using the launch gate evidence;
 do not send an extra paid probe to verify the setting.
 
 The additive `AddAiReasoningUsage` migration retains reasoning-token totals. Take the
@@ -27,20 +37,24 @@ Uncached input includes cache writes; reasoning is a subset of output and is bil
 The cache hit fraction is `cached_input / (cached_input + uncached_input)`.
 Historical rows default reasoning to zero because past reasoning usage cannot be recovered.
 
-The system message and full tool catalog are static across users and conversation states.
-Offer data, account context, preview constraints and history follow that prefix. Tool
-execution still validates client capabilities, account reads and draft bindings. The
-serialized static prefix measures 396,280 characters, approximately 99,070 tokens using
-characters divided by four. Provider tokenization can differ.
+The system message and tool schemas are byte-stable for each client capability set.
+Offer data, account context, shared-title guidance, preview constraints and history follow
+that prefix. Offer schema fields are declared only for clients supporting offers.
+The initial catalog omits `ask`; a successful typed account read or a missing-field create
+result unlocks its stable declaration at the end of the catalog. Subsequent rounds retain
+that declaration and append changed ask constraints once. Execution still validates
+client capabilities, account reads and draft bindings. See [TESTING.md](../TESTING.md)
+for the measured comparison against a uniform catalog and the cache-prefix tests.
 
 Output caps include reasoning: chat allows 4,096 tokens; offer selection, tag suggestions
 and emoji inference allow 1,024; proactive messages and slip alerts allow 512; date
 interpretation retains 128; habit drafts allow at most 4,096; other auxiliary purposes
 allow at most 2,048. A caller's smaller limit is preserved. The largest captured bulk-create
 payload in `g9i-composition-medical-batch-pt-BR-r3.json` measures 1,189 `o200k_base` tokens,
-leaving 2,907 tokens for reasoning and framing under the chat cap. Auxiliary caps follow
-their bounded response contracts where no real output capture is available. No captured
-successful output requires an 8,192-token cap.
+leaving 2,907 tokens for reasoning and framing under the chat cap. Daily summaries allow
+600 tokens. Truncation warnings include the purpose for both chat and auxiliary calls.
+The check-in and slip-alert caps remain pending measured provider-output evidence; the
+repository's proactive chat fixtures do not capture those notification services.
 
 After release, record the daily chat cost per call and cache hit fraction on
 `thomasluizon/orbit-tickets#1916`. The release acceptance target is at most $0.0009 per

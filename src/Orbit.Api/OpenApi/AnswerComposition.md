@@ -19,6 +19,14 @@ existing readable habit and goal lists when the client advertises no part kinds.
 The model receives no instruction to write fallback prose in this mode. A false
 completion signal, failed read or missing projection retains normal continuation.
 No message pattern changes the tools, their arguments or the answer.
+The static catalog is selected by client capabilities, never by message or habit-title
+keywords. Unsupported clients do not receive proactive-offer schema fields. Recursively
+empty or null `suggested_fields` placeholders mean no offer and preserve requested-only
+write previews; nonempty suggestions still require offer support. The initial catalog
+omits `ask`. A successful typed account read or a typed missing-field create result
+unlocks a stable ask declaration appended to the catalog. Per-round ask constraints
+follow the static prefix and are appended only when they change. A valid accepted ask
+still ends the reply. These rules require no mobile contract change.
 Provider-facing schemas put server control fields before tool payload fields in both `properties` and `required`, preserving tool field order, because strict generation can emit runaway whitespace when a large payload precedes required controls.
 
 The following model-facing copy is English at runtime in both locales; pt-BR is

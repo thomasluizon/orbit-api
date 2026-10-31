@@ -115,7 +115,10 @@ public partial class AgentOperationExecutor(
     private async Task<Result<JsonElement>> PrepareOfferArgumentsAsync(AgentExecuteOperationRequest request,
         AgentOperation operation, JsonElement arguments, CancellationToken ct)
     {
-        if (!operation.IsMutation || !ProactiveProposal.Contains(arguments)) return Result.Success(arguments);
+        var createsDraft = operation.Id is "create_habit" or "bulk_create_habits" or "create_sub_habit"
+            or "create_goal" or "create_checklist_template";
+        var captureRequestedFields = createsDraft && ProactiveProposal.Enabled(request.ClientContext);
+        if (!operation.IsMutation || (!ProactiveProposal.Contains(arguments) && !captureRequestedFields)) return Result.Success(arguments);
         var offered = await changePreviewer.PreviewAsync(request.UserId, operation.Id, arguments, ct, request.ClientContext);
         if (offered.IsFailure)
             return Result.Failure<JsonElement>(offered.Error, offered.ErrorCode ?? "invalid_offer");

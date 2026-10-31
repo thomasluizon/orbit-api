@@ -54,8 +54,7 @@ public partial class ProcessUserChatCommandHandlerTests
             StreamSink: item => { events.Add(item); return Task.CompletedTask; }), default);
 
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
-        DeclaredAskReasons(request).Should().Contain("check_in");
-        request.DynamicContext.Should().Contain(AskTool.AccountReadInstruction);
+        DeclaredAskReasons(request).Should().BeEmpty();
         request.History.Should().BeEquivalentTo(history);
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should().BeOfType<HabitListCard>();

@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
 
@@ -29,6 +32,8 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var flags = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
         var unmetered = (await flags.GetEnabledKeysForUserAsync(userId, cancellationToken))
             .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
+        var evaluation = unmetered || EvalAccountAccess.Contains(
+            scope.ServiceProvider.GetService<IConfiguration>()?[EvalAccountAccess.AccountIdsKey], userId);
         var user = await db.Users.AsNoTracking().SingleAsync(user => user.Id == userId, cancellationToken);
         var localDate = await dates.GetUserTodayAsync(userId, cancellationToken);
         var pro = user.HasProAccess;
@@ -39,6 +44,24 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
             pro ? AppConfigKeys.DefaultProAiMicroDollarsPerWeek : AppConfigKeys.DefaultFreeAiMicroDollarsPerDay, cancellationToken);
         return await work.ExecuteInTransactionAsync(async token =>
         {
+            DateOnly? evalDateUtc = null;
+            if (evaluation)
+            {
+                var clock = scope.ServiceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+                evalDateUtc = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+                await work.AcquireAdvisoryLockAsync($"ai-eval-budget:{evalDateUtc:yyyy-MM-dd}", token);
+                var settings = scope.ServiceProvider.GetService<IOptions<AiSettings>>()?.Value ?? new AiSettings();
+                var ceiling = decimal.Floor(settings.EvalDailyBudgetUsd * 1_000_000m);
+                var spent = await db.AiBudgetCalls.Where(call => call.EvalDateUtc == evalDateUtc)
+                    .SumAsync(call => call.ChargedMicroDollars, token);
+                var settled = await db.AiBudgetCalls.Where(call => call.EvalDateUtc == evalDateUtc && call.IsSettled)
+                    .SumAsync(call => call.ChargedMicroDollars, token);
+                var reported = await db.AiUsageDaily.Where(row => row.Date == evalDateUtc && row.Purpose.StartsWith("eval_"))
+                    .Select(row => row.CostUsd).ToListAsync(token);
+                spent += Math.Max(0, checked((long)decimal.Ceiling(reported.Sum() * 1_000_000m)) - settled);
+                if (reservedMicroDollars > ceiling - spent)
+                    throw new AiBudgetExceededException();
+            }
             await work.AcquireAdvisoryLockAsync($"ai-budget:{userId}:{period.Start:yyyy-MM-dd}", token);
             var query = db.AiBudgetCalls.Where(call => call.UserId == userId && call.LocalDate >= period.Start && call.LocalDate < period.End);
             var totals = await query.GroupBy(call => call.UserId)
@@ -51,7 +74,7 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
                 }).SingleOrDefaultAsync(token);
             if (!unmetered && ((totals?.Calls ?? 0) >= callLimit || reservedMicroDollars > spendLimit - (totals?.MicroDollars ?? 0)))
                 throw new AiBudgetExceededException();
-            var call = AiBudgetCall.Reserve(userId, localDate, reservedMicroDollars);
+            var call = AiBudgetCall.Reserve(userId, localDate, reservedMicroDollars, evalDateUtc);
             db.AiBudgetCalls.Add(call);
             await work.SaveChangesAsync(token);
             return call.Id;

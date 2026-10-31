@@ -26,6 +26,7 @@ public sealed partial class AiCompletionClient
     private readonly ResponsesClient _evalResponsesClient;
     private readonly ResponsesClient _evalStreamingResponsesClient;
     private readonly string? _evalAccountIds;
+    private readonly bool _hasEvalKey;
     internal TimeSpan CompletionTimeout { get; }
     internal TimeSpan StreamingCompletionTimeout { get; }
     private readonly string _primaryModel;
@@ -81,6 +82,7 @@ public sealed partial class AiCompletionClient
         }
 
         _evalAccountIds = configuration?[EvalAccountAccess.AccountIdsKey];
+        _hasEvalKey = !string.IsNullOrWhiteSpace(settings.EvalApiKey);
         _primaryModel = settings.Model;
         _responsesClient = CreateClient(settings.BufferedNetworkTimeoutSeconds);
         _streamingResponsesClient = CreateClient(settings.NetworkTimeoutSeconds);
@@ -133,6 +135,8 @@ public sealed partial class AiCompletionClient
     {
         userId ??= AiCallContext.Current?.UserId;
         var eval = userId is { } id && EvalAccountAccess.Contains(_evalAccountIds, id);
+        if (eval && !_hasEvalKey)
+            throw new InvalidOperationException("Evaluation AI credentials are required.");
         return (eval, streaming) switch
         {
             (true, true) => _evalStreamingResponsesClient,
@@ -343,6 +347,7 @@ public sealed partial class AiCompletionClient
         {
             stopwatch.Stop();
             var usage = response?.Usage;
+            LogTruncation(response, purpose, options.MaxOutputTokenCount);
             var failed = response is null || response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete);
             if (usage is not null)
                 LogAiTokenUsage(_logger, purpose, options.Model, usage.InputTokenDetails?.CachedTokenCount ?? 0,
@@ -389,5 +394,14 @@ public sealed partial class AiCompletionClient
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI JSON completion failed at {Stage} with {Reason}; status {Status}")]
     private static partial void LogJsonCompletionFailed(ILogger logger, string stage, string reason, string status);
+
+    private void LogTruncation(ResponseResult? response, string purpose, int? maxOutputTokens)
+    {
+        if (response?.IncompleteStatusDetails?.Reason == ResponseIncompleteStatusReason.MaxOutputTokens)
+            LogResponseTruncated(_logger, purpose, maxOutputTokens);
+    }
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); Purpose={Purpose} MaxOutputTokens={MaxOutputTokens}")]
+    private static partial void LogResponseTruncated(ILogger logger, string purpose, int? maxOutputTokens);
 
 }

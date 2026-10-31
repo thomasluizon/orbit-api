@@ -47,7 +47,6 @@ public sealed partial class AiSummaryService(
                 prompt,
                 temperature: 0.3,
                 cancellationToken: cancellationToken,
-                maxOutputTokens: 8192,
                 purpose: "daily_summary",
                 userId: context.UserId);
 

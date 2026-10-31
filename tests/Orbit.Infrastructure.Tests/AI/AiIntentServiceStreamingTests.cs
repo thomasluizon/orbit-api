@@ -159,7 +159,7 @@ public partial class AiIntentServiceStreamingTests
         read.OutputItems.Add(ResponseItem.CreateFunctionCallItem("read", query.Name, BinaryData.FromString("{}")));
         var reply = ResponsesTestData.Response("Ready.");
         string Body(ResponseResult response) => streaming ? ResponsesTestData.Stream(response) : ModelReaderWriter.Write(response).ToString();
-        var handler = new SequenceSseHandler(Body(read), Body(reply));
+        var handler = new SequenceSseHandler(Body(read), Body(reply), Body(reply));
         var (service, sink) = BuildService(handler);
         var streamSink = streaming ? sink.Handle : (Func<AiStreamEvent, Task>?)null;
         var first = await service.SendWithToolsAsync(new AiToolRequest("Continue.", "system",
@@ -171,14 +171,20 @@ public partial class AiIntentServiceStreamingTests
             [new(query.Name, "read", true, null, null, null)], streamSink);
 
         next.IsSuccess.Should().BeTrue(next.Error);
-        handler.RequestBodies.Should().HaveCount(2);
-        for (var index = 0; index < 2; index++)
+        next.Value.ConversationContext!.ToolDeclarationUpdates = [Declaration(true)];
+        var last = await service.ContinueWithToolResultsAsync(next.Value.ConversationContext, [], streamSink);
+        last.IsSuccess.Should().BeTrue(last.Error);
+        handler.RequestBodies.Should().HaveCount(3);
+        for (var index = 0; index < 3; index++)
         {
             using var document = JsonDocument.Parse(handler.RequestBodies[index]);
             var declarations = document.RootElement.GetProperty("tools").EnumerateArray().ToArray();
             declarations.Select(tool => tool.GetProperty("name").GetString()).Should().Equal("ask", "query_habits");
             if (index == 0) continue;
             document.RootElement.GetProperty("input").GetRawText().Should().Contain("Apply these ask constraints for this round");
+            document.RootElement.GetProperty("input").EnumerateArray()
+                .Count(item => item.GetRawText().Contains("Apply these ask constraints for this round", StringComparison.Ordinal))
+                .Should().Be(1);
             using var initial = JsonDocument.Parse(handler.RequestBodies[0]);
             document.RootElement.GetProperty("tools").GetRawText().Should().Be(initial.RootElement.GetProperty("tools").GetRawText());
             var declaration = declarations[0];

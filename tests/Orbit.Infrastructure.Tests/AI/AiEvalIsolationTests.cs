@@ -74,13 +74,29 @@ public class AiEvalIsolationTests
             var service = new AiIntentService(budgeted, usage, NullLogger<AiIntentService>.Instance);
             var result = await service.SendWithToolsAsync(new("hello", "system", [], userId),
                 kind == "stream" ? _ => Task.CompletedTask : null);
+            if (eval && !configured)
+            {
+                result.IsFailure.Should().BeTrue();
+                handler.Credentials.Should().BeEmpty();
+                return;
+            }
             result.IsSuccess.Should().BeTrue(result.Error);
         }
         else
         {
             using var context = AiCallContext.Begin(userId);
-            if (kind == "text") await budgeted.CompleteTextAsync("system", "hello");
-            else await budgeted.CompleteJsonAsync<object>("system", "hello");
+            async Task Invoke()
+            {
+                if (kind == "text") await budgeted.CompleteTextAsync("system", "hello");
+                else await budgeted.CompleteJsonAsync<object>("system", "hello");
+            }
+            if (eval && !configured)
+            {
+                await ((Func<Task>)Invoke).Should().ThrowAsync<InvalidOperationException>();
+                handler.Credentials.Should().BeEmpty();
+                return;
+            }
+            await Invoke();
         }
 
         handler.Credentials.Should().Equal(eval && configured ? "eval-test-key" : "production-test-key");

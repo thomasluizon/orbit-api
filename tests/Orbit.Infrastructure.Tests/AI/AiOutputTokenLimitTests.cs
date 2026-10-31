@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using OpenAI.Responses;
 using Orbit.Domain.Interfaces;
@@ -20,6 +21,33 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiOutputTokenLimitTests
 {
     [Theory]
+    [InlineData("proactive_item")]
+    [InlineData("slip_alert")]
+    [InlineData("daily_summary")]
+    public async Task TruncatedAuxiliaryResponse_WarnsWithPurpose(string purpose)
+    {
+        var response = ResponsesTestData.Response("{}");
+        response.Status = ResponseStatus.Incomplete;
+        response.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        var logger = Substitute.For<ILogger<AiCompletionClient>>();
+        logger.IsEnabled(LogLevel.Warning).Returns(true);
+        var handler = new LimitCapture(response);
+        var client = new AiCompletionClient(new ResponsesClient(new System.ClientModel.ApiKeyCredential("test-key"),
+            new ResponsesClientOptions
+            {
+                Endpoint = new Uri("https://orbit.test/v1"),
+                Transport = new HttpClientPipelineTransport(new HttpClient(handler))
+            }), logger, Substitute.For<IAiUsageRecorder>());
+
+        await client.CompleteJsonAsync<object>("system", "continue", purpose: purpose);
+
+        logger.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "Log")
+            .Should().Contain(call => (LogLevel)call.GetArguments()[0]! == LogLevel.Warning
+                && ((IEnumerable<KeyValuePair<string, object?>>)call.GetArguments()[2]!)
+                    .Any(property => property.Key == "Purpose" && (string?)property.Value == purpose));
+    }
+
+    [Theory]
     [InlineData("proactive_item", 512)]
     [InlineData("slip_alert", 512)]
     [InlineData("tag_suggestion", 1024)]
@@ -31,7 +59,7 @@ public class AiOutputTokenLimitTests
     [InlineData("reschedule_suggestion", 2048)]
     [InlineData("retrospective", 2048)]
     [InlineData("goal_review", 2048)]
-    [InlineData("daily_summary", 2048)]
+    [InlineData("daily_summary", 600)]
     [InlineData("text", 2048)]
     [InlineData("json", 2048)]
     public async Task Completions_EnforcePurposeCapForDirectAndBudgetedCalls(string purpose, int expected)

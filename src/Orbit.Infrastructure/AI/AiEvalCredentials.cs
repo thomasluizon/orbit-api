@@ -13,8 +13,9 @@ internal static class AiEvalCredentials
         var userId = AiCallContext.Current?.UserId;
         if (userId is null && Guid.TryParse(http?.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var authenticatedUser))
             userId = authenticatedUser;
-        return !string.IsNullOrWhiteSpace(settings.EvalApiKey) && userId is { } id
-            && EvalAccountAccess.Contains(configuration?[EvalAccountAccess.AccountIdsKey], id)
-            ? settings.EvalApiKey : settings.ApiKey;
+        if (userId is not { } id || !EvalAccountAccess.Contains(configuration?[EvalAccountAccess.AccountIdsKey], id))
+            return settings.ApiKey;
+        return !string.IsNullOrWhiteSpace(settings.EvalApiKey) ? settings.EvalApiKey
+            : throw new InvalidOperationException("Evaluation AI credentials are required.");
     }
 }

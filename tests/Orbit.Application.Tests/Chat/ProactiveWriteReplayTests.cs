@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -18,9 +19,63 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Theory]
+    [InlineData(false, "null")]
+    [InlineData(false, "[]")]
+    [InlineData(false, "{}")]
+    [InlineData(true, "null")]
+    [InlineData(true, "[]")]
+    [InlineData(true, "{}")]
+    public async Task ProactiveWriteReplay_UnsupportedClientStagesCapturedWritesWithEmptySuggestions(bool bulk, string placeholder)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _unitOfWork.PassThroughTransactions<AgentExecuteOperationResponse>();
+        _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        IAiTool tool = bulk ? new BulkCreateHabitsTool(_mediator) : new CreateHabitTool(_userDateService, _mediator);
+        var handler = CreateHandler(tool);
+        var catalog = new AgentCatalogService([tool]);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
+            AgentPolicyDecisionStatus.ConfirmationRequired, catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!,
+            PendingOperation: new(Guid.NewGuid(), call.Arg<AgentPolicyEvaluationContext>().CapabilityId, "Create habit", "Preview", AgentRiskClass.Low,
+                AgentConfirmationRequirement.FreshConfirmation, TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(10))));
+        var ownership = Substitute.For<IAgentTargetOwnershipService>();
+        ownership.GetDenialReasonAsync(Arg.Any<string>(), UserId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        var real = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(), ownership,
+            Substitute.For<IAgentStepUpAuthorizationBridge>(), new([tool]),
+            new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService, new([tool])),
+            _pendingOperationStore, _unitOfWork, NullLogger<AgentOperationExecutor>.Instance);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var outcome = await real.ExecuteAsync(call.Arg<AgentExecuteOperationRequest>(), call.Arg<CancellationToken>());
+                outcome.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, JsonSerializer.Serialize(outcome));
+                return outcome;
+            });
+        var relative = bulk ? "GateNineMedical/g9i-composition-medical-batch-pt-BR-r3.json" : "GateTenPreviews/single-create-pt-r1.json";
+        var fixture = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", relative)))!;
+        var arguments = fixture["toolCalls"]!.AsArray().Single(call => call!["name"]!.GetValue<string>() == tool.Name)!["arguments"]!.DeepClone().AsObject();
+        arguments["orbit_write_complete"] = true;
+        if (bulk)
+            foreach (var item in arguments["habits"]!.AsArray()) item!["suggested_fields"] = JsonNode.Parse(placeholder);
+        else arguments["suggested_fields"] = JsonNode.Parse(placeholder);
+        SetupAiResponse(ToolResponse(tool.Name, "captured", arguments.ToJsonString()));
+
+        var result = await handler.Handle(new(UserId, "Continue.",
+            ClientContext: OfferClient("pt-BR") with { SupportsProactiveOffers = false }), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.PendingOperations.Should().ContainSingle().Which.Items.Should().NotBeEmpty();
+        await AssertNoCompositionContinuation();
+        await _operationExecutor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
+            !ProactiveProposal.Contains(request.Arguments)), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProactiveWriteReplay_KeepsSchemasStaticAndNegotiatesContextForEverySupportedTool(bool supports)
+    public async Task ProactiveWriteReplay_DeclaresOnlySupportedOfferFields(bool supports)
     {
         SetupUserAndPayGate();
         var tools = new IAiTool[]
@@ -38,16 +93,16 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
         if (supports) request.DynamicContext.Should().Contain(ProactiveProposal.Instruction);
-        else request.DynamicContext.Should().Contain("Proactive offers are unavailable for this client");
+        else request.DynamicContext.Should().NotContain(ProactiveProposal.Instruction);
         foreach (var declaration in request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value)))
         {
             var name = declaration.GetProperty("name").GetString();
             var schema = declaration.GetProperty("parameters");
-            schema.GetProperty("properties").TryGetProperty("orbit_dismissed_offer_keys", out _).Should().BeTrue();
+            schema.GetProperty("properties").TryGetProperty("orbit_dismissed_offer_keys", out _).Should().Be(supports);
             if (name == "revise_pending_changes")
             {
                 schema.GetProperty("properties").GetProperty("items").GetProperty("items").GetProperty("properties")
-                    .TryGetProperty("remove_suggested_fields", out _).Should().BeTrue();
+                    .TryGetProperty("remove_suggested_fields", out _).Should().Be(supports);
                 continue;
             }
             if (name is "bulk_create_habits" or "bulk_update_habits")
@@ -56,7 +111,8 @@ public partial class ProcessUserChatCommandHandlerTests
                 schema = name == "bulk_create_habits" ? schema.GetProperty("properties").GetProperty("habits").GetProperty("items")
                     : schema.GetProperty("properties").GetProperty("updates");
             }
-            schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeTrue(name);
+            schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
+            if (!supports) continue;
             schema.GetProperty("properties").GetProperty("suggested_fields").GetProperty("type").GetString().Should().Be("array");
             if (schema.GetProperty("properties").TryGetProperty("sub_habits", out var children))
                 children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeTrue(name);

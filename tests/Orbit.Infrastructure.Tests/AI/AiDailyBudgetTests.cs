@@ -35,6 +35,58 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
 {
     private static readonly DateOnly Today = new(2026, 1, 2);
 
+    [Fact]
+    public async Task EvalCeiling_IsSharedAcrossAccountsAndCannotBeBypassedByUnmetered()
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: true, listed: true);
+        var other = User.Create("Other", "other-eval@example.com").Value;
+        other.GrantLifetimePro();
+        fixture.Database.Context.Users.Add(other);
+        fixture.Database.Context.AppFeatureFlagAccounts.Add(AppFeatureFlagAccount.Create(FeatureFlagKeys.AstraEvalUnmetered, other.Id));
+        await fixture.Database.Context.SaveChangesAsync();
+        fixture.AccountConfiguration[EvalAccountAccess.AccountIdsKey] = $"{fixture.User.Id},{other.Id}";
+        await fixture.Budget.ReserveAsync(fixture.User.Id, 500_000, default);
+
+        var blocked = () => fixture.Budget.ReserveAsync(other.Id, 1, default);
+
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Locks.Where(key => key.StartsWith("ai-eval-budget:", StringComparison.Ordinal))
+            .Should().Equal("ai-eval-budget:2026-01-02", "ai-eval-budget:2026-01-02");
+        using var read = fixture.Database.CreateContext();
+        read.AiBudgetCalls.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(0.01)]
+    public async Task EvalCeiling_UsesConfiguredDollarsAndResetsAtUtcMidnight(double dollars)
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: true, listed: true, evalDailyBudgetUsd: (decimal)dollars);
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 1, 2, 23, 59, 59, TimeSpan.Zero);
+        fixture.Dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today.AddDays(1));
+        var ceiling = (long)((decimal)dollars * 1_000_000m);
+        if (ceiling > 0) await fixture.Budget.ReserveAsync(fixture.User.Id, ceiling, default);
+        var blocked = () => fixture.Budget.ReserveAsync(fixture.User.Id, 1, default);
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        fixture.Clock.UtcNow = fixture.Clock.UtcNow.AddSeconds(1);
+        if (ceiling == 0)
+            await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+        else
+            (await blocked()).Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task EvalCeiling_CountsAlreadyReportedUtcUsageDuringRollout()
+    {
+        using var fixture = new BudgetFixture(pro: true, evalExempt: true, listed: true);
+        var row = AiUsageDaily.Create(Today, "gpt-6-luna", "eval_chat", new(1, 0, 0, 0, 0, 0.50m), fixture.User.Id);
+        fixture.Database.Context.AiUsageDaily.Add(row);
+        await fixture.Database.Context.SaveChangesAsync();
+
+        var blocked = () => fixture.Budget.ReserveAsync(fixture.User.Id, 1, default);
+        await blocked.Should().ThrowAsync<AiBudgetExceededException>();
+    }
+
     [Theory]
     [InlineData(1, 0, "2026-08-03", "2026-08-16", true)]
     [InlineData(1, 0, "2026-08-03", "2026-08-16", false)]
@@ -585,11 +637,15 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         internal IAiUsageRecorder Recorder { get; }
         internal IAiRequestCostEstimator Estimator { get; }
         internal List<JsonElement> EstimatedRequests { get; } = [];
+        internal IConfiguration AccountConfiguration => _provider.GetRequiredService<IConfiguration>();
+        internal BudgetClock Clock { get; } = new();
+        internal List<string> Locks { get; } = [];
         private readonly ServiceProvider _provider;
         private readonly Microsoft.Extensions.Caching.Memory.MemoryCache _estimateCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
 
         internal BudgetFixture(bool pro = false, string model = "gpt-6-luna", int completionTimeoutSeconds = 185,
-            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging", bool listed = false)
+            bool useLocalEstimator = false, bool evalExempt = false, string environmentName = "Staging", bool listed = false,
+            decimal evalDailyBudgetUsd = 0.50m)
         {
             User = User.Create("Writer", "writer@example.com").Value;
             User.StartTrial(DateTime.UtcNow.AddDays(pro ? 1 : -1));
@@ -604,7 +660,22 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             dates.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
             _provider = new ServiceCollection()
                 .AddScoped(_ => Database.CreateContext())
-                .AddScoped<IUnitOfWork>(scope => new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()))
+                .AddScoped<IUnitOfWork>(scope =>
+                {
+                    var real = new UnitOfWork(scope.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings());
+                    var work = Substitute.For<IUnitOfWork>();
+                    work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<Guid>>>(), Arg.Any<CancellationToken>())
+                        .Returns(call => real.ExecuteInTransactionAsync(call.Arg<Func<CancellationToken, Task<Guid>>>(), call.Arg<CancellationToken>()));
+                    work.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => real.SaveChangesAsync(call.Arg<CancellationToken>()));
+                    work.AcquireAdvisoryLockAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call =>
+                    {
+                        Locks.Add(call.Arg<string>());
+                        return real.AcquireAdvisoryLockAsync(call.Arg<string>(), call.Arg<CancellationToken>());
+                    });
+                    return work;
+                })
+                .AddSingleton<TimeProvider>(Clock)
+                .AddSingleton<IOptions<AiSettings>>(Options.Create(new AiSettings { EvalDailyBudgetUsd = evalDailyBudgetUsd }))
                 .AddSingleton<IHostEnvironment>(Host.CreateApplicationBuilder(
                     new HostApplicationBuilderSettings { EnvironmentName = environmentName }).Environment)
                 .AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(
@@ -654,6 +725,12 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             _provider.Dispose();
             Database.Dispose();
         }
+    }
+
+    private sealed class BudgetClock : TimeProvider
+    {
+        internal DateTimeOffset UtcNow { get; set; } = new(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => UtcNow;
     }
 
     /// <summary>

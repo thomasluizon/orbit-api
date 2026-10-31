@@ -26,9 +26,6 @@ public partial class ProcessUserChatCommandHandler
     private static string AddAskContext(string dynamicContext, ProcessUserChatCommand request, ChatContext context)
     {
         var askEnabled = AskEnabled(request, context);
-        if (!askEnabled)
-            dynamicContext = string.Join(Environment.NewLine, dynamicContext,
-                "The ask tool is unavailable for this client. Request missing input in plain text using the current message language.");
         if (askEnabled && UsesComposition(request, context))
             dynamicContext = string.Join(Environment.NewLine, dynamicContext, TerminalAnswerDirective.Instruction);
         if (askEnabled)
@@ -197,7 +194,8 @@ public partial class ProcessUserChatCommandHandler
         {
             name = ask.Name,
             description = ask.Description,
-            parameters = ChatToolSchema(ask, results.HasSuccessfulAccountRead, results.MissingHabitDrafts.Values.ToArray())
+            parameters = ChatToolSchema(ask, request.ClientContext, UsesComposition(request, context), results.HasSuccessfulAccountRead, results.MissingHabitDrafts.Values.ToArray()),
+            cacheable_parameters = ChatToolSchema(ask, request.ClientContext, UsesComposition(request, context))
         }];
     }
 

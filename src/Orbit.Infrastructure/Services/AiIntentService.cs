@@ -90,6 +90,7 @@ public sealed partial class AiIntentService(
         }
 
         AppendToolConstraints(messages, options, conversationContext.ToolDeclarationUpdates);
+        conversationContext.ToolDeclarationUpdates = [];
 
         foreach (var output in messages.OfType<FunctionCallOutputResponseItem>()
             .Where(output => conversationContext.RetiredReadCallIds.Contains(output.CallId)))
@@ -144,11 +145,21 @@ public sealed partial class AiIntentService(
     private static void AppendToolConstraints(List<ResponseItem> messages, CreateResponseOptions options,
         IReadOnlyList<object> updates)
     {
-        if (!options.Tools.OfType<FunctionTool>().Any(tool => tool.FunctionName == "ask")) return;
         foreach (var update in updates)
         {
             var declaration = JsonSerializer.SerializeToElement(update, SerializeOptions);
             if (declaration.GetProperty("name").GetString() != "ask") continue;
+            if (!options.Tools.OfType<FunctionTool>().Any(tool => tool.FunctionName == "ask"))
+            {
+                var cacheable = new
+                {
+                    name = "ask",
+                    description = declaration.GetProperty("description"),
+                    parameters = declaration.TryGetProperty("cacheable_parameters", out var schema)
+                        ? schema : declaration.GetProperty("parameters")
+                };
+                options.Tools.Add(BuildToolCatalog([cacheable])["ask"]);
+            }
             var forms = declaration.GetProperty("parameters").GetProperty("properties")
                 .GetProperty("input").GetProperty("anyOf").EnumerateArray().Select(form =>
                 {
@@ -161,9 +172,12 @@ public sealed partial class AiIntentService(
                         missing_field = fields.TryGetProperty("missing_field", out var field) ? field.GetProperty("enum") : (JsonElement?)null
                     };
                 }).ToArray();
-            messages.Add(ResponseItem.CreateSystemMessageItem(
-                "Apply these ask constraints for this round. Use only the listed forms and missing_input values. For a bound draft, copy draft_call_id and missing_field exactly and ask only for that field with one question. These constraints do not authorize writes. "
-                + JsonSerializer.Serialize(forms, SerializeOptions)));
+            const string instruction = "Apply these ask constraints for this round. Use only the listed forms and missing_input values. For a bound draft, copy draft_call_id and missing_field exactly and ask only for that field with one question. These constraints do not authorize writes. ";
+            var constraints = instruction + JsonSerializer.Serialize(forms, SerializeOptions);
+            var previous = messages.OfType<MessageResponseItem>().Where(message => message.Role == MessageRole.System)
+                .SelectMany(message => message.Content).LastOrDefault(part => part.Text?.StartsWith(instruction, StringComparison.Ordinal) == true)?.Text;
+            if (previous != constraints)
+                messages.Add(ResponseItem.CreateSystemMessageItem(constraints));
         }
     }
 
@@ -310,8 +324,8 @@ public sealed partial class AiIntentService(
         try
         {
             return streamSink is null
-                ? await CompleteBufferedRoundAsync(client, messages, options, observation, cancellationToken)
-                : await CompleteStreamingRoundAsync(client, messages, options, observation, streamSink, stopwatch, cancellationToken);
+                ? await CompleteBufferedRoundAsync(client, messages, options, observation, cancellationToken, purpose)
+                : await CompleteStreamingRoundAsync(client, messages, options, observation, streamSink, stopwatch, cancellationToken, purpose);
         }
         finally
         {
@@ -359,13 +373,13 @@ public sealed partial class AiIntentService(
         List<ResponseItem> messages,
         CreateResponseOptions options,
         ModelCallObservation observation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string purpose)
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = false;
         var completion = await client.GetResponsesClient().CreateResponseAsync(options, cancellationToken);
         observation.Response = completion.Value;
-        return FinishRound(completion.Value, messages, options, "buffered");
+        return FinishRound(completion.Value, messages, options, "buffered", purpose);
     }
 
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
@@ -375,7 +389,7 @@ public sealed partial class AiIntentService(
         ModelCallObservation observation,
         Func<AiStreamEvent, Task> streamSink,
         System.Diagnostics.Stopwatch stopwatch,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string purpose)
     {
         SetInputItems(options, messages);
         options.StreamingEnabled = true;
@@ -438,7 +452,7 @@ public sealed partial class AiIntentService(
         response.OutputItems.Clear();
         foreach (var item in completedItems.Values) response.OutputItems.Add(item);
         observation.Response = response;
-        var round = FinishRound(response, messages, options, "streaming", contentEmitted);
+        var round = FinishRound(response, messages, options, "streaming", purpose, contentEmitted);
         if (round.ToolCalls.Count > 0 && contentEmitted)
             await streamSink(AiStreamEvent.Reset());
         return round;
@@ -481,7 +495,7 @@ public sealed partial class AiIntentService(
         ResponseResult response,
         List<ResponseItem> messages,
         CreateResponseOptions options,
-        string phase,
+        string phase, string purpose,
         bool assistantTextStreamed = false)
     {
         LogChatUsage(response.Usage, phase);
@@ -493,7 +507,7 @@ public sealed partial class AiIntentService(
                 if (item is not ReasoningResponseItem || AiCompletionClient.IsReasoningModel(aiClient.ChatModel))
                     messages.Add(item);
         if (truncated && logger.IsEnabled(LogLevel.Warning))
-            LogResponseTruncated(logger, response.Usage?.OutputTokenCount,
+            LogResponseTruncated(logger, purpose, response.Usage?.OutputTokenCount,
                 response.Usage?.OutputTokenDetails?.ReasoningTokenCount, options.MaxOutputTokenCount,
                 options.Model, JsonSerializer.Serialize(response.OutputItems.Select(item => new
                 {
@@ -690,8 +704,8 @@ public sealed partial class AiIntentService(
     [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "First content token after {ElapsedMs}ms")]
     private static partial void LogFirstContentToken(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); OutputTokens={OutputTokens} ReasoningTokens={ReasoningTokens} MaxOutputTokens={MaxOutputTokens} Model={Model} OutputItems={OutputItems}")]
-    private static partial void LogResponseTruncated(ILogger logger, int? outputTokens, int? reasoningTokens,
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (max_output_tokens); Purpose={Purpose} OutputTokens={OutputTokens} ReasoningTokens={ReasoningTokens} MaxOutputTokens={MaxOutputTokens} Model={Model} OutputItems={OutputItems}")]
+    private static partial void LogResponseTruncated(ILogger logger, string purpose, int? outputTokens, int? reasoningTokens,
         int? maxOutputTokens, string model, string outputItems);
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "AI token usage ({Phase}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]

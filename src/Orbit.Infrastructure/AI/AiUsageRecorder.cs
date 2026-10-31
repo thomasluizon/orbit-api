@@ -96,8 +96,7 @@ public sealed partial class AiUsageRecorder(
     /// Returns 0 when the model has no configured price (the daily summary flags such models as unpriced).
     /// </summary>
     internal static decimal ComputeCostUsd(
-        AiModelPrice? price, long cachedTokens, long promptTokens, long completionTokens, long cacheWriteTokens = 0,
-        long reasoningTokens = 0)
+        AiModelPrice? price, long cachedTokens, long promptTokens, long completionTokens, long cacheWriteTokens = 0)
     {
         if (price is null)
             return 0m;

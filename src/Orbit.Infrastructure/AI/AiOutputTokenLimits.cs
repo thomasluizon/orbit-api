@@ -12,6 +12,7 @@ internal static class AiOutputTokenLimits
         "offer_selection" or "tag_suggestion" or "habit_emoji_inference" => 1024,
         "proactive_item" or "slip_alert" => 512,
         "habit_interpret_date" => 128,
+        "daily_summary" => 600,
         _ => 2048
     };
 

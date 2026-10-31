@@ -90,8 +90,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
             var supportsAsk = index % 2 != 0;
-            names.Should().HaveCount(tools.Count).And.Contain("suggest_habits").And.Contain("ask");
-            names.Should().Equal(tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
+            names.Should().HaveCount(tools.Count - 1).And.Contain("suggest_habits").And.NotContain("ask");
+            names.Should().Equal(tools.Select(tool => tool.Name).Where(name => name != "ask").Order(StringComparer.Ordinal));
             var currentPrefix = CacheablePrefix(root);
             prefixes.TryAdd(supportsAsk, currentPrefix);
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefixes[supportsAsk]));

@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
 
@@ -37,11 +39,18 @@ public class AiEvalEndpointIsolationTests
             MaxRetries = 0
         });
         var handler = new RejectedRequestCapture();
+        if (eval && !configured)
+        {
+            var resolve = () => AiEvalCredentials.Resolve(options.Value, config, http);
+            resolve.Should().Throw<InvalidOperationException>();
+            handler.Credentials.Should().BeEmpty();
+            return;
+        }
         if (kind == "audio")
         {
             var service = new AudioTranscriptionService(options, NullLogger<AudioTranscriptionService>.Instance,
-                new HttpClientPipelineTransport(new HttpClient(handler)), config, http);
-            using var audio = new MemoryStream([0, 1]);
+                new HttpClientPipelineTransport(new HttpClient(handler)), config, http, Substitute.For<IAiDailyBudget>());
+            using var audio = AudioTranscriptionBudgetTests.Wave();
             (await service.TranscribeAsync(audio, "audio.wav", "en")).IsFailure.Should().BeTrue();
         }
         else

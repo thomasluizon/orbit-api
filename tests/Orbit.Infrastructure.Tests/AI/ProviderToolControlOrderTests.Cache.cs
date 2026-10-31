@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.ML.Tokenizers;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using OpenAI.Responses;
@@ -26,13 +27,15 @@ namespace Orbit.Infrastructure.Tests.AI;
 
 public sealed partial class ProviderToolControlOrderTests
 {
-    [Fact]
-    public async Task ChatRequests_ShareStaticPrefixAcrossUsersOffersPreviewsAndHistory()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChatRequests_ShareStaticPrefixAcrossUsersOffersPreviewsAndHistory(bool offers)
     {
-        var plain = await CaptureChatRequestAsync(false);
-        var offers = await CaptureChatRequestAsync(true);
+        var plain = await CaptureChatRequestAsync(offers, false);
+        var populated = await CaptureChatRequestAsync(offers, true);
         using var first = JsonDocument.Parse(plain);
-        using var second = JsonDocument.Parse(offers);
+        using var second = JsonDocument.Parse(populated);
         var firstSystem = first.RootElement.GetProperty("input")[0].GetRawText();
         var secondSystem = second.RootElement.GetProperty("input")[0].GetRawText();
         var firstTools = first.RootElement.GetProperty("tools").GetRawText();
@@ -44,14 +47,18 @@ public sealed partial class ProviderToolControlOrderTests
             .Be(second.RootElement.GetProperty("prompt_cache_key").GetString());
         first.RootElement.GetProperty("safety_identifier").GetString().Should()
             .NotBe(second.RootElement.GetProperty("safety_identifier").GetString());
-        second.RootElement.GetProperty("input").GetRawText().Should().Contain("pending_operation_id", "previously_issued_offers", "Earlier conversation");
-        first.RootElement.GetProperty("input").GetRawText().Should().NotContain("pending_operation_id", "previously_issued_offers");
+        second.RootElement.GetProperty("input").GetRawText().Should().Contain("pending_operation_id", "Earlier conversation");
+        if (offers) second.RootElement.GetProperty("input").GetRawText().Should().Contain("previously_issued_offers");
+        first.RootElement.GetProperty("input").GetRawText().Should().NotContain("pending_operation_id");
         var prefixCharacters = firstSystem.Length + firstTools.Length;
-        await File.WriteAllTextAsync(Path.Combine(Path.GetTempPath(), "orbit-1916-prefix-size.txt"),
-            $"Serialized system and tools: {prefixCharacters} characters, approximately {prefixCharacters / 4} tokens (characters / 4).");
+        var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
+        var tokens = tokenizer.CountTokens(firstSystem + firstTools);
+        var requestTokens = tokenizer.CountTokens(plain);
+        await File.WriteAllTextAsync(Path.Combine(Path.GetTempPath(), $"orbit-1916-prefix-{offers}.txt"),
+            $"Serialized system and tools: {prefixCharacters} characters, {tokens} o200k_base tokens; raw request JSON {requestTokens} tokens.");
     }
 
-    private static async Task<string> CaptureChatRequestAsync(bool offers)
+    private static async Task<string> CaptureChatRequestAsync(bool offers, bool populated)
     {
         var registry = new AiToolRegistry(StrictChatToolSchemaTests.AllTools());
         var http = new PrefixCaptureHandler();
@@ -64,12 +71,12 @@ public sealed partial class ProviderToolControlOrderTests
             }), NullLogger<AiCompletionClient>.Instance, usage);
         var intent = new AiIntentService(AiBudgetTestDouble.Wrap(client), usage, NullLogger<AiIntentService>.Instance);
         var user = User.Create("Person", "prefix@example.com").Value;
-        user.SetLanguage(offers ? "pt-BR" : "en");
-        var parent = Habit.Create(new(HabitSchedule.Recurring, user.Id, offers ? "Rotina" : "Routine", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value;
-        var child = Habit.Create(new(HabitSchedule.Recurring, user.Id, offers ? "Rotina" : "Child", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1), ParentHabitId: parent.Id)).Value;
-        var habits = offers ? new[] { parent, child } : Array.Empty<Habit>();
+        user.SetLanguage(populated ? "pt-BR" : "en");
+        var parent = Habit.Create(new(HabitSchedule.Recurring, user.Id, populated ? "Rotina" : "Routine", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value;
+        var child = Habit.Create(new(HabitSchedule.Recurring, user.Id, populated ? "Rotina" : "Child", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1), ParentHabitId: parent.Id)).Value;
+        var habits = populated ? new[] { parent, child } : Array.Empty<Habit>();
         var pending = Substitute.For<IPendingAgentOperationStore>();
-        pending.GetAwaiting(user.Id).Returns(offers
+        pending.GetAwaiting(user.Id).Returns(populated
             ? new[] { new PendingAgentOperationExecution(Guid.NewGuid(), "habits", "create_habit", JsonSerializer.SerializeToElement(new { title = "Draft" }), AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation) }
             : Array.Empty<PendingAgentOperationExecution>());
         var preview = Substitute.For<IPendingOperationChangePreviewer>();
@@ -88,8 +95,8 @@ public sealed partial class ProviderToolControlOrderTests
             new object?[] { habits, habits.ToList(), habits.ToList(), false, user, user.Language, true,
                 Array.Empty<Goal>(), Array.Empty<Tag>(), Array.Empty<string>(), offers ? new[] { FeatureFlagKeys.AstraBlockFirst } : Array.Empty<string>(),
                 new DateOnly(2026, 1, 1), facts, 0L });
-        var request = new ProcessUserChatCommand(user.Id, offers ? "Continue, por favor" : "Hello",
-            History: offers ? [new("user", "Earlier conversation"), new("assistant", "Earlier reply")] : null,
+        var request = new ProcessUserChatCommand(user.Id, populated ? "Continue, por favor" : "Hello",
+            History: populated ? [new("user", "Earlier conversation"), new("assistant", "Earlier reply")] : null,
             ClientContext: new(SupportsParts: offers, PartKinds: ["choice"], SupportsPendingOperationChanges: offers,
                 SupportsProactiveOffers: offers, ConversationId: Guid.NewGuid()));
         var state = Activator.CreateInstance(handlerType.GetNestedType("ChatTurnState", BindingFlags.NonPublic)!, nonPublic: true);

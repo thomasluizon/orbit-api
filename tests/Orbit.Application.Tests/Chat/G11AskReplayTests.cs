@@ -16,7 +16,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("en", 3)]
     [InlineData("pt-BR", 2)]
     [InlineData("pt-BR", 3)]
-    public async Task G11_LegacyCapturedEmptyAskKeepsCatalogButIsNeverExecutedAndReadsStillAnswer(string language, int repeat)
+    public async Task G11_LegacyCapturedEmptyAskIsNeverOfferedOrExecutedAndReadsStillAnswer(string language, int repeat)
     {
         SetupExistingParents(language);
         EnableComposition();
@@ -46,8 +46,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var request = _aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync")
             .GetArguments()[0].Should().BeOfType<AiToolRequest>().Subject;
         request.ToolDeclarations.Select(tool => JsonSerializer.SerializeToElement(tool).GetProperty("name").GetString())
-            .Should().BeEquivalentTo(["ask", "query_habits", "query_goals"]);
-        request.DynamicContext.Should().Contain("The ask tool is unavailable for this client");
+            .Should().BeEquivalentTo(["query_habits", "query_goals"]);
         await ask.DidNotReceiveWithAnyArgs().ExecuteAsync(default, default, default);
         await _blockStore.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         AssertStoredComposition(result.Value, client, language);
