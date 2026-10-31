@@ -1,5 +1,22 @@
 # Selecting an OpenAPI artifact
 
+AI provider credit exhaustion returns HTTP 424 with the existing error body shape:
+`{"error":"...","errorCode":"AI_PROVIDER_QUOTA_EXHAUSTED"}`. This additive code
+means automatic retries must stop for the request. It is separate from the person's
+Orbit message allowance. Summary, chat, retrospective, goal review, habit setup,
+suggestions and refinement, date interpretation, rescheduling, tags and transcription
+share this code. Chat SSE uses the existing `error` event with `status: 424` and
+`code: "AI_PROVIDER_QUOTA_EXHAUSTED"` after the stream starts.
+
+Provider HTTP 429 bodies with `error.code` (or `error.type` when the code is absent or null) equal to
+`insufficient_quota` or `credit_balance_exhausted` stop after one attempt, even when the
+response also carries a `Retry-After` header, because the body code states the failure is
+permanent. Other or unrecognized 429 bodies retain the existing rate-limit retries. Error messages reuse the
+existing localized `AI_UNAVAILABLE` copy. Deploy this producer before the paired web
+and Android consumer disables automatic query and chat retries for this code.
+The existing shared query retry helper retries generic failures, including HTTP 424,
+until that consumer change lands. Tracks thomasluizon/orbit-tickets#1915.
+
 Habit search (`GET /api/habits` with `search`) appends nullable optional
 `completedOn` and `isSkippedOnDate` to schedule rows and children.
 `completedOn` is the latest nondeleted positive log's account calendar `Date`
@@ -12,7 +29,7 @@ Search pages put other results before completed OneTime tasks, then order those
 tasks by descending completion date, with missing dates last. Position, creation instant and habit ID
 break ties. The shared query orders in SQL before paging; MCP and Astra reuse it.
 Deploy this API to production before the search sections and completion labels
-in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2267). Tracks
+in thomasluizon/orbit-tickets#1924 (orbit-ui-mobile#2271). Tracks
 thomasluizon/orbit-tickets#1933.
 
 The FCM data message and shared Android category for repeat reminder actions

@@ -24,7 +24,7 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiCompletionErrorTests
 {
     [Fact]
-    public async Task CompleteTextAsync_QuotaExhausted429_RetriesThenThrowsAndRecordsErrorWithoutTokens()
+    public async Task CompleteTextAsync_QuotaExhausted429_ThrowsOnceAndRecordsErrorWithoutTokens()
     {
         const string quotaBody =
             "{\"error\":{\"message\":\"You exceeded your current quota\",\"type\":\"insufficient_quota\",\"code\":\"insufficient_quota\"}}";
@@ -37,8 +37,8 @@ public class AiCompletionErrorTests
 
         var exception = (await act.Should().ThrowAsync<ClientResultException>()).Which;
         exception.Status.Should().Be(429);
-        handler.CallCount.Should().Be(3);
-        retryLogger.Entries.Should().HaveCount(3);
+        handler.CallCount.Should().Be(1);
+        retryLogger.Entries.Should().ContainSingle();
         retryLogger.Entries[^1].Should().Contain("retriable: False");
         await usageRecorder.Received(1).RecordAsync(
             Arg.Any<string>(), "gpt-6-luna", 0, 0, 0, 0, Arg.Any<CancellationToken>(), null,

@@ -26,6 +26,10 @@ public sealed class AiHabitDraftGenerator(BudgetedAiCompletionClient client, ILo
             return result?.Drafts is { } drafts ? Result.Success(drafts)
                 : Result.Failure<IReadOnlyList<HabitSuggestionDraft>>(ErrorMessages.AiEmptyResponse);
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<IReadOnlyList<HabitSuggestionDraft>>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<IReadOnlyList<HabitSuggestionDraft>>(AiBudgetExceededException.Error);

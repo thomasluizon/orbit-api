@@ -30,6 +30,10 @@ public sealed class AiDateInterpretationService(BudgetedAiCompletionClient clien
                 userId: userId, cancellationToken: cancellationToken, requireComplete: true);
             return Result.Success(Parse(result));
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<DateOnly?>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<DateOnly?>(AiBudgetExceededException.Error);

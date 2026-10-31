@@ -72,6 +72,76 @@ public class AiRetryLoggingPolicyTests
         });
     }
 
+    [Theory]
+    [InlineData("insufficient_quota", "insufficient_quota", false, 1)]
+    [InlineData("credit_balance_exhausted", "insufficient_quota", false, 1)]
+    [InlineData(null, "insufficient_quota", false, 1)]
+    [InlineData(null, "credit_balance_exhausted", false, 1)]
+    [InlineData("rate_limit_exceeded", "requests", false, 3)]
+    [InlineData("rate_limit_exceeded", "insufficient_quota", false, 3)]
+    [InlineData(null, null, false, 3)]
+    [InlineData("insufficient_quota", "insufficient_quota", true, 1)]
+    [InlineData(null, "credit_balance_exhausted", true, 1)]
+    [InlineData("rate_limit_exceeded", "requests", true, 3)]
+    public async Task Send_Provider429_StopsOnQuotaBodyAndRetriesRateLimits(
+        string? code, string? type, bool retryAfter, int expectedAttempts)
+    {
+        var body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            error = new { message = "Provider failure", code, type, param = (string?)null }
+        });
+        foreach (var asynchronous in new[] { false, true })
+        {
+            var logger = new CollectingLogger();
+            var handler = new FixedStatusHandler(HttpStatusCode.TooManyRequests, body, retryAfter);
+            var pipeline = ClientPipeline.Create(new ClientPipelineOptions
+            {
+                Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
+                RetryPolicy = new ZeroDelayRetryPolicy(2, logger)
+            });
+            using var message = CreateMessage(pipeline);
+            message.BufferResponse = false;
+
+            if (asynchronous)
+                await pipeline.SendAsync(message);
+            else
+                pipeline.Send(message);
+
+            handler.CallCount.Should().Be(expectedAttempts);
+            logger.Entries.Should().HaveCount(expectedAttempts);
+            logger.Entries[^1].Should().Contain("retriable: False");
+            if (expectedAttempts == 1)
+            {
+                message.Response!.Content.ToString().Should().Be(body);
+                AiProviderErrors.IsQuotaExhausted(new System.ClientModel.ClientResultException(message.Response))
+                    .Should().BeTrue();
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("not JSON")]
+    [InlineData("[]")]
+    [InlineData("{\"error\":null}")]
+    [InlineData("{\"error\":{\"code\":42}}")]
+    [InlineData("{\"error\":{\"message\":\"insufficient_quota\"}}")]
+    public async Task SendAsync_Unrecognized429_KeepsRetries(string body)
+    {
+        var logger = new CollectingLogger();
+        var handler = new FixedStatusHandler(HttpStatusCode.TooManyRequests, body);
+        var pipeline = ClientPipeline.Create(new ClientPipelineOptions
+        {
+            Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
+            RetryPolicy = new ZeroDelayRetryPolicy(2, logger)
+        });
+        using var message = CreateMessage(pipeline);
+
+        await pipeline.SendAsync(message);
+
+        handler.CallCount.Should().Be(3);
+        logger.Entries.Should().HaveCount(3);
+    }
+
     private static ClientPipeline BuildThrowingPipeline(ILogger logger, string exceptionMessage, int maxRetries)
     {
         return ClientPipeline.Create(new ClientPipelineOptions
@@ -104,8 +174,9 @@ public class AiRetryLoggingPolicyTests
         protected override TimeSpan GetNextDelay(PipelineMessage message, int tryCount) => TimeSpan.Zero;
     }
 
-    private sealed class FixedStatusHandler(HttpStatusCode status) : HttpMessageHandler
+    private sealed class FixedStatusHandler(HttpStatusCode status, string body = "", bool retryAfter = false) : HttpMessageHandler
     {
+        public int CallCount { get; private set; }
         protected override HttpResponseMessage Send(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -122,11 +193,15 @@ public class AiRetryLoggingPolicyTests
 
         private HttpResponseMessage BuildResponse(HttpRequestMessage request)
         {
-            return new HttpResponseMessage(status)
+            CallCount++;
+            var response = new HttpResponseMessage(status)
             {
                 RequestMessage = request,
-                Content = new StringContent(string.Empty),
+                Content = new StringContent(body),
             };
+            if (retryAfter)
+                response.Headers.Add("Retry-After", "0");
+            return response;
         }
     }
 

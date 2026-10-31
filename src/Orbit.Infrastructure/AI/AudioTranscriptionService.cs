@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
@@ -96,6 +97,10 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<string>(ErrorMessages.AiProviderQuotaExhausted);
         }
         catch (Exception ex)
         {

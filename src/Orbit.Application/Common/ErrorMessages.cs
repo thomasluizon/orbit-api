@@ -109,6 +109,7 @@ public static class ErrorMessages
     public static readonly AppError NoGoalsData = From(ErrorCodes.NoGoalsData);
     public static readonly AppError AiEmptyResponse = From(ErrorCodes.AiEmptyResponse);
     public static readonly AppError AiNoOutput = From(ErrorCodes.AiEmptyResponse);
+    public static readonly AppError AiProviderQuotaExhausted = From(ErrorCodes.AiProviderQuotaExhausted);
     public static readonly AppError AiUnavailable = From(ErrorCodes.AiUnavailable);
     public static readonly AppError ContentModerationRefused = From(ErrorCodes.ContentModerationRefused);
     public static readonly AppError AiRetrospectiveUnavailable = From(ErrorCodes.AiUnavailable);

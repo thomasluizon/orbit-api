@@ -47,6 +47,10 @@ public sealed partial class AiTagSuggestionService(
 
             return Result.Success<IReadOnlyList<string>>(cleaned);
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<IReadOnlyList<string>>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<IReadOnlyList<string>>(AiBudgetExceededException.Error);

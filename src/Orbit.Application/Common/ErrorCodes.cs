@@ -114,6 +114,7 @@ public static class ErrorCodes
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";
     public const string NoGoalsData = "NO_GOALS_DATA";
     public const string AiEmptyResponse = "AI_EMPTY_RESPONSE";
+    public const string AiProviderQuotaExhausted = "AI_PROVIDER_QUOTA_EXHAUSTED";
     public const string AiUnavailable = "AI_UNAVAILABLE";
     public const string ContentModerationRefused = "CONTENT_MODERATION_REFUSED";
     public const string AiNoActiveConversation = "AI_NO_ACTIVE_CONVERSATION";

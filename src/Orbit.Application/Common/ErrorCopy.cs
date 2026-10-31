@@ -401,6 +401,7 @@ public static partial class ErrorCopy
 
         foreach (var (code, sourceCode) in new[]
         {
+            (ErrorCodes.AiProviderQuotaExhausted, ErrorCodes.AiUnavailable),
             (DomainErrors.WnsEndpointInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (DomainErrors.PushApnsTopicInvalid.Code, ErrorCodes.PushEndpointInvalid),
             (DomainErrors.PushDeviceIdInvalid.Code, ErrorCodes.PushEndpointInvalid),

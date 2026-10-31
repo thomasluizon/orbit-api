@@ -34,18 +34,20 @@ public class TranscribeAudioCommandHandlerTests
         result.Value.Text.Should().Be("Walk the dog every morning.");
     }
 
-    [Fact]
-    public async Task Handle_TranscriptionFails_PropagatesError()
+    [Theory]
+    [InlineData(ErrorCodes.AudioTranscriptionEmpty)]
+    [InlineData(ErrorCodes.AiProviderQuotaExhausted)]
+    public async Task Handle_TranscriptionFails_PropagatesError(string errorCode)
     {
         _transcription.TranscribeAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<string>(ErrorMessages.AudioTranscriptionEmpty));
+            .Returns(Result.Failure<string>(ErrorCopy.English(errorCode), errorCode));
 
         var command = new TranscribeAudioCommand(_userId, [1, 2, 3], "clip.webm");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(ErrorCodes.AudioTranscriptionEmpty);
+        result.ErrorCode.Should().Be(errorCode);
     }
 
     [Theory]

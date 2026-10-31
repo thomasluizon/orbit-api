@@ -128,18 +128,35 @@ public partial class ProcessUserChatCommandHandlerTests
         await _operationExecutor.DidNotReceiveWithAnyArgs().ExecuteAsync(default!, default);
     }
 
-    [Fact]
-    public async Task ContinuationProviderFailure_FailsTurnExplicitly()
+    [Theory]
+    [InlineData(ErrorCodes.AiUnavailable)]
+    [InlineData(ErrorCodes.AiProviderQuotaExhausted)]
+    public async Task ContinuationProviderFailure_FailsTurnExplicitly(string errorCode)
     {
         SetupUserAndPayGate();
         SetupAiResponse(ToolResponse("get_habits", "call_1", "{}"));
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiUnavailable));
+            .Returns(Result.Failure<AiResponse>(ErrorCopy.English(errorCode), errorCode));
         var tool = ReadTool("get_habits", new ToolResult(true, Payload: new { habits = Array.Empty<object>() }));
         var result = await CreateHandler(tool).Handle(new ProcessUserChatCommand(UserId, "Show my habits"), default);
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.AiUnavailable.Message);
+        result.Error.Should().Be(ErrorCopy.English(errorCode));
+        result.ErrorCode.Should().Be(errorCode);
+    }
+
+    [Fact]
+    public async Task ProviderQuotaFailure_PreservesCodeWithoutModelRetry()
+    {
+        SetupUserAndPayGate();
+        _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<AiResponse>(ErrorMessages.AiProviderQuotaExhausted));
+
+        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello"), default);
+
+        result.ErrorCode.Should().Be(ErrorCodes.AiProviderQuotaExhausted);
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     private static Habit CreateHabit(string title, bool isCompleted = false)

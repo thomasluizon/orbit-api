@@ -53,6 +53,7 @@ public static class ResultActionResultExtensions
         [ErrorCodes.ApiKeyCreationChallengeRequired] = StatusCodes.Status428PreconditionRequired,
 
 
+        [ErrorCodes.AiProviderQuotaExhausted] = StatusCodes.Status424FailedDependency,
         [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.PaymentServiceUnavailable] = StatusCodes.Status503ServiceUnavailable,
         [ErrorCodes.BillingDetailsUnavailable] = StatusCodes.Status503ServiceUnavailable,

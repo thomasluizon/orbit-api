@@ -37,6 +37,10 @@ public sealed partial class AiHabitSuggestionService(
 
             return MapSuggestion(dto);
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<HabitSetupSuggestion>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<HabitSetupSuggestion>(AiBudgetExceededException.Error);

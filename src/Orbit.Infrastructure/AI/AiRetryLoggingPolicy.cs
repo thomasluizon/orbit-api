@@ -10,10 +10,24 @@ public partial class AiRetryLoggingPolicy(int maxRetries, ILogger logger) : Clie
         public int Value;
     }
 
-    // WHY: ShouldRetryAsync is not overridden — its base dispatches to this sync virtual, so overriding both double-logs every attempt: https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/core/System.ClientModel/src/Pipeline/ClientRetryPolicy.cs
     protected override bool ShouldRetry(PipelineMessage message, Exception? exception)
     {
-        var retriable = base.ShouldRetry(message, exception);
+        if (AiProviderErrors.IsQuotaCandidate(message.Response))
+            message.Response.BufferContent(message.CancellationToken);
+        return EvaluateRetry(message, exception);
+    }
+
+    protected override async ValueTask<bool> ShouldRetryAsync(PipelineMessage message, Exception? exception)
+    {
+        if (AiProviderErrors.IsQuotaCandidate(message.Response))
+            await message.Response.BufferContentAsync(message.CancellationToken);
+        return EvaluateRetry(message, exception);
+    }
+
+    private bool EvaluateRetry(PipelineMessage message, Exception? exception)
+    {
+        var retriable = !AiProviderErrors.IsQuotaExhausted(message.Response)
+            && base.ShouldRetry(message, exception);
         LogFailedAttempt(message, exception, retriable);
         return retriable;
     }
