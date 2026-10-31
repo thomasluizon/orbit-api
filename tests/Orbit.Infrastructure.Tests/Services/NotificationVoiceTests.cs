@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -41,7 +42,7 @@ public class NotificationVoiceTests
         { "chat, system with image", ChatSystemPrompt() },
     };
 
-    public static TheoryData<string, string> EveryGeneratedUserPrompt() => new()
+    public static TheoryData<string, string> EveryGenerationPrompt() => new()
     {
         { "slip alert, en", AiSlipAlertMessageService.BuildPrompt("Smoking", DayOfWeek.Friday, 14, "en") },
         { "slip alert, pt-BR", AiSlipAlertMessageService.BuildPrompt("Fumar", DayOfWeek.Monday, null, "pt-BR") },
@@ -52,8 +53,7 @@ public class NotificationVoiceTests
     };
 
     /// <summary>
-    /// The daily summary is built rather than declared, and it is the prompt this pull request
-    /// strips doubled hyphens from, so the guard written for that leak has to reach it.
+    /// The daily-summary request combines static instructions with the generated fact sheet.
     /// </summary>
     private static string DailySummaryPrompt(string language)
     {
@@ -65,7 +65,7 @@ public class NotificationVoiceTests
             1,
             DueDate: today)).Value;
 
-        return AiSummaryService.BuildSummaryPrompt(
+        return AiSummaryService.SystemPrompt + "\n" + AiSummaryService.BuildSummaryPrompt(
             [habit],
             new DailySummaryContext(today, today, today, language, null, 0, 0, new Dictionary<Guid, DateOnly>()));
     }
@@ -110,20 +110,27 @@ public class NotificationVoiceTests
     }
 
     [Theory]
-    [MemberData(nameof(EveryGeneratedUserPrompt))]
-    public void EveryUserPromptCarriesTheSharedVoiceContract(string label, string prompt)
+    [MemberData(nameof(EveryGenerationPrompt))]
+    public void EveryGenerationCarriesTheSharedVoiceContract(string label, string prompt)
     {
         var rules = IsSlipAlert(label) ? NotificationVoice.SlipAlertRules : NotificationVoice.Rules;
         prompt.Should().Contain(rules, $"the {label} prompt must pin the register in the prompt");
     }
 
     [Theory]
-    [MemberData(nameof(EveryGeneratedUserPrompt))]
-    public void EveryUserPromptNamesTheLanguageItMustWriteIn(string label, string prompt)
+    [MemberData(nameof(EveryGenerationPrompt))]
+    public void EveryGenerationSpecifiesTheLanguageItMustWriteIn(string label, string prompt)
     {
         var languageName = label.EndsWith("pt-BR", StringComparison.Ordinal) ? "Brazilian Portuguese" : "English";
 
-        prompt.Should().Contain($"Write ONLY in {languageName}");
+        if (label.StartsWith("daily summary", StringComparison.Ordinal))
+        {
+            prompt.Should().Contain("in the profileLanguage supplied in the fact sheet");
+            using var facts = JsonDocument.Parse(prompt.Split("Daily facts (JSON):\n")[1]);
+            facts.RootElement.GetProperty("profileLanguage").GetString().Should().Be(languageName);
+        }
+        else
+            prompt.Should().Contain($"Write ONLY in {languageName}");
     }
 
     /// <summary>
@@ -133,7 +140,7 @@ public class NotificationVoiceTests
     /// redden when a generator stops carrying the contract, which is the failure that ships slop.
     /// </summary>
     [Theory]
-    [MemberData(nameof(EveryGeneratedUserPrompt))]
+    [MemberData(nameof(EveryGenerationPrompt))]
     public void EveryPromptTellsTheModelWhichCharactersAreBanned(string label, string prompt)
     {
         foreach (var ban in new[]
@@ -149,7 +156,7 @@ public class NotificationVoiceTests
 
     /// <inheritdoc cref="EveryPromptTellsTheModelWhichCharactersAreBanned"/>
     [Theory]
-    [MemberData(nameof(EveryGeneratedUserPrompt))]
+    [MemberData(nameof(EveryGenerationPrompt))]
     public void EveryPromptBansTheSellingRegister(string label, string prompt)
     {
         foreach (var ban in new[]
@@ -192,7 +199,7 @@ public class NotificationVoiceTests
     public static TheoryData<string, string, string> EveryPromptAndHypeWord()
     {
         var cases = new TheoryData<string, string, string>();
-        foreach (var promptCase in EveryGeneratedUserPrompt())
+        foreach (var promptCase in EveryGenerationPrompt())
         {
             var label = (string)promptCase[0];
             var prompt = (string)promptCase[1];
