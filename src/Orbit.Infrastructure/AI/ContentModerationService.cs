@@ -15,6 +15,7 @@ public partial class ContentModerationService(
     HttpClient httpClient,
     IOptions<AiSettings> aiSettings,
     ILogger<ContentModerationService> logger,
+    IFeatureFlagService flags,
     IConfiguration? configuration = null,
     IHttpContextAccessor? http = null) : IContentModerationService
 {
@@ -32,7 +33,8 @@ public partial class ContentModerationService(
             {
                 Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
             };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, configuration, http));
+            var account = await AiEvalAccount.ResolveAsync(AiEvalAccount.CurrentUserId(http), flags, configuration, cancellationToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, account));
             request.Options.Set(HandlesFailedResponse, true);
 
             using var response = await httpClient.SendAsync(request, cancellationToken);

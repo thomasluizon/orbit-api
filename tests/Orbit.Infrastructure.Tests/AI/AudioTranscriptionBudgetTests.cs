@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
@@ -17,16 +18,18 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AudioTranscriptionBudgetTests
 {
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task EvalAudio_ReservationFailurePreventsDispatchAndRetainsQuotaError(bool quota)
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task EvalAudio_ReservationFailurePreventsDispatchAndRetainsQuotaError(bool quota, bool listed)
     {
         var userId = Guid.NewGuid();
         var budget = Substitute.For<IAiDailyBudget>();
         budget.ReserveAsync(userId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<Guid>(quota ? new AiBudgetExceededException() : new IOException("Reservation unavailable")));
         var handler = new AudioCapture();
-        var service = Service(userId, budget, handler);
+        var service = Service(userId, budget, handler, listed);
         using var audio = Wave();
 
         var result = await service.TranscribeAsync(audio, "recording.wav", "en");
@@ -39,9 +42,11 @@ public class AudioTranscriptionBudgetTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task EvalAudio_SettlesRejectionsToZeroAndRetainsUncertainDispatchSpend(bool uncertain)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public async Task EvalAudio_SettlesRejectionsToZeroAndRetainsUncertainDispatchSpend(bool uncertain, bool listed)
     {
         var userId = Guid.NewGuid();
         var callId = Guid.NewGuid();
@@ -50,7 +55,7 @@ public class AudioTranscriptionBudgetTests
         var handler = new AudioCapture(uncertain);
         using var audio = Wave();
 
-        (await Service(userId, budget, handler).TranscribeAsync(audio, "recording.wav", "en")).IsFailure.Should().BeTrue();
+        (await Service(userId, budget, handler, listed).TranscribeAsync(audio, "recording.wav", "en")).IsFailure.Should().BeTrue();
 
         handler.Calls.Should().Be(1);
         await budget.Received(1).SettleAsync(callId, uncertain ? 200 : 0, Arg.Any<CancellationToken>());
@@ -68,22 +73,25 @@ public class AudioTranscriptionBudgetTests
         await budget.DidNotReceiveWithAnyArgs().ReserveAsync(default, default, default);
     }
 
-    private static AudioTranscriptionService Service(Guid userId, IAiDailyBudget budget, AudioCapture handler)
+    private static AudioTranscriptionService Service(Guid userId, IAiDailyBudget budget, AudioCapture handler, bool listed = true)
     {
         var http = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
         http.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["StagingEval:AccountIds"] = userId.ToString()
+            ["StagingEval:AccountIds"] = listed ? userId.ToString() : null
         }).Build();
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(listed ? [] : [FeatureFlagKeys.AstraEvalUnmetered]);
         return new AudioTranscriptionService(Options.Create(new AiSettings
         {
             ApiKey = "production-test-key",
             EvalApiKey = "eval-test-key",
             BaseUrl = "https://orbit.test/v1",
-            MaxRetries = 0
+            MaxRetries = 2
         }), NullLogger<AudioTranscriptionService>.Instance,
-            new HttpClientPipelineTransport(new HttpClient(handler)), config, http, budget);
+            new HttpClientPipelineTransport(new HttpClient(handler)), flags, config, http, budget);
     }
 
     internal static MemoryStream Wave()

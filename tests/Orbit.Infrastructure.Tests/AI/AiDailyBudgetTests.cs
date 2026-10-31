@@ -638,6 +638,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         internal IAiRequestCostEstimator Estimator { get; }
         internal List<JsonElement> EstimatedRequests { get; } = [];
         internal IConfiguration AccountConfiguration => _provider.GetRequiredService<IConfiguration>();
+        internal IServiceScope CreateScope() => _provider.CreateScope();
         internal BudgetClock Clock { get; } = new();
         internal List<string> Locks { get; } = [];
         private readonly ServiceProvider _provider;

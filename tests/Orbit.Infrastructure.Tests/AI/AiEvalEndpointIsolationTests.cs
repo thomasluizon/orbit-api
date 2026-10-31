@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
@@ -16,20 +17,24 @@ namespace Orbit.Infrastructure.Tests.AI;
 public class AiEvalEndpointIsolationTests
 {
     [Theory]
-    [InlineData("audio", true, true)]
-    [InlineData("moderation", true, true)]
-    [InlineData("audio", false, true)]
-    [InlineData("moderation", false, true)]
-    [InlineData("audio", true, false)]
-    [InlineData("moderation", true, false)]
-    public async Task AuthenticatedRequests_SelectProjectBeforeAnyBudgetContext(string kind, bool eval, bool configured)
+    [InlineData("audio", true, true, false)]
+    [InlineData("moderation", true, true, false)]
+    [InlineData("audio", false, true, false)]
+    [InlineData("moderation", false, true, false)]
+    [InlineData("audio", true, false, false)]
+    [InlineData("moderation", true, false, false)]
+    [InlineData("audio", false, true, true)]
+    [InlineData("moderation", false, true, true)]
+    [InlineData("audio", false, false, true)]
+    [InlineData("moderation", false, false, true)]
+    public async Task AuthenticatedRequests_SelectProjectBeforeAnyBudgetContext(string kind, bool listed, bool configured, bool flagged)
     {
         var userId = Guid.NewGuid();
         var http = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
         http.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["StagingEval:AccountIds"] = (eval ? userId : Guid.NewGuid()).ToString()
+            ["StagingEval:AccountIds"] = (listed ? userId : Guid.NewGuid()).ToString()
         }).Build();
         var options = Options.Create(new AiSettings
         {
@@ -39,28 +44,39 @@ public class AiEvalEndpointIsolationTests
             MaxRetries = 0
         });
         var handler = new RejectedRequestCapture();
-        if (eval && !configured)
-        {
-            var resolve = () => AiEvalCredentials.Resolve(options.Value, config, http);
-            resolve.Should().Throw<InvalidOperationException>();
-            handler.Credentials.Should().BeEmpty();
-            return;
-        }
+        var flags = Substitute.For<IFeatureFlagService>();
+        flags.GetEnabledKeysForUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(flagged ? [FeatureFlagKeys.AstraEvalUnmetered] : []);
+        var eval = listed || flagged;
         if (kind == "audio")
         {
+            var budget = Substitute.For<IAiDailyBudget>();
             var service = new AudioTranscriptionService(options, NullLogger<AudioTranscriptionService>.Instance,
-                new HttpClientPipelineTransport(new HttpClient(handler)), config, http, Substitute.For<IAiDailyBudget>());
+                new HttpClientPipelineTransport(new HttpClient(handler)), flags, config, http, budget);
             using var audio = AudioTranscriptionBudgetTests.Wave();
             (await service.TranscribeAsync(audio, "audio.wav", "en")).IsFailure.Should().BeTrue();
+            if (eval)
+                await budget.Received(1).ReserveAsync(userId, 200, Arg.Any<CancellationToken>());
+            else
+                await budget.DidNotReceiveWithAnyArgs().ReserveAsync(default, default, default);
         }
         else
         {
             var service = new ContentModerationService(new HttpClient(handler), options,
-                NullLogger<ContentModerationService>.Instance, config, http);
-            (await service.CheckTextAsync("hello")).Unavailable.Should().BeTrue();
+                NullLogger<ContentModerationService>.Instance, flags, config, http);
+            if (eval && !configured)
+            {
+                var check = () => service.CheckTextAsync("hello");
+                await check.Should().ThrowAsync<InvalidOperationException>();
+            }
+            else
+                (await service.CheckTextAsync("hello")).Unavailable.Should().BeTrue();
         }
 
-        handler.Credentials.Should().Equal(eval && configured ? "eval-test-key" : "production-test-key");
+        if (eval && !configured)
+            handler.Credentials.Should().BeEmpty();
+        else
+            handler.Credentials.Should().Equal(eval ? "eval-test-key" : "production-test-key");
     }
 
     private sealed class RejectedRequestCapture : HttpMessageHandler

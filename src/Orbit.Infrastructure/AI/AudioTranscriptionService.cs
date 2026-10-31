@@ -10,50 +10,52 @@ using Orbit.Infrastructure.Configuration;
 using System.ClientModel.Primitives;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
-using System.Security.Claims;
 
 namespace Orbit.Infrastructure.AI;
 
 public sealed partial class AudioTranscriptionService : IAudioTranscriptionService
 {
-    private readonly AudioClient _audioClient;
+    private readonly AiSettings _settings;
+    private readonly PipelineTransport? _transport;
+    private readonly IFeatureFlagService _flags;
+    private readonly IConfiguration? _configuration;
+    private readonly IHttpContextAccessor? _http;
     private readonly ILogger<AudioTranscriptionService> _logger;
     private readonly IAiDailyBudget? _budget;
-    private readonly Guid? _evalUserId;
-    private readonly string _model;
 
     public AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger,
-        IConfiguration? configuration = null, IHttpContextAccessor? http = null, IAiDailyBudget? budget = null)
-        : this(options, logger, null, configuration, http, budget)
+        IFeatureFlagService flags, IConfiguration? configuration = null, IHttpContextAccessor? http = null, IAiDailyBudget? budget = null)
+        : this(options, logger, null, flags, configuration, http, budget)
     {
     }
 
     internal AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger,
-        PipelineTransport? transport, IConfiguration? configuration = null, IHttpContextAccessor? http = null,
+        PipelineTransport? transport, IFeatureFlagService flags, IConfiguration? configuration = null, IHttpContextAccessor? http = null,
         IAiDailyBudget? budget = null)
     {
         _logger = logger;
         _budget = budget;
-        var settings = options.Value;
-        _model = settings.TranscriptionModel;
-        var userId = AiCallContext.Current?.UserId;
-        if (userId is null && Guid.TryParse(http?.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var authenticatedUser))
-            userId = authenticatedUser;
-        if (userId is { } id && EvalAccountAccess.Contains(configuration?[EvalAccountAccess.AccountIdsKey], id))
-            _evalUserId = id;
+        _settings = options.Value;
+        _transport = transport;
+        _flags = flags;
+        _configuration = configuration;
+        _http = http;
+    }
 
+    private AudioClient CreateClient(AiEvalAccount account)
+    {
         var clientOptions = new OpenAIClientOptions
         {
-            Endpoint = new Uri(settings.BaseUrl),
-            Transport = transport,
-            NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
-            RetryPolicy = new AiRetryLoggingPolicy(_evalUserId is null ? settings.MaxRetries : 0, logger)
+            Endpoint = new Uri(_settings.BaseUrl),
+            Transport = _transport,
+            NetworkTimeout = TimeSpan.FromSeconds(_settings.NetworkTimeoutSeconds),
+            RetryPolicy = new AiRetryLoggingPolicy(account.IsEvaluation ? 0 : _settings.MaxRetries, _logger)
         };
         clientOptions.AddPolicy(new AiBudgetDispatchPolicy(), PipelinePosition.BeforeTransport);
 
-        _audioClient = new AudioClient(
-            model: settings.TranscriptionModel,
-            credential: new ApiKeyCredential(AiEvalCredentials.Resolve(settings, configuration, http)),
+        return new AudioClient(
+            model: _settings.TranscriptionModel,
+            credential: new ApiKeyCredential(AiEvalCredentials.Resolve(_settings, account)),
             options: clientOptions);
     }
 
@@ -61,17 +63,20 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
     {
         Guid? reservation = null;
         long reservedMicroDollars = 0;
-        using var context = _evalUserId is { } userId ? AiCallContext.Begin(userId) : null;
+        AiCallContext? context = null;
         try
         {
-            if (_evalUserId is { } evalUser)
+            var account = await AiEvalAccount.ResolveAsync(AiEvalAccount.CurrentUserId(_http), _flags,
+                _configuration, cancellationToken);
+            if (account.IsEvaluation && account.UserId is { } evalUser)
             {
+                context = AiCallContext.Begin(evalUser);
                 if (_budget is null)
                     throw new InvalidOperationException("Evaluation audio requires spend reservation.");
-                reservedMicroDollars = EvalAudioReservation.EstimateMicroDollars(audio, fileName, _model);
+                reservedMicroDollars = EvalAudioReservation.EstimateMicroDollars(audio, fileName, _settings.TranscriptionModel);
                 reservation = await _budget.ReserveAsync(evalUser, reservedMicroDollars, cancellationToken);
             }
-            var transcription = await _audioClient.TranscribeAudioAsync(
+            var transcription = await CreateClient(account).TranscribeAudioAsync(
                 audio,
                 fileName,
                 new AudioTranscriptionOptions { Language = language },
@@ -111,6 +116,7 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
                     _logger.LogWarning(exception, "AI audio budget settlement failed for {CallId}; spend reservation retained", callId);
                 }
             }
+            context?.Dispose();
         }
     }
 

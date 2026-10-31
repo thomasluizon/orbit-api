@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Security.Claims;
+using NSubstitute;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
@@ -28,7 +30,8 @@ public class ContentModerationServiceTests
             ApiKey = "test-key",
             BaseUrl = "https://api.openai.com/v1"
         });
-        _sut = new ContentModerationService(httpClient, aiSettings, NullLogger<ContentModerationService>.Instance);
+        _sut = new ContentModerationService(httpClient, aiSettings, NullLogger<ContentModerationService>.Instance,
+            Substitute.For<IFeatureFlagService>());
     }
 
     [Fact]
@@ -38,6 +41,7 @@ public class ContentModerationServiceTests
         var http = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
         http.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], "Test"));
         using var services = new ServiceCollection().AddSingleton<IHttpContextAccessor>(http)
+            .AddSingleton(Substitute.For<IFeatureFlagService>())
             .AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             { ["StagingEval:AccountIds"] = userId.ToString() }).Build()).BuildServiceProvider();
         var service = ActivatorUtilities.CreateInstance<ContentModerationService>(services, new HttpClient(_handler),

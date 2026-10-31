@@ -30,10 +30,8 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         var config = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
         var dates = scope.ServiceProvider.GetRequiredService<IUserDateService>();
         var flags = scope.ServiceProvider.GetRequiredService<IFeatureFlagService>();
-        var unmetered = (await flags.GetEnabledKeysForUserAsync(userId, cancellationToken))
-            .Contains(FeatureFlagKeys.AstraEvalUnmetered, StringComparer.Ordinal);
-        var evaluation = unmetered || EvalAccountAccess.Contains(
-            scope.ServiceProvider.GetService<IConfiguration>()?[EvalAccountAccess.AccountIdsKey], userId);
+        var account = await AiEvalAccount.ResolveAsync(userId, flags,
+            scope.ServiceProvider.GetService<IConfiguration>(), cancellationToken);
         var user = await db.Users.AsNoTracking().SingleAsync(user => user.Id == userId, cancellationToken);
         var localDate = await dates.GetUserTodayAsync(userId, cancellationToken);
         var pro = user.HasProAccess;
@@ -45,7 +43,7 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
         return await work.ExecuteInTransactionAsync(async token =>
         {
             DateOnly? evalDateUtc = null;
-            if (evaluation)
+            if (account.IsEvaluation)
             {
                 var clock = scope.ServiceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
                 evalDateUtc = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
@@ -72,7 +70,7 @@ public sealed class AiDailyBudget(IServiceScopeFactory scopes) : IAiDailyBudget
                     ? EF.Property<long>(call, "ChargedTokens") * LegacyMaxMicroDollarsPerToken
                     : call.ChargedMicroDollars)
                 }).SingleOrDefaultAsync(token);
-            if (!unmetered && ((totals?.Calls ?? 0) >= callLimit || reservedMicroDollars > spendLimit - (totals?.MicroDollars ?? 0)))
+            if (!account.IsUnmetered && ((totals?.Calls ?? 0) >= callLimit || reservedMicroDollars > spendLimit - (totals?.MicroDollars ?? 0)))
                 throw new AiBudgetExceededException();
             var call = AiBudgetCall.Reserve(userId, localDate, reservedMicroDollars, evalDateUtc);
             db.AiBudgetCalls.Add(call);
