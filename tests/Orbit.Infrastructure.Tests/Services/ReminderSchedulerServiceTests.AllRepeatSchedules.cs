@@ -15,6 +15,45 @@ namespace Orbit.Infrastructure.Tests.Services;
 public partial class ReminderSchedulerServiceTests
 {
     [Theory]
+    [InlineData(true, 10000)]
+    [InlineData(false, 10000)]
+    [InlineData(true, 2)]
+    [InlineData(false, 2)]
+    [InlineData(true, 1)]
+    [InlineData(false, 1)]
+    public async Task Repeat_SparseScheduleCannotHoldUpReadbackOrOtherReminders(bool readback, int years)
+    {
+        var db = CreateSqliteDbContext();
+        var (active, startAtUtc) = await SeedRepeat();
+        var sparse = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, active.UserId, "Sparse",
+            FrequencyUnit.Year, years, UtcToday, ReminderEnabled: true,
+            RepeatReminder: new(480, StartAtUtc: startAtUtc))).Value;
+        var log = sparse.Log(UtcToday, loggedOnLocalDate: UtcToday);
+        log.IsSuccess.Should().BeTrue();
+        db.Habits.Add(sparse);
+        db.HabitLogs.Add(log.Value);
+        await db.SaveChangesAsync();
+        var clock = new MutableTimeProvider(new(startAtUtc.AddHours(8)));
+        if (readback)
+        {
+            var next = await Task.Run(() => ReadNextReminder(sparse, clock)).WaitAsync(TimeSpan.FromSeconds(5));
+            if (years == 1)
+                next.Should().Be(UtcToday.AddYears(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+            else
+                next.Should().BeNull();
+        }
+        else
+        {
+            var push = Substitute.For<IPushNotificationService>();
+            var scheduler = CreateService(db, push, clock);
+            await Task.Run(() => scheduler.CheckAndSendReminders(default)).WaitAsync(TimeSpan.FromSeconds(5));
+            (await db.SentReminders.ToListAsync()).Should().ContainSingle().Which.HabitId.Should().Be(active.Id);
+            await push.Received(1).SendReminderToUserAsync(active.UserId, active.Title, Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(), "/", Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Theory]
     [InlineData(HabitSchedule.OneTime, null, null, 0, false, true)]
     [InlineData(HabitSchedule.OneTime, null, null, -1, false, true)]
     [InlineData(HabitSchedule.OneTime, null, null, 1, false, false)]
@@ -64,16 +103,18 @@ public partial class ReminderSchedulerServiceTests
     [InlineData(HabitSchedule.Recurring, 1)]
     [InlineData(HabitSchedule.Flexible, 0)]
     [InlineData(HabitSchedule.Flexible, 1)]
+    [InlineData(HabitSchedule.Flexible, 8)]
     [InlineData(HabitSchedule.OneTime, 0)]
     [InlineData(HabitSchedule.OneTime, 1)]
+    [InlineData(HabitSchedule.General, 0)]
     public async Task Repeat_DoneOrSkippedTodaySuppressesCachedFollowUps(HabitSchedule schedule, int value)
     {
         var db = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var startAtUtc = UtcToday.ToDateTime(new(4, 0), DateTimeKind.Utc);
         var habit = Habit.Create(new HabitCreateParams(schedule, user.Id, "Reminder",
-            schedule == HabitSchedule.OneTime ? null : FrequencyUnit.Day,
-            schedule == HabitSchedule.OneTime ? null : 3, UtcToday, ReminderEnabled: true,
+            schedule is HabitSchedule.OneTime or HabitSchedule.General ? null : FrequencyUnit.Day,
+            schedule is HabitSchedule.OneTime or HabitSchedule.General ? null : 8, UtcToday, ReminderEnabled: true,
             RepeatReminder: new(480, StartAtUtc: startAtUtc))).Value;
         db.Users.Add(user);
         db.Habits.Add(habit);
@@ -84,10 +125,13 @@ public partial class ReminderSchedulerServiceTests
         (await db.SentReminders.CountAsync()).Should().Be(1);
         if (value > 0)
         {
-            var log = habit.Log(UtcToday, loggedOnLocalDate: UtcToday);
-            log.IsSuccess.Should().BeTrue();
-            log.Value.CorrectTakenAtUtc(clock.GetUtcNow().UtcDateTime, clock.GetUtcNow().UtcDateTime);
-            db.HabitLogs.Add(log.Value);
+            for (var i = 0; i < value; i++)
+            {
+                var log = habit.Log(UtcToday, loggedOnLocalDate: UtcToday);
+                log.IsSuccess.Should().BeTrue();
+                log.Value.CorrectTakenAtUtc(clock.GetUtcNow().UtcDateTime, clock.GetUtcNow().UtcDateTime);
+                db.HabitLogs.Add(log.Value);
+            }
             await db.SaveChangesAsync();
         }
         else
@@ -103,12 +147,23 @@ public partial class ReminderSchedulerServiceTests
         }
         clock.SetUtcNow(clock.GetUtcNow().AddMinutes(15));
         var next = await ReadNextReminder(habit, clock);
-        (next is null || next > UtcToday.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddTicks(-1))
-            .Should().BeTrue();
+        var partialFlexible = schedule == HabitSchedule.Flexible && value == 1;
+        if (partialFlexible)
+            next.Should().Be(startAtUtc.AddHours(16));
+        else
+            (next is null || next > UtcToday.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddTicks(-1))
+                .Should().BeTrue();
         await scheduler.CheckAndSendReminders(default);
         clock.SetUtcNow(new(startAtUtc.AddHours(16)));
         await scheduler.CheckAndSendReminders(default);
-        (await db.SentReminders.CountAsync()).Should().Be(1);
+        (await db.SentReminders.CountAsync()).Should().Be(partialFlexible ? 2 : 1);
+        if (schedule == HabitSchedule.General)
+        {
+            clock.SetUtcNow(new(startAtUtc.AddDays(1)));
+            (await ReadNextReminder(habit, clock)).Should().Be(clock.GetUtcNow().UtcDateTime);
+            await scheduler.CheckAndSendReminders(default);
+            (await db.SentReminders.CountAsync()).Should().Be(2);
+        }
     }
 
     [Fact]

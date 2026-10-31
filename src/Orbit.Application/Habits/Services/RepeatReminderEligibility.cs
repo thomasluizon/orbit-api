@@ -17,15 +17,15 @@ public sealed class RepeatReminderEligibility(
             || habit.EndDate is { } end && date > end)
             return false;
         if (habit.Schedule == HabitSchedule.General)
-            return true;
+            return date >= habit.NextDueDate && !_facts.HasSkipped(habit.Id, date);
+        if (habit.Schedule == HabitSchedule.Flexible)
+            return !_facts.HasSkipped(habit.Id, date) && _facts.IsFlexibleDue(habit, date, weekStartDay);
         var resolvedDates = _facts.ResolvedDates(habit.Id);
         if (resolvedDates.Contains(date))
             return false;
-        return habit.Schedule == HabitSchedule.Flexible
-            ? _facts.IsFlexibleDue(habit, date, weekStartDay)
-            : HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay)
-                || HabitScheduleService.IsOverdueOnDate(habit, date, weekStartDay,
-                    resolvedDueDateIds.Contains(habit.Id), resolvedDates);
+        return HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay)
+            || HabitScheduleService.IsOverdueOnDate(habit, date, weekStartDay,
+                resolvedDueDateIds.Contains(habit.Id), resolvedDates);
     }
 
     public static async Task<RepeatReminderEligibility> LoadAsync(IHabitScheduleLogReader reader,

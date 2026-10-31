@@ -193,12 +193,12 @@ public partial class ReminderSchedulerServiceTests
 
     [Theory]
     [InlineData(HabitSchedule.Recurring, 0)]
-    [InlineData(HabitSchedule.Flexible, 0)]
+    [InlineData(HabitSchedule.Flexible, 1)]
     [InlineData(HabitSchedule.General, 1)]
     public async Task Repeat_ScheduledHabitsStopAfterDailyCompletion(HabitSchedule schedule, int expected)
     {
         var db = CreateSqliteDbContext();
-        var (habit, start) = await SeedRepeat(schedule: schedule);
+        var (habit, start) = await SeedRepeat(schedule: schedule, frequencyQuantity: 8);
         var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, start);
         db.HabitLogs.Add(log);
         await db.SaveChangesAsync();
@@ -424,14 +424,14 @@ public partial class ReminderSchedulerServiceTests
     }
 
     private async Task<(Habit Habit, DateTime Start)> SeedRepeat(RepeatReminderOptions? options = null,
-        HabitSchedule schedule = HabitSchedule.Flexible)
+        HabitSchedule schedule = HabitSchedule.Flexible, int frequencyQuantity = 1)
     {
         var db = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var start = UtcToday.ToDateTime(new(4, 0), DateTimeKind.Utc);
         var habit = Habit.Create(new HabitCreateParams(schedule, user.Id, "Drink water",
             schedule == HabitSchedule.General ? null : FrequencyUnit.Day,
-            schedule == HabitSchedule.General ? null : 1, UtcToday,
+            schedule == HabitSchedule.General ? null : frequencyQuantity, UtcToday,
             ReminderEnabled: true, RepeatReminder: options ?? new(480, StartAtUtc: start))).Value;
         db.Users.Add(user);
         db.Habits.Add(habit);

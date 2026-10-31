@@ -153,6 +153,24 @@ test("nested writable fields and filter predicates have distinct parameter paths
   })
 })
 
+test("MCP forwarding detects unsupported dictionary and anonymous object parameters", () => {
+  for (const anonymous of [false, true]) {
+    mutate("src/Orbit.Application/Chat/Tools/Implementations/BulkCreateHabitsTool.cs",
+      text => text.replace('["is_general"] = new { type =', '["inventory_probe"] = new { type ='), (_build, copy) => {
+        if (anonymous) {
+          const path = join(copy, "src/Orbit.Api/Mcp/Tools/HabitTools.cs")
+          const text = readFileSync(path, "utf8")
+          assert.ok(text.includes('["is_general"] = isGeneral,'))
+          writeFileSync(path, text.replace('["is_general"] = isGeneral,', 'is_general = isGeneral,'))
+        }
+        const tool = buildInventory(copy).registries.mcp.find(row => row.name === "create_habit")
+        const parameter = tool.parameters.find(row => row.name === "isGeneral")
+        assert.equal(parameter.unsupportedByExecutorSchema, true)
+        assert.equal(parameter.forwardedAs, "is_general")
+      })
+  }
+})
+
 test("removing a real registration removes coverage and fails the drift gate", () => {
   mutate("src/Orbit.Api/Extensions/ServiceCollectionExtensions.AiServices.cs", text => text.replace("builder.Services.AddScoped<IAiTool, CreateTagTool>();", ""), build => {
     const changed = build()

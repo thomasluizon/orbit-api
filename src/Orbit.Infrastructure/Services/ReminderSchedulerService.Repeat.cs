@@ -48,7 +48,7 @@ public partial class ReminderSchedulerService
             var plan = RepeatReminderPlanner.Next(habit, nowAtUtc, zone, user.WeekStartDay,
                 snapshot.RepeatAnchors.TryGetValue(habit.Id, out var anchorAtUtc) ? anchorAtUtc : null,
                 snapshot.RepeatEligibility,
-                snapshot.RepeatSent.Where(r => r.HabitId == habit.Id).ToList());
+                snapshot.RepeatSent.Where(r => r.HabitId == habit.Id).ToList(), nowAtUtc);
             if (plan is null || plan.DispatchAtUtc > nowAtUtc)
                 continue;
             var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone));
