@@ -5,14 +5,6 @@ namespace Orbit.Infrastructure.Services;
 
 internal static partial class AiPlainText
 {
-    internal static string WithoutLiteralNames(string text, IEnumerable<string> literalNames)
-    {
-        var names = literalNames.Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(name => name.Length).ToArray();
-        return names.Length == 0 ? text : Regex.Replace(text, string.Join('|', names.Select(Regex.Escape)),
-            " ", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-    }
-
     internal static string Normalize(string text, IEnumerable<string>? literalNames = null)
     {
         var names = literalNames?.Where(name => !string.IsNullOrEmpty(name)

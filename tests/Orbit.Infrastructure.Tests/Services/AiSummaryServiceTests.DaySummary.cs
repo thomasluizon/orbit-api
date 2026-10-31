@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Linq.Expressions;
 using NSubstitute;
 using Orbit.Domain.Common;
+using Orbit.Infrastructure.Services;
 using FluentAssertions;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
@@ -24,7 +25,6 @@ public partial class AiSummaryServiceTests
         var calls = 0;
         var service = BuildSummaryService(JsonSerializer.Serialize(new
         {
-            habitId = next.Id,
             nextStepHabitId = next.Id,
             summary = sentence
         }), _ => calls++);
@@ -54,7 +54,108 @@ public partial class AiSummaryServiceTests
         calls.Should().Be(2);
     }
 
-    private static async Task<(List<Habit> Habits, DailySummaryContext Context)> OwnerDay(string language)
+    private static JsonDocument ReadFacts(string prompt) => JsonDocument.Parse(prompt.Split("Daily facts (JSON):\n")[1]);
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DailySummary_FactSheetContainsOwnerRoutinesWithoutHistory(string language)
+    {
+        var (habits, context) = await OwnerDay(language);
+        using var facts = ReadFacts(AiSummaryService.BuildSummaryPrompt(habits, context));
+        var root = facts.RootElement;
+        root.GetProperty("partOfDay").GetString().Should().Be("afternoon");
+        var routines = root.GetProperty("routines").EnumerateArray().ToList();
+        routines.Select(item => item.GetProperty("title").GetString()).Should().BeEquivalentTo(
+            ["Water", "Meals", "Post Lunch", "Waking up"]);
+        var waking = routines.Single(item => item.GetProperty("title").GetString() == "Waking up");
+        waking.GetProperty("state").GetString().Should().Be("nearly done");
+        waking.GetProperty("completedSteps").GetInt32().Should().Be(2);
+        waking.GetProperty("totalSteps").GetInt32().Should().Be(3);
+        waking.GetProperty("pendingSteps")[0].GetProperty("isOverdue").GetBoolean().Should().BeTrue();
+        root.GetProperty("badHabits").EnumerateArray().Should().OnlyContain(item => item.GetProperty("state").GetString() == "clean");
+        root.GetProperty("nextStep").GetProperty("title").GetString().Should().Be("Psyllium 5g");
+        root.ToString().Should().NotContain("history").And.NotContain("streak");
+    }
+
+    [Fact]
+    public async Task DailySummary_StaticInstructionsAreIdenticalAcrossProfilesAndStates()
+    {
+        var systems = new List<string>();
+        foreach (var language in new[] { "en", "pt-BR" })
+        {
+            var (habits, context) = await OwnerDay(language);
+            foreach (var pending in new[] { context.PendingHabits, Array.Empty<DailySummaryPendingHabit>() })
+            {
+                var next = DailySummaryPendingProjection.SelectNextStep(pending);
+                var service = BuildSummaryService(JsonSerializer.Serialize(new { summary = "Your day is taking shape.", nextStepHabitId = next?.Id }), body =>
+                {
+                    using var request = JsonDocument.Parse(body);
+                    systems.Add(request.RootElement.GetProperty("input")[0].GetProperty("content")[0].GetProperty("text").GetString()!);
+                });
+                (await service.GenerateSummaryAsync(habits, context with { PendingHabits = pending })).IsSuccess.Should().BeTrue();
+            }
+        }
+        systems.Should().HaveCount(4).And.OnlyContain(system => system == AiSummaryService.SystemPrompt);
+    }
+
+    [Fact]
+    public async Task DailySummary_InventedFigureWithCorrectNextStepIsRejected()
+    {
+        var (habits, context) = await OwnerDay("en");
+        var calls = 0;
+        var service = BuildSummaryService(JsonSerializer.Serialize(new
+        {
+            nextStepHabitId = DailySummaryPendingProjection.SelectNextStep(context.PendingHabits)!.Id,
+            summary = "With 99 routines open, start with Psyllium 5g."
+        }), _ => calls++);
+        (await service.GenerateSummaryAsync(habits, context)).IsFailure.Should().BeTrue();
+        calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task DailySummary_RetryCanRecoverFromMalformedOutput()
+    {
+        var (habits, context) = await OwnerDay("pt-BR");
+        var next = DailySummaryPendingProjection.SelectNextStep(context.PendingHabits)!;
+        const string sentence = "As refeições seguem em aberto, começando por Psyllium 5g.";
+        var calls = 0;
+        var service = BuildSummaryService(attempt => attempt == 1 ? "{invalid}" : JsonSerializer.Serialize(new
+        {
+            nextStepHabitId = next.Id,
+            summary = sentence
+        }), _ => calls++);
+        var result = await service.GenerateSummaryAsync(habits, context);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.Summary.Should().Be(sentence);
+        calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task DailySummary_DigitsInParentTitleAreAllowed()
+    {
+        var (habits, context) = await OwnerDay("en", "Routine 2");
+        var next = DailySummaryPendingProjection.SelectNextStep(context.PendingHabits)!;
+        const string sentence = "Routine 2 is nearly done, starting with Psyllium 5g.";
+        var service = BuildSummaryService(JsonSerializer.Serialize(new { nextStepHabitId = next.Id, summary = sentence }));
+        (await service.GenerateSummaryAsync(habits, context)).Value.Summary.Should().Be(sentence);
+    }
+
+    [Fact]
+    public async Task DailySummary_CompletedDayUsesSameFactSheetWithoutInventingNextStep()
+    {
+        var habit = CreateHabit("Read");
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        var context = new DailySummaryContext(Today, Today, Today, "en", new TimeOnly(20, 0), 0, 0,
+            new Dictionary<Guid, DateOnly>(), PendingHabits: []);
+        using var facts = ReadFacts(AiSummaryService.BuildSummaryPrompt([habit], context));
+        facts.RootElement.GetProperty("nextStep").ValueKind.Should().Be(JsonValueKind.Null);
+        facts.RootElement.GetProperty("standaloneTasks")[0].GetProperty("state").GetString().Should().Be("done");
+        var service = BuildSummaryService("{\"summary\":\"Your reading is done and the day has no open steps.\",\"nextStepHabitId\":null}");
+        (await service.GenerateSummaryAsync([habit], context)).IsSuccess.Should().BeTrue();
+    }
+
+    private static async Task<(List<Habit> Habits, DailySummaryContext Context)> OwnerDay(string language, string wakingTitle = "Waking up")
     {
         var habits = new List<Habit>();
         Habit Add(string title, Guid? parent = null, TimeOnly? time = null, bool bad = false)
@@ -76,7 +177,7 @@ public partial class AiSummaryServiceTests
         var postLunch = Add("Post Lunch");
         Add("Pills", postLunch.Id);
         Add("Creatine", postLunch.Id);
-        var waking = Add("Waking up");
+        var waking = Add(wakingTitle);
         Add("Morning skin care", waking.Id, new TimeOnly(8, 0)).Log(Today);
         Add("Check money to receive", waking.Id, new TimeOnly(8, 30)).Log(Today);
         Add("Psyllium 5g", waking.Id, new TimeOnly(10, 30));

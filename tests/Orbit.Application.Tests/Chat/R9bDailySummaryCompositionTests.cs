@@ -17,18 +17,15 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
-    public void R9b_DailySummaryCompositionGuidanceKeepsFiguresAndStatusesInTheBlock(string language)
+    public void R9b_DailySummaryCompositionGuidanceKeepsFiguresAndStatusesInTheBlock()
     {
-        var prompt = AiSummaryService.BuildSummaryPrompt([], new(Today, Today, Today, language,
-            new TimeOnly(11, 0), 1, 0, new Dictionary<Guid, DateOnly>()));
+        var prompt = AiSummaryService.SystemPrompt;
+        prompt.Should().Contain("Summarize the day across the person's routines in words");
+        prompt.Should().Contain("End the sentence by naturally naming the server-selected next step");
+        prompt.Should().Contain("Digits are allowed only inside an exact supplied stored title");
+        prompt.Should().Contain("The model never selects a task");
+        prompt.Should().Contain("If nextStep is null, close the day");
 
-        prompt.Should().Contain("Never include figures, times, dates, counts, durations, rates or quantities, even when supplied; the daySummary block already shows them.");
-        prompt.Should().Contain("Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.");
-        prompt.Should().Contain("Never invent habit or goal names; use only supplied facts");
-        prompt.Should().Contain("An overdue or time-bound item in another group may take priority only when clearly more urgent; explain the priority in one short clause based on its order, without figures or times");
-        prompt.Should().Contain("Use supplied timing and progress only to choose the next item, never in the sentence. This applies equally to English and Brazilian Portuguese.");
-        prompt.Should().NotContain("using supplied timing or order");
-        prompt.Should().NotContain("Mention a completion only as the reason");
     }
 
     [Theory]
