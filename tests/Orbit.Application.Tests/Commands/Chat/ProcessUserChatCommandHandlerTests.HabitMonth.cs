@@ -63,7 +63,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var tool = new GetHabitMonthTool(_mediator);
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
-        SetupAiResponse(ToolResponse(tool.Name, "month", JsonSerializer.Serialize(new { language })));
+        SetupAiResponse(ToolResponse(tool.Name, "month", JsonSerializer.Serialize(new { window = "month", language })));
         ContinueWithReadDirective("There are 99 events. Some actions are unavailable.");
         var client = new AgentClientContext(SupportsParts: true, PartKinds: ["habitMonth"]);
 

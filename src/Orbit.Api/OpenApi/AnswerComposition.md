@@ -1444,8 +1444,8 @@ the same operation's schema. Proposed values stay in the ordinary operation fiel
 the array identifies which values are optional offers. Requested field names stay
 outside that array. List a name only after setting its value. Null optional values
 and empty arrays are absent for offer eligibility and provenance. A listed name
-without a value is dropped while every filled valid suggestion and the requested
-write remain intact. Unknown names, invalid shapes and unusable values return
+without a value returns a repairable failure naming that field; no preview is
+prepared from that call. Unknown names, invalid shapes and unusable values return
 repairable tool failures naming the affected field, rather than policy denials.
 Pre-confirmation argument-check failures across operations return repairable `Failed`
 outcomes with their domain code, including `GENERAL_HABIT_HAS_FREQUENCY`.
@@ -1464,6 +1464,19 @@ ownership, plan and approval checks. No suggestion executes on a read turn.
 Fixed clock reminders remain fixed; repeat proposals cannot replace supplied
 reminder configuration or use an unsupported schedule. General and OneTime drafts
 receive no suggested recurrence end date. The interval never defines a daily target.
+Repeat exclusion reads the requested snapshot and stored reminders, never fields
+accepted from a sibling suggestion. Conflicting fixed and repeat suggestions
+return a repairable `invalid_offer` failure naming `repeat_reminder`, independent
+of field order. Requested or prescribed fixed times remain requested; unrequested
+emoji, schedule defaults and other configuration must be marked suggested.
+
+The first offer-enabled model turn includes `offer_account_facts`: the loaded
+routine index with its completeness flag, complete active goals and owned tags.
+These typed facts establish parent, duplicate and goal-link candidates without
+another read round. A partial index or missing operation detail still requires
+the matching account query. Supplied habit IDs go directly to the matching write.
+A stated aim inside a read request authorizes only that read, never a write or
+breakdown; the server owns the optional goal action until the person selects it.
 
 `PendingOperationChange` appends optional `provenance` (`requested`, `stored` or
 `suggested`) and `removal` (`offerKey`, `field`, optional `fields`). Suggested fields
@@ -1488,19 +1501,26 @@ parent. Supplied-field provenance is retained separately from execution defaults
 so a default create date is not marked requested. Refresh merges proposed collection additions against current stored
 contents and does not regenerate removed nested proposals.
 
-After composing supported successful read blocks, an enabled turn may make one
-additional tool-free model call. The same configured chat model, effort, usage
-recording and budget apply. Its cancellation deadline is three seconds. Input is
+After composing supported successful read blocks, concrete typed candidates are
+selected without an additional model call. Priority is reminder, restart, skip,
+log and then other concrete families, including a small step for an empty day.
+Aim and calendar candidates require interpretation and may use one additional
+tool-free model call. The same configured chat model, effort, usage recording and
+budget apply. Its cancellation deadline is three seconds. Input is
 the request, typed eligible candidates, complete active-goal facts and previously
 issued offer keys. Output selects one candidate or none and may report typed
 natural-language dismissals. The selector cannot call a tool or write prose.
-Unknown IDs, malformed output, failures and timeouts retain the readable answer.
+Unknown IDs, malformed output, failures and timeouts fall back to the same typed
+priority; when no concrete candidate exists, they retain the readable answer.
 When the selector picks `inspect`, an eligible concrete family action outranks it.
 Repeated reminder gaps take priority, followed by restart and skip, then the other
 eligible family actions. Aim and calendar candidates enter this choice only with
 the corresponding typed interpretation; a generic inspect choice alone cannot
 establish either intent. A selection of none remains none, including exclusions.
 There is no live-model measurement in this API round.
+Truncated turns never select or issue an offer and retain their cut-off notice.
+When a supported typed block carries its empty state, no extra model prose repeats
+it. Text fallbacks for clients unable to display that block remain available.
 
 A validated action appears only in the selected block's optional
 `read.nextAction`, with `offerKey`, `kind`, `label` and optional `surface`, `prompt`,
@@ -1534,7 +1554,10 @@ interpretation as well as eligible account state. No message pattern selects too
 rewrites calls, initiates calls or replaces the answer.
 An empty habit-calendar text fallback states that the requested period has no
 habit data and omits the log legend. Current-day summaries use `get_daily_summary`;
-`get_habit_month` is reserved for a requested habit-calendar window. An explicit
+`get_habit_month` requires `window: month` or `window: date_range`. Relative month
+selection accepts only `this_month` and `last_month`; an explicit range requires
+both dates and more than one day. The server validates the selected tool rather
+than rerouting a day call. An explicit
 habit ID supplied by the person goes directly to the matching write tool, without
 a selection lookup or `ask`. `assign_tags` validates a nonempty owned target before
 approval and returns a repairable tool failure when the target is missing.
@@ -1568,7 +1591,9 @@ server-only typed target context. That context carries the action kind, family,
 entity ID, local occurrence date, query family/scope, pending preview ID and
 action-specific scope. Scope is selected by typed action kind and family, plus the
 typed query family or pending preview target when needed; no prompt text selects
-it. The visible prompt is the person's own message and contains no internal IDs or
+it. A selected `continueChat` / `smallStep` action requires `suggest_breakdown`
+with `one_small_step: true`, no prerequisite read and no write preview. The visible
+prompt is the person's own message and contains no internal IDs or
 server instructions. A stale or dismissed
 action returns `stale_offer`; no model or mutation starts. A successful selection
 consumes that offer. Navigation actions use their declared surface directly.

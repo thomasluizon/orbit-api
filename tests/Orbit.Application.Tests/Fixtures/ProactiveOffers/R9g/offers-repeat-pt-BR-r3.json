@@ -1,0 +1,61 @@
+{
+  "source": "offers-repeat-pt-BR-r3.json",
+  "sha256": "ef1b63d0f6ff3bd7900afd468e157cbc609d24504da09a1f2c9cd03e7ca5c182",
+  "toolCalls": [
+    {
+      "name": "bulk_create_habits",
+      "arguments": {
+        "parent_habit_id": null,
+        "habits": [
+          {
+            "title": "Beber água",
+            "description": null,
+            "emoji": "💧",
+            "frequency_unit": "Day",
+            "frequency_quantity": null,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": null,
+            "end_date": null,
+            "due_time": null,
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": true,
+            "reminder_times": null,
+            "scheduled_reminders": [
+              {
+                "when": "same_day",
+                "time": "09:00"
+              }
+            ],
+            "relative_reminders": null,
+            "repeat_reminder": {
+              "interval_minutes": 120,
+              "active_start": "09:00",
+              "active_end": "21:00",
+              "start_at_utc": null
+            },
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null,
+            "suggested_fields": [
+              "frequency_quantity",
+              "scheduled_reminders",
+              "repeat_reminder"
+            ]
+          }
+        ],
+        "orbit_write_complete": true
+      }
+    }
+  ]
+}

@@ -141,6 +141,13 @@ public sealed partial class PendingOperationChangePreviewer
         var suggestions = proposed as JsonObject ?? new JsonObject();
         var requested = new JsonArray(source.Where(field => ProactiveProposal.HasValue(field.Value))
             .Select(field => (JsonNode?)JsonValue.Create(field.Key)).ToArray());
+        var requestedValues = (JsonObject)source.DeepClone();
+        if (ProactiveProposal.HasValue(suggestions["repeat_reminder"])
+            && FixedReminderFields.Any(field => ProactiveProposal.HasValue(suggestions[field])))
+        {
+            preparation.InvalidField = "repeat_reminder";
+            return false;
+        }
         var schedule = OfferSchedule(source, suggestions, existing, inherited);
         var accepted = new JsonObject();
         var values = new JsonObject();
@@ -149,7 +156,7 @@ public sealed partial class PendingOperationChangePreviewer
         if (node.TargetId is not null) keySource[HabitId] = node.TargetId;
         foreach (var suggestion in suggestions)
         {
-            if (suggestion.Value is null || ExcludedSuggestion(suggestion.Key, source, suggestions, schedule)) continue;
+            if (suggestion.Value is null || ExcludedSuggestion(suggestion.Key, requestedValues, suggestions, schedule)) continue;
             var key = ProactiveProposal.Key(preparation.Operation, keySource, node.Path + suggestion.Key);
             if (IgnoreOfferSuggestion(source, preparation.Client, suggestion.Key, key)) continue;
             if (!ProactiveProposal.Eligible(suggestion.Key) || !AgentArgumentSchema.Accepts(proposalSchema, suggestion.Key,

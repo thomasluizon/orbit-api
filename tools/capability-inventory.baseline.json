@@ -4302,24 +4302,21 @@
             ]
           },
           {
-            "name": "period_count",
-            "type": "integer",
-            "required": false
-          },
-          {
             "name": "relative_period",
             "type": "string",
             "required": false,
             "values": [
-              "last_7_days",
               "last_month",
-              "last_n_days",
-              "last_n_weeks",
-              "last_week",
-              "this_month",
-              "this_week",
-              "today",
-              "yesterday"
+              "this_month"
+            ]
+          },
+          {
+            "name": "window",
+            "type": "string",
+            "required": true,
+            "values": [
+              "date_range",
+              "month"
             ]
           }
         ]

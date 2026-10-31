@@ -7,6 +7,16 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AstraBehaviourPromptTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReadWithAnAimRequiresTheReadAndNoUnrequestedPlanning(bool composition)
+    {
+        const string instruction = "When a read request also states an aim, answer only the requested read. An aim alone does not request a write or suggest_breakdown. The server offers a goal action on the read block when appropriate; wait for the person to select it before planning the aim.";
+        Build(composition).Should().Contain(instruction);
+        new SuggestBreakdownTool().Description.Should().Contain(instruction);
+    }
+
     [Fact]
     public void FeatureHelp_RequiresShortCompleteSentencesOnSeparateLines()
     {

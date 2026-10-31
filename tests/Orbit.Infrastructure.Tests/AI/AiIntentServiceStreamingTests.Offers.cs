@@ -19,8 +19,10 @@ public partial class AiIntentServiceStreamingTests
         empty.Id = "resp_empty";
         empty.Status = ResponseStatus.Incomplete;
         empty.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        var write = ResponsesTestData.Response();
+        write.OutputItems.Add(ResponseItem.CreateFunctionCallItem("write", "create_habit", BinaryData.FromString("{\"title\":\"Water\"}")));
         var handler = new SequenceSseHandler(ToolStream("query_habits", "{}"),
-            ResponsesTestData.Stream(empty), retryAlsoEmpty ? ResponsesTestData.Stream(empty) : ToolStream("create_habit", "{\"title\":\"Water\"}"));
+            ResponsesTestData.Stream(empty), retryAlsoEmpty ? ResponsesTestData.Stream(empty) : ResponsesTestData.Stream(write));
         var (service, logger) = BuildServiceWithRecordingLogger(handler);
         var sink = new CollectingSink();
         var first = await service.SendWithToolsAsync(new AiToolRequest("Prepare it.", "system", [new { name = "query_habits" }, new { name = "create_habit" }]), sink.Handle);
@@ -35,6 +37,28 @@ public partial class AiIntentServiceStreamingTests
         logger.WarningProperties.Should().Contain(entry => entry.EventId == 15
             && (string)entry.Properties["ResponseId"]! == "resp_empty"
             && (int?)entry.Properties["InputTokens"] == 0);
+    }
+
+    [Fact]
+    public async Task OfferContinuation_PartialWriteAfterReadRemainsTruncatedWithoutRetryOrExecution()
+    {
+        var partial = ResponsesTestData.Response(inputTokens: 50, outputTokens: 8192);
+        partial.Status = ResponseStatus.Incomplete;
+        partial.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        partial.OutputItems.Add(ResponseItem.CreateFunctionCallItem("partial", "create_habit", BinaryData.FromString("{\"title\":")));
+        var handler = new SequenceSseHandler(ToolStream("query_habits", "{}"), ResponsesTestData.Stream(partial));
+        var (service, sink) = BuildService(handler);
+        var first = await service.SendWithToolsAsync(new AiToolRequest("Prepare it.", "system", []), sink.Handle);
+
+        var next = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new("query_habits", "call_1", true, null, null, null)], sink.Handle);
+
+        next.IsSuccess.Should().BeTrue(next.Error);
+        next.Value.IsTruncated.Should().BeTrue();
+        next.Value.HasToolCalls.Should().BeFalse();
+        handler.RequestBodies.Should().HaveCount(2);
+        ((List<ResponseItem>)next.Value.ConversationContext!.Messages).OfType<FunctionCallResponseItem>()
+            .Should().NotContain(call => call.CallId == "partial");
     }
 
     [Fact]

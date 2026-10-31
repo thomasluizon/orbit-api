@@ -66,7 +66,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("tools")]
     [InlineData("malformed")]
     [InlineData("timeout")]
-    public async Task ProactiveReadReplay_InvalidSelectionRetainsTheReadableBlock(string mode)
+    public async Task ProactiveReadReplay_ConcreteActionDoesNotNeedASelector(string mode)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -77,8 +77,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Show the requested records.", ClientContext: OfferClient("en")), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var card = result.Value.Parts!.OfType<ChatBlockPart>().Single().Block.Should().BeOfType<HabitListCard>().Subject;
-        card.Read!.NextAction.Should().BeNull();
-        await _offers.DidNotReceiveWithAnyArgs().IssueAsync(default, default, default!, default);
+        card.Read!.NextAction!.OfferKey.Should().StartWith("smallStep:");
+        await _offers.Received(1).IssueAsync(UserId, Arg.Any<Guid>(), Arg.Is<AstraOfferFact>(fact => fact.Family == "smallStep"), Arg.Any<CancellationToken>());
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -210,6 +211,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "preparePreview", "goalLink", "query_goals", "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.")]
     [InlineData("en", "continueChat", "aim", "query_habits", "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.")]
     [InlineData("pt-BR", "continueChat", "aim", "query_habits", "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.")]
+    [InlineData("en", "continueChat", "smallStep", "query_habits", "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview.")]
+    [InlineData("pt-BR", "continueChat", "smallStep", "query_habits", "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview.")]
     public async Task ProactiveReadReplay_SelectedScopeUsesTypedActionAndTarget(string locale, string kind,
         string family, string queryFamily, string scope)
     {
