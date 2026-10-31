@@ -25,7 +25,7 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
-                    properties = new { item_id = new { type = JsonSchemaTypes.String, description = "Exact item_id from the pending preview for the entity being edited. It may differ from entity_id." }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
+                    properties = new { remove_suggested_fields = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String }, description = "Suggested field names or slash-separated paths to remove while preserving stored and requested values. Use only fields with removal metadata." }, item_id = new { type = JsonSchemaTypes.String, description = "Exact item_id from the pending preview for the entity being edited. It may differ from entity_id." }, edits_json = new { type = JsonSchemaTypes.String, description = "JSON object containing only the requested changes, using the operation schema field names and types. Optional fields may be absent from the preview." } },
                     required = new[] { "item_id", "edits_json" }
                 }
             },
@@ -49,11 +49,13 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         var original = await previewer.PreviewAsync(userId, stored.OperationId, stored.Arguments, ct, clientContext);
         if (original.IsFailure || original.Value?.Items is not { } offered) return new(false, Error: "preview_unavailable");
         var edits = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var removedFields = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         try
         {
             foreach (var item in args.GetProperty("items").EnumerateArray())
             {
                 var itemId = item.GetProperty("item_id").GetString()!;
+                removedFields[itemId] = JsonArgumentParser.ParseStringArray(item, "remove_suggested_fields") ?? [];
                 using var json = JsonDocument.Parse(item.GetProperty("edits_json").GetString()!);
                 if (!edits.TryAdd(itemId, json.RootElement.Clone())) return new(false, Error: "invalid_revision");
             }
@@ -66,7 +68,8 @@ public sealed class RevisePendingChangesTool(IServiceProvider services) : IAiToo
         if (edits.Keys.Concat(removed).Any(itemId => offered.All(item => item.ItemId != itemId))) return new(false, Error: "item_not_offered");
         if (IsInspection(args)) return PendingPreview(original.Value);
         var selected = offered.Where(item => !removed.Contains(item.ItemId)).Select(item =>
-            new RevisedPendingOperationItem(item.ItemId, edits.TryGetValue(item.ItemId, out var change) ? change : null)).ToArray();
+            new RevisedPendingOperationItem(item.ItemId, edits.TryGetValue(item.ItemId, out var change) ? change : null,
+                RemoveSuggestedFields: removedFields.GetValueOrDefault(item.ItemId))).ToArray();
         var revision = await services.GetRequiredService<PendingOperationRevisionService>().ReviseAsync(userId, id,
             new(original.Value.PreviewFingerprint!, selected, clientContext), ct);
         if (!revision.IsSuccess || revision.Preview is not { } preview) return new(false, Error: revision.Error ?? "invalid_revision");

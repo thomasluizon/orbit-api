@@ -59,6 +59,7 @@ public static class AgentArgumentPreview
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
         var entityEmoji = ResolveEmoji(operationId, arguments, target);
         var fields = arguments.EnumerateObject()
+            .Where(property => property.Name != ProactiveProposal.Metadata)
             .OrderBy(property => property.Name != "title")
             .ThenBy(property => property.Name, StringComparer.Ordinal)
             .Select(property => new PendingOperationChange(
@@ -66,9 +67,9 @@ public static class AgentArgumentPreview
                 entityName,
                 property.Name,
                 target?.CurrentValues.GetValueOrDefault(property.Name),
-                FormatValue(property.Value),
+                FormatValue(ProactiveProposal.StripMetadata(property.Value)),
                 ResolveValueType(property.Name, property.Value),
-                property.Value.Clone(),
+                ProactiveProposal.StripMetadata(property.Value),
                 (IsEditable(property.Name) || PendingOperationChangePreviewer.CanReviseHabitField(operationId, property.Name))
                     && AgentArgumentSchema.Declares(editableSchema, property.Name)
                     && AgentEditableArguments.IsConsumed(operationId, arguments, property.Name)

@@ -22,6 +22,23 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
             RuleFor(x => x.BlockAnswer!).SetValidator(new AstraBlockAnswerValidator()));
 
         RuleFor(x => x.ClientContext)
+            .Must(context => context?.SupportsProactiveOffers != true
+                || context.ConversationId is { } id && id != Guid.Empty
+                    && context.SupportsParts == true && context.SupportsPendingOperationChanges == true)
+            .WithCopy(ErrorCodes.InvalidClientContext);
+
+        RuleFor(x => x.ClientContext)
+            .Must(context => context?.SelectedOfferKey is null || context.SelectedOfferKey.Length is > 0 and <= 200
+                && !context.SelectedOfferKey.Any(char.IsControl))
+            .WithCopy(ErrorCodes.InvalidClientContext);
+
+        RuleFor(x => x.ClientContext)
+            .Must(context => context?.DismissedOfferKeys is null || context.DismissedOfferKeys.Count <= 100
+                && context.DismissedOfferKeys.All(key => !string.IsNullOrWhiteSpace(key)
+                    && key.Length <= 200 && !key.Any(char.IsControl)))
+            .WithCopy(ErrorCodes.InvalidClientContext);
+
+        RuleFor(x => x.ClientContext)
             .Must(context => context?.PreviousStartingStep is not { } step
                 || new StartingStepArgumentsValidator().Validate(new StartingStepArguments(step.Goal, step.Step, step.Language, 1)).IsValid)
             .WithCopy(ErrorCodes.InvalidClientContext);

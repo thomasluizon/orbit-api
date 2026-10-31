@@ -42,7 +42,7 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
     private async Task<Result<QueryReadBlock>> RefreshAsync(RefreshReadBlockQuery request, CancellationToken ct)
     {
         var ticket = tokens.Read(request.Token, request.UserId);
-        if (ticket is null || !ReadBlockFactory.Supports(ticket.Tool))
+        if (ticket is null || !ReadBlockFactory.Supports(ticket.Tool, ProactiveProposal.Enabled(request.ClientContext)))
             return Result.Failure<QueryReadBlock>("This exact query is unavailable. Repeat the original request.", errorCode: "READ_QUERY_EXPIRED");
         if (!MatchesContract(request, ticket.Kind))
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
@@ -71,7 +71,7 @@ public sealed class RefreshReadBlockQueryHandler(IReadQueryTokenService tokens, 
         if (block is null || block.Kind != ticket.Kind)
             return Result.Failure<QueryReadBlock>("The exact query could not be refreshed. Retry this query.", errorCode: "READ_QUERY_REFRESH_FAILED");
         if (!Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler.ReadSubtypeEnabled(block.Block, request.ClientContext,
-            enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst)))
+            (enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(request.ClientContext))))
             return Result.Failure<QueryReadBlock>(ErrorMessages.NoPermission);
         if (request.Page && block.Read.Revision != ticket.Revision)
             return Result.Failure<QueryReadBlock>("The source changed. Refresh the original query before paging.", errorCode: "READ_QUERY_STALE");

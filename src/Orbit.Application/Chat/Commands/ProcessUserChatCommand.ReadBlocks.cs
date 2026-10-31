@@ -178,13 +178,14 @@ public partial class ProcessUserChatCommandHandler
         HabitListCard card when (!blockFirst || client?.SupportsParts != true) && card.Read is { } read
             && HabitReadMessages.IsMissingMetricsLookup(new("habitList", card, read)) => false,
         HabitListCard { Scope: "date" } => client?.SupportsDatedHabitListCard == true,
+        RecordListCard { Kind: "notionTasks" } => ProactiveProposal.Enabled(client),
         RecordListCard { Kind: "habitHistory" } => client?.SupportsHabitHistoryCard == true,
         _ => true
     };
 
     private static bool ReadEnabled(QueryReadBlock read, AgentClientContext? client, IReadOnlyList<string> flags) =>
         ReadKindEnabled(read.Kind, client, flags) && ReadSubtypeEnabled(read.Block, client,
-            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst));
+            flags.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(client));
 
     internal static string ReadFallback(object block, string? language, string? timeZone = null, DateOnly? userToday = null) =>
         new ReadFallbackText(language ?? (block as HabitMonthCard)?.Language, timeZone, userToday).Format(block);

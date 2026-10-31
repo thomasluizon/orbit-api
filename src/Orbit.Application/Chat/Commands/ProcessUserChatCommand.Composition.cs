@@ -15,7 +15,7 @@ public partial class ProcessUserChatCommandHandler
 {
     private static bool UsesComposition(ProcessUserChatCommand request, ChatContext context) =>
         request.ClientContext?.SupportsParts == true
-        && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraBlockFirst);
+        && (context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraBlockFirst) || ProactiveProposal.Enabled(request.ClientContext));
 
     private static bool CanCompleteComposition(ProcessUserChatCommand request, ChatContext context, ToolExecutionAccumulator results) =>
         UsesComposition(request, context) && request.BlockAnswer is null && results.OperationResults.Count > 0
@@ -156,6 +156,9 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
         }
         cards = SuppressCreationReadCards(cards, request, executionResults);
+        var offered = await ComposeOfferAsync(request, context, cards, executionResults, cancellationToken);
+        cards = offered.Cards;
+        if (ProactiveProposal.Enabled(request.ClientContext)) followUps = null;
         followUps = composition ? ContextualFollowUps(followUps, executionResults) : followUps;
         if (composition)
             AnalyticsCapture.SafeCaptureUserEvent(execution.ProductAnalytics, logger, request.UserId,

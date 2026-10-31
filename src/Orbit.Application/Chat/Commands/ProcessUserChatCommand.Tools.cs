@@ -282,7 +282,7 @@ public partial class ProcessUserChatCommandHandler
         ? call with
         {
             Args = OptionalToolArguments.OmitOptionalNulls(
-            tool.IsReadOnly ? TerminalReadDirective.ExecutionArguments(call.Args) : TerminalWriteDirective.ExecutionArguments(call.Args), tool.GetParameterSchema())
+            tool.IsReadOnly ? TerminalReadDirective.ExecutionArguments(ProactiveProposal.ForModelCall(call.Args)) : TerminalWriteDirective.ExecutionArguments(ProactiveProposal.ForModelCall(call.Args)), tool.GetParameterSchema())
         }
         : call;
 

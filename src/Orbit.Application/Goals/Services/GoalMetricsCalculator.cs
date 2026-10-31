@@ -51,6 +51,9 @@ public static class GoalMetricsCalculator
             daysToDeadline, trackingStatus, habitAdherence);
     }
 
+    public static string GetTrackingStatus(Goal goal, DateOnly userToday) =>
+        DetermineTrackingStatus(goal, goal.Deadline?.DayNumber - userToday.DayNumber);
+
     private static string DetermineTrackingStatus(Goal goal, int? daysToDeadline)
     {
         if (goal.Status == GoalStatus.Completed) return "completed";

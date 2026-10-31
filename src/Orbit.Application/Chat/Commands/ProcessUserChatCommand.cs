@@ -47,7 +47,11 @@ public record ProcessUserChatCommand(
     Func<ChatStreamEvent, Task>? StreamSink = null,
     AstraBlockAnswer? BlockAnswer = null,
     bool EvalTraceRequested = false,
-    Guid? TurnId = null) : IRequest<Result<ChatResponse>>;
+    Guid? TurnId = null) : IRequest<Result<ChatResponse>>
+{
+    [JsonIgnore]
+    public AstraOfferFact? SelectedOffer { get; init; }
+}
 
 public record ChatResponse(
     string? AiMessage,
@@ -170,7 +174,7 @@ public partial class ProcessUserChatCommandHandler(
     IAppConfigService appConfig,
     IContentModerationService moderation,
     IConversationTurnRecorder? conversationRecorder = null, ReadBlockFactory? readBlocks = null,
-    TimeProvider? timeProvider = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    TimeProvider? timeProvider = null, IConversationOfferStore? offerStore = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -207,7 +211,10 @@ public partial class ProcessUserChatCommandHandler(
                 if (flags.Contains(FeatureFlagKeys.AstraEvalTrace, StringComparer.Ordinal))
                     evalTrace = new ChatEvalTraceCollector(request.CorrelationId ?? Guid.NewGuid().ToString("N"), ai.ToolRegistry);
             }
-            response = await HandleCoreAsync(request, recording, evalTrace, cancellationToken);
+            request = await LoadOfferDismissalsAsync(request, cancellationToken);
+            var offeredTurn = await PrepareSelectedOfferAsync(request, cancellationToken);
+            response = offeredTurn.IsFailure ? offeredTurn.PropagateError<ChatResponse>()
+                : await HandleCoreAsync(offeredTurn.Value, recording, evalTrace, cancellationToken);
             if (response.IsSuccess)
             {
                 var negotiated = ChatResponseNegotiation.ForAllowance(response.Value, request.ClientContext,

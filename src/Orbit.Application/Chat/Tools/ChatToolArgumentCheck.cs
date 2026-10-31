@@ -19,6 +19,7 @@ internal static class ChatToolArgumentCheck
 
     internal static bool HasValidShape(IAiTool tool, JsonElement args)
     {
+        args = ProactiveProposal.StripMetadata(args);
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
         return args.ValueKind == JsonValueKind.Object
             && args.EnumerateObject().Select(field => field.Name).Distinct(StringComparer.Ordinal).Count()

@@ -78,6 +78,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ChatTurn> ChatTurns => Set<ChatTurn>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<ConversationOffer> ConversationOffers => Set<ConversationOffer>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<ClosedMonthRecap> ClosedMonthRecaps => Set<ClosedMonthRecap>();
 
@@ -147,6 +148,16 @@ public class OrbitDbContext : DbContext
                 entity.Property(turn => turn.TerminalEvent).HasConversion(nullableEncConverter);
         });
         ConfigureAiUsageDailyEntity(modelBuilder);
+        modelBuilder.Entity<ConversationOffer>(entity =>
+        {
+            entity.HasKey(offer => offer.Id);
+            entity.Property(offer => offer.OfferKey).HasMaxLength(200).IsRequired();
+            entity.Property(offer => offer.DefinitionJson).IsRequired();
+            if (encConverter is not null)
+                entity.Property(offer => offer.DefinitionJson).HasConversion(encConverter);
+            entity.HasIndex(offer => new { offer.UserId, offer.ConversationId, offer.OfferKey }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(offer => offer.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<ConversationTurn>(entity =>
         {
             entity.HasKey(turn => turn.Id);

@@ -44,6 +44,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
         builder.Services.AddScoped<IIssuedAstraBlockStore, IssuedAstraBlockStore>();
+        builder.Services.AddScoped<IConversationOfferStore, ConversationOfferStore>();
         builder.Services.AddScoped<IAiTool, AskTool>();
         builder.Services.AddScoped<IAiTool, RevisePendingChangesTool>();
         builder.Services.AddScoped<Orbit.Api.Controllers.AgentPendingStores>();

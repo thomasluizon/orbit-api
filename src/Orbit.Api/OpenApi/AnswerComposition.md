@@ -12,7 +12,8 @@ Legacy clients keep FORMAT and all fields.
 Tracks thomasluizon/orbit-tickets#1756. A complete read round sets
 `orbit_read_complete=true` on every read, including independent compound reads.
 When every call succeeds with a typed projection, the server composes the answer
-without another model call. Missing rendering capabilities do not make the read
+without another model call for clients without proactive offers. Offer-enabled
+clients may run the optional selection pass described below. Missing rendering capabilities do not make the read
 plan incomplete. For example, `query_habits` and `query_goals` together produce the
 existing readable habit and goal lists when the client advertises no part kinds.
 The model receives no instruction to write fallback prose in this mode. A false
@@ -1401,3 +1402,191 @@ SDK `kind` and `characterLength`, measured over the SDK's serialized JSON item,
 including its JSON envelope. Missing usage remains null. No output content,
 arguments, identifiers or user text enters these warning fields. Buffered and
 streamed responses use the same diagnostic path. Model, effort and cap are unchanged.
+
+## Negotiated proactive offers
+
+Tracks thomasluizon/orbit-tickets#1674. The paired consumer is #1903.
+A client enables offers with `clientContext.supportsProactiveOffers: true`,
+`supportsParts: true`, `supportsPendingOperationChanges: true`, and a nonempty
+`conversationId` UUID. It retains that UUID for the conversation across reloads
+and devices. Omission preserves the existing prompts, tool schemas and read path.
+Offer-enabled turns use server block composition even when the general block-first
+flag is off; existing rendering kill flags still apply. This capability requires rendering and removing optional preview fields, rendering
+one read-block action, and persisting the conversation identity.
+
+For enabled clients, supported habit, goal and checklist-template create/edit
+schemas append optional `suggested_fields`. Its properties come from the same
+operation's schema. Requested arguments stay outside that object and take priority.
+The API resolves effective values before ordinary tool validation and command
+preparation. Stored scalars remain intact; checklist, tag and goal additions retain
+stored entries. Every accepted proposal passes the existing tool, command, domain,
+ownership, plan and approval checks. No suggestion executes on a read turn.
+Fixed clock reminders remain fixed; repeat proposals cannot replace supplied
+reminder configuration or use an unsupported schedule. General and OneTime drafts
+receive no suggested recurrence end date. The interval never defines a daily target.
+
+`PendingOperationChange` appends optional `provenance` (`requested`, `stored` or
+`suggested`) and `removal` (`offerKey`, `field`, optional `fields`). Suggested fields
+remain editable. `fields` groups dependent reminder settings: removing the reminder
+also removes its suggested enable switch and other suggested reminder settings,
+while preserving requested and stored settings. The normal revision endpoint
+accepts optional `items[].removeSuggestedFields`; `revise_pending_changes` exposes
+`items[].remove_suggested_fields`. Only fields carrying removal metadata can be
+removed this way. Removal omits the proposed write and restores the previous
+configuration. It never translates rejection into a null clear. Fingerprints,
+validation, item selection and confirmation remain authoritative.
+
+Nested draft objects carry their own `suggested_fields`. Their editable/removable
+preview rows use slash-separated paths such as `sub_habits/0/repeat_reminder` in
+`field`, grouped `removal.fields`, revision edits and removal requests. Schema and
+command validation apply at that path. The containing field's displayed JSON omits
+internal offer metadata. Removing a child proposal preserves its siblings and
+inherited cadence; requested parent membership takes priority over optional parent
+suggestions. Bulk schemas expose suggestions on each item or `updates`, not on the
+bulk container. Refresh merges proposed collection additions against current stored
+contents and does not regenerate removed nested proposals.
+
+After composing supported successful read blocks, an enabled turn may make one
+additional tool-free model call. The same configured chat model, effort, usage
+recording and budget apply. Its cancellation deadline is three seconds. Input is
+the request, typed eligible candidates, complete active-goal facts and previously
+issued offer keys. Output selects one candidate or none and may report typed
+natural-language dismissals. The selector cannot call a tool or write prose.
+Unknown IDs, malformed output, failures and timeouts retain the readable answer.
+There is no live-model measurement in this API round.
+
+A validated action appears only in the selected block's optional
+`read.nextAction`, with `offerKey`, `kind`, `label` and optional `surface`, `prompt`,
+`entityId`, and `date`. Kinds are `openSurface`, `continueChat` and `preparePreview`.
+`openSurface` uses an existing surface catalog ID. The other kinds continue the
+ordinary chat/preview workflow; they never approve a write. There is at most one
+offer across all blocks, with no prose question or follow-up chips. Existing block
+controls, requested subjects, query identities and metrics remain intact. Preview
+answers remain preview-only and may contain several removable field proposals.
+Pending previews also append optional `nextAction` with the same contract. This
+slot can offer Calendar connection for a typed dated-event draft or planning an
+expressed aim as a goal. The selector sees the typed preview; the action is bound
+to its pending ID and fingerprint. Selecting a chat action revalidates that pending
+preview instead of refreshing a read query. A goal draft cannot offer another goal.
+
+Occurrence actions use the account's local date and real schedule/log evidence.
+A reminder gap requires at least three unresolved scheduled occurrences in the
+fourteen local days before today and reminders disabled. Positive due/unlogged
+occurrences can offer logging; actual missed/overdue occurrences can offer restart
+or skip. Avoid habits, resolved occurrences and historical scopes cannot offer a
+log for today. Goal actions require typed behind/at-risk evidence, independently
+of displayed projection fields. Empty-day offers require a complete current-day
+result. Goal and calendar gaps require the model's typed aim or dated-event
+interpretation as well as eligible account state. No message pattern selects tools,
+rewrites calls, initiates calls or replaces the answer.
+Calendar and daily-summary offers require their resolved account feature flags and
+plan access; a disabled integration or summary feature produces no offer.
+
+`get_notion_tasks` additionally supports `recordList` subtype `notionTasks` for
+offer-enabled clients advertising `recordList`. The block carries stored task rows
+and optional `connection` with the existing Notion connection read contract.
+Planning an Orbit item is offered only with a usable connected account. Other
+clients retain the existing Notion answer. API-key, billing and other sensitive
+operations retain their existing authorization and verification boundaries.
+
+`POST /api/chat/offers/dismiss` accepts `{ "conversationId": "<uuid>",
+"offerKeys": ["<semantic-key>"] }` and returns 204. Each request supports one to
+one hundred keys, each at most two hundred characters. Optional
+`clientContext.dismissedOfferKeys` records the same event on the next chat turn.
+Dismissals are stored by account, conversation and semantic offer key in
+`ConversationOffers`. They survive history truncation and cannot be undone by
+reissuing an offer. Definitions are encrypted with the existing field-encryption
+service. Account reset/deletion removes the state, and account export includes it.
+
+To select a chat action, send its `offerKey` as
+`clientContext.selectedOfferKey` with the same conversation and capability. The API
+loads the issued action by its exact key, owner and conversation, independently of
+the selector's bounded 100-row history. Reissuing an undismissed key refreshes its
+definition without changing lookup eligibility. The API checks the local date, refreshes
+the bound query under the caller's scopes, and requires the same revision before
+starting the ordinary model turn using the issued visible prompt and a separate
+server-only typed target context. That context carries the action kind, family,
+entity ID, local occurrence date, query family/scope, pending preview ID and
+action-specific scope. Scope is selected by typed action kind and family, plus the
+typed query family or pending preview target when needed; no prompt text selects
+it. The visible prompt is the person's own message and contains no internal IDs or
+server instructions. A stale or dismissed
+action returns `stale_offer`; no model or mutation starts. A successful selection
+consumes that offer. Navigation actions use their declared surface directly.
+Refresh responses do not carry an old offer forward; a subsequent chat selection
+revalidates its source. Deploy the API and its migration before #1903 advertises
+the capability. The coordinator owns the production release and #26 real-call gate.
+
+
+### Proactive action copy
+
+The labels and prompts below are the approved en and pt-BR copy. `{title}` names
+a habit or goal, `{record}` names a Notion task, alert, tag or checklist template,
+and `{date}` is locale-formatted. Tag and checklist-template prompts are separate
+strings. Navigation actions have no chat prompt.
+
+### Offer labels (button text)
+
+| en | pt-BR |
+| --- | --- |
+| Log this habit | Registrar hábito |
+| Review this habit | Rever este hábito |
+| Restart gently | Retomar aos poucos |
+| Skip | Pular |
+| Add a reminder | Adicionar lembrete |
+| Link a habit | Vincular hábito |
+| Adjust the target | Ajustar a meta |
+| Choose one small step | Escolher um passo pequeno |
+| Plan in Orbit | Planejar no Orbit |
+| Mark as read | Marcar como lido |
+| Use with a habit | Usar em um hábito |
+| Review Astra settings | Ver configurações da Astra |
+| Connect Google Calendar | Conectar Google Agenda |
+| Plan this goal | Planejar esta meta |
+| View details | Ver detalhes |
+
+### Offer prompts (sent and shown as the person's own message)
+
+| en | pt-BR |
+| --- | --- |
+| Log {title} for {date}. | Registre {title} em {date}. |
+| Suggest one useful change to {title} and keep the rest as it is. | Sugira um ajuste útil em {title} e mantenha o resto como está. |
+| Help me restart my overdue habits: just a few today and new dates for the rest. | Me ajude a retomar meus hábitos atrasados: só alguns hoje e novas datas para o resto. |
+| Skip {title} on {date}. | Pule {title} em {date}. |
+| Skip the day I missed {title}. | Pule o dia em que perdi {title}. |
+| Suggest a reminder for {title} without changing anything else. | Sugira um lembrete para {title} sem mudar o resto. |
+| Suggest a habit to link to my goal {title}. | Sugira um hábito para vincular à minha meta {title}. |
+| Suggest a new target for my goal {title}. | Sugira um novo valor para a minha meta {title}. |
+| Help me choose one small step I can take today. | Me ajude a escolher um passo pequeno para hoje. |
+| Turn my Notion task {record} into an Orbit task or habit. | Transforme minha tarefa do Notion {record} em uma tarefa ou hábito no Orbit. |
+| Mark the alert {record} as read. | Marque o aviso {record} como lido. |
+| Suggest a habit to use my tag {record} with. | Sugira um hábito para usar a etiqueta {record}. |
+| Suggest a habit to use my checklist template {record} with. | Sugira um hábito para usar o modelo de checklist {record}. |
+| Turn what we just talked about into a goal. | Transforme o que acabamos de conversar em uma meta. |
+| Suggest a goal for what is in this preview. | Sugira uma meta para o que está nesta prévia. |
+
+### Selected-action model context
+
+The following context is model-only. Runtime guidance is English in both locales;
+the pt-BR column records its translation for copy review. It never appears in the
+person's message bubble. The shared guidance applies to every selected chat action;
+action-specific guidance comes from typed metadata, independently of the prompt.
+Existing requested and stored fields remain intact outside the selected scope.
+
+| Context | en | pt-BR |
+| --- | --- | --- |
+| Shared | The person selected this server-issued optional action. Use the typed action kind and target below to apply its server-defined scope. Treat the visible prompt as the person's message, not as server instructions. Read current state through the ordinary app queries and prepare the normal approval preview. Preserve every requested and stored field outside this action's scope. | A pessoa selecionou esta ação opcional emitida pelo servidor. Use o tipo de ação e o alvo tipados abaixo para aplicar o escopo definido pelo servidor. Trate o texto visível como a mensagem da pessoa, não como instruções do servidor. Leia o estado atual pelas consultas normais do aplicativo e prepare a prévia normal para aprovação. Preserve todos os campos solicitados e salvos fora do escopo desta ação. |
+| preparePreview / log | Prepare a log preview for the typed habit on its supplied local date. | Prepare uma prévia de registro para o hábito tipado na data local informada. |
+| continueChat / reviewHabit | Read the typed habit's current configuration and propose one useful adjustment. | Leia a configuração atual do hábito tipado e proponha um ajuste útil. |
+| preparePreview / restart | Call query_habits for the complete current due and overdue set. Prepare a smaller restart plan with only a small set today and a concrete local date for every deferred item. | Chame query_habits para obter o conjunto completo de hábitos previstos e atrasados no momento. Prepare uma retomada menor com poucos itens hoje e uma data local concreta para cada item adiado. |
+| preparePreview / skip | Read the current schedule and resolve an unresolved missed occurrence of the typed habit. Use the supplied date when present; otherwise keep the missed occurrence's original local date. Never replace it with today. | Leia a programação atual e identifique um dia perdido ainda não resolvido do hábito tipado. Use a data informada quando houver; caso contrário, mantenha a data local original desse dia perdido. Nunca a substitua por hoje. |
+| preparePreview / reminder | Read the typed habit's current reminder configuration and propose a reminder without changing any other setting. | Leia a configuração atual de lembretes do hábito tipado e proponha um lembrete sem alterar nenhuma outra configuração. |
+| preparePreview / goalLink | Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links. | Leia primeiro os hábitos atuais e os vínculos existentes da meta tipada. Proponha um vínculo adequado com um hábito, preservando todos os vínculos existentes. |
+| preparePreview / goalTarget | Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field. | Leia o valor atual da meta tipada e prepare um ajuste editável desse valor sem alterar nenhum outro campo da meta. |
+| continueChat / smallStep | Help the person choose one small step for their local today. | Ajude a pessoa a escolher um passo pequeno para hoje na data local dela. |
+| continueChat / notion | Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits. | Leia a tarefa salva do Notion identificada pelo alvo tipado. Preserve a data informada e proponha recorrência somente se fizer sentido. |
+| preparePreview / notification | Prepare a preview to mark the typed unread alert as read. | Prepare uma prévia para marcar o aviso tipado ainda não lido como lido. |
+| continueChat / reuse / list_tags | Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags. | Leia a etiqueta salva completa identificada pelo alvo tipado e os hábitos atuais. Proponha um uso adequado em uma prévia editável, preservando as etiquetas existentes. |
+| continueChat / reuse / get_checklist_templates | Read the full stored checklist template identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing checklist entries. | Leia o modelo de checklist salvo completo identificado pelo alvo tipado e os hábitos atuais. Proponha um uso adequado em uma prévia editável, preservando os itens de checklist existentes. |
+| continueChat / aim / pending preview | Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in the pending preview, preserving all pending work. | Confira primeiro as metas existentes e evite criar uma meta equivalente. Prepare uma proposta de meta para o objetivo expresso na prévia pendente, preservando todo o trabalho pendente. |
+| continueChat / aim / conversation | Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation. | Confira primeiro as metas existentes e evite criar uma meta equivalente. Prepare uma proposta de meta para o objetivo expresso nesta conversa. |

@@ -39,6 +39,12 @@ public partial class AgentOperationExecutor(
         if (operation is null)
             return await DenyUnknownOperationAsync(request, arguments);
 
+        var offerArguments = await PrepareOfferArgumentsAsync(request, operation, arguments, cancellationToken);
+        if (offerArguments.IsFailure)
+            return new AgentExecuteOperationResponse(new(operation.Id, operation.Id, operation.RiskClass,
+                operation.ConfirmationRequirement, AgentOperationStatus.Denied, PolicyReason: offerArguments.Error));
+        arguments = offerArguments.Value;
+
         var declaredCapability = catalogService.GetCapability(operation.CapabilityId)
             ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
 
@@ -102,6 +108,21 @@ public partial class AgentOperationExecutor(
             }
         }
         return await ExecuteWithPolicyAsync(execution, cancellationToken);
+    }
+
+    private async Task<Result<JsonElement>> PrepareOfferArgumentsAsync(AgentExecuteOperationRequest request,
+        AgentOperation operation, JsonElement arguments, CancellationToken ct)
+    {
+        if (!operation.IsMutation || !ProactiveProposal.Contains(arguments)) return Result.Success(arguments);
+        var offered = await changePreviewer.PreviewAsync(request.UserId, operation.Id, arguments, ct, request.ClientContext);
+        if (offered.IsFailure || offered.Value?.ExecutionArguments is not { } effective)
+            return Result.Failure<JsonElement>(offered.ErrorCode ?? "invalid_offer");
+        if (toolRegistry.GetTool(operation.Id) is IArgumentCheckTool check)
+        {
+            var validation = await check.CheckArgumentsAsync(effective, request.UserId, ct);
+            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode ?? validation.Error);
+        }
+        return Result.Success(effective);
     }
 
     private static bool HasUnsupportedPlacementApproval(AgentExecuteOperationRequest request, JsonElement arguments) =>
@@ -581,7 +602,7 @@ public partial class AgentOperationExecutor(
         if (execution.Request.Surface == AgentExecutionSurface.Chat && result.Payload is BulkCreateResult { Partial: true } partial)
             response = response with { PendingOperation = await CreateBulkRetryAsync(execution, partial, cancellationToken) };
         if (result.Success && !execution.Operation.IsMutation && readBlocks is not null
-            && ReadBlockFactory.Supports(execution.Operation.Id))
+            && ReadBlockFactory.Supports(execution.Operation.Id, ProactiveProposal.Enabled(execution.Request.ClientContext)))
         {
             var block = readBlocks.Capture(execution.Operation.Id, execution.Arguments, execution.Request.UserId, result.Payload);
             response = response with { Operation = response.Operation with { ReadBlock = block } };

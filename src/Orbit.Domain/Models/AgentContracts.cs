@@ -143,7 +143,8 @@ public record PendingAgentOperation(
     int? ChangeTargetCount = null,
     IReadOnlyList<PendingOperationItem>? Items = null,
     string? PreviewFingerprint = null,
-    string? ActionKey = null);
+    string? ActionKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AstraNextAction? NextAction = null);
 
 public record PendingOperationItem(
     string ItemId,
@@ -188,7 +189,14 @@ public record PendingOperationChange(
     JsonElement? ProposedValue = null,
     bool IsEditable = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? EntityEmoji = null);
+    string? EntityEmoji = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Provenance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    PendingProposalRemoval? Removal = null);
+
+public sealed record PendingProposalRemoval(string OfferKey, string Field,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Fields = null);
 
 public record PendingOperationChangePreview(
     IReadOnlyList<PendingOperationChange> Changes,
@@ -306,7 +314,11 @@ public record AgentClientContext(
     bool? SupportsCompletedHabitsMetric = null,
     bool? SupportsSkippedHabitRows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StartingStep? PreviousStartingStep = null,
-    bool? SupportsStartingStepContext = null);
+    bool? SupportsStartingStepContext = null,
+    bool? SupportsProactiveOffers = null,
+    Guid? ConversationId = null,
+    IReadOnlyList<string>? DismissedOfferKeys = null,
+    string? SelectedOfferKey = null);
 
 public record AgentContextSnapshot(
     string Plan,

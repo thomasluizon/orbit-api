@@ -5114,6 +5114,14 @@
             "required": true
           },
           {
+            "name": "items[].remove_suggested_fields",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
             "name": "pending_operation_id",
             "type": "string",
             "required": true

@@ -32,6 +32,7 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<NotionConnection> _notionConnections = Substitute.For<IGenericRepository<NotionConnection>>();
     private readonly IGenericRepository<NotionTask> _notionTasks = Substitute.For<IGenericRepository<NotionTask>>();
     private readonly IGenericRepository<ConversationTurn> _conversations = Substitute.For<IGenericRepository<ConversationTurn>>();
+    private readonly IGenericRepository<ConversationOffer> _conversationOffers = Substitute.For<IGenericRepository<ConversationOffer>>();
     private readonly ExportUserDataQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -43,7 +44,7 @@ public class ExportUserDataQueryHandlerTests
             new ExportUserDataRepositories(
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-                _proactiveRepo, _notionConnections, _notionTasks, _conversations),
+                _proactiveRepo, _notionConnections, _notionTasks, _conversations, _conversationOffers),
             _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -51,6 +52,7 @@ public class ExportUserDataQueryHandlerTests
             .Returns(new Dictionary<Guid, int>());
 
         ReturnsEmpty(_conversations);
+        ReturnsEmpty(_conversationOffers);
         ReturnsEmpty(_proactiveRepo);
         ReturnsEmpty(_notionConnections);
         ReturnsEmpty(_notionTasks);
@@ -211,7 +213,22 @@ public class ExportUserDataQueryHandlerTests
             "exportedAtUtc", "account", "settings", "subscription", "habits", "goals", "tags",
             "notifications", "checklistTemplates", "achievements", "streakFreezes", "referrals",
             "apiKeys", "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents",
-            "proactiveItems", "notionConnection", "notionTasks", "conversations");
+            "proactiveItems", "notionConnection", "notionTasks", "conversations", "conversationOffers");
+    }
+
+    [Fact]
+    public async Task Handle_ExportsOnlyTheOwnersConversationOfferState()
+    {
+        ArrangeUser(CreateTestUser());
+        var mine = ConversationOffer.Create(UserId, Guid.NewGuid(), "reminder:habit").Value;
+        mine.Dismiss();
+        var other = ConversationOffer.Create(Guid.NewGuid(), Guid.NewGuid(), "other:offer").Value;
+        _conversationOffers.FindAsync(Arg.Any<Expression<Func<ConversationOffer, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call => new[] { mine, other }.Where(call.ArgAt<Expression<Func<ConversationOffer, bool>>>(0).Compile()).ToArray());
+        var result = await _handler.Handle(new ExportUserDataQuery(UserId), default);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ConversationOffers.Should().ContainSingle().Which.Should().BeEquivalentTo(new
+        { mine.ConversationId, mine.OfferKey, mine.Dismissed, mine.DefinitionJson });
     }
 
     [Fact]

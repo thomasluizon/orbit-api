@@ -92,8 +92,11 @@ public sealed class PendingOperationItemContractTests
         change.GetProperty("required").EnumerateArray().Select(field => field.GetString())
             .Should().BeEquivalentTo("entityId", "entityName", "field", "oldValue", "newValue", "valueType");
         var changeProperties = change.GetProperty("properties");
+        change.GetProperty("required").EnumerateArray().Should().NotContain(field => field.GetString() == "provenance" || field.GetString() == "removal");
+        changeProperties.GetProperty("provenance").GetProperty("type").EnumerateArray()
+            .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
         changeProperties.EnumerateObject().Select(property => property.Name).Should().Equal(
-            "entityId", "entityName", "field", "oldValue", "newValue", "valueType", "proposedValue", "isEditable", "entityEmoji");
+            "entityId", "entityName", "field", "oldValue", "newValue", "valueType", "proposedValue", "isEditable", "entityEmoji", "provenance", "removal");
         changeProperties.GetProperty("entityEmoji").GetProperty("type").EnumerateArray()
             .Select(type => type.GetString()).Should().BeEquivalentTo("string", "null");
         properties.EnumerateObject().Select(property => property.Name).Should().Equal(

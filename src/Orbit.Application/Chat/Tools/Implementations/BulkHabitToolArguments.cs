@@ -123,6 +123,7 @@ internal static class BulkHabitToolArguments
 
     public static (BulkHabitChanges? Changes, string? Error) ParseUpdateFields(JsonElement updates, bool allowHabitId = false)
     {
+        updates = ProactiveProposal.StripMetadata(updates);
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "title", "description", "emoji", "frequency_unit", "frequency_quantity", IntervalWeeks,
