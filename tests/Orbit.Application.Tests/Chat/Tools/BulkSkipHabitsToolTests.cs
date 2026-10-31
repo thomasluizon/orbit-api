@@ -59,7 +59,7 @@ public class BulkSkipHabitsToolTests
         _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habits.ToList());
         using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
-        var handler = new BulkSkipHabitsCommandHandler(_habitRepo, logs, _userDateService, unit, cache);
+        var handler = new BulkSkipHabitsCommandHandler(_habitRepo, logs, _userDateService, unit, cache, Substitute.For<IGenericRepository<Notification>>());
         _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => handler.Handle(call.Arg<BulkSkipHabitsCommand>(), call.Arg<CancellationToken>()));
 

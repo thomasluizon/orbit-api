@@ -62,9 +62,9 @@ public sealed class GeneralHabitSkipTests : IDisposable
             .Returns(call => call.Arg<Func<CancellationToken, Task<Result<SkipHabitResponse>>>>()(call.Arg<CancellationToken>()));
         _unit.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task<bool>>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task<bool>>>()(call.Arg<CancellationToken>()));
-        var singleHandler = new SkipHabitCommandHandler(new SkipHabitRepositories(_repository, _logs, _receipts),
+        var singleHandler = new SkipHabitCommandHandler(new SkipHabitRepositories(_repository, _logs, _receipts, Substitute.For<IGenericRepository<Notification>>()),
             _dates, Substitute.For<IGoalCompletionService>(), _unit, _cache);
-        var bulkHandler = new BulkSkipHabitsCommandHandler(_repository, _logs, _dates, _unit, _cache);
+        var bulkHandler = new BulkSkipHabitsCommandHandler(_repository, _logs, _dates, _unit, _cache, Substitute.For<IGenericRepository<Notification>>());
         _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(call => singleHandler.Handle(call.Arg<SkipHabitCommand>(), call.Arg<CancellationToken>()));
         _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
