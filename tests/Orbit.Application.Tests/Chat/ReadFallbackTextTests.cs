@@ -34,7 +34,7 @@ public class ReadFallbackTextTests
             yield return [language, new GoalListCard([]), pt ? "Metas" : "Goals", "0", "goals"];
             yield return [language, new DaySummaryCard(To, 10, 6, 60, 0, 2), pt ? "Concluídos / agendados" : "Completed / scheduled", "6/10", "daySummary"];
             yield return [language, new StreakCard(6, 9, 2, 20, 30, To, false, [], []), pt ? "Sequência atual" : "Current streak", "6", "TotalXp"];
-            yield return [language, new HabitMonthCard(From, To, To, 1, new([], [])), pt ? "Nenhum dado de hábitos" : "No habit data", "26", "habitMonth"];
+            yield return [language, new HabitMonthCard(From, To, To, 1, new([], [])), pt ? "Nenhum hábito registrado" : "No habits logged", "26", "habitMonth"];
             yield return [language, new CalendarCard([new("Meeting", "2026-10-26T02:00:00Z", null, false)], new(true, "ReconnectRequired", null)), pt ? "Reconecte o Google Agenda" : "Reconnect Google Calendar", "1", "ReconnectRequired"];
             yield return [language, new PeriodInsightCard("week", From, To, 60, 6, 7, 6, 10, 2, 4, [], [], new("", "", "", ""), null), pt ? "Concluídos / agendados" : "Completed / scheduled", "6/10", "week"];
             foreach (var kind in new[] { "notifications", "tags", "templates", "keys" })

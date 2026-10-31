@@ -78,7 +78,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { ToolCalls = [R9fCall("empty-en-r2", tool.Name)], ConversationContext = TestConversationContext });
         var result = await handler.Handle(new(UserId, "Read the requested window.", ClientContext: OfferClient(locale)), default);
         result.IsSuccess.Should().BeTrue(result.Error);
-        result.Value.AiMessage.Should().Contain(locale == "en" ? "No habit data in this period." : "Nenhum dado de hábitos neste período.");
+        result.Value.AiMessage.Should().Contain(locale == "en" ? "No habits logged in this period." : "Nenhum hábito registrado neste período.");
         result.Value.AiMessage.Should().NotContain(locale == "en" ? "Logs:" : "Registros:");
     }
 }
