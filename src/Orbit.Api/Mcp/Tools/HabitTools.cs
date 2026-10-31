@@ -141,7 +141,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateHabit preserves eleven flat habit creation schema properties, including intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "CreateHabit preserves flat habit creation schema properties, including repeat reminders, intervalWeeks and emoji. MCP schema generation requires these separate parameters.")]
     public async Task<string> CreateHabit(
         ClaimsPrincipal user,
         [Description("Name of the habit")] string title,
@@ -456,6 +456,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             ("checklist_items", checklistItems), ("repeat_reminder", repeatReminder));
         if (jsonError is not null)
             return jsonError;
+        if (arguments.GetValueOrDefault("repeat_reminder") is System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Object })
+            arguments["reminder_enabled"] = true;
         var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", arguments,
             confirmationToken: null, cancellationToken);
 

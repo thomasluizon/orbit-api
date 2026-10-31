@@ -99,6 +99,7 @@ public class HabitToolsTests
             await _tools.CreateSubHabit(_user, Guid.NewGuid().ToString(), "Reminder",
                 repeatReminder: """{"interval_minutes":480}"""));
         child.Arguments.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(480);
+        child.Arguments.GetProperty("reminder_enabled").GetBoolean().Should().BeTrue();
         var bulk = await CapturedRequestAsync(async () => await _tools.BulkCreateHabits(_user,
             """[{"title":"Reminder","repeatReminder":{"interval_minutes":480},"subHabits":[{"title":"Child","repeatReminder":{"interval_minutes":30}}]}]"""));
         var item = bulk.Arguments.GetProperty("habits")[0];
