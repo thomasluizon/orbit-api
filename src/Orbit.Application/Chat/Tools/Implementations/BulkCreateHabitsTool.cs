@@ -66,13 +66,7 @@ public partial class BulkCreateHabitsTool(
         args = PrepareArguments(args);
         var schemaArguments = JsonNode.Parse(args.GetRawText());
         if (schemaArguments?[ToolArgumentNames.Habits] is JsonArray habits)
-            foreach (var habit in habits.OfType<JsonObject>())
-            {
-                habit.Remove("preview_item_id");
-                habit.Remove(HabitHeadingParents.CandidateIdsField);
-                habit.Remove(HabitHeadingParents.SuggestedParentField);
-                habit.Remove(HabitHeadingParents.ExistingCandidatesField);
-            }
+            PrepareSchemaItems(habits);
         return ChatToolArgumentCheck.CheckAsync(this, JsonSerializer.SerializeToElement(schemaArguments),
             () => ExecuteCoreAsync(args, userId, ct, checkOnly: true));
     }

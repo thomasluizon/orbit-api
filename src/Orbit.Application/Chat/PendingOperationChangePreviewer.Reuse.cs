@@ -1,6 +1,7 @@
 using static Orbit.Application.Chat.Tools.ToolArgumentNames;
 using System.Text.Json;
 using System.Text;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
@@ -30,6 +31,7 @@ public sealed partial class PendingOperationChangePreviewer
             return fingerprint;
         var state = new StringBuilder(fingerprint);
         var previousChildren = new List<object>();
+        var proposedChildren = new List<object>();
         foreach (var child in children.EnumerateArray())
         {
             var reused = TryReadId(child, HabitId, out var id) ? known.FirstOrDefault(habit => habit.Id == id) : null;
@@ -38,11 +40,18 @@ public sealed partial class PendingOperationChangePreviewer
             if (childFingerprint is null) return null;
             state.Append(childFingerprint);
             previousChildren.Add(childFields.ToDictionary(field => field.Field, field => field.OldValue));
+            proposedChildren.Add(childFields.ToDictionary(field => field.Field, field =>
+                field.Field == SubHabits && field.NewValue is { } displayed
+                    ? JsonSerializer.Deserialize<JsonElement>(displayed) : field.ProposedValue));
         }
         if (state.Length > 0)
         {
             var index = fields.FindIndex(field => field.Field == SubHabits);
-            if (index >= 0) fields[index] = fields[index] with { OldValue = JsonSerializer.Serialize(previousChildren) };
+            if (index >= 0) fields[index] = fields[index] with
+            {
+                OldValue = JsonSerializer.Serialize(previousChildren),
+                NewValue = JsonSerializer.Serialize(proposedChildren)
+            };
         }
         return state.ToString();
     }
@@ -58,6 +67,10 @@ public sealed partial class PendingOperationChangePreviewer
     private async Task<bool> BindReuseFieldsAsync(Guid userId, JsonElement source, Habit existing,
         IReadOnlyList<Habit> known, List<PendingOperationChange> fields, CancellationToken ct)
     {
+        var (resolved, error) = OptionalToolArguments.ResolveClears(source, OptionalToolArguments.BulkHabitClearFields);
+        if (error is not null) return false;
+        fields.AddRange(CreationFields(resolved, existing.Title)
+            .Where(field => fields.All(candidate => candidate.Field != field.Field)));
         var values = HabitValues(existing);
         values[HabitId] = existing.Title;
         values["tag_names"] = values[TagIds] = FormatTags(existing) ?? "[]";

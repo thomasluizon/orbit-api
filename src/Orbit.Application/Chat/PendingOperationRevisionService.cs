@@ -378,7 +378,7 @@ public sealed partial class PendingOperationRevisionService(
             var copy = (JsonObject)habit.DeepClone();
             if (clearSharedParent && !copy.ContainsKey(ParentHabitId) && root[ParentHabitId] is { } sharedParent)
                 copy[ParentHabitId] = sharedParent.DeepClone();
-            if (!ApplyEdits(copy, item.Edits))
+            if (!ApplyCreationEdits(copy, item.Edits))
                 return false;
             SyncCreationAnchor(habit, copy, item.Edits);
             ApplyPlacement(copy, item);
@@ -401,6 +401,9 @@ public sealed partial class PendingOperationRevisionService(
         if (clearSharedParent) root.Remove(ParentHabitId);
         return true;
     }
+
+    private static bool ApplyCreationEdits(JsonObject target, JsonElement? edits) =>
+        ApplyEdits(target, edits, target.ContainsKey(HabitId) ? "bulk_update_habits" : null);
 
     private static void SyncCreationAnchor(JsonObject original, JsonObject revised, JsonElement? edits)
     {

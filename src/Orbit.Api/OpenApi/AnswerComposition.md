@@ -1342,6 +1342,21 @@ the proposal before dispatch. The person's explicit items remain alongside the
 drafts. A later `revise_pending_changes` is outside this binding and keeps the
 ordinary approval flow. No new tool or message keyword selects an operation.
 
+An issued adjustment that replaces an existing habit's cadence retains the
+single-suggestion mapping: it clears the previous `end_date`, and a change to a
+one-time task also clears `frequency_unit`. Combined previews resolve these
+`clear_fields` into ordinary field rows with their current value and a null
+proposed value, matching the single-suggestion preview. Nested reused items show
+the same removals in their displayed child values. Both item state and approval
+fingerprints bind these changes, including previews with placement choices.
+Replacing a displayed removal through preview revision removes that field from
+`clear_fields` before validation and regenerates the approval fingerprint.
+Argument checks retain and validate the original execution clears, including
+nested reused items; the model's creation schema remains unchanged.
+Creation and unchanged-cadence adjustments keep their existing behavior. These
+rows use the existing null-value presentation; no English or pt-BR user-facing
+or model-facing copy is added or changed.
+
 These strings are model-facing only. No person-facing fixed string is added or
 changed for these two contracts. English is the emitted guidance; pt-BR is the
 coordinator's review translation.
