@@ -138,6 +138,35 @@ public partial class AskToolTests
     }
 
     [Theory]
+    [InlineData("{\"title\":\"Read\",\"due_time\":\"07:00\",\"reminder_enabled\":true,\"reminder_times\":[10],\"checklist_items\":[{\"text\":\"Choose a book\"}]}", true)]
+    [InlineData("{\"title\":\"\"}", false)]
+    [InlineData("{", false)]
+    [InlineData("[]", false)]
+    [InlineData("null", false)]
+    public async Task PickList_ExpandsSparseJsonAndKeepsBulkValidation(string arguments, bool valid)
+    {
+        var result = await _tool.ExecuteAsync(JsonSerializer.SerializeToElement(new
+        {
+            input = new
+            {
+                form = "pickList",
+                title = "Choose",
+                action = "create_habits",
+                items = new[] { new { id = "draft", label = "Read", arguments } }
+            }
+        }), UserId, default);
+
+        result.Success.Should().Be(valid, result.Error);
+        if (!valid) return;
+        var item = result.Payload.Should().BeOfType<AstraBlockDefinition>().Subject.Items.Should().ContainSingle().Subject;
+        var expanded = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(arguments)!;
+        foreach (var field in expanded)
+            item.Arguments.GetProperty(field.Key).GetRawText().Should().Be(field.Value.GetRawText());
+        item.Arguments.GetProperty("due_date").GetString().Should().Be("2026-04-03");
+        _mediator.ReceivedCalls().Should().OnlyContain(call => call.GetArguments()[0] is CheckChatCommandQuery);
+    }
+
+    [Theory]
     [InlineData("create_habits", false)]
     [InlineData("log_habits", false)]
     [InlineData("skip_habits", false)]

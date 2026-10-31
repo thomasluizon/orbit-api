@@ -39,6 +39,56 @@ public partial class AiIntentServiceStreamingTests
             && (int?)entry.Properties["InputTokens"] == 0);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task OfferContinuation_ZeroUsageIncompleteDiscardsDoneCallAndRetries(bool missingUsage, bool exhausted)
+    {
+        var incomplete = ResponsesTestData.Response(inputTokens: 0, outputTokens: 0);
+        incomplete.Status = ResponseStatus.Incomplete;
+        incomplete.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        if (missingUsage) incomplete.Usage = null;
+        var discarded = ResponseItem.CreateFunctionCallItem("discarded", "create_habit", BinaryData.FromString("{\"title\":\"Wrong\"}"));
+        var failedStream = ResponsesTestData.Event(new StreamingResponseOutputItemDoneUpdate { OutputIndex = 0, Item = discarded })
+            + ResponsesTestData.Stream(incomplete);
+        var handler = new SequenceSseHandler(ToolStream("query_habits", "{}"), failedStream,
+            exhausted ? failedStream : ToolStream("create_habit", "{\"title\":\"Correct\"}"));
+        var (service, sink) = BuildService(handler);
+        var first = await service.SendWithToolsAsync(new AiToolRequest("Prepare it.", "system", []), sink.Handle);
+
+        var result = await service.ContinueWithToolResultsAsync(first.Value.ConversationContext!,
+            [new("query_habits", "call_1", true, null, null, null)], sink.Handle);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        handler.RequestBodies.Should().HaveCount(3);
+        handler.RequestBodies[2].Should().Be(handler.RequestBodies[1]);
+        result.Value.IsTruncated.Should().Be(exhausted);
+        (result.Value.ToolCalls ?? []).Should().NotContain(call => call.Id == "discarded");
+        ((List<ResponseItem>)result.Value.ConversationContext!.Messages).OfType<FunctionCallResponseItem>()
+            .Should().NotContain(call => call.CallId == "discarded");
+        if (!exhausted)
+            result.Value.ToolCalls.Should().ContainSingle(call => call.Args.GetProperty("title").GetString() == "Correct");
+    }
+
+    [Fact]
+    public async Task OfferContinuation_ZeroUsageWithStreamedTextIsNotRetried()
+    {
+        var incomplete = ResponsesTestData.Response(inputTokens: 0, outputTokens: 0);
+        incomplete.Status = ResponseStatus.Incomplete;
+        incomplete.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
+        var handler = new SequenceSseHandler(ResponsesTestData.Stream(incomplete, "Already streamed."));
+        var (service, sink) = BuildService(handler);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("Prepare it.", "system", []), sink.Handle);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.IsTruncated.Should().BeTrue();
+        result.Value.HasToolCalls.Should().BeFalse();
+        handler.RequestBodies.Should().ContainSingle();
+    }
+
     [Fact]
     public async Task OfferContinuation_PartialWriteAfterReadRemainsTruncatedWithoutRetryOrExecution()
     {

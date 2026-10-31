@@ -958,6 +958,7 @@ public partial class AiIntentServiceStreamingTests
 
     private sealed class RecordingLogger : ILogger<AiIntentService>
     {
+        public List<Exception> Exceptions { get; } = [];
         public List<int> WarningEventIds { get; } = [];
         public List<(int EventId, Dictionary<string, object?> Properties)> WarningProperties { get; } = [];
 
@@ -967,6 +968,7 @@ public partial class AiIntentServiceStreamingTests
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
+            if (exception is not null) Exceptions.Add(exception);
             if (logLevel == LogLevel.Warning)
             {
                 WarningEventIds.Add(eventId.Id);

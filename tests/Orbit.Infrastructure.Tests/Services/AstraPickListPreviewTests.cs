@@ -67,7 +67,8 @@ public class AstraPickListPreviewTests
             {
                 id = i.ToString(),
                 label = habit.Title,
-                arguments = action == "create_habits" ? JsonSerializer.SerializeToElement(new { title = "New " + i })
+                arguments = action == "create_habits" ? JsonSerializer.SerializeToElement(JsonSerializer.Serialize(new
+                { title = "New " + i, description = "Selected draft", due_time = "07:00", frequency_unit = "Day", frequency_quantity = 1 }))
                     : JsonSerializer.SerializeToElement(new { habit_id = habit.Id, date = "2026-04-03" })
             })
         });
