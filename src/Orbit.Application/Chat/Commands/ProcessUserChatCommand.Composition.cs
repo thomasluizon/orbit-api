@@ -156,7 +156,7 @@ public partial class ProcessUserChatCommandHandler
             if (request.StreamSink is not null) await request.StreamSink(ChatStreamEvent.Reset());
         }
         cards = SuppressCreationReadCards(cards, request, executionResults);
-        cards = SuppressEmptyReadNarrative(cards, executionResults, aiResponse.IsTruncated);
+        cards = SuppressEmptyReadNarrative(cards, executionResults, aiResponse.IsTruncated, request, context);
         var offered = await ComposeOfferAsync(request, context, cards, executionResults, aiResponse.IsTruncated, cancellationToken);
         cards = offered.Cards;
         if (ProactiveProposal.Enabled(request.ClientContext)) followUps = null;
@@ -399,22 +399,31 @@ public partial class ProcessUserChatCommandHandler
         return text.Length == 0 ? null : text;
     }
 
-    private static ResponseCards SuppressEmptyReadNarrative(ResponseCards cards, ToolExecutionAccumulator results, bool truncated)
+    private static ResponseCards SuppressEmptyReadNarrative(ResponseCards cards, ToolExecutionAccumulator results, bool truncated,
+        ProcessUserChatCommand request, ChatContext context)
     {
         var blocks = cards.Parts?.OfType<ChatBlockPart>().ToArray() ?? [];
-        return !truncated && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded)
-            && blocks.Length > 0 && blocks.All(block => CarriesEmptyReadState(block.Block))
+        return !truncated && blocks.Length > 0 && results.AskBlock is null && results.OperationResults.Count > 0
+            && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded
+                && operation.ReadBlock is { } read && ReadEnabled(read, request.ClientContext, context.EnabledFeatureFlags)
+                && blocks.Any(block => ReadBlockTelemetry.Describe(block.Block).Read?.QueryId == read.Read.QueryId))
+            && blocks.All(block => CarriesEmptyReadState(block.Block))
             ? cards with { AiMessage = null, Parts = blocks, ServerComposedText = true } : cards;
     }
 
     private static bool CarriesEmptyReadState(object block) => block switch
     {
         DaySummaryCard { Due: 0, Done: 0, OverdueCount: 0 } => true,
-        HabitListCard { Items.Count: 0, TotalCount: null or 0 } => true,
-        GoalListCard { Items.Count: 0, TotalCount: null or 0 } => true,
+        HabitListCard { Items.Count: 0, TotalCount: null or 0, Read: { } read } => !HasReadFilter(read),
+        GoalListCard { Items.Count: 0, TotalCount: null or 0, Read: { } read } => !HasReadFilter(read),
         RecordListCard { Items.Count: 0, TotalCount: 0 } => true,
         _ => false
     };
+
+    private static bool HasReadFilter(ReadBlockMetadata read) =>
+        read.Scope.ValueKind != JsonValueKind.Object
+        || read.Scope.TryGetProperty("search", out var search) && search.ValueKind == JsonValueKind.String
+        || read.Scope.TryGetProperty("tag", out var tag) && tag.ValueKind == JsonValueKind.String;
 
     private static bool IsCompleteEmptyList(QueryReadBlock read) =>
         read.Read.TotalCount == 0 && read.Read.Completeness == "complete" && read.Block switch

@@ -184,7 +184,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private static AiToolCall[] BrainDumpCalls(JsonDocument fixture) => fixture.RootElement.GetProperty("toolCalls")
         .EnumerateArray().Select((call, index) => new AiToolCall(call.GetProperty("name").GetString()!,
-            "capture-" + index, call.GetProperty("arguments").Clone())).ToArray();
+            "capture-" + index, WithCalendarWindow(call.GetProperty("name").GetString()!, call.GetProperty("arguments")))).ToArray();
 
     private List<AgentExecuteOperationRequest> HoldBrainDumpWithReads(IAiTool bulk, params IAiTool[] reads)
     {

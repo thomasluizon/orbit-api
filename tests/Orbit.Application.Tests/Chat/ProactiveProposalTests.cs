@@ -198,6 +198,9 @@ public sealed class ProactiveProposalTests
     [Fact]
     public void GuidancePinsSemanticChoicesAndPreservation()
     {
+        ProactiveOfferDismissal.Instruction.Should().Contain("include its exact key from previously_issued_offers in orbit_dismissed_offer_keys on your tool call or tool-free final JSON answer.")
+            .And.Contain("Never infer dismissal from account labels or invent a key.")
+            .And.Contain("A dismissal alone needs no account read or write.");
         ProactiveProposal.Instruction.Should().Contain("List a name only after setting its non-null, non-empty value; never list unused options or null placeholders.")
             .And.Contain("Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields.")
             .And.Contain("Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested.")

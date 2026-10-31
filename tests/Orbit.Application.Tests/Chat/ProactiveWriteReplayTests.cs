@@ -41,6 +41,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             var name = declaration.GetProperty("name").GetString();
             var schema = declaration.GetProperty("parameters");
+            schema.GetProperty("properties").TryGetProperty("orbit_dismissed_offer_keys", out _).Should().Be(supports);
             if (name == "revise_pending_changes")
             {
                 schema.GetProperty("properties").GetProperty("items").GetProperty("items").GetProperty("properties")

@@ -25,3 +25,8 @@ rejection. The reminder-conflict replay fills the independently missing frequenc
 quantity before testing the sibling reminder defect; its single repair removes
 the conflicting fixed suggestion while keeping the repeat interval. No captured
 result is used as a test double for the gateway or previewer.
+
+Legacy calendar and brain-dump replays supply `window: month` to keep exercising
+their existing calendar projection. The r9g day-call capture remains unchanged
+and must be rejected. Legacy placeholder replays with missing suggestion values
+now perform the same single repair required by the contract.

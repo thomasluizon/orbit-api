@@ -451,7 +451,9 @@ public sealed class ReadBlockScopeTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
-    public async Task HabitMonth_RefreshRetainsAbsolutePeriodAcrossLocalMonthBoundary(string language)
+    [InlineData("en", true)]
+    [InlineData("pt-BR", true)]
+    public async Task HabitMonth_RefreshRetainsAbsolutePeriodAcrossLocalMonthBoundary(string language, bool legacy = false)
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
@@ -462,7 +464,7 @@ public sealed class ReadBlockScopeTests
         var tool = new GetHabitMonthTool(mediator);
         var executor = Executor(tool);
         var initial = await executor.ExecuteAsync(new(_userId, tool.Name,
-            JsonSerializer.SerializeToElement(new { language }), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
+            JsonSerializer.SerializeToElement(new { window = "month", language }), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
         var read = initial.Operation.ReadBlock!;
         read.Kind.Should().Be("habitMonth");
         read.Read.Scope.GetProperty("date_from").GetString().Should().Be("2026-04-01");
@@ -470,9 +472,17 @@ public sealed class ReadBlockScopeTests
         var month = read.Block.Should().BeOfType<HabitMonthCard>().Subject;
         month.Read.Should().Be(read.Read);
         HabitMonthReadBlockRefreshResponse.From(read).Block.Should().BeSameAs(month);
+        var token = read.Read.RefreshToken;
+        if (legacy)
+        {
+            var ticket = _tokens.Read(token, _userId)!;
+            var args = System.Text.Json.Nodes.JsonNode.Parse(ticket.Arguments.GetRawText())!.AsObject();
+            args.Remove("window");
+            token = _tokens.Issue(ticket with { Arguments = JsonSerializer.SerializeToElement(args) });
+        }
         _dates.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 5, 1));
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);
-        var refreshed = await refresh.Handle(new(_userId, read.Read.RefreshToken,
+        var refreshed = await refresh.Handle(new(_userId, token,
             new(SupportsParts: true, PartKinds: ["habitMonth"]), HabitMonthOnly: true), default);
         refreshed.IsSuccess.Should().BeTrue();
         refreshed.Value.Read.QueryId.Should().Be(read.Read.QueryId);
@@ -500,7 +510,7 @@ public sealed class ReadBlockScopeTests
             .Returns(call => handler.Handle(call.Arg<GetHabitMonthQuery>(), call.Arg<CancellationToken>()));
         var tool = new GetHabitMonthTool(mediator);
         var executor = Executor(tool);
-        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{}"),
+        var initial = await executor.ExecuteAsync(new(_userId, tool.Name, Json("{\"window\":\"month\"}"),
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
         mediator.ClearReceivedCalls();
         var refresh = new RefreshReadBlockQueryHandler(_tokens, executor, _blocks, _flags);

@@ -1406,7 +1406,7 @@ streamed responses use the same diagnostic path. Model, effort and cap are uncha
 The stream retains `response.output_item.done` items by output index and merges
 them with terminal output without duplication. The SDK parses these events
 independently; it does not reconstruct terminal output from earlier events.
-An incomplete `max_output_tokens` round with no assistant text or function calls
+An incomplete `max_output_tokens` round with zero or missing output usage and no assistant text or function calls
 is retried once with the identical input, tools, model, effort and cap. Each
 dispatch uses its own budget reservation and usage record. Warning event 15
 records only `ResponseId`, `InputTokens` and `IncompleteReason`. A second empty
@@ -1557,7 +1557,9 @@ habit data and omits the log legend. Current-day summaries use `get_daily_summar
 `get_habit_month` requires `window: month` or `window: date_range`. Relative month
 selection accepts only `this_month` and `last_month`; an explicit range requires
 both dates and more than one day. The server validates the selected tool rather
-than rerouting a day call. An explicit
+than rerouting a day call. Signed habit-calendar refresh tickets issued without
+`window` retain their exact stored dates and receive the month selector only on
+the refresh path. Model calls never receive this compatibility default. An explicit
 habit ID supplied by the person goes directly to the matching write tool, without
 a selection lookup or `ask`. `assign_tags` validates a nonempty owned target before
 approval and returns a repairable tool failure when the target is missing.
@@ -1575,6 +1577,15 @@ operations retain their existing authorization and verification boundaries.
 "offerKeys": ["<semantic-key>"] }` and returns 204. Each request supports one to
 one hundred keys, each at most two hundred characters. Optional
 `clientContext.dismissedOfferKeys` records the same event on the next chat turn.
+The main model turn receives bounded `previously_issued_offers` keys and labels.
+For offer-enabled clients, tool schemas and the tool-free final JSON support
+`orbit_dismissed_offer_keys` for dismissals interpreted by that main turn. The
+server accepts only keys issued to the same account and conversation, persists
+them before selecting the next action, and strips this metadata from command
+arguments. A dismissal alone needs neither an account query nor a selector call.
+The selector can still report dismissals on interpretation turns. Neither path
+matches the person's message against keywords or phrases.
+
 Dismissals are stored by account, conversation and semantic offer key in
 `ConversationOffers`. They survive history truncation and cannot be undone by
 reissuing an offer. Definitions are encrypted with the existing field-encryption

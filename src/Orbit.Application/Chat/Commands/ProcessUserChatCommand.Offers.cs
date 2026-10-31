@@ -13,6 +13,17 @@ public partial class ProcessUserChatCommandHandler
 {
     private static readonly JsonSerializerOptions OfferSelectionJsonOptions = new(JsonSerializerDefaults.Web);
 
+    private async Task RecordModelOfferDismissalsAsync(AiResponse response, ProcessUserChatCommand request, CancellationToken ct)
+    {
+        if (!ProactiveProposal.Enabled(request.ClientContext) || offerStore is null || response.IsTruncated) return;
+        var keys = ProactiveOfferDismissal.Read(response);
+        if (keys.Count == 0) return;
+        var conversation = request.ClientContext!.ConversationId!.Value;
+        var issued = await offerStore.IssuedAsync(request.UserId, conversation, ct);
+        var owned = keys.Where(key => issued.Any(offer => offer.Action.OfferKey == key)).ToArray();
+        if (owned.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, owned, ct);
+    }
+
     private async Task<ProcessUserChatCommand> LoadOfferDismissalsAsync(ProcessUserChatCommand request, CancellationToken ct)
     {
         if (!ProactiveProposal.Enabled(request.ClientContext) || offerStore is null) return request;
@@ -104,9 +115,9 @@ public partial class ProcessUserChatCommandHandler
         var reads = results.OperationResults.Where(operation => operation.ReadBlock is not null)
             .Select(operation => operation.ReadBlock!).Where(read => blocks.Any(block =>
                 ReadBlockTelemetry.Describe(block.Block).Read?.QueryId == read.Read.QueryId)).ToArray();
+        if (reads.Length == 0) return (cards, false);
         var conversation = request.ClientContext!.ConversationId!.Value;
         var issued = await offerStore!.IssuedAsync(request.UserId, conversation, ct);
-        if (reads.Length == 0 && issued.Count == 0) return (cards, false);
         var facts = await OfferFactsAsync(request.UserId, reads, context, ct);
         var dismissed = await offerStore.DismissedAsync(request.UserId, conversation, ct);
         var candidates = ProactiveOfferPlanner.Build(reads, facts, context.Language)

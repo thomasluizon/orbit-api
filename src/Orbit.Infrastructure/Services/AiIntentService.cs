@@ -453,7 +453,7 @@ public sealed partial class AiIntentService(
         var text = AiCompletionClient.GetAssistantOutputText(response);
         return new CompletedRound(text, toolCalls,
             GetReportedTokenCount(response.Usage), GetRequestBudgetTokenCount(response.Usage), truncated,
-            truncated && toolCalls.Count == 0 && string.IsNullOrWhiteSpace(text), response.Id,
+            truncated && response.Usage?.OutputTokenCount is null or 0 && toolCalls.Count == 0 && string.IsNullOrWhiteSpace(text), response.Id,
             response.Usage?.InputTokenCount, response.IncompleteStatusDetails?.Reason?.ToString() ?? "none");
     }
 

@@ -164,6 +164,7 @@ public static class ProactiveProposal
     {
         if (node is JsonObject obj)
         {
+            obj.Remove(ProactiveOfferDismissal.Argument);
             obj.Remove(Metadata);
             if (suggestions) obj.Remove(Argument);
             foreach (var property in obj.ToArray()) Strip(property.Value, suggestions);

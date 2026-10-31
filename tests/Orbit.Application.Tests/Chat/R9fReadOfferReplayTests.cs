@@ -75,7 +75,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         _mediator.Send(Arg.Any<GetHabitMonthQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new HabitMonthCard(Today, Today, Today, 1, new([], []))));
-        SetupAiResponse(new AiResponse { ToolCalls = [R9fCall("empty-en-r2", tool.Name)], ConversationContext = TestConversationContext });
+        var captured = R9fCall("empty-en-r2", tool.Name);
+        SetupAiResponse(new AiResponse { ToolCalls = [captured with { Args = WithCalendarWindow(tool.Name, captured.Args) }], ConversationContext = TestConversationContext });
         var result = await handler.Handle(new(UserId, "Read the requested window.", ClientContext: OfferClient(locale)), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.AiMessage.Should().Contain(locale == "en" ? "No habits logged in this period." : "Nenhum hábito registrado neste período.");

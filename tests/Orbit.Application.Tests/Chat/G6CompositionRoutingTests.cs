@@ -347,8 +347,16 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             ToolCalls = capture.RootElement.GetProperty("toolCalls").EnumerateArray().Select((call, index) =>
                 new AiToolCall(call.GetProperty("name").GetString()!, "capture_" + index,
-                    call.GetProperty("arguments").Clone())).ToArray(),
+                    WithCalendarWindow(call.GetProperty("name").GetString()!, call.GetProperty("arguments")))).ToArray(),
             ConversationContext = TestConversationContext
         };
+    }
+
+    private static JsonElement WithCalendarWindow(string tool, JsonElement arguments)
+    {
+        if (tool != "get_habit_month") return arguments.Clone();
+        var node = System.Text.Json.Nodes.JsonNode.Parse(arguments.GetRawText())!.AsObject();
+        node["window"] = "month";
+        return JsonSerializer.SerializeToElement(node);
     }
 }

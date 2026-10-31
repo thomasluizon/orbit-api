@@ -49,7 +49,7 @@ public partial class AiIntentServiceStreamingTests
         firstResponse.OutputItems.Add(new ReasoningResponseItem("private reasoning summary") { EncryptedContent = "private encrypted state" });
         firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_1", toolName, BinaryData.FromString("{}")));
         firstResponse.OutputItems.Add(ResponseItem.CreateFunctionCallItem("call_2", "private tool name", BinaryData.FromString("{}")));
-        var emptyResponse = ResponsesTestData.Response();
+        var emptyResponse = ResponsesTestData.Response(outputTokens: kind == "truncated" ? 0 : 2);
         switch (kind)
         {
             case "empty_text":
