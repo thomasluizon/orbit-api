@@ -10,7 +10,7 @@ namespace Orbit.Infrastructure.AI;
 public sealed class BudgetAwareAiUsageRecorder(AiUsageRecorder inner, IHttpContextAccessor http, IOptions<AiSettings> settings) : IAiUsageRecorder
 {
     public Task RecordAsync(string purpose, string model, long cachedTokens, long promptTokens, long completionTokens,
-        long totalTokens, CancellationToken cancellationToken = default, Guid? userId = null, AiCallTelemetry? telemetry = null, long cacheWriteTokens = 0)
+        long totalTokens, CancellationToken cancellationToken = default, Guid? userId = null, AiCallTelemetry? telemetry = null, long cacheWriteTokens = 0, long reasoningTokens = 0)
     {
         var context = AiCallContext.Current;
         if (context is not null && telemetry is not { HasUsage: false })
@@ -22,6 +22,6 @@ public sealed class BudgetAwareAiUsageRecorder(AiUsageRecorder inner, IHttpConte
         var effectiveUser = userId ?? context?.UserId;
         if (effectiveUser is null && Guid.TryParse(http.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var authenticatedUser))
             effectiveUser = authenticatedUser;
-        return inner.RecordAsync(purpose, model, cachedTokens, promptTokens, completionTokens, totalTokens, cancellationToken, effectiveUser, telemetry, cacheWriteTokens);
+        return inner.RecordAsync(purpose, model, cachedTokens, promptTokens, completionTokens, totalTokens, cancellationToken, effectiveUser, telemetry, cacheWriteTokens, reasoningTokens);
     }
 }

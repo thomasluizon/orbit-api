@@ -334,7 +334,8 @@ public sealed partial class AiCompletionClient
                     new AiCallTelemetry(traceId, stopwatch.Elapsed.TotalSeconds,
                         failed,
                         [], HasUsage: usage is not null),
-                    cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0);
+                    cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0,
+                    reasoningTokens: usage?.OutputTokenDetails?.ReasoningTokenCount ?? 0);
             }
             catch (Exception ex) when (failed || ex is not OperationCanceledException)
             {

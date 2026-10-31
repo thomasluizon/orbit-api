@@ -239,6 +239,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<long>("ReasoningTokens")
+                        .HasColumnType("bigint");
+
                     b.Property<long>("TotalTokens")
                         .HasColumnType("bigint");
 

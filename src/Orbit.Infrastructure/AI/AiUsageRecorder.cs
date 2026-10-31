@@ -30,7 +30,8 @@ public sealed partial class AiUsageRecorder(
         CancellationToken cancellationToken = default,
         Guid? userId = null,
         AiCallTelemetry? telemetry = null,
-        long cacheWriteTokens = 0)
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         var costUsd = ComputeCostUsd(_pricing.GetValueOrDefault(model), cachedTokens, promptTokens, completionTokens, cacheWriteTokens);
 #pragma warning disable ORBIT0004 // AiUsageDaily.Date partitions model cost counters by UTC accounting day; it is not the user quota or schedule date. https://github.com/thomasluizon/orbit-tickets/issues/230
@@ -45,14 +46,15 @@ public sealed partial class AiUsageRecorder(
             var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
             await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "AiUsageDaily"
-                    ("Id", "Date", "Model", "Purpose", "UserId", "Calls", "CachedTokens", "PromptTokens", "CompletionTokens", "TotalTokens", "CostUsd")
-                VALUES ({Guid.NewGuid()}, {date}, {model}, {purpose}, {userId}, 1, {cachedTokens}, {promptTokens}, {completionTokens}, {totalTokens}, {costUsd})
+                    ("Id", "Date", "Model", "Purpose", "UserId", "Calls", "CachedTokens", "PromptTokens", "CompletionTokens", "TotalTokens", "ReasoningTokens", "CostUsd")
+                VALUES ({Guid.NewGuid()}, {date}, {model}, {purpose}, {userId}, 1, {cachedTokens}, {promptTokens}, {completionTokens}, {totalTokens}, {reasoningTokens}, {costUsd})
                 ON CONFLICT ("Date", "Model", "Purpose", "UserId") DO UPDATE SET
                     "Calls" = "AiUsageDaily"."Calls" + 1,
                     "CachedTokens" = "AiUsageDaily"."CachedTokens" + EXCLUDED."CachedTokens",
                     "PromptTokens" = "AiUsageDaily"."PromptTokens" + EXCLUDED."PromptTokens",
                     "CompletionTokens" = "AiUsageDaily"."CompletionTokens" + EXCLUDED."CompletionTokens",
                     "TotalTokens" = "AiUsageDaily"."TotalTokens" + EXCLUDED."TotalTokens",
+                    "ReasoningTokens" = "AiUsageDaily"."ReasoningTokens" + EXCLUDED."ReasoningTokens",
                     "CostUsd" = "AiUsageDaily"."CostUsd" + EXCLUDED."CostUsd"
                 """, cancellationToken);
         }
@@ -94,7 +96,8 @@ public sealed partial class AiUsageRecorder(
     /// Returns 0 when the model has no configured price (the daily summary flags such models as unpriced).
     /// </summary>
     internal static decimal ComputeCostUsd(
-        AiModelPrice? price, long cachedTokens, long promptTokens, long completionTokens, long cacheWriteTokens = 0)
+        AiModelPrice? price, long cachedTokens, long promptTokens, long completionTokens, long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         if (price is null)
             return 0m;

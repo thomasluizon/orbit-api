@@ -642,7 +642,8 @@ public sealed partial class AiIntentService(
                 cancellationToken,
                 userId,
                 telemetry,
-                cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0);
+                cacheWriteTokens: usage?.InputTokenDetails?.CacheWriteTokenCount ?? 0,
+                    reasoningTokens: usage?.OutputTokenDetails?.ReasoningTokenCount ?? 0);
         }
         catch (Exception ex) when (telemetry.IsError || ex is not OperationCanceledException)
         {

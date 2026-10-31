@@ -30,19 +30,23 @@ public class AiUsageRecorderTests
             Options.Create(new AiSettings { Pricing = new Dictionary<string, AiModelPrice> { ["priced"] = SamplePrice } }),
             NullLogger<AiUsageRecorder>.Instance);
 
-        await recorder.RecordAsync("summary", "priced", 200_000, 1_000_000, 500_000, 1_500_000);
+        await recorder.RecordAsync("summary", "priced", 200_000, 1_000_000, 500_000, 1_500_000, reasoningTokens: 123);
 
         commandCapture.Costs.Should().ContainSingle().Which.Should().Be(1.14m);
+        commandCapture.ReasoningTokens.Should().ContainSingle().Which.Should().Be(123);
         analytics.Received(1).CaptureAggregateEvent("$ai_generation", Arg.Any<IReadOnlyDictionary<string, object>>());
     }
 
     private sealed class UpsertCapture : DbCommandInterceptor
     {
         public List<decimal> Costs { get; } = [];
+        public List<long> ReasoningTokens { get; } = [];
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             Costs.Add(Convert.ToDecimal(command.Parameters.Cast<DbParameter>().Last().Value, System.Globalization.CultureInfo.InvariantCulture));
+            command.CommandText.Should().Contain("\"ReasoningTokens\" = \"AiUsageDaily\".\"ReasoningTokens\" + EXCLUDED.\"ReasoningTokens\"");
+            ReasoningTokens.Add(Convert.ToInt64(command.Parameters.Cast<DbParameter>().Reverse().Skip(1).First().Value));
             return ValueTask.FromResult(InterceptionResult<int>.SuppressWithResult(1));
         }
     }
