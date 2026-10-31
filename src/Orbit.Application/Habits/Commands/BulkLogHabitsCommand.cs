@@ -105,6 +105,21 @@ public partial class BulkLogHabitsCommandHandler(
                 .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
                 .Select(r => r.HabitId)
                 .ToHashSet();
+            var derivedParentIds = new HashSet<Guid>();
+            foreach (var result in results.Where(result => result.Status == BulkItemStatus.Success && result.LogId is not null))
+            {
+                var targetDate = request.Items[result.Index].Date ?? today;
+                var parentLog = await BadHabitParentSlipService.LogAsync(
+                    habitMap[result.HabitId], targetDate, today, weekStartDay, habitRepository, ct);
+                if (parentLog.IsFailure)
+                    throw new InvalidOperationException(parentLog.Error);
+                if (parentLog.Value is { } derivedLog)
+                {
+                    await habitLogRepository.AddAsync(derivedLog, ct);
+                    derivedParentIds.Add(derivedLog.HabitId);
+                }
+            }
+
             var goalIds = habitMap.Values
                 .Where(h => changedHabitIds.Contains(h.Id))
                 .SelectMany(h => h.Goals)
@@ -112,7 +127,7 @@ public partial class BulkLogHabitsCommandHandler(
                 .ToHashSet();
             await goalCompletionService.SyncDerivedGoalsAsync(request.UserId, goalIds, today, cancellationToken: ct);
 
-            var loggedHabitIds = changedHabitIds.ToList();
+            var loggedHabitIds = changedHabitIds.Union(derivedParentIds).ToList();
             if (loggedHabitIds.Count > 0)
             {
                 try
@@ -153,7 +168,7 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
-        if (habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && habit.Logs.Any(l => l.Date == targetDate))
+        if (habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && habit.Logs.Any(l => l.Date == targetDate && !l.IsDeleted && (!habit.IsBadHabit || l.Value > 0)))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
         if (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible

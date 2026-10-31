@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Chat.Validators;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -68,6 +69,7 @@ public sealed class UnlogHabitTool(
                 if (unlogged.IsFailure)
                     return unlogged.PropagateError<ToolResult>();
 
+                await BadHabitParentSlipService.RemoveIfIncompleteAsync(habit, targetDate, habitRepository, token);
                 await unitOfWork.SaveChangesAsync(token);
                 await goalCompletionService.SyncDerivedGoalsAsync(userId, habit.Goals.Select(goal => goal.Id).ToList(),
                     today, cancellationToken: token);
