@@ -1,0 +1,47 @@
+{
+  "source": "offers-dated-reminder-pt-BR-r2.json",
+  "sha256": "96b843e3eb0de8c08caa293f770c6be16acf64001aebab636347564c59fecaef",
+  "toolCalls": [
+    {
+      "name": "create_habit",
+      "arguments": {
+        "title": "Enviar o formulário",
+        "description": null,
+        "emoji": "📝",
+        "frequency_unit": "OneTime",
+        "frequency_quantity": null,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": "2026-11-02",
+        "end_date": null,
+        "due_time": "14:00",
+        "due_end_time": null,
+        "is_bad_habit": false,
+        "is_general": false,
+        "is_flexible": false,
+        "checklist_items": null,
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": null,
+        "reminder_times": null,
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "repeat_reminder": null,
+        "slip_alert_enabled": null,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": null,
+        "suggested_fields": [
+          "description",
+          "reminder_enabled",
+          "relative_reminders",
+          "emoji"
+        ],
+        "orbit_write_complete": true
+      }
+    }
+  ]
+}

@@ -12,7 +12,7 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
 
     public string Description =>
         "Read a completion summary with totals and an optional narrative recap for a date range, defaulting to today. "
-        + "Use for completion totals, a recap or today's next pending step. "
+        + "Use for completion totals, a recap or today's next pending step. For a current-day summary, use this tool with relative_period: today. "
         + "For what to do next today, pass relative_period: today and generate_narrative: true. "
         + "The narrative uses the complete ordered pending schedule and the profile language. Use query_habits for habit listings and schedules; "
         + "a request for habits and goals needs query_habits and query_goals. "

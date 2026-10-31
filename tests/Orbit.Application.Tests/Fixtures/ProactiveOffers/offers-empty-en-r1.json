@@ -1,0 +1,18 @@
+{
+  "source": "offers-empty-en-r1.json",
+  "sha256": "bf6ce6a553aa4f1caade3dd2a782a9460d3d046592c8fd81216f7df85b65c3e3",
+  "toolCalls": [
+    {
+      "name": "get_daily_summary",
+      "arguments": {
+        "relative_period": "today",
+        "period_count": null,
+        "generate_narrative": true,
+        "date_from": null,
+        "date_to": null,
+        "language": "en",
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

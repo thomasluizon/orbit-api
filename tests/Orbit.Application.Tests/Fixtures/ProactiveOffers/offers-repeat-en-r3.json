@@ -1,0 +1,50 @@
+{
+  "source": "offers-repeat-en-r3.json",
+  "sha256": "e9e492164553bfd3e5a12d80178aab5b6bd2dcffc1aff669559cbb56d363b9ad",
+  "toolCalls": [
+    {
+      "name": "create_habit",
+      "arguments": {
+        "title": "Drink water",
+        "description": null,
+        "emoji": "💧",
+        "frequency_unit": "Day",
+        "frequency_quantity": null,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": null,
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_bad_habit": false,
+        "is_general": true,
+        "is_flexible": false,
+        "checklist_items": null,
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": true,
+        "reminder_times": null,
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "repeat_reminder": {
+          "interval_minutes": 120,
+          "active_start": null,
+          "active_end": null,
+          "start_at_utc": null
+        },
+        "slip_alert_enabled": null,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": null,
+        "suggested_fields": [
+          "repeat_reminder",
+          "emoji"
+        ],
+        "orbit_write_complete": true
+      }
+    }
+  ]
+}

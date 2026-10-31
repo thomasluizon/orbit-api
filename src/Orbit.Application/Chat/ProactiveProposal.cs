@@ -11,7 +11,7 @@ public static class ProactiveProposal
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
     private const string Properties = "properties";
-    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in the ordinary operation fields and list their names in suggested_fields. Keep requested field names out of that list. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
+    public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in the ordinary operation fields and list their names in suggested_fields. List a name only after setting its non-null, non-empty value; never list unused options or null placeholders. Keep requested field names out of that list. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. To find a fitting parent, list the existing routines as well as checking for duplicates of the new item. Put an unrequested parent on the item and list parent_habit_id in its suggested_fields; leave the bulk container parent unset. Read active goals before proposing a useful owned goal link. For a dated task, consider a concrete reminder configuration, not just an emoji. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
 
     public static bool Enabled(AgentClientContext? client) => client is
     {
@@ -81,29 +81,49 @@ public static class ProactiveProposal
         };
     }
 
-    internal static bool NormalizeSuggestions(JsonNode? node)
+    internal static bool NormalizeSuggestions(JsonNode? node, out string? invalidField)
     {
-        if (node is JsonArray array) return array.All(NormalizeSuggestions);
+        invalidField = null;
+        if (node is JsonArray array)
+        {
+            foreach (var item in array)
+                if (!NormalizeSuggestions(item, out invalidField)) return false;
+            return true;
+        }
         if (node is not JsonObject source) return true;
-        if (!source.All(property => NormalizeSuggestions(property.Value))) return false;
+        foreach (var property in source)
+            if (!NormalizeSuggestions(property.Value, out invalidField)) return false;
         if (!source.TryGetPropertyValue(Argument, out var proposed)) return true;
         if (proposed is null)
         {
             source.Remove(Argument);
             return true;
         }
-        if (proposed is not JsonArray names) return proposed is JsonObject;
+        if (proposed is JsonObject) return true;
+        if (proposed is not JsonArray names)
+        {
+            invalidField = Argument;
+            return false;
+        }
         var suggestions = new JsonObject();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in names)
         {
             if (name is not JsonValue value || !value.TryGetValue<string>(out var field)
-                || !Eligible(field) || suggestions.ContainsKey(field)
-                || !source.Remove(field, out var configuration) || configuration is null) return false;
+                || !Eligible(field) || !seen.Add(field))
+            {
+                invalidField = name?.ToJsonString() ?? Argument;
+                return false;
+            }
+            if (!source.Remove(field, out var configuration) || !HasValue(configuration)) continue;
             suggestions[field] = configuration;
         }
         source[Argument] = suggestions;
         return true;
     }
+
+    internal static bool HasValue(JsonNode? value) => value is not null
+        && value is not JsonArray { Count: 0 };
 
     public static bool Contains(JsonElement args) => ContainsNode(JsonNode.Parse(args.GetRawText()));
     private static bool ContainsNode(JsonNode? node) => node switch

@@ -1,0 +1,19 @@
+{
+  "source": "offers-goal-gap-en-r2.json",
+  "sha256": "50ff412c1c8a27f832f0cb8e3a521bd5b4eb54e43d8f4afefc59b63273136622",
+  "toolCalls": [
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": null,
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

@@ -100,7 +100,7 @@ internal sealed class ReadFallbackText(string? language, string? timeZone, DateO
     }
 
     private string Month(HabitMonthCard card) => Lines(new[]
-        { Range(card.DateFrom, card.DateTo), Text("calendarLogs") }
+        { Range(card.DateFrom, card.DateTo), Text(card.Calendar.Habits.Count == 0 ? "noHabitData" : "calendarLogs") }
         .Concat(card.Calendar.Habits.SelectMany(habit => MonthRows(habit.Title, habit.Id, habit.ScheduledDates, habit.Children, card))));
 
     private IEnumerable<string> MonthRows(string title, Guid id, IReadOnlyList<DateOnly> scheduled,

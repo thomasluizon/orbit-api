@@ -41,8 +41,9 @@ public partial class AgentOperationExecutor(
 
         var offerArguments = await PrepareOfferArgumentsAsync(request, operation, arguments, cancellationToken);
         if (offerArguments.IsFailure)
-            return new AgentExecuteOperationResponse(new(operation.Id, operation.Id, operation.RiskClass,
-                operation.ConfirmationRequirement, AgentOperationStatus.Denied, PolicyReason: offerArguments.Error));
+            return new RepairableArgumentResponse(new(new(operation.Id, operation.Id, operation.RiskClass,
+                operation.ConfirmationRequirement, AgentOperationStatus.Failed, PolicyReason: offerArguments.Error,
+                ErrorCode: offerArguments.ErrorCode, Access: "write")));
         arguments = offerArguments.Value;
 
         var declaredCapability = catalogService.GetCapability(operation.CapabilityId)
@@ -115,12 +116,14 @@ public partial class AgentOperationExecutor(
     {
         if (!operation.IsMutation || !ProactiveProposal.Contains(arguments)) return Result.Success(arguments);
         var offered = await changePreviewer.PreviewAsync(request.UserId, operation.Id, arguments, ct, request.ClientContext);
-        if (offered.IsFailure || offered.Value?.ExecutionArguments is not { } effective)
-            return Result.Failure<JsonElement>(offered.ErrorCode ?? "invalid_offer");
+        if (offered.IsFailure)
+            return Result.Failure<JsonElement>(offered.Error, offered.ErrorCode ?? "invalid_offer");
+        if (offered.Value?.ExecutionArguments is not { } effective)
+            return Result.Failure<JsonElement>("Cannot prepare suggested_fields for this operation; check its fields and target.", "invalid_offer");
         if (toolRegistry.GetTool(operation.Id) is IArgumentCheckTool check)
         {
             var validation = await check.CheckArgumentsAsync(effective, request.UserId, ct);
-            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode ?? validation.Error);
+            if (validation.IsFailure) return Result.Failure<JsonElement>(validation.ErrorCode is { } code ? $"{code}: {validation.Error}" : validation.Error, validation.ErrorCode ?? "invalid_arguments");
         }
         return Result.Success(effective);
     }
@@ -407,8 +410,14 @@ public partial class AgentOperationExecutor(
         {
             var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
             if (validation.IsFailure)
+            {
+                if (execution.Operation.Id == "assign_tags")
+                    return new RepairableArgumentResponse(await BuildToolOutcomeResponseAsync(execution,
+                        new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, execution.Capability),
+                        ToolResult.FromFailure(validation), cancellationToken));
                 return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
                     AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error));
+            }
         }
 
         IReadOnlyList<OperationExecutionContext>? changeSetMembers = null;
@@ -489,7 +498,7 @@ public partial class AgentOperationExecutor(
         return operationId switch
         {
             "bulk_reschedule_habits" => arguments.TryGetProperty("revised_items", out _),
-            "update_checklist" or "update_checklist_template" => true,
+            "update_checklist" or "update_checklist_template" or "assign_tags" => true,
             "update_profile_preferences" => action == "set_name",
             "manage_calendar_sync" => action == "set_selected_calendars",
             _ => false

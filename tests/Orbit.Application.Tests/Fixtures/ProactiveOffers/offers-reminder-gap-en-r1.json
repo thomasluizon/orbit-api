@@ -1,0 +1,26 @@
+{
+  "source": "offers-reminder-gap-en-r1.json",
+  "sha256": "d40d15d2f3b74cee4703a05ebd36b689ad554678d0ef8c3c508383847de50070",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": "today",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

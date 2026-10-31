@@ -1,0 +1,50 @@
+{
+  "source": "offers-parent-en-r1.json",
+  "sha256": "77412b8b95d5e3dc48de5fcbcf793e589e4c92f4797f1fd485e51145dd679fb0",
+  "toolCalls": [
+    {
+      "name": "bulk_create_habits",
+      "arguments": {
+        "parent_habit_id": null,
+        "habits": [
+          {
+            "title": "Take magnesium",
+            "description": null,
+            "emoji": "💊",
+            "frequency_unit": "Day",
+            "frequency_quantity": 1,
+            "interval_weeks": null,
+            "days": null,
+            "due_date": null,
+            "end_date": null,
+            "due_time": null,
+            "due_end_time": null,
+            "is_bad_habit": false,
+            "is_general": false,
+            "is_flexible": false,
+            "checklist_items": null,
+            "start_date": null,
+            "placement": null,
+            "reminder_enabled": null,
+            "reminder_times": null,
+            "scheduled_reminders": null,
+            "relative_reminders": null,
+            "repeat_reminder": null,
+            "slip_alert_enabled": null,
+            "tag_names": null,
+            "habit_id": null,
+            "tag_ids": null,
+            "goal_ids": null,
+            "parent_habit_id": null,
+            "sub_habits": null,
+            "suggested_fields": [
+              "due_time",
+              "reminder_enabled"
+            ]
+          }
+        ],
+        "orbit_write_complete": true
+      }
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
@@ -7,6 +8,9 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
+    private static bool AllowsArgumentRepair(AgentExecuteOperationResponse response, ProcessUserChatCommand request) =>
+        response is RepairableArgumentResponse && request.ConfirmationToken is null;
+
     internal sealed record CorrectionOccurrence(AiToolCall Call, ToolCallOutcome Outcome);
 
     private static bool IsOwnershipReadDenial(ToolCallOutcome outcome) =>
@@ -27,7 +31,7 @@ public partial class ProcessUserChatCommandHandler
                             instruction = "Correct only this read once using an owned ID from the appropriate account index, or omit it if successful reads already answer the request. Do not add writes or repeat successful reads."
                         }
                     };
-                else if (outcome.PreparedResponse is RejectedBeforeDispatchResponse { Operation.Status: AgentOperationStatus.Failed })
+                else if (outcome.ArgumentRepairAllowed || outcome.PreparedResponse is RejectedBeforeDispatchResponse { Operation.Status: AgentOperationStatus.Failed })
                     results[index] = results[index] with { Payload = new { correction_allowed = true } };
             }
     }
@@ -53,7 +57,7 @@ public partial class ProcessUserChatCommandHandler
             : occurrences.Count == 1 && IsFailedStartingStep(occurrences[0])
             || occurrences.Any(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
             && occurrences.Where(item => item.Outcome.OperationResult?.Status == AgentOperationStatus.Failed)
-                .All(item => item.Outcome.PreparedResponse is RejectedBeforeDispatchResponse);
+                .All(item => item.Outcome.ArgumentRepairAllowed || item.Outcome.PreparedResponse is RejectedBeforeDispatchResponse);
 
         public async Task<IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)>> BindAsync(
             IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, CancellationToken ct)
@@ -74,6 +78,8 @@ public partial class ProcessUserChatCommandHandler
         private async Task<IReadOnlyList<(AiToolCall Candidate, CorrectionOccurrence Original)>> PrepareBindingsAsync(
             IReadOnlyList<AiToolCall> candidates, AiToolRegistry registry, CancellationToken ct)
         {
+            if (_unresolved.All(item => item.Outcome.ArgumentRepairAllowed))
+                return BindArgumentRepairs(candidates);
             if (IsReadOnly)
             {
                 var reads = new List<(AiToolCall, CorrectionOccurrence)>();
@@ -115,9 +121,43 @@ public partial class ProcessUserChatCommandHandler
             return bound;
         }
 
+        private IReadOnlyList<(AiToolCall, CorrectionOccurrence)> BindArgumentRepairs(IReadOnlyList<AiToolCall> candidates)
+        {
+            var repairs = new List<(AiToolCall, CorrectionOccurrence)>();
+            foreach (var candidate in candidates)
+            {
+                var matches = _unresolved.Where(item => item.Call.Name == candidate.Name
+                    && SameArgumentTargets(item.Call.Args, candidate.Args) && repairs.All(repair => repair.Item2 != item)).ToArray();
+                if (matches.Length != 1) return [];
+                repairs.Add((candidate, matches[0]));
+            }
+            return repairs;
+        }
+
+        private static bool SameArgumentTargets(JsonElement original, JsonElement candidate)
+        {
+            if (original.ValueKind != JsonValueKind.Object || candidate.ValueKind != JsonValueKind.Object) return false;
+            foreach (var property in original.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.Null) continue;
+                if (property.Name is "habit_id" or "goal_id" or "template_id" or "parent_habit_id" or "title" or "name" or "habit_ids")
+                {
+                    if (!candidate.TryGetProperty(property.Name, out var value) || !JsonElement.DeepEquals(property.Value, value)) return false;
+                }
+                if (property.Name is "habits" or "sub_habits" or "revised_items" && property.Value.ValueKind == JsonValueKind.Array)
+                {
+                    if (!candidate.TryGetProperty(property.Name, out var items) || items.ValueKind != JsonValueKind.Array
+                        || items.GetArrayLength() != property.Value.GetArrayLength()
+                        || !property.Value.EnumerateArray().Zip(items.EnumerateArray()).All(pair => SameArgumentTargets(pair.First, pair.Second))) return false;
+                }
+            }
+            return true;
+        }
+
         public void Accept(CorrectionOccurrence original, ToolCallOutcome outcome)
         {
-            if (IsReadOnly && outcome.OperationResult?.Status == AgentOperationStatus.Succeeded
+            if (original.Outcome.ArgumentRepairAllowed && outcome.OperationResult?.Status == AgentOperationStatus.PendingConfirmation
+                || IsReadOnly && outcome.OperationResult?.Status == AgentOperationStatus.Succeeded
                 || IsFailedStartingStep(original)
                     && outcome.OperationResult is { Status: AgentOperationStatus.Succeeded, Payload: StartingStep }
                 || outcome.PreparedResponse?.Operation.Status is AgentOperationStatus.Succeeded or AgentOperationStatus.PendingConfirmation)

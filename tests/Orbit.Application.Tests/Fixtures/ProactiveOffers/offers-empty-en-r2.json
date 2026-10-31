@@ -1,0 +1,17 @@
+{
+  "source": "offers-empty-en-r2.json",
+  "sha256": "9af71e1a2d98ce1c29f0e99c124037bf1c281073ddf201fc54837170d8ccf994",
+  "toolCalls": [
+    {
+      "name": "get_habit_month",
+      "arguments": {
+        "relative_period": "today",
+        "period_count": null,
+        "date_from": null,
+        "date_to": null,
+        "language": "en",
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

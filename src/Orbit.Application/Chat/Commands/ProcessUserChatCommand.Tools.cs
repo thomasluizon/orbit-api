@@ -718,7 +718,10 @@ public partial class ProcessUserChatCommandHandler
                 executionResponse.PolicyDenial,
                 executionResponse.PendingOperation)
         }) with
-        { PreparedResponse = executionResponse as PreparedToolOperationResponse };
+        {
+            PreparedResponse = executionResponse as PreparedToolOperationResponse,
+            ArgumentRepairAllowed = AllowsArgumentRepair(executionResponse, request)
+        };
     }
 
     private static void RegisterPreviewDiscussion(AiToolCall call, AgentExecuteOperationResponse response, ToolExecutionAccumulator results)
@@ -938,5 +941,6 @@ public partial class ProcessUserChatCommandHandler
         AgentPolicyDenial? PolicyDenial,
         PendingAgentOperation? PendingOperation,
         AgentOperationStatus? TraceStatus = null,
-        PreparedToolOperationResponse? PreparedResponse = null);
+        PreparedToolOperationResponse? PreparedResponse = null,
+        bool ArgumentRepairAllowed = false);
 }

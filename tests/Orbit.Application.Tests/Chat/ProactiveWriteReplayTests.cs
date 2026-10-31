@@ -69,6 +69,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "goal")]
     [InlineData("en", "calendar")]
     [InlineData("pt-BR", "calendar")]
+    [InlineData("en", "calendar-default")]
+    [InlineData("pt-BR", "calendar-default")]
     [InlineData("en", "calendar-disabled")]
     [InlineData("pt-BR", "calendar-disabled")]
     [InlineData("en", "nested")]
@@ -80,7 +82,7 @@ public partial class ProcessUserChatCommandHandlerTests
         if (calendar) owner.GrantLifetimePro();
         SetupUserAndPayGate(owner);
         EnableComposition();
-        if (mode == "calendar") _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+        if (mode is "calendar" or "calendar-default") _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(["astra_block_first", "astra_conversation_recording", "calendar_integration"]);
         _userDateService.GetUserTimeZoneAsync(UserId, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
         _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -142,13 +144,7 @@ public partial class ProcessUserChatCommandHandlerTests
             preview.NextAction!.Surface.Should().Be("calendar-sync");
             preview.NextAction.Label.Should().Be(locale == "en" ? "Connect Google Calendar" : "Conectar Google Agenda");
         }
-        if (mode == "goal")
-        {
-            preview.NextAction!.Kind.Should().Be("continueChat");
-            preview.NextAction.Prompt.Should().Be(locale == "en" ? "Suggest a goal for what is in this preview."
-                : "Sugira uma meta para o que está nesta prévia.");
-        }
-        if (mode is "repeat" or "calendar-disabled" or "nested") preview.NextAction.Should().BeNull();
+        if (mode is "repeat" or "goal" or "calendar-disabled" or "calendar-default" or "nested") preview.NextAction.Should().BeNull();
         result.Value.Parts.Should().BeEmpty();
         result.Value.AiMessage.Should().BeNullOrEmpty();
         await toolMediatorWasNotDispatched();
@@ -173,7 +169,7 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             title = locale == "en" ? "Appointment" : "Consulta",
             frequency_unit = "OneTime",
-            due_date = Today.AddDays(1).ToString("yyyy-MM-dd"),
+            due_date = mode == "calendar-default" ? null : Today.AddDays(1).ToString("yyyy-MM-dd"),
             due_time = "08:00",
             emoji = "📅",
             suggested_fields = new[] { "emoji" },

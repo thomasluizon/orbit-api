@@ -1,0 +1,49 @@
+{
+  "source": "offers-multi-block-pt-BR-r3.json",
+  "sha256": "a5f1cd6a1959947c3b02f7a681b40876ec1094b6dbd59894ca7deda662df6077",
+  "toolCalls": [
+    {
+      "name": "assign_tags",
+      "arguments": {
+        "habit_id": null,
+        "habit_ids": null,
+        "tag_names": null,
+        "tag_ids": null,
+        "orbit_write_complete": false
+      }
+    },
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": null,
+        "include_overdue": null,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      }
+    },
+    {
+      "name": "query_goals",
+      "arguments": {
+        "search": null,
+        "status": null,
+        "include_completed": false,
+        "include_descriptions": true,
+        "include_linked_habits": true,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

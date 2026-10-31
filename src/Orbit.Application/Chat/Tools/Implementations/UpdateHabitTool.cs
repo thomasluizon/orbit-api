@@ -21,7 +21,7 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update habit fields. Null keeps values; clear_fields removes them (frequency_unit makes a one-time task). Use is_flexible for windows and bulk tools for multiple habits." + "\n" + HabitModelInstructions.All;
+        "Update habit fields. Use an explicit habit ID supplied by the person directly; no selection lookup or ask is needed. Null keeps values; clear_fields removes them (frequency_unit makes a one-time task). Use is_flexible for windows and bulk tools for multiple habits." + "\n" + HabitModelInstructions.All;
 
     public object GetParameterSchema() => new
     {

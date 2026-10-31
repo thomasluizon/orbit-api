@@ -43,13 +43,13 @@ public partial class ProcessUserChatCommandHandler
             new(key, family, evidence, action, preview.Id, preview.PreviewFingerprint!, context.UserToday)
             { PendingOperationId = preview.Id, SourceKind = "pendingOperation" };
         var offers = new List<AstraOfferFact>();
-        var hasDate = preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "due_date" or "deadline" && field.ProposedValue is not null);
+        var hasDate = preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "due_date" or "deadline" && field.ProposedValue is not null && field.Provenance == "requested");
         if (context.HasProAccess && context.EnabledFeatureFlags.Contains(FeatureFlagKeys.CalendarIntegration)
             && context.User?.GoogleAccessToken is null && hasDate)
             offers.Add(Offer("calendar:calendar-sync", "calendar", "An editable dated draft and an available disconnected Google Calendar connection; requires dated_event interpretation.",
                 new("calendar:calendar-sync", "openSurface", pt ? "Conectar Google Agenda" : "Connect Google Calendar", Surface: "calendar-sync")));
         if (preview.CapabilityId != AgentCapabilityIds.GoalsWrite
-            && !preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "target_value" or "goal_type"))
+            && preview.Items!.SelectMany(item => item.Fields).Any(field => field.Field is "target_value" or "goal_type" && field.ProposedValue is not null))
             offers.Add(Offer("aim:account", "aim", "The editable draft and complete active-goal snapshot support a goal only for an expressed aim with no equivalent active goal.",
             new("aim:account", "continueChat", pt ? "Planejar esta meta" : "Plan this goal", Prompt: pt
                 ? "Sugira uma meta para o que está nesta prévia."

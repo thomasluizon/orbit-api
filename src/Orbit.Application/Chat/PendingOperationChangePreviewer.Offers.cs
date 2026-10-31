@@ -25,11 +25,14 @@ public sealed partial class PendingOperationChangePreviewer
             return Result.Failure<PendingOperationChangePreview?>("offers_not_supported");
         if (toolRegistry.GetTool(operationId) is not { } tool)
             return Result.Failure<PendingOperationChangePreview?>("preview_unavailable");
-        var root = JsonNode.Parse(arguments.GetRawText())!.AsObject();
-        if (!ProactiveProposal.NormalizeSuggestions(root)) return Result.Failure<PendingOperationChangePreview?>("invalid_offer");
+        var root = JsonNode.Parse(OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema()).GetRawText())!.AsObject();
+        if (!ProactiveProposal.NormalizeSuggestions(root, out var invalidField))
+            return Result.Failure<PendingOperationChangePreview?>($"Invalid suggested_fields entry {invalidField}: use a supported field name with a value.", "invalid_offer");
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
-        var prepared = await PrepareOfferNodesAsync(root, schema, new(userId, operationId, clientContext!), cancellationToken);
-        if (!prepared) return Result.Failure<PendingOperationChangePreview?>("invalid_offer");
+        var preparation = new OfferPreparation(userId, operationId, clientContext!);
+        var prepared = await PrepareOfferNodesAsync(root, schema, preparation, cancellationToken);
+        if (!prepared) return Result.Failure<PendingOperationChangePreview?>(
+            $"Invalid suggested_fields entry {preparation.InvalidField ?? ProactiveProposal.Argument}: check its value against this operation schema.", "invalid_offer");
         var bound = JsonSerializer.SerializeToElement(root);
         var result = await PreviewCoreAsync(userId, operationId, bound, clientContext, cancellationToken);
         if (result.IsFailure || result.Value is not { Items: { } items } preview) return result;
@@ -58,7 +61,10 @@ public sealed partial class PendingOperationChangePreviewer
         });
     }
 
-    private sealed record OfferPreparation(Guid UserId, string Operation, AgentClientContext Client);
+    private sealed record OfferPreparation(Guid UserId, string Operation, AgentClientContext Client)
+    {
+        public string? InvalidField { get; set; }
+    }
     private sealed record OfferNodeContext(string? TargetId = null, string Path = "",
         Dictionary<string, JsonNode?>? Inherited = null);
 
@@ -79,7 +85,7 @@ public sealed partial class PendingOperationChangePreviewer
             ? await ExistingOfferValuesAsync(new JsonObject { [HabitId] = parent.DeepClone() }, null, preparation.UserId, ct) : null;
         foreach (var habit in habits.OfType<JsonObject>())
         {
-            if (root.ContainsKey(ParentHabitId) && habit[ProactiveProposal.Argument] is JsonObject suggestions)
+            if (ProactiveProposal.HasValue(root[ParentHabitId]) && habit[ProactiveProposal.Argument] is JsonObject suggestions)
                 suggestions.Remove(ParentHabitId);
             if (!await PrepareOfferNodeAsync(habit, itemSchema, preparation, new(Inherited: inherited), ct)) return false;
         }
@@ -130,8 +136,11 @@ public sealed partial class PendingOperationChangePreviewer
     private static bool ApplyOfferSuggestions(JsonObject source, JsonElement schema, OfferPreparation preparation,
         OfferNodeContext node, Dictionary<string, JsonNode?> existing, Dictionary<string, JsonNode?>? inherited)
     {
-        if (!source.Remove(ProactiveProposal.Argument, out var proposed)) return true;
-        if (proposed is not JsonObject suggestions || source.ContainsKey(ProactiveProposal.Metadata)) return false;
+        if (!source.Remove(ProactiveProposal.Argument, out var proposed) && source.ContainsKey(ProactiveProposal.Metadata)) return true;
+        if (proposed is not null and not JsonObject || source.ContainsKey(ProactiveProposal.Metadata)) return false;
+        var suggestions = proposed as JsonObject ?? new JsonObject();
+        var requested = new JsonArray(source.Where(field => ProactiveProposal.HasValue(field.Value))
+            .Select(field => (JsonNode?)JsonValue.Create(field.Key)).ToArray());
         var schedule = OfferSchedule(source, suggestions, existing, inherited);
         var accepted = new JsonObject();
         var values = new JsonObject();
@@ -144,7 +153,11 @@ public sealed partial class PendingOperationChangePreviewer
             var key = ProactiveProposal.Key(preparation.Operation, keySource, node.Path + suggestion.Key);
             if (IgnoreOfferSuggestion(source, preparation.Client, suggestion.Key, key)) continue;
             if (!ProactiveProposal.Eligible(suggestion.Key) || !AgentArgumentSchema.Accepts(proposalSchema, suggestion.Key,
-                JsonSerializer.SerializeToElement(suggestion.Value))) return false;
+                JsonSerializer.SerializeToElement(suggestion.Value)))
+            {
+                preparation.InvalidField = suggestion.Key;
+                return false;
+            }
             var value = MergeStoredSuggestion(suggestion.Key, suggestion.Value.DeepClone(), existing.GetValueOrDefault(suggestion.Key));
             if (value is null) continue;
             accepted[suggestion.Key] = key;
@@ -153,6 +166,7 @@ public sealed partial class PendingOperationChangePreviewer
         }
         source[ProactiveProposal.Metadata] = new JsonObject
         {
+            ["requested_fields"] = requested,
             ["fields"] = accepted,
             ["values"] = values,
             ["conversation_id"] = preparation.Client.ConversationId!.Value.ToString()
@@ -161,7 +175,7 @@ public sealed partial class PendingOperationChangePreviewer
     }
 
     private static bool IgnoreOfferSuggestion(JsonObject source, AgentClientContext client, string field, string key) =>
-        source.ContainsKey(field) || IsExplicitlyCleared(source, field)
+        ProactiveProposal.HasValue(source[field]) || IsExplicitlyCleared(source, field)
         || client.DismissedOfferKeys?.Contains(key, StringComparer.Ordinal) == true;
 
     private static Dictionary<string, JsonNode?> OfferSchedule(JsonObject source, JsonObject suggestions,
@@ -240,8 +254,8 @@ public sealed partial class PendingOperationChangePreviewer
     private static readonly string[] OfferScheduleFields = [IsGeneralField, IsFlexible, FrequencyUnitField, FrequencyQuantityField, IntervalWeeks, "days"];
 
     private static bool HasFixedReminders(JsonObject source, Dictionary<string, JsonNode?> stored) =>
-        FixedReminderFields.Any(field => source.ContainsKey(field)
-            || !string.IsNullOrEmpty(stored.GetValueOrDefault(field)?.ToString()));
+        FixedReminderFields.Any(field => ProactiveProposal.HasValue(source[field])
+            || stored.GetValueOrDefault(field)?.ToString() is { Length: > 0 } value && value != "[]");
 
     private static bool ExcludedSuggestion(string field, JsonObject source, JsonObject suggestions,
         Dictionary<string, JsonNode?> stored)
@@ -329,7 +343,10 @@ public sealed partial class PendingOperationChangePreviewer
     {
         if (suggestions?[field.Field]?.ToString() is { } key)
             return field with { Provenance = "suggested", IsEditable = true, Removal = new(key, field.Field, ProactiveProposal.RemovalFields(suggestions, field.Field)) };
-        return field with { Provenance = source?.ContainsKey(field.Field) == true ? "requested" : "stored" };
+        var requested = source?[ProactiveProposal.Metadata]?["requested_fields"] as JsonArray;
+        var supplied = requested is not null ? requested.Any(name => name?.ToString() == field.Field)
+            : ProactiveProposal.HasValue(source?[field.Field]);
+        return field with { Provenance = supplied ? "requested" : "stored" };
     }
 
     private static void AddNestedOfferFields(List<PendingOperationChange> fields, JsonObject source, string prefix)

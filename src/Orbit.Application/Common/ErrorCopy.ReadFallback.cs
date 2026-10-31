@@ -92,6 +92,7 @@ public static partial class ErrorCopy
         ("chat.read.pro_days", "Pro days", "Dias de Pro"),
         ("chat.read.notSet", "Not set", "Não definido"),
         ("chat.read.to", "to", "a"),
+        ("chat.read.noHabitData", "No habit data in this period.", "Nenhum dado de hábitos neste período."),
         ("chat.read.calendarLogs", "Logs: positive = completion, zero = skipped; for bad habits, positive = slip.", "Registros: positivo = conclusão, zero = pulado; em hábitos ruins, positivo = deslize."),
     ];
 }

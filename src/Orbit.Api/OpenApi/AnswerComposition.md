@@ -1429,7 +1429,17 @@ For enabled clients, supported habit, goal and checklist-template create/edit
 schemas append optional `suggested_fields`, an array of eligible field names from
 the same operation's schema. Proposed values stay in the ordinary operation fields;
 the array identifies which values are optional offers. Requested field names stay
-outside that array. This avoids duplicating nested draft schemas inside offers.
+outside that array. List a name only after setting its value. Null optional values
+and empty arrays are absent for offer eligibility and provenance. A listed name
+without a value is dropped while every filled valid suggestion and the requested
+write remain intact. Unknown names, invalid shapes and unusable values return
+repairable tool failures naming the affected field, rather than policy denials.
+Argument failures retain their domain code, including `GENERAL_HABIT_HAS_FREQUENCY`.
+A chat turn may repair such a rejection once before approval, using the same tool
+and preserving supplied target IDs, names and nested target structure. Successful
+siblings are not replayed. The repaired arguments run through the ordinary checks
+and still require approval. Policy denials retain their policy status.
+This avoids duplicating nested draft schemas inside offers.
 The preview also accepts the earlier value-object representation for pending drafts.
 The API resolves effective values before ordinary tool validation and command
 preparation. Stored scalars remain intact; checklist, tag and goal additions retain
@@ -1457,7 +1467,9 @@ command validation apply at that path. The containing field's displayed JSON omi
 internal offer metadata. Removing a child proposal preserves its siblings and
 inherited cadence; requested parent membership takes priority over optional parent
 suggestions. Bulk schemas expose suggestions on each item or `updates`, not on the
-bulk container. Refresh merges proposed collection additions against current stored
+bulk container. A null shared `parent_habit_id` does not override an item's optional
+parent. Supplied-field provenance is retained separately from execution defaults,
+so a default create date is not marked requested. Refresh merges proposed collection additions against current stored
 contents and does not regenerate removed nested proposals.
 
 After composing supported successful read blocks, an enabled turn may make one
@@ -1467,6 +1479,11 @@ the request, typed eligible candidates, complete active-goal facts and previousl
 issued offer keys. Output selects one candidate or none and may report typed
 natural-language dismissals. The selector cannot call a tool or write prose.
 Unknown IDs, malformed output, failures and timeouts retain the readable answer.
+When the selector picks `inspect`, an eligible concrete family action outranks it.
+Repeated reminder gaps take priority, followed by restart and skip, then the other
+eligible family actions. Aim and calendar candidates enter this choice only with
+the corresponding typed interpretation; a generic inspect choice alone cannot
+establish either intent. A selection of none remains none, including exclusions.
 There is no live-model measurement in this API round.
 
 A validated action appears only in the selected block's optional
@@ -1482,17 +1499,29 @@ slot can offer Calendar connection for a typed dated-event draft or planning an
 expressed aim as a goal. The selector sees the typed preview; the action is bound
 to its pending ID and fingerprint. Selecting a chat action revalidates that pending
 preview instead of refreshing a read query. A goal draft cannot offer another goal.
+An aim offer additionally requires a nonempty goal-shaped `target_value` or
+`goal_type` field on a non-goal preview. Ordinary habit previews do not provide that
+evidence. Calendar eligibility requires a supplied date or deadline; the server's
+default create date is not evidence of a dated event.
 
 Occurrence actions use the account's local date and real schedule/log evidence.
 A reminder gap requires at least three unresolved scheduled occurrences in the
 fourteen local days before today and reminders disabled. Positive due/unlogged
 occurrences can offer logging; actual missed/overdue occurrences can offer restart
-or skip. Avoid habits, resolved occurrences and historical scopes cannot offer a
+or skip, even when a recurring daily habit is due again today and its row is not
+marked overdue. Completion and skip logs resolve the original occurrence date.
+Avoid habits, resolved occurrences and historical scopes cannot offer a
 log for today. Goal actions require typed behind/at-risk evidence, independently
 of displayed projection fields. Empty-day offers require a complete current-day
 result. Goal and calendar gaps require the model's typed aim or dated-event
 interpretation as well as eligible account state. No message pattern selects tools,
 rewrites calls, initiates calls or replaces the answer.
+An empty habit-calendar text fallback states that the requested period has no
+habit data and omits the log legend. Current-day summaries use `get_daily_summary`;
+`get_habit_month` is reserved for a requested habit-calendar window. An explicit
+habit ID supplied by the person goes directly to the matching write tool, without
+a selection lookup or `ask`. `assign_tags` validates a nonempty owned target before
+approval and returns a repairable tool failure when the target is missing.
 Calendar and daily-summary offers require their resolved account feature flags and
 plan access; a disabled integration or summary feature produces no offer.
 
