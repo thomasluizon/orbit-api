@@ -57,7 +57,8 @@ public sealed class DailySummaryNarrativeCacheTests : IDisposable
         var goals = Substitute.For<IGoalCompletionService>();
         goals.SyncDerivedGoalsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
             Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<GoalCompletionUpdate>());
-        logHandler = new(new(repo, Substitute.For<IGenericRepository<HabitLog>>(), users, Substitute.For<IGenericRepository<SentReminder>>()),
+        logHandler = new(new(repo, Substitute.For<IGenericRepository<HabitLog>>(), users, Substitute.For<IGenericRepository<SentReminder>>(),
+            Substitute.For<IGenericRepository<Notification>>()),
             new(dates, streaks, Substitute.For<IGamificationService>(), goals, mediator, gate), unit, cache,
             NullLogger<LogHabitCommandHandler>.Instance);
         handler = new(repo, users, Substitute.For<IGenericRepository<HabitLog>>(), logs, gate, summaries, cache, dates, mediator);
