@@ -50,6 +50,7 @@ public partial class AiSummaryServiceTests
         prompt.Should().Contain("Choose the first actionable pending item in day order");
         prompt.Should().Contain("Never choose a later pending sibling while an earlier sibling is pending");
         prompt.Should().Contain("explain the priority in one short clause");
+        prompt.Should().NotContain("Breakfast", "a next-step generation must not receive completed rows to recap");
         replay.Summary.Should().NotContain("Afternoon snack");
     }
 
