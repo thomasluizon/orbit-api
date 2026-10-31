@@ -12,12 +12,57 @@ using Orbit.Domain.Models;
 using OpenAI.Responses;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Chat;
+using Orbit.Application.Chat.Models;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
 public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
 {
+    [Fact]
+    public void AllChatDeclarations_StayWithinProviderNestingLimit()
+    {
+        var violations = new List<string>();
+        foreach (var tool in new AiToolRegistry(AllTools()).GetAll().OrderBy(tool => tool.Name))
+            foreach (var offers in new[] { false, true })
+                foreach (var (variant, source) in DeclarationVariants(tool))
+                {
+                    var schema = offers && ProactiveProposal.Supports(tool.Name) ? ProactiveProposal.Schema(source) : source;
+                    if (tool.Name == "revise_pending_changes") schema = ProactiveProposal.RevisionSchema(schema, offers);
+                    schema = tool.IsReadOnly ? TerminalReadDirective.WithCompletionArgument(schema)
+                        : TerminalWriteDirective.WithCompletionArgument(schema);
+                    var method = typeof(AiIntentService).GetMethod("ConvertToSdkTool", BindingFlags.NonPublic | BindingFlags.Static)!;
+                    var sdkTool = (ResponseTool)method.Invoke(null, [new { name = tool.Name, parameters = schema }])!;
+                    using var wire = JsonDocument.Parse(ModelReaderWriter.Write(sdkTool).ToString());
+                    if (tool.Name == "create_tag" && offers) output.WriteLine("SDK wire evidence: " + wire.RootElement.GetRawText());
+                    var parameters = wire.RootElement.GetProperty("parameters");
+                    AssertStrict(parameters);
+                    var depth = ObjectDepth(parameters);
+                    output.WriteLine($"{tool.Name} | {variant} | {(offers ? "offers" : "plain")} | {depth}");
+                    if (depth > 10) violations.Add($"{tool.Name}/{variant}/{(offers ? "offers" : "plain")}: {depth}");
+                }
+        violations.Should().BeEmpty("the provider permits at most 10 object levels; the production bulk_create_habits rejection reports 12");
+    }
+
+    private static IEnumerable<(string Variant, object Schema)> DeclarationVariants(IAiTool tool)
+    {
+        yield return ("initial", tool.GetParameterSchema());
+        if (tool is not AskTool ask) yield break;
+        yield return ("post-read", ask.GetParameterSchema(true));
+        yield return ("draft-revision", ask.GetParameterSchema(false, [new HabitSetupDraft("draft", "Activity", "frequency_unit", Guid.NewGuid())]));
+    }
+
+    private static int ObjectDepth(JsonElement schema)
+    {
+        var own = schema.TryGetProperty("properties", out var properties) ? 1 : 0;
+        var children = new List<int> { 0 };
+        if (own != 0) children.AddRange(properties.EnumerateObject().Select(property => ObjectDepth(property.Value)));
+        if (schema.TryGetProperty("items", out var items)) children.Add(ObjectDepth(items));
+        if (schema.TryGetProperty("anyOf", out var alternatives)) children.AddRange(alternatives.EnumerateArray().Select(ObjectDepth));
+        return own + children.Max();
+    }
+
     [Fact]
     public void RegistryTools_SerializeWithStrictSchemas()
     {

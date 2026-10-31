@@ -54,6 +54,8 @@ public partial class ProcessUserChatCommandHandlerTests
                     : schema.GetProperty("properties").GetProperty("updates");
             }
             schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
+            if (supports)
+                schema.GetProperty("properties").GetProperty("suggested_fields").GetProperty("type").GetString().Should().Be("array");
             if (schema.GetProperty("properties").TryGetProperty("sub_habits", out var children))
                 children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
             declaration.GetProperty("description").GetString()!.Contains(ProactiveProposal.Instruction, StringComparison.Ordinal).Should().Be(supports, name);
@@ -69,6 +71,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "calendar")]
     [InlineData("en", "calendar-disabled")]
     [InlineData("pt-BR", "calendar-disabled")]
+    [InlineData("en", "nested")]
+    [InlineData("pt-BR", "nested")]
     public async Task ProactiveWriteReplay_RealExecutorStagesSuggestedFieldsInTheOnlyApprovalPreview(string locale, string mode)
     {
         var calendar = mode.StartsWith("calendar", StringComparison.Ordinal);
@@ -90,7 +94,9 @@ public partial class ProcessUserChatCommandHandlerTests
         {
             var context = call.Arg<AgentPolicyEvaluationContext>();
             using var args = JsonDocument.Parse(context.OperationArgumentsJson!);
-            if (!calendar)
+            if (mode == "nested")
+                args.RootElement.GetProperty("sub_habits")[0].GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(120);
+            else if (!calendar)
                 args.RootElement.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(120);
             var capability = catalog.GetCapability(context.CapabilityId)!;
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
@@ -111,21 +117,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 outcome.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation, JsonSerializer.Serialize(outcome));
                 return outcome;
             });
-        var draft = calendar ? JsonSerializer.Serialize(new
-        {
-            title = locale == "en" ? "Appointment" : "Consulta",
-            frequency_unit = "OneTime",
-            due_date = Today.AddDays(1).ToString("yyyy-MM-dd"),
-            due_time = "08:00",
-            suggested_fields = new { emoji = "📅" },
-            orbit_write_complete = true
-        }) : JsonSerializer.Serialize(new
-        {
-            title = locale == "en" ? "Water" : "Água",
-            is_general = true,
-            suggested_fields = new { repeat_reminder = new { interval_minutes = 120, active_start = "08:00", active_end = "20:00" } },
-            orbit_write_complete = true
-        });
+        var draft = ProactiveWriteDraft(locale, mode);
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => Result.Success(call.Arg<AiToolRequest>().SystemPrompt == ProactiveOfferPlanner.SelectionInstruction
                 ? new AiResponse
@@ -141,7 +133,9 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(locale)), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
-        preview.Items!.Single().Fields.Should().Contain(field => field.Field == (calendar ? "emoji" : "repeat_reminder")
+        preview.Items!.Single().Fields.Should().Contain(field => field.Field == (mode == "nested" ? "sub_habits/0/repeat_reminder" : calendar ? "emoji" : "repeat_reminder")
+            && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
+        if (mode == "nested") preview.Items!.Single().Fields.Should().Contain(field => field.Field == "sub_habits"
             && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
         if (mode == "calendar")
         {
@@ -154,7 +148,7 @@ public partial class ProcessUserChatCommandHandlerTests
             preview.NextAction.Prompt.Should().Be(locale == "en" ? "Suggest a goal for what is in this preview."
                 : "Sugira uma meta para o que está nesta prévia.");
         }
-        if (mode is "repeat" or "calendar-disabled") preview.NextAction.Should().BeNull();
+        if (mode is "repeat" or "calendar-disabled" or "nested") preview.NextAction.Should().BeNull();
         result.Value.Parts.Should().BeEmpty();
         result.Value.AiMessage.Should().BeNullOrEmpty();
         await toolMediatorWasNotDispatched();
@@ -162,4 +156,36 @@ public partial class ProcessUserChatCommandHandlerTests
         async Task toolMediatorWasNotDispatched() => await _mediator.DidNotReceive().Send(
             Arg.Any<Orbit.Application.Habits.Commands.CreateHabitCommand>(), Arg.Any<CancellationToken>());
     }
+
+    private static string ProactiveWriteDraft(string locale, string mode)
+    {
+        return mode == "nested" ? JsonSerializer.Serialize(new
+        {
+            title = locale == "en" ? "Routine" : "Rotina",
+            frequency_unit = "Day",
+            frequency_quantity = 1,
+            sub_habits = new[] { new { title = locale == "en" ? "Water" : "Água",
+                repeat_reminder = new { interval_minutes = 120 }, reminder_enabled = true,
+                suggested_fields = new[] { "repeat_reminder", "reminder_enabled" } } },
+            suggested_fields = new[] { "sub_habits" },
+            orbit_write_complete = true
+        }) : mode.StartsWith("calendar", StringComparison.Ordinal) ? JsonSerializer.Serialize(new
+        {
+            title = locale == "en" ? "Appointment" : "Consulta",
+            frequency_unit = "OneTime",
+            due_date = Today.AddDays(1).ToString("yyyy-MM-dd"),
+            due_time = "08:00",
+            emoji = "📅",
+            suggested_fields = new[] { "emoji" },
+            orbit_write_complete = true
+        }) : JsonSerializer.Serialize(new
+        {
+            title = locale == "en" ? "Water" : "Água",
+            is_general = true,
+            repeat_reminder = new { interval_minutes = 120, active_start = "08:00", active_end = "20:00" },
+            suggested_fields = new[] { "repeat_reminder" },
+            orbit_write_complete = true
+        });
+    }
+
 }

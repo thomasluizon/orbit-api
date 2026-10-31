@@ -26,6 +26,7 @@ public sealed partial class PendingOperationChangePreviewer
         if (toolRegistry.GetTool(operationId) is not { } tool)
             return Result.Failure<PendingOperationChangePreview?>("preview_unavailable");
         var root = JsonNode.Parse(arguments.GetRawText())!.AsObject();
+        if (!ProactiveProposal.NormalizeSuggestions(root)) return Result.Failure<PendingOperationChangePreview?>("invalid_offer");
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
         var prepared = await PrepareOfferNodesAsync(root, schema, new(userId, operationId, clientContext!), cancellationToken);
         if (!prepared) return Result.Failure<PendingOperationChangePreview?>("invalid_offer");
@@ -134,7 +135,7 @@ public sealed partial class PendingOperationChangePreviewer
         var schedule = OfferSchedule(source, suggestions, existing, inherited);
         var accepted = new JsonObject();
         var values = new JsonObject();
-        var proposalSchema = JsonSerializer.SerializeToElement(ProactiveProposal.Schema(schema));
+        var proposalSchema = JsonSerializer.SerializeToElement(ProactiveProposal.PreviewSchema(schema));
         var keySource = (JsonObject)source.DeepClone();
         if (node.TargetId is not null) keySource[HabitId] = node.TargetId;
         foreach (var suggestion in suggestions)
