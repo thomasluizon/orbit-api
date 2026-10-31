@@ -5,12 +5,21 @@
 The owner creates a separate evaluation project in OpenAI Platform, configures its budget,
 and creates a project API key. Store that key as a SecureString in AWS Systems Manager
 Parameter Store under both `/orbit/production/api/AI__EvalApiKey` and
-`/orbit/staging/api/AI__EvalApiKey` before planning Terraform. Terraform reads these
+`/orbit/staging/api/AI__EvalApiKey` when evaluation calls are needed. Terraform reads these
 parameters; it does not create them. Review and apply only the targeted environment groups
 `render_env_group.production_api` and `render_env_group.staging_api`. Confirm the masked
 `AI__EvalApiKey` setting reaches `orbit-production-api` and `orbit-staging-api` in Render,
-then release the API through the normal workflow. Parameters absent from SSM block the
-Terraform plan. An absent or empty runtime key blocks evaluation calls before dispatch.
+then release the API through the normal workflow. An absent parameter omits `AI__EvalApiKey`
+from that environment group without blocking the plan. Terraform checks the names returned
+by the existing per-environment `aws_ssm_parameters_by_path.onboarding_platform` lookup
+before requesting the evaluation parameter with `aws_ssm_parameter`. Other required secrets
+still block planning when absent. An absent or empty runtime key blocks evaluation calls
+before dispatch in `AiEvalCredentials` and `AiCompletionClient`.
+
+The pinned AWS provider's [single-parameter reader](https://github.com/hashicorp/terraform-provider-aws/blob/v6.66.0/internal/service/ssm/parameter_data_source.go)
+returns an error for a failed lookup. Its [path reader](https://github.com/hashicorp/terraform-provider-aws/blob/v6.66.0/internal/service/ssm/parameters_by_path_data_source.go)
+collects paginated parameter names and returns an empty list when there are no matching
+parameters; permission and service errors still fail the plan.
 
 `StagingEval__AccountIds` selects the accounts that use the evaluation key. Buffered and
 streamed chat, auxiliary completions, moderation and audio transcription select that key
@@ -555,8 +564,11 @@ separate redesign Render service configuration are retired.
 The [build selection and routing audit](redesign-flag-audit.md) records the
 retired client selectors and infrastructure disposition.
 
-Run `npm test --prefix infra` for the infrastructure tests. They use Node's built-in
-test runner without third-party test dependencies.
+Run `terraform -chdir=infra init -backend=false -input=false`, then
+`npm test --prefix infra` for the infrastructure tests. They use Node's built-in
+test runner and Terraform's mocked plan tests without cloud credentials or cloud calls.
+The credential plans exercise the actual API environment groups with evaluation parameters
+present and absent.
 
 ## Exact chat read recovery
 
