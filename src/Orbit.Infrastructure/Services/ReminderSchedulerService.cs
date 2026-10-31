@@ -259,7 +259,7 @@ public partial class ReminderSchedulerService(
                 var notification = Notification.Create(
                     habit.UserId, habit.Title, minutesText, NotificationUrls.Home, habit.Id);
 
-                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
                     continue;
 
                 sentReminderSet.Add((habit.Id, occurrenceDate, minutesBefore));
@@ -288,7 +288,7 @@ public partial class ReminderSchedulerService(
                 var body = FormatScheduledReminderText(reminder.When!.Value, lang);
                 var sentReminder = SentReminder.Create(habit.Id, sendDate, 0, reminder.Time, reminder.When);
                 var notification = Notification.Create(habit.UserId, habit.Title, body, NotificationUrls.Home, habit.Id);
-                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+                if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
                     continue;
 
                 sentClockSet.Add(clockKey);
@@ -341,7 +341,7 @@ public partial class ReminderSchedulerService(
             var notification = Notification.Create(
                 habit.UserId, habit.Title, text, NotificationUrls.Home, habit.Id);
 
-            if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, ct))
+            if (!await TryRecordReminderAsync(habit, sentReminder, notification, dbContext, tz, nowUtc, ct))
                 continue;
 
             sentScheduledSet.Add((habit.Id, userToday, sr.Time, sr.When));
@@ -364,13 +364,14 @@ public partial class ReminderSchedulerService(
 
     private async Task<bool> TryRecordReminderAsync(
         Habit habit, SentReminder sentReminder, Notification notification,
-        OrbitDbContext dbContext, CancellationToken ct)
+        OrbitDbContext dbContext, TimeZoneInfo zone, DateTime sentAtUtc, CancellationToken ct)
     {
         await dbContext.SentReminders.AddAsync(sentReminder, ct);
-        await dbContext.Notifications.AddAsync(notification, ct);
 
         try
         {
+            await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(dbContext),
+                notification, zone, sentAtUtc, ct);
             await dbContext.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))

@@ -49,6 +49,27 @@ public class Notification : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public void RefreshReminder(Notification reminder, string dedupeKey, DateTime sentAtUtc)
+    {
+        if (HabitId is null || HabitId != reminder.HabitId || UserId != reminder.UserId)
+            throw new ArgumentException("Reminder must belong to the same user and habit.", nameof(reminder));
+        ArgumentException.ThrowIfNullOrWhiteSpace(dedupeKey);
+        if (DedupeKey is not null && DedupeKey != dedupeKey)
+            throw new ArgumentException("Reminder dedupe key cannot change.", nameof(dedupeKey));
+        if (sentAtUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Reminder send time must be UTC.", nameof(sentAtUtc));
+
+        Title = reminder.Title;
+        Body = reminder.Body;
+        Url = reminder.Url;
+        DedupeKey = dedupeKey;
+        IsRead = false;
+        CreatedAtUtc = sentAtUtc;
+        UpdatedAtUtc = sentAtUtc;
+        IsDeleted = false;
+        DeletedAtUtc = null;
+    }
+
     public void SoftDelete()
     {
         IsDeleted = true;

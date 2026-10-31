@@ -42,6 +42,47 @@ public class NotificationTests
         notification.IsRead.Should().BeTrue();
     }
 
+    [Fact]
+    public void RefreshReminder_UpdatesTheRowAndMakesItUnread()
+    {
+        var habitId = Guid.NewGuid();
+        var row = Notification.Create(ValidUserId, "Title", "Old", "/", habitId);
+        row.MarkAsRead();
+        row.SoftDelete();
+        var reminder = Notification.Create(ValidUserId, "Updated", "Latest", "/", habitId);
+        var sentAtUtc = new DateTime(2027, 9, 26, 12, 0, 0, DateTimeKind.Utc);
+
+        row.RefreshReminder(reminder, "daily-key", sentAtUtc);
+
+        row.Title.Should().Be(reminder.Title);
+        row.Body.Should().Be(reminder.Body);
+        row.DedupeKey.Should().Be("daily-key");
+        row.CreatedAtUtc.Should().Be(sentAtUtc);
+        row.IsRead.Should().BeFalse();
+        row.IsDeleted.Should().BeFalse();
+        row.DeletedAtUtc.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("user")]
+    [InlineData("habit")]
+    [InlineData("key")]
+    [InlineData("time")]
+    public void RefreshReminder_RejectsMismatchedIdentityOrInvalidTime(string invalid)
+    {
+        var habitId = Guid.NewGuid();
+        var row = Notification.Create(ValidUserId, "Title", "Old", "/", habitId, "daily-key");
+        var reminder = Notification.Create(invalid == "user" ? Guid.NewGuid() : ValidUserId, "Title", "Latest",
+            "/", invalid == "habit" ? Guid.NewGuid() : habitId);
+        var sentAtUtc = new DateTime(2027, 9, 26, 12, 0, 0,
+            invalid == "time" ? DateTimeKind.Unspecified : DateTimeKind.Utc);
+
+        var act = () => row.RefreshReminder(reminder, invalid == "key" ? "different-key" : "daily-key", sentAtUtc);
+
+        act.Should().Throw<ArgumentException>();
+        row.Body.Should().Be("Old");
+    }
+
     [Theory]
     [InlineData("goal-deadline-key")]
     [InlineData("//external.example")]

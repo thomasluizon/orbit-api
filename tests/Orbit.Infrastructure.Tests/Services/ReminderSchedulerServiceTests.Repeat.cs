@@ -280,6 +280,13 @@ public partial class ReminderSchedulerServiceTests
         await service.CheckAndSendReminders(default);
         (await db.SentReminders.CountAsync()).Should().Be(2);
         (await db.SentReminders.AnyAsync(r => r.ParentReminderId != null)).Should().BeFalse();
+        clock.SetUtcNow(new(startAtUtc.AddMinutes(90)));
+        await service.CheckAndSendReminders(default);
+        (await db.SentReminders.CountAsync()).Should().Be(3);
+        var notification = (await db.Notifications.ToListAsync()).Should().ContainSingle().Subject;
+        notification.IsRead.Should().BeFalse();
+        notification.Body.Should().Be("Next at 06:00");
+        notification.CreatedAtUtc.Should().Be(startAtUtc.AddMinutes(90));
     }
 
     [Fact]
