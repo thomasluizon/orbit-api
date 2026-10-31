@@ -1,5 +1,22 @@
 # Selecting an OpenAPI artifact
 
+AI provider credit exhaustion returns HTTP 424 with the existing error body shape:
+`{"error":"...","errorCode":"AI_PROVIDER_QUOTA_EXHAUSTED"}`. This additive code
+means automatic retries must stop for the request. It is separate from the person's
+Orbit message allowance. Summary, chat, retrospective, goal review, habit setup,
+suggestions and refinement, date interpretation, rescheduling, tags and transcription
+share this code. Chat SSE uses the existing `error` event with `status: 424` and
+`code: "AI_PROVIDER_QUOTA_EXHAUSTED"` after the stream starts.
+
+Provider HTTP 429 bodies with `error.code` (or `error.type` when the code is absent or null) equal to
+`insufficient_quota` or `credit_balance_exhausted` stop after one attempt.
+A `Retry-After` header takes precedence and preserves the existing rate-limit retries;
+other or unrecognized 429 bodies also retain those retries. Error messages reuse the
+existing localized `AI_UNAVAILABLE` copy. Deploy this producer before the paired web
+and Android consumer disables automatic query and chat retries for this code.
+The existing shared query retry helper retries generic failures, including HTTP 424,
+until that consumer change lands. Tracks thomasluizon/orbit-tickets#1915.
+
 The FCM data message and shared Android category for repeat reminder actions
 are documented in [RepeatReminderPush.md](RepeatReminderPush.md).
 

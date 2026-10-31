@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
@@ -16,6 +17,12 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
     private readonly ILogger<AudioTranscriptionService> _logger;
 
     public AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger)
+        : this(options, logger, null)
+    {
+    }
+
+    internal AudioTranscriptionService(IOptions<AiSettings> options, ILogger<AudioTranscriptionService> logger,
+        PipelineTransport? transport)
     {
         _logger = logger;
         var settings = options.Value;
@@ -26,6 +33,7 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
             options: new OpenAIClientOptions
             {
                 Endpoint = new Uri(settings.BaseUrl),
+                Transport = transport,
                 NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
                 RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
             });
@@ -47,6 +55,10 @@ public sealed partial class AudioTranscriptionService : IAudioTranscriptionServi
                 return Result.Failure<string>(ErrorMessages.AudioTranscriptionEmpty);
 
             return Result.Success(text);
+        }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<string>(ErrorMessages.AiProviderQuotaExhausted);
         }
         catch (Exception ex)
         {

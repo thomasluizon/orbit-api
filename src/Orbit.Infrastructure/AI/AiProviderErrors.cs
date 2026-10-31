@@ -25,7 +25,9 @@ internal static class AiProviderErrors
             return document.RootElement.ValueKind == JsonValueKind.Object
                 && document.RootElement.TryGetProperty("error", out var error)
                 && error.ValueKind == JsonValueKind.Object
-                && (HasQuotaCode(error, "code") || HasQuotaCode(error, "type"));
+                && (error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String
+                    ? IsQuotaCode(code)
+                    : error.TryGetProperty("type", out var type) && IsQuotaCode(type));
         }
         catch (JsonException)
         {
@@ -33,8 +35,7 @@ internal static class AiProviderErrors
         }
     }
 
-    private static bool HasQuotaCode(JsonElement error, string field) =>
-        error.TryGetProperty(field, out var value)
-        && value.ValueKind == JsonValueKind.String
+    private static bool IsQuotaCode(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String
         && value.GetString() is "insufficient_quota" or "credit_balance_exhausted";
 }

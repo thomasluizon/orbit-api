@@ -380,8 +380,10 @@ public class GetDailySummaryQueryHandlerTests
         result.Error.Should().Be(ErrorMessages.AiSummaryDisabled.Message);
     }
 
-    [Fact]
-    public async Task Handle_SummaryServiceFails_ReturnsFailure()
+    [Theory]
+    [InlineData(ErrorCodes.AiUnavailable)]
+    [InlineData(ErrorCodes.AiProviderQuotaExhausted)]
+    public async Task Handle_SummaryServiceFails_ReturnsFailure(string errorCode)
     {
         var user = CreateTestUser();
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
@@ -397,7 +399,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Arg.Is<DailySummaryContext>(c => c.DateFrom == Today && c.DateTo == Today && c.Language == "en" && c.UserId == UserId),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<DailySummaryContent>("AI service unavailable"));
+            .Returns(Result.Failure<DailySummaryContent>("AI service unavailable", errorCode));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -405,6 +407,7 @@ public class GetDailySummaryQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("AI service unavailable");
+        result.ErrorCode.Should().Be(errorCode);
     }
 
     [Fact]

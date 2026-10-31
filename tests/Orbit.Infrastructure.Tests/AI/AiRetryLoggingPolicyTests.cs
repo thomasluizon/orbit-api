@@ -78,6 +78,7 @@ public class AiRetryLoggingPolicyTests
     [InlineData(null, "insufficient_quota", false, 1)]
     [InlineData(null, "credit_balance_exhausted", false, 1)]
     [InlineData("rate_limit_exceeded", "requests", false, 3)]
+    [InlineData("rate_limit_exceeded", "insufficient_quota", false, 3)]
     [InlineData(null, null, false, 3)]
     [InlineData("insufficient_quota", "insufficient_quota", true, 3)]
     public async Task Send_Provider429_ClassifiesBodyAndPreservesRetryAfter(

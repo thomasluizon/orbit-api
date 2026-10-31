@@ -52,6 +52,10 @@ public sealed partial class AiRescheduleSuggestionService(
                 LogRescheduleGenerated(logger, habit.Id);
             return suggestion;
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<RescheduleSuggestion>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<RescheduleSuggestion>(AiBudgetExceededException.Error);

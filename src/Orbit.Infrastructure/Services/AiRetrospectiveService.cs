@@ -54,6 +54,10 @@ public sealed partial class AiRetrospectiveService(
                 LogRetrospectiveGenerated(logger, trimmed.Length);
             return Result.Success(narrative);
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<RetrospectiveNarrative>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<RetrospectiveNarrative>(AiBudgetExceededException.Error);

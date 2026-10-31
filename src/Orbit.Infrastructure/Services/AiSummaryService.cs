@@ -84,6 +84,10 @@ public sealed partial class AiSummaryService(
                     LogDailySummaryGenerated(logger, summary.Length);
                 return Result.Success(new DailySummaryContent(summary, string.Empty));
             }
+            catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+            {
+                return Result.Failure<DailySummaryContent>(ErrorMessages.AiProviderQuotaExhausted);
+            }
             catch (AiBudgetExceededException)
             {
                 return Result.Failure<DailySummaryContent>(AiBudgetExceededException.Error);

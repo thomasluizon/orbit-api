@@ -66,6 +66,10 @@ public sealed partial class AiGoalReviewService(
                 LogGoalReviewGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<string>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<string>(AiBudgetExceededException.Error);

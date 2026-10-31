@@ -265,6 +265,10 @@ public sealed partial class AiIntentService(
                 IsTruncated = round.IsTruncated
             });
         }
+        catch (Exception exception) when (AiProviderErrors.IsQuotaExhausted(exception))
+        {
+            return Result.Failure<AiResponse>(ErrorMessages.AiProviderQuotaExhausted);
+        }
         catch (AiBudgetExceededException)
         {
             return Result.Failure<AiResponse>(AiBudgetExceededException.Error);
