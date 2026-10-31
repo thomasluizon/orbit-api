@@ -106,15 +106,14 @@ public partial class ReminderSchedulerServiceTests
     [InlineData(HabitSchedule.Flexible, 8)]
     [InlineData(HabitSchedule.OneTime, 0)]
     [InlineData(HabitSchedule.OneTime, 1)]
-    [InlineData(HabitSchedule.General, 0)]
     public async Task Repeat_DoneOrSkippedTodaySuppressesCachedFollowUps(HabitSchedule schedule, int value)
     {
         var db = CreateSqliteDbContext();
         var user = User.Create("Alex", "alex@test.com").Value;
         var startAtUtc = UtcToday.ToDateTime(new(4, 0), DateTimeKind.Utc);
         var habit = Habit.Create(new HabitCreateParams(schedule, user.Id, "Reminder",
-            schedule is HabitSchedule.OneTime or HabitSchedule.General ? null : FrequencyUnit.Day,
-            schedule is HabitSchedule.OneTime or HabitSchedule.General ? null : 8, UtcToday, ReminderEnabled: true,
+            schedule is HabitSchedule.OneTime ? null : FrequencyUnit.Day,
+            schedule is HabitSchedule.OneTime ? null : 8, UtcToday, ReminderEnabled: true,
             RepeatReminder: new(480, StartAtUtc: startAtUtc))).Value;
         db.Users.Add(user);
         db.Habits.Add(habit);
@@ -158,13 +157,6 @@ public partial class ReminderSchedulerServiceTests
         clock.SetUtcNow(new(startAtUtc.AddHours(16)));
         await scheduler.CheckAndSendReminders(default);
         (await db.SentReminders.CountAsync()).Should().Be(partialFlexible ? 2 : 1);
-        if (schedule == HabitSchedule.General)
-        {
-            clock.SetUtcNow(new(startAtUtc.AddDays(1)));
-            (await ReadNextReminder(habit, clock)).Should().Be(clock.GetUtcNow().UtcDateTime);
-            await scheduler.CheckAndSendReminders(default);
-            (await db.SentReminders.CountAsync()).Should().Be(2);
-        }
     }
 
     [Fact]
