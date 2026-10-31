@@ -118,14 +118,30 @@ public class QueryHabitsTool(
             .Take(limit)
             .ToList();
 
-        var output = results.Count == 0 && query.Schedule is null
-            ? "No habits found matching the given filters."
-            : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule, parentTitles);
+        string output;
         var rows = new List<HabitListCardItem>();
         foreach (var root in allHabits.Where(h => h.ParentHabitId is null || !returnedIds.Contains(h.ParentHabitId.Value))
             .OrderBy(h => h.Position).ThenBy(h => h.Id))
             AppendReadRows(root, 0, rows, allHabits, query.Schedule, today, includeSubs, parentTitles);
-        var page = rows.Skip(Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0)).Take(limit).ToList();
+        var offset = Math.Max(0, JsonArgumentParser.GetOptionalInt(args, "offset") ?? 0);
+        List<HabitListCardItem> page;
+        if (!string.IsNullOrWhiteSpace(filters.Search) && rows.Count > 0)
+        {
+            var orderedPage = await HabitSearchQuery.ReadPageAsync(habitRepository, userId,
+                rows.Select(row => Guid.Parse(row.Id)).ToArray(), offset, limit, ct);
+            var rowsById = rows.ToDictionary(row => Guid.Parse(row.Id));
+            page = orderedPage.Select(habit => rowsById[habit.Id]).ToList();
+            var habitsById = allHabits.ToDictionary(habit => habit.Id);
+            output = BuildOutput(orderedPage.Select(habit => habitsById[habit.Id]).ToList(), allHabits,
+                today, user.WeekStartDay, includeMetrics, false, query.Schedule, parentTitles);
+        }
+        else
+        {
+            page = rows.Skip(offset).Take(limit).ToList();
+            output = results.Count == 0 && query.Schedule is null
+                ? "No habits found matching the given filters."
+                : BuildOutput(results, allHabits, today, user.WeekStartDay, includeMetrics, includeSubs, query.Schedule, parentTitles);
+        }
         return new ToolResult(true, EntityName: output,
             Payload: new HabitListCard(query.Schedule is null ? "all" : query.Schedule.Date == today ? "today" : "date",
                 page,
