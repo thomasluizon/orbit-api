@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using Orbit.Domain.Common;
 using MediatR;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
@@ -46,38 +48,82 @@ public sealed class BulkSkipHabitsTool(
         }
         if (items.Count == 0)
             return Orbit.Domain.Common.Result.Failure("No matching habits found.");
+        Orbit.Domain.Common.Result? generalRejection = null;
+        var hasEligibleChunk = false;
         foreach (var chunk in items.Chunk(Orbit.Application.Common.AppConstants.MaxBulkOperationSize))
         {
             var result = await mediator.Send(new CheckChatCommandQuery(new BulkSkipHabitsCommand(userId, chunk)), ct);
-            if (result.IsFailure)
+            if (result.ErrorCode == DomainErrors.CannotSkipGeneralHabit.Code)
+                generalRejection = result;
+            else if (result.IsFailure)
                 return result;
+            else
+                hasEligibleChunk = true;
         }
-        return Orbit.Domain.Common.Result.Success();
+        return hasEligibleChunk ? Orbit.Domain.Common.Result.Success()
+            : generalRejection ?? Orbit.Domain.Common.Result.Success();
     }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var outcomes = new List<BulkSkipItemResult>();
         if (args.TryGetProperty("revised_items", out _))
         {
             var (revised, revisedError) = BulkHabitToolArguments.ParseRevisedDatedItems(args);
             if (revisedError is not null)
                 return new ToolResult(false, Error: revisedError);
-            return await BulkUpdateHabitsTool.ExecuteInChunksAsync(
+            var revisedResult = await BulkUpdateHabitsTool.ExecuteInChunksAsync(
                 revised!.Select(item => new BulkSkipItem(item.HabitId, item.Date)).ToList(),
-                (items, token) => mediator.Send(new BulkSkipHabitsCommand(userId, items), token),
+                (items, token) => ExecuteChunkAsync(userId, items, outcomes, token),
                 result => result.Results.Count(item => item.Status == BulkItemStatus.Success),
                 "Skipped", ct);
+            return WithGeneralRejections(revisedResult, outcomes);
         }
 
-        return await replayPlanner.ExecuteAsync(
+        var result = await replayPlanner.ExecuteAsync(
             args, userId, habitRepository, userDateService, typeof(BulkSkipHabitsCommand).FullName!,
             (id, date) => new BulkSkipItem(id, date),
-            (items, cancellationToken) => mediator.Send(
-                new BulkSkipHabitsCommand(userId, items),
-                cancellationToken),
+            (items, cancellationToken) => ExecuteChunkAsync(userId, items, outcomes, cancellationToken),
             result => result.Results.Count(item => item.Status == BulkItemStatus.Success),
             "Skipped",
             "No matching habits found to skip.",
             ct);
+        return WithGeneralRejections(result, outcomes);
+    }
+
+    private async Task<Result<BulkSkipResult>> ExecuteChunkAsync(Guid userId, IReadOnlyList<BulkSkipItem> items,
+        List<BulkSkipItemResult> outcomes, CancellationToken ct)
+    {
+        var result = await mediator.Send(new BulkSkipHabitsCommand(userId, items), ct);
+        if (result.IsSuccess)
+        {
+            var offset = outcomes.Count;
+            outcomes.AddRange(result.Value.Results.Select(item => item with { Index = offset + item.Index }));
+        }
+        return result;
+    }
+
+    private static ToolResult WithGeneralRejections(ToolResult result, IReadOnlyList<BulkSkipItemResult> outcomes)
+    {
+        if (!outcomes.Any(item => item.ErrorCode == DomainErrors.CannotSkipGeneralHabit.Code))
+            return result;
+
+        var payload = JsonSerializer.SerializeToNode(result.Payload)?.AsObject() ?? new JsonObject();
+        payload["results"] = JsonSerializer.SerializeToNode(outcomes.Select(item => new
+        {
+            index = item.Index,
+            status = item.Status,
+            habit_id = item.HabitId,
+            error = item.Error,
+            error_code = item.ErrorCode
+        }));
+        var noneApplied = result.Success && outcomes.All(item => item.Status != BulkItemStatus.Success);
+        return result with
+        {
+            Success = result.Success && !noneApplied,
+            Error = noneApplied ? DomainErrors.CannotSkipGeneralHabit.Message : result.Error,
+            ErrorCode = noneApplied ? DomainErrors.CannotSkipGeneralHabit.Code : result.ErrorCode,
+            Payload = payload
+        };
     }
 }

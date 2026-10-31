@@ -67,6 +67,21 @@ public class SkipHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_GeneralHabit_ExistingReceiptReplayRemainsSuccessfulWithoutWrites()
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Read", null, null, Today)).Value;
+        var receipt = HabitSkipUndo.Create(Guid.NewGuid(), habit).Value;
+        _skipUndoRepo.GetByIdAsync(receipt.Id, Arg.Any<CancellationToken>()).Returns(receipt);
+
+        var result = await _handler.Handle(new SkipHabitCommand(UserId, habit.Id, SkipId: receipt.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.SkipId.Should().Be(receipt.Id);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _skipUndoRepo.DidNotReceive().AddAsync(Arg.Any<HabitSkipUndo>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_OneTimeTask_PostponesToTomorrow()
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime,

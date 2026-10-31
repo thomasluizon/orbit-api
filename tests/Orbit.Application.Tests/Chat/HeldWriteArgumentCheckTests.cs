@@ -11,6 +11,31 @@ namespace Orbit.Application.Tests.Chat;
 public sealed class HeldWriteArgumentCheckTests
 {
     [Theory]
+    [InlineData("skip_habit", false)]
+    [InlineData("bulk_skip_habits", false)]
+    [InlineData("bulk_skip_habits", true)]
+    public async Task GeneralSkipChecks_RejectGeneralAndAllowDatedMembersWithoutWrites(string name, bool mixed)
+    {
+        using var context = new HeldWriteTestContext();
+        var general = Habit.Create(new HabitCreateParams(Orbit.Domain.Enums.HabitSchedule.General,
+            context.UserId, "Read", null, null, context.Today)).Value;
+        context.Records.Add(general);
+        var args = name == "skip_habit"
+            ? JsonSerializer.SerializeToElement(new { habit_id = general.Id })
+            : JsonSerializer.SerializeToElement(new { habit_ids = mixed ? new[] { general.Id, context.Habit.Id } : new[] { general.Id } });
+        var before = JsonSerializer.Serialize(context.Records);
+
+        var result = await ((IArgumentCheckTool)context.Tool(name)).CheckArgumentsAsync(args, context.UserId, CancellationToken.None);
+
+        result.IsSuccess.Should().Be(mixed);
+        if (!mixed)
+            result.ErrorCode.Should().Be(Orbit.Domain.Common.DomainErrors.CannotSkipGeneralHabit.Code);
+        JsonSerializer.Serialize(context.Records).Should().Be(before);
+        context.Added.Should().BeEmpty();
+        context.Commands.Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData("delete_habit", """{"habit_id":"$habit"}""")]
     [InlineData("duplicate_habit", """{"habit_id":"$habit"}""")]
     [InlineData("move_habit", """{"habit_id":"$habit","new_parent_id":null}""")]

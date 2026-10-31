@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 using Orbit.Api.Extensions;
 using Orbit.Api.Middleware;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -72,6 +73,35 @@ public partial class LocalizedErrorResultFilterTests
 
         var objectResult = context.Result.Should().BeOfType<ObjectResult>().Subject;
         return objectResult.Value.Should().BeOfType<ErrorResponse>().Subject;
+    }
+
+    [Theory]
+    [InlineData(false, "en", "General habits have no scheduled day to skip.")]
+    [InlineData(false, "pt-BR", "Hábitos gerais não têm um dia agendado para pular.")]
+    [InlineData(true, "en", "General habits have no scheduled day to skip.")]
+    [InlineData(true, "pt-BR", "Hábitos gerais não têm um dia agendado para pular.")]
+    public async Task GeneralSkipRejection_UsesTheSameCopyForSingleAndBulk(bool bulk, string language, string expected)
+    {
+        IActionResult result = bulk
+            ? new OkObjectResult(new BulkSkipResult([new BulkSkipItemResult(0, BulkItemStatus.Failed, Guid.NewGuid(),
+                DomainErrors.CannotSkipGeneralHabit.Message, DomainErrors.CannotSkipGeneralHabit.Code)]))
+            : Result.Failure(DomainErrors.CannotSkipGeneralHabit).ToErrorResult();
+
+        var context = await RunContext(result, language);
+
+        var body = context.Result.Should().BeAssignableTo<ObjectResult>().Subject.Value;
+        if (bulk)
+        {
+            var item = body.Should().BeOfType<BulkSkipResult>().Subject.Results.Should().ContainSingle().Which;
+            item.Error.Should().Be(expected);
+            item.ErrorCode.Should().Be(DomainErrors.CannotSkipGeneralHabit.Code);
+        }
+        else
+        {
+            var error = body.Should().BeOfType<ErrorResponse>().Subject;
+            error.Error.Should().Be(expected);
+            error.ErrorCode.Should().Be(DomainErrors.CannotSkipGeneralHabit.Code);
+        }
     }
 
     [Fact]

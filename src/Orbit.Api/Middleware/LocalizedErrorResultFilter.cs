@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 
 namespace Orbit.Api.Middleware;
 
@@ -27,6 +28,21 @@ internal sealed class LocalizedErrorResultFilter(IRequestLanguageResolver langua
             {
                 Results = moves.Results.Select(item =>
                     item.Error is not null && ErrorCopy.TryResolve(item.ErrorCode, isPtBr, item.ErrorArgs, out var message)
+                        ? item with { Error = message }
+                        : item).ToList()
+            };
+        }
+
+        if (context.Result is ObjectResult { Value: BulkSkipResult skips } skipResult
+            && skips.Results.Any(item => item.ErrorCode == DomainErrors.CannotSkipGeneralHabit.Code))
+        {
+            var isPtBr = await languageResolver.IsPortugueseAsync(
+                context.HttpContext, context.HttpContext.RequestAborted);
+            skipResult.Value = skips with
+            {
+                Results = skips.Results.Select(item =>
+                    item.ErrorCode == DomainErrors.CannotSkipGeneralHabit.Code
+                        && ErrorCopy.TryResolve(item.ErrorCode, isPtBr, [], out var message)
                         ? item with { Error = message }
                         : item).ToList()
             };

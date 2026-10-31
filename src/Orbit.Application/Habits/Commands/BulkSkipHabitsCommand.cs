@@ -108,14 +108,20 @@ public class BulkSkipHabitsCommandHandler(
             return ownership;
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, selected, today.AddDays(-AppConstants.MaxRangeDays), ct);
         var byId = selected.ToDictionary(h => h.Id);
+        Result? generalRejection = null;
+        var hasEligibleItem = false;
         foreach (var item in request.Items)
         {
             var result = SkipHabitArgumentChecks.Check(byId[item.HabitId], item.Date ?? today, today, weekStart,
                 allowOverdue: true, resolution.Contains(item.HabitId), enforceWindow: true);
-            if (result.IsFailure)
+            if (result.ErrorCode == DomainErrors.CannotSkipGeneralHabit.Code)
+                generalRejection = result;
+            else if (result.IsFailure)
                 return result;
+            else
+                hasEligibleItem = true;
         }
-        return Result.Success();
+        return hasEligibleItem ? Result.Success() : generalRejection ?? Result.Success();
     }
 
     private async Task<BulkSkipItemResult> ProcessSkipItem(
