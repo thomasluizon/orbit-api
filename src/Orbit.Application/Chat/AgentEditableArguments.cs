@@ -26,12 +26,6 @@ internal static class AgentEditableArguments
             "manage_subscription" when action.GetString() == "create_checkout" => ["interval"],
             "manage_account" when action.GetString() == "confirm_deletion" => ["code"],
             "manage_calendar_sync" when action.GetString() == "set_auto_sync" => ["enabled"],
-            "update_notifications" => action.GetString() switch
-            {
-                "subscribe_push" => new[] { "endpoint", "p256dh", "auth" },
-                "unsubscribe_push" => ["endpoint", "p256dh", "auth", "release_other_account"],
-                _ => []
-            },
             _ => []
         };
         return fields.Contains(field, StringComparer.Ordinal);

@@ -16,6 +16,60 @@ namespace Orbit.Application.Tests.Chat;
 
 public sealed class HeldWriteRevisionTests
 {
+    [Theory]
+    [InlineData("subscribe_push")]
+    [InlineData("unsubscribe_push")]
+    public void PushDeviceArguments_AreFixedInTheArgumentPreview(string action)
+    {
+        using var context = new HeldWriteTestContext();
+        var tool = context.Tool("update_notifications");
+        var arguments = JsonSerializer.SerializeToElement(new
+        {
+            action,
+            endpoint = "https://push.example.com/device",
+            p256dh = "device-key",
+            auth = "device-auth",
+            release_other_account = true
+        });
+
+        var preview = AgentArgumentPreview.Build(tool.Name, arguments, null,
+            JsonSerializer.SerializeToElement(tool.GetParameterSchema()));
+
+        preview!.Items.Should().ContainSingle().Which.Fields.Should().HaveCount(5)
+            .And.OnlyContain(field => !field.IsEditable);
+    }
+
+    [Theory]
+    [InlineData("subscribe_push", "endpoint")]
+    [InlineData("subscribe_push", "p256dh")]
+    [InlineData("subscribe_push", "auth")]
+    [InlineData("subscribe_push", "release_other_account")]
+    [InlineData("unsubscribe_push", "endpoint")]
+    [InlineData("unsubscribe_push", "p256dh")]
+    [InlineData("unsubscribe_push", "auth")]
+    [InlineData("unsubscribe_push", "release_other_account")]
+    public async Task PushDeviceArguments_CannotBeRevised(string action, string field)
+    {
+        using var context = new HeldWriteTestContext();
+        var original = JsonSerializer.Serialize(new
+        {
+            action,
+            endpoint = "https://push.example.com/device",
+            p256dh = "device-key",
+            auth = "device-auth",
+            release_other_account = true
+        });
+        var (revision, stored) = await context.ReviseAsync(context.Tool("update_notifications"),
+            original, JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                [field] = field == "release_other_account" ? false : "replacement"
+            }));
+
+        revision.Error.Should().Be("field_not_offered");
+        JsonElement.DeepEquals(stored, JsonSerializer.Deserialize<JsonElement>(original)).Should().BeTrue();
+        context.Commands.Should().BeEmpty();
+    }
+
     public static TheoryData<string, string, string, string, string> EditableTools => new()
     {
         { "create_habit", """{"title":"Read"}""", "title", "\"Write\"", "Title" },
@@ -37,8 +91,6 @@ public sealed class HeldWriteRevisionTests
         { "update_profile_preferences", """{"action":"set_clock_format","uses_24_hour_clock":false}""", "uses_24_hour_clock", "true", "Uses24HourClock" },
         { "update_profile_preferences", """{"action":"set_theme_preference","theme_preference":"light"}""", "theme_preference", "\"dark\"", "Preference" },
         { "set_ai_summary", """{"enabled":true}""", "enabled", "false", "Enabled" },
-        { "update_notifications", """{"action":"subscribe_push","endpoint":"https://fcm.googleapis.com/fcm/send/a","p256dh":"key","auth":"secret"}""", "endpoint", "\"https://fcm.googleapis.com/fcm/send/b\"", "Endpoint" },
-        { "update_notifications", """{"action":"unsubscribe_push","endpoint":"https://example.com/a"}""", "endpoint", "\"https://example.com/b\"", "Endpoint" },
         { "manage_calendar_sync", """{"action":"set_auto_sync","enabled":true}""", "enabled", "false", "Enabled" },
         { "create_checklist_template", """{"name":"Prepare","items":["Read"]}""", "items", """["Write"]""", "Items.0" },
         { "manage_subscription", """{"action":"create_checkout","interval":"monthly"}""", "interval", "\"yearly\"", "Interval" },
@@ -141,7 +193,6 @@ public sealed class HeldWriteRevisionTests
         { "update_profile_preferences", """{"action":"set_language","language":"en"}""", """{"language":"invalid"}""" },
         { "update_profile_preferences", """{"action":"set_week_start_day","week_start_day":0}""", """{"week_start_day":2}""" },
         { "update_profile_preferences", """{"action":"set_theme_preference","theme_preference":"light"}""", """{"theme_preference":"invalid"}""" },
-        { "update_notifications", """{"action":"subscribe_push","endpoint":"https://fcm.googleapis.com/fcm/send/a","p256dh":"key","auth":"secret"}""", """{"endpoint":"http://example.com/b"}""" },
         { "manage_subscription", """{"action":"create_checkout","interval":"monthly"}""", """{"interval":"weekly"}""" },
         { "manage_api_keys", """{"action":"create","name":"Key","scopes":["read_habits"]}""", """{"scopes":["invented:write"]}""" },
         { "manage_api_keys", """{"action":"create","name":"Key","is_read_only":false}""", """{"is_read_only":null}""" },

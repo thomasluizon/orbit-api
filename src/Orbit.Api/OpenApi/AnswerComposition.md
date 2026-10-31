@@ -1403,6 +1403,17 @@ including its JSON envelope. Missing usage remains null. No output content,
 arguments, identifiers or user text enters these warning fields. Buffered and
 streamed responses use the same diagnostic path. Model, effort and cap are unchanged.
 
+## Fixed push subscription arguments
+
+Push subscription previews for `update_notifications` retain device arguments for
+approval and execution, but expose no editable fields. `endpoint`, `p256dh`, `auth`
+and `release_other_account` are fixed for both `subscribe_push` and
+`unsubscribe_push`. The release flag belongs to device ownership cleanup rather
+than a choice entered by the person. The preview keeps its item, fingerprint,
+action key and approve/reject controls when every field is fixed. Revision attempts
+on these fields return `field_not_offered`; approval executes the original stored
+arguments.
+
 ## Negotiated proactive offers
 
 Tracks thomasluizon/orbit-tickets#1674. The paired consumer is #1903.
