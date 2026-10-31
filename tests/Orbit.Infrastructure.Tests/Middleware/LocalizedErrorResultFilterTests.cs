@@ -76,10 +76,10 @@ public partial class LocalizedErrorResultFilterTests
     }
 
     [Theory]
-    [InlineData(false, "en", "General habits have no scheduled day to skip.")]
-    [InlineData(false, "pt-BR", "Hábitos gerais não têm um dia agendado para pular.")]
-    [InlineData(true, "en", "General habits have no scheduled day to skip.")]
-    [InlineData(true, "pt-BR", "Hábitos gerais não têm um dia agendado para pular.")]
+    [InlineData(false, "en", "Anytime habits have no set day, so there is nothing to skip.")]
+    [InlineData(false, "pt-BR", "Hábitos sem dia fixo não têm um dia para pular.")]
+    [InlineData(true, "en", "Anytime habits have no set day, so there is nothing to skip.")]
+    [InlineData(true, "pt-BR", "Hábitos sem dia fixo não têm um dia para pular.")]
     public async Task GeneralSkipRejection_UsesTheSameCopyForSingleAndBulk(bool bulk, string language, string expected)
     {
         IActionResult result = bulk

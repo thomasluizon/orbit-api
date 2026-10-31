@@ -66,7 +66,7 @@ public static partial class ErrorCopy
         (ErrorCodes.GeneralMismatchWithParent, "A sub-habit follows its parent on the general setting. Match them and try again.", "Um sub-hábito segue o hábito principal na opção geral. Deixe os dois iguais e tente de novo."),
         (ErrorCodes.GeneralMismatchWithChildren, "The sub-habits here use a different general setting. Change them first.", "Os sub-hábitos aqui usam outra opção geral. Mude os sub-hábitos primeiro."),
         (ErrorCodes.HabitAlreadyCompleted, "You already marked this done for that day.", "Você já marcou isto como feito nesse dia."),
-        (DomainErrors.CannotSkipGeneralHabit.Code, "General habits have no scheduled day to skip.", "Hábitos gerais não têm um dia agendado para pular."),
+        (DomainErrors.CannotSkipGeneralHabit.Code, "Anytime habits have no set day, so there is nothing to skip.", "Hábitos sem dia fixo não têm um dia para pular."),
         (ErrorCodes.CannotSkipFutureDate, "You can skip a day once it arrives.", "Você pode pular um dia quando ele chegar."),
         (ErrorCodes.CannotLogFutureDate, "You can log a day once it arrives.", "Você pode registrar um dia quando ele chegar."),
         (ErrorCodes.HabitNotYetDue, "This is not due yet, so there is nothing to skip.", "Isto ainda não venceu, então não há o que pular."),
