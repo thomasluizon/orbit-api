@@ -78,7 +78,7 @@ public sealed partial class ReminderDoneTests
     }
 
     [Fact]
-    public async Task MarkRead_LegacyRowsUseTheUsersLocalDate()
+    public async Task Completion_LeavesUntypedRowsUnread()
     {
         var (_, habit, _) = await Seed();
         var db = _factory.Context;
@@ -90,11 +90,12 @@ public sealed partial class ReminderDoneTests
         db.Entry(legacy).Property(n => n.CreatedAtUtc).CurrentValue = today.AddDays(1).ToDateTime(new(2, 30), DateTimeKind.Utc);
         await db.SaveChangesAsync();
 
-        await HabitReminderInbox.MarkReadAsync(new GenericRepository<Notification>(db), habit.UserId, habit.Id,
-            today, _dates, default);
-        await db.SaveChangesAsync();
+        (await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false)))
+            .IsSuccess.Should().BeTrue();
 
         db.ChangeTracker.Clear();
-        (await db.Notifications.ToListAsync()).Should().OnlyContain(n => n.IsRead);
+        var rows = await db.Notifications.ToListAsync();
+        rows.Single(n => n.Id == legacy.Id).IsRead.Should().BeFalse();
+        rows.Single(n => n.Id != legacy.Id).IsRead.Should().BeTrue();
     }
 }

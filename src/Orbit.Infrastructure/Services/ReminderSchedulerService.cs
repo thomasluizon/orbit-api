@@ -370,8 +370,10 @@ public partial class ReminderSchedulerService(
 
         try
         {
+            var reminderDate = sentReminder.When == ScheduledReminderWhen.DayBefore
+                ? sentReminder.Date.AddDays(1) : sentReminder.Date;
             await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(dbContext),
-                notification, zone, sentAtUtc, ct);
+                notification, zone, sentAtUtc, reminderDate, ct);
             await dbContext.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))

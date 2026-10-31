@@ -109,7 +109,7 @@ public partial class BulkLogHabitsCommandHandler(
                 .ToHashSet();
             foreach (var result in results.Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
                 await HabitReminderInbox.MarkReadAsync(services.Notifications, request.UserId, result.HabitId,
-                    request.Items[result.Index].Date ?? today, services.UserDateService, ct);
+                    request.Items[result.Index].Date ?? today, ct);
             var goalIds = habitMap.Values
                 .Where(h => changedHabitIds.Contains(h.Id))
                 .SelectMany(h => h.Goals)

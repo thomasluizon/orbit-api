@@ -26,7 +26,8 @@ public partial class ReminderSchedulerServiceTests
         var sentAtUtc = new DateTime(2027, 3, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(minutes);
         var reminder = Notification.Create(habit.UserId, habit.Title, "Latest", "/", habit.Id);
 
-        await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(db), reminder, zone, sentAtUtc, default);
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(sentAtUtc, zone));
+        await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(db), reminder, zone, sentAtUtc, localDate, default);
         await db.SaveChangesAsync();
 
         (await db.Notifications.SingleAsync()).CreatedAtUtc.Should().Be(sentAtUtc);
@@ -57,7 +58,7 @@ public partial class ReminderSchedulerServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Repeat_NextSendCollapsesLegacyDuplicatesAndRefreshesReadRow(bool keyed)
+    public async Task Repeat_NextSendPreservesUntypedDuplicatesAndRefreshesOnlyTheKeyedRow(bool keyed)
     {
         var db = CreateSqliteDbContext();
         var (habit, startAtUtc) = await SeedRepeat();
@@ -67,6 +68,8 @@ public partial class ReminderSchedulerServiceTests
         foreach (var row in duplicates)
             db.Entry(row).Property(n => n.CreatedAtUtc).CurrentValue = startAtUtc;
         duplicates[2].MarkAsRead();
+        if (keyed)
+            duplicates[2].SoftDelete();
         var previousDay = Notification.Create(habit.UserId, habit.Title, "History", "/", habit.Id);
         var otherHabit = Notification.Create(habit.UserId, "Other", "Other", "/", Guid.NewGuid());
         db.Notifications.AddRange(previousDay, otherHabit);
@@ -78,12 +81,17 @@ public partial class ReminderSchedulerServiceTests
             .CheckAndSendReminders(default);
 
         db.ChangeTracker.Clear();
-        var current = (await db.Notifications.Where(n => n.HabitId == habit.Id && n.Id != previousDay.Id).ToListAsync())
+        var current = (await db.Notifications.Where(n => n.DedupeKey == HabitReminderInbox.Key(habit.Id, UtcToday)).ToListAsync())
             .Should().ContainSingle().Subject;
         current.IsRead.Should().BeFalse();
         current.CreatedAtUtc.Should().Be(sentAtUtc);
-        (await db.Notifications.IgnoreQueryFilters().CountAsync(n => n.IsDeleted)).Should().Be(2);
-        (await db.Notifications.CountAsync()).Should().Be(3);
+        if (keyed)
+            current.Id.Should().Be(duplicates[2].Id);
+        var untyped = await db.Notifications.Where(n => n.DedupeKey == null && n.HabitId == habit.Id && n.Id != previousDay.Id).ToListAsync();
+        untyped.Should().HaveCount(keyed ? 2 : 3);
+        untyped.Should().OnlyContain(n => n.Body == "Old" && n.CreatedAtUtc == startAtUtc);
+        (await db.Notifications.IgnoreQueryFilters().CountAsync(n => n.IsDeleted)).Should().Be(0);
+        (await db.Notifications.CountAsync()).Should().Be(keyed ? 5 : 6);
     }
 
     [Fact]

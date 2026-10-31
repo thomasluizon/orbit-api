@@ -87,7 +87,7 @@ public class BulkSkipHabitsCommandHandler(
             foreach (var result in results.Where(r => r.Status == BulkItemStatus.Success))
                 await HabitReminderInbox.MarkReadAsync(notifications, request.UserId, result.HabitId,
                     habitMap[result.HabitId].Schedule is HabitSchedule.OneTime or HabitSchedule.General
-                        ? today : request.Items[result.Index].Date ?? today, userDateService, ct);
+                        ? today : request.Items[result.Index].Date ?? today, ct);
             await unitOfWork.SaveChangesAsync(ct);
             return true;
         }, cancellationToken);

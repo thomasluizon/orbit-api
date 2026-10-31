@@ -87,8 +87,7 @@ public class SkipHabitCommandHandler(
         if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             habit.PostponeTo(today.AddDays(1));
-            await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, today,
-                userDateService, cancellationToken);
+            await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, today, cancellationToken);
             await SaveUndoAsync(receipt.Value, habit, previousLogIds, cancellationToken);
             CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
             return Result.Success(new SkipHabitResponse(receipt.Value.Id));
@@ -111,8 +110,7 @@ public class SkipHabitCommandHandler(
         if (skipError is not null)
             return skipError.PropagateError<SkipHabitResponse>();
 
-        await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, targetDate,
-            userDateService, cancellationToken);
+        await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id, targetDate, cancellationToken);
         var userId = habit.UserId;
         var streakGoalIds = habit.Goals
             .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)

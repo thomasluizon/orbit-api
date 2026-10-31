@@ -10,6 +10,7 @@ public class Notification : Entity, ITimestamped, ISoftDeletable
     public string? Url { get; private set; }
     public string? DedupeKey { get; private set; }
     public Guid? HabitId { get; private set; }
+    public DateOnly? ReminderDate { get; private set; }
     public bool IsRead { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
@@ -49,7 +50,7 @@ public class Notification : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
-    public void RefreshReminder(Notification reminder, string dedupeKey, DateTime sentAtUtc)
+    public void RefreshReminder(Notification reminder, string dedupeKey, DateTime sentAtUtc, DateOnly reminderDate)
     {
         if (HabitId is null || HabitId != reminder.HabitId || UserId != reminder.UserId)
             throw new ArgumentException("Reminder must belong to the same user and habit.", nameof(reminder));
@@ -58,11 +59,14 @@ public class Notification : Entity, ITimestamped, ISoftDeletable
             throw new ArgumentException("Reminder dedupe key cannot change.", nameof(dedupeKey));
         if (sentAtUtc.Kind != DateTimeKind.Utc)
             throw new ArgumentException("Reminder send time must be UTC.", nameof(sentAtUtc));
+        if (reminderDate == default)
+            throw new ArgumentOutOfRangeException(nameof(reminderDate));
 
         Title = reminder.Title;
         Body = reminder.Body;
         Url = reminder.Url;
         DedupeKey = dedupeKey;
+        ReminderDate = reminderDate;
         IsRead = false;
         CreatedAtUtc = sentAtUtc;
         UpdatedAtUtc = sentAtUtc;

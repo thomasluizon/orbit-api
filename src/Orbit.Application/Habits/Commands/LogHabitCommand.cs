@@ -352,7 +352,7 @@ public partial class LogHabitCommandHandler(
                     reminder?.TryConsume(logEntity.CreatedAtUtc);
                 }
                 await HabitReminderInbox.MarkReadAsync(repos.Notifications, request.UserId, habit.Id,
-                    targetDate, services.UserDateService, cancellationToken);
+                    targetDate, cancellationToken);
                 var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
                     request.UserId,
                     goalIds,
