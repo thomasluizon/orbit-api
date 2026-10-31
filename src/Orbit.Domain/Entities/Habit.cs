@@ -627,6 +627,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public Result CheckSkipEligibility() => Schedule == HabitSchedule.General
+        ? Result.Failure(DomainErrors.CannotSkipGeneralHabit)
+        : Result.Success();
+
     public Result<HabitLog> SkipFlexible(DateOnly date)
     {
         if (Schedule != HabitSchedule.Flexible)

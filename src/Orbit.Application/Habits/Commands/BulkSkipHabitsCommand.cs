@@ -82,14 +82,16 @@ public class BulkSkipHabitsCommandHandler(
                 }
             }
 
-            await unitOfWork.SaveChangesAsync(ct);
+            if (results.Any(result => result.Status == BulkItemStatus.Success))
+                await unitOfWork.SaveChangesAsync(ct);
             return true;
         }, cancellationToken);
 
         if (!refreshed)
             return Result.Failure<BulkSkipResult>(ErrorMessages.ConcurrentUpdateConflict);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        if (results.Any(result => result.Status == BulkItemStatus.Success))
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(new BulkSkipResult(results));
     }
@@ -122,6 +124,15 @@ public class BulkSkipHabitsCommandHandler(
         IReadOnlySet<Guid> dueDateResolution,
         CancellationToken cancellationToken)
     {
+        if (!habitMap.TryGetValue(habitId, out var habit))
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
+
+        var eligibility = habit.CheckSkipEligibility();
+        if (eligibility.IsFailure)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: eligibility.Error, ErrorCode: eligibility.ErrorCode);
+
         if (targetDate > today)
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.CannotSkipFutureDate.Message, ErrorCode: ErrorMessages.CannotSkipFutureDate.Code);
@@ -130,15 +141,11 @@ public class BulkSkipHabitsCommandHandler(
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.BeyondOverdueWindow.Message, ErrorCode: ErrorMessages.BeyondOverdueWindow.Code);
 
-        if (!habitMap.TryGetValue(habitId, out var habit))
-            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
-
         if (habit.IsCompleted)
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.CannotSkipCompletedHabit.Message, ErrorCode: ErrorMessages.CannotSkipCompletedHabit.Code);
 
-        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
+        if (habit.Schedule == HabitSchedule.OneTime)
         {
             habit.PostponeTo(today.AddDays(1));
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);

@@ -38,6 +38,38 @@ public class BulkSkipHabitsCommandHandlerTests
             .Returns(call => call.ArgAt<Func<CancellationToken, Task<bool>>>(0)(call.ArgAt<CancellationToken>(1)));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_GeneralMembers_RejectsOnlyGeneralWithoutMutatingThem(bool mixed)
+    {
+        var general = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Read", null, null, Today)).Value;
+        var oneTime = Habit.Create(new HabitCreateParams(HabitSchedule.OneTime, UserId, "Task", null, null, Today)).Value;
+        var recurring = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, UserId, "Daily", FrequencyUnit.Day, 1, Today)).Value;
+        var before = (general.NextDueDate, general.ScheduledStartDate, general.IsCompleted, general.UpdatedAtUtc);
+        SetupHabitsForUser(mixed ? [general, oneTime, recurring] : [general]);
+        IReadOnlyList<BulkSkipItem> items = mixed ? [new(general.Id), new(oneTime.Id), new(recurring.Id)] : [new(general.Id)];
+
+        var result = await _handler.Handle(new BulkSkipHabitsCommand(UserId, items), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(items.Count);
+        result.Value.Results.Count(item => item.Status == BulkItemStatus.Success).Should().Be(mixed ? 2 : 0);
+        var rejected = result.Value.Results.Single(item => item.HabitId == general.Id);
+        rejected.Index.Should().Be(0);
+        rejected.Status.Should().Be(BulkItemStatus.Failed);
+        rejected.ErrorCode.Should().Be("CANNOT_SKIP_GENERAL_HABIT");
+        (general.NextDueDate, general.ScheduledStartDate, general.IsCompleted, general.UpdatedAtUtc).Should().Be(before);
+        general.Logs.Should().BeEmpty();
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(mixed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
+        if (mixed)
+        {
+            oneTime.NextDueDate.Should().Be(Today.AddDays(1));
+            recurring.NextDueDate.Should().BeAfter(Today);
+        }
+    }
+
     [Fact]
     public async Task Handle_HabitChangedConcurrently_ReturnsConflictWithoutSaving()
     {

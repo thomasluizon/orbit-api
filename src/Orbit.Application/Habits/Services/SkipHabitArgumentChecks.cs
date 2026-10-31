@@ -10,13 +10,16 @@ internal static class SkipHabitArgumentChecks
     public static Result Check(Habit habit, DateOnly targetDate, DateOnly today, int weekStartDay,
         bool allowOverdue, bool dueDateResolved, bool enforceWindow)
     {
+        var eligibility = habit.CheckSkipEligibility();
+        if (eligibility.IsFailure)
+            return eligibility;
         if (habit.IsCompleted)
             return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
         if (targetDate > today)
             return Result.Failure(ErrorMessages.CannotSkipFutureDate);
         if (enforceWindow && targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
             return Result.Failure(ErrorMessages.BeyondOverdueWindow);
-        if (habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General)
+        if (habit.Schedule == HabitSchedule.OneTime)
             return Result.Success();
         if (habit.Schedule != HabitSchedule.Flexible && habit.NextDueDate > targetDate)
             return Result.Failure(ErrorMessages.HabitNotYetDue);

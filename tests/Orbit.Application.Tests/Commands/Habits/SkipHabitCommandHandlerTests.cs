@@ -18,6 +18,7 @@ public class SkipHabitCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<HabitSkipUndo> _skipUndoRepo = Substitute.For<IGenericRepository<HabitSkipUndo>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -32,11 +33,37 @@ public class SkipHabitCommandHandlerTests
         _habitRepo.TryRefreshAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>()).Returns(true);
         _unitOfWork.PassThroughTransactions<Result<SkipHabitResponse>>();
         _handler = new SkipHabitCommandHandler(
-            new SkipHabitRepositories(_habitRepo, _habitLogRepo, Substitute.For<IGenericRepository<HabitSkipUndo>>()), _userDateService,
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, _skipUndoRepo), _userDateService,
             _goalCompletionService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(-1)]
+    [InlineData(1)]
+    public async Task Handle_GeneralHabit_RejectsWithoutMutationOrPersistence(int? dayOffset)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Read", null, null, Today)).Value;
+        SetupHabitFound(habit);
+        var before = (habit.NextDueDate, habit.ScheduledStartDate, habit.IsCompleted, habit.UpdatedAtUtc);
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
+        _cache.Set(cacheKey, "cached-summary");
+
+        var result = await _handler.Handle(new SkipHabitCommand(UserId, habit.Id,
+            dayOffset.HasValue ? Today.AddDays(dayOffset.Value) : null), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("CANNOT_SKIP_GENERAL_HABIT");
+        (habit.NextDueDate, habit.ScheduledStartDate, habit.IsCompleted, habit.UpdatedAtUtc).Should().Be(before);
+        habit.Logs.Should().BeEmpty();
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _skipUndoRepo.DidNotReceive().AddAsync(Arg.Any<HabitSkipUndo>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.DidNotReceiveWithAnyArgs().SyncDerivedGoalsAsync(default, default!, default);
+        _cache.TryGetValue(cacheKey, out _).Should().BeTrue();
     }
 
     [Fact]
