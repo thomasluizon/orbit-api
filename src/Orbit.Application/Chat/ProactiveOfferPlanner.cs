@@ -94,7 +94,8 @@ public static class ProactiveOfferPlanner
                     $"Sugira um ajuste útil em {habit.Title} e mantenha o resto como está."), id, kind: ContinueChat);
             var missed = MissedDates(habit, account.Today, account.WeekStartDay, days);
             if (habit.Schedule == HabitSchedule.OneTime && habit.NextDueDate < account.Today && !resolved.Contains(habit.NextDueDate)
-                || missed.Count > 0)
+                || missed.Count > 0
+                || item.Status == "overdue" && HabitScheduleService.HasMissedPastOccurrence(habit, account.Today, account.WeekStartDay, resolvedDates: resolved))
             {
                 Add("restart", "An owned overdue or missed occurrence is unresolved.", new("Restart gently", "Retomar aos poucos",
                     "Help me restart my overdue habits: just a few today and new dates for the rest.",
