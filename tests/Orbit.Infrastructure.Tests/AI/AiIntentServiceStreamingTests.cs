@@ -108,7 +108,7 @@ public partial class AiIntentServiceStreamingTests
         JsonSerializer.Serialize(metadata).Should().NotContain("private");
 
         var options = (CreateResponseOptions)first.Value.ConversationContext!.Options!;
-        options.MaxOutputTokenCount.Should().Be(8192);
+        options.MaxOutputTokenCount.Should().Be(4096);
         options.ReasoningOptions.ReasoningEffortLevel.Should().Be(ResponseReasoningEffortLevel.Low);
         options.ToolChoice.Should().BeNull();
         options.Tools.OfType<FunctionTool>().Select(tool => tool.FunctionName).Should().Equal(toolName);
@@ -534,7 +534,7 @@ public partial class AiIntentServiceStreamingTests
     [InlineData(true)]
     public async Task SendWithToolsAsync_TruncationLogsOnlyTokenCountsAndOrderedItemSizes(bool streaming)
     {
-        var response = ResponsesTestData.Response(inputTokens: 128, outputTokens: 8192);
+        var response = ResponsesTestData.Response(inputTokens: 128, outputTokens: 4096);
         response.Status = ResponseStatus.Incomplete;
         response.IncompleteStatusDetails = new() { Reason = ResponseIncompleteStatusReason.MaxOutputTokens };
         response.Usage.OutputTokenDetails = new() { ReasoningTokenCount = 8100 };
@@ -553,9 +553,9 @@ public partial class AiIntentServiceStreamingTests
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.IsTruncated.Should().BeTrue();
         var properties = logger.WarningProperties.Should().ContainSingle(entry => entry.EventId == 8).Subject.Properties;
-        properties.Should().ContainKey("OutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("OutputTokens").WhoseValue.Should().Be(4096);
         properties.Should().ContainKey("ReasoningTokens").WhoseValue.Should().Be(8100);
-        properties.Should().ContainKey("MaxOutputTokens").WhoseValue.Should().Be(8192);
+        properties.Should().ContainKey("MaxOutputTokens").WhoseValue.Should().Be(4096);
         properties.Should().ContainKey("Model").WhoseValue.Should().Be("gpt-6-luna");
         properties.Should().ContainKey("OutputItems");
         using var items = JsonDocument.Parse((string)properties["OutputItems"]!);

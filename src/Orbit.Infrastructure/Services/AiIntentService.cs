@@ -64,13 +64,13 @@ public sealed partial class AiIntentService(
         }
 
         var usageUserId = userId == Guid.Empty ? (Guid?)null : userId;
-        var options = aiClient.Inner.CreateOptions(maxOutputTokens: 8192, userId: usageUserId);
+        var options = aiClient.Inner.CreateOptions(maxOutputTokens: AiOutputTokenLimits.ForPurpose(request.Purpose), userId: usageUserId);
 
         var tools = BuildToolCatalog(toolDeclarations);
         foreach (var tool in tools.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             options.Tools.Add(tool.Value);
         return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken,
-            telemetry: request.Telemetry);
+            telemetry: request.Telemetry, purpose: request.Purpose);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
@@ -138,7 +138,7 @@ public sealed partial class AiIntentService(
             conversationContext.UserId,
             streamSink,
             cancellationToken,
-            telemetry: conversationContext.Telemetry);
+            telemetry: conversationContext.Telemetry, purpose: conversationContext.Purpose);
     }
 
     private static void AppendToolConstraints(List<ResponseItem> messages, CreateResponseOptions options,
@@ -196,7 +196,7 @@ public sealed partial class AiIntentService(
         Guid? userId,
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken,
-        AiTurnTelemetry? telemetry = null)
+        AiTurnTelemetry? telemetry = null, string purpose = "chat")
     {
         using var completionCancellation = aiClient.CreateCompletionCancellation(cancellationToken, streaming: streamSink is not null);
         cancellationToken = completionCancellation.Token;
@@ -208,7 +208,7 @@ public sealed partial class AiIntentService(
                 LogCallingAiWithTools(logger);
             SetInputItems(options, messages);
             var round = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
-                messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken),
+                messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose),
                 cancellationToken, ModelReaderWriter.Write(options).ToString());
             if (round.RetryableIncomplete)
             {
@@ -216,7 +216,7 @@ public sealed partial class AiIntentService(
                     LogRetryIncomplete(logger, round.ResponseId, round.InputTokenCount, round.IncompleteReason);
                 stopwatch.Restart();
                 var retry = await aiClient.RunAsync(userId, client => CompleteObservedRoundAsync(client,
-                    messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken),
+                    messages, options, userId, telemetry, streamSink, stopwatch, cancellationToken, purpose),
                     cancellationToken, ModelReaderWriter.Write(options).ToString());
                 round = retry with
                 {
@@ -234,6 +234,7 @@ public sealed partial class AiIntentService(
                 Messages = messages,
                 Options = options,
                 UserId = userId,
+                Purpose = purpose,
                 Telemetry = telemetry
             };
             if (round.IsTruncated)
@@ -303,7 +304,7 @@ public sealed partial class AiIntentService(
         AiCompletionClient client, List<ResponseItem> messages, CreateResponseOptions options, Guid? userId,
         AiTurnTelemetry telemetry,
         Func<AiStreamEvent, Task>? streamSink, System.Diagnostics.Stopwatch stopwatch,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string purpose)
     {
         var observation = new ModelCallObservation();
         try
@@ -328,7 +329,7 @@ public sealed partial class AiIntentService(
             await RecordChatUsageAsync(observation.Response?.Usage, streamSink is null ? "buffered" : "streaming",
                 userId, new AiCallTelemetry(telemetry.TraceId, stopwatch.Elapsed.TotalSeconds,
                     observation.Response is null || observation.Response.Status is not (ResponseStatus.Completed or ResponseStatus.Incomplete),
-                    toolNames, telemetry.Plan, observation.Response?.Usage is not null), cancellationToken);
+                    toolNames, telemetry.Plan, observation.Response?.Usage is not null), cancellationToken, purpose);
         }
     }
 
@@ -638,7 +639,7 @@ public sealed partial class AiIntentService(
         string phase,
         Guid? userId,
         AiCallTelemetry telemetry,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string purpose)
     {
         if (usage is null)
         {
@@ -649,7 +650,7 @@ public sealed partial class AiIntentService(
         try
         {
             await usageRecorder.RecordAsync(
-                "chat",
+                purpose,
                 aiClient.ChatModel,
                 usage?.InputTokenDetails?.CachedTokenCount ?? 0,
                 usage?.InputTokenCount ?? 0,

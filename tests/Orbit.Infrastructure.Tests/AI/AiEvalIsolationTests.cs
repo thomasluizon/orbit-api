@@ -13,11 +13,32 @@ using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
+using System.IO.Compression;
+using System.Text.Json;
+using OpenAI.Responses;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
 public class AiEvalIsolationTests
 {
+    [Fact]
+    public async Task UsageSchema_ReadsReasoningFromCapturedProviderUsage()
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../..",
+            "tests/Orbit.Infrastructure.Tests/Fixtures/AiReservation/8.json.gz"));
+        await using var file = File.OpenRead(path);
+        await using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        using var capture = await JsonDocument.ParseAsync(gzip);
+        var usage = ModelReaderWriter.Read<ResponseTokenUsage>(BinaryData.FromString(capture.RootElement.GetProperty("completion_usage").GetRawText()))!;
+
+        usage.InputTokenCount.Should().Be(25);
+        usage.InputTokenDetails.CachedTokenCount.Should().Be(0);
+        usage.InputTokenDetails.CacheWriteTokenCount.Should().Be(0);
+        usage.OutputTokenCount.Should().Be(100);
+        usage.OutputTokenDetails.ReasoningTokenCount.Should().Be(85);
+        usage.TotalTokenCount.Should().Be(125);
+    }
+
     [Theory]
     [InlineData("chat", true, true)]
     [InlineData("stream", true, true)]

@@ -144,8 +144,6 @@ public sealed partial class AiCompletionClient
 
     internal string ChatModel => _primaryModel;
 
-    internal const int DefaultMaxOutputTokens = 8192;
-
     internal async Task<HabitSetupSuggestion?> CompleteOnboardingSetupAsync(string title, string language, CancellationToken cancellationToken)
     {
         using var deadline = CreateCompletionCancellation(cancellationToken);
@@ -229,7 +227,7 @@ public sealed partial class AiCompletionClient
     {
         using var completionCancellation = CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
-        var options = CreateOptions(tier, temperature, maxOutputTokens);
+        var options = CreateOptions(tier, temperature, AiOutputTokenLimits.Resolve(purpose, maxOutputTokens));
         options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
         options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
 
@@ -258,7 +256,7 @@ public sealed partial class AiCompletionClient
     {
         using var completionCancellation = CreateCompletionCancellation(cancellationToken);
         cancellationToken = completionCancellation.Token;
-        var options = CreateOptions(tier, temperature, maxOutputTokens, userId);
+        var options = CreateOptions(tier, temperature, AiOutputTokenLimits.Resolve(purpose, maxOutputTokens), userId);
         options.InputItems.Add(ResponseItem.CreateSystemMessageItem(systemPrompt));
         options.InputItems.Add(ResponseItem.CreateUserMessageItem(userPrompt));
         options.TextOptions = new ResponseTextOptions

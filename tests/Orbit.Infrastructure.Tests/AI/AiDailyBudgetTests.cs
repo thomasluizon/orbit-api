@@ -265,7 +265,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
 
         await fixture.Client.CompleteTextAsync("system", "write");
 
-        reserved.Should().Be(6546);
+        reserved.Should().Be(3474);
         using var read = fixture.Database.CreateContext();
         var call = read.AiBudgetCalls.Single();
         call.ChargedMicroDollars.Should().Be(2644);
@@ -274,7 +274,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         JsonElement.DeepEquals(fixture.EstimatedRequests.Single().GetProperty("input"),
             fixture.Handler.CompletionRequests.Single().GetProperty("input")).Should().BeTrue();
         fixture.Handler.CountedRequests.Should().BeEmpty();
-        fixture.Handler.CompletionRequests.Single().GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+        fixture.Handler.CompletionRequests.Single().GetProperty("max_output_tokens").GetInt32().Should().Be(2048);
     }
 
     [Fact]
@@ -300,11 +300,11 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             loops.Should().BeLessThan(10);
         }
 
-        loops.Should().Be(3, $"provider calls: {fixture.Handler.Completions}");
-        fixture.Handler.Completions.Should().Be(18);
+        loops.Should().Be(4, $"provider calls: {fixture.Handler.Completions}");
+        fixture.Handler.Completions.Should().Be(26);
         using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Count().Should().Be(18);
-        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(117_828);
+        read.AiBudgetCalls.Count().Should().Be(26);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(116_948);
     }
 
     [Fact]
@@ -378,7 +378,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         fixture.Handler.OmitUsage = true;
         await fixture.Client.CompleteTextAsync("system", "write");
         using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(6546);
+        read.AiBudgetCalls.Single().ChargedMicroDollars.Should().Be(3474);
     }
 
     [Theory]
@@ -416,7 +416,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         using var read = fixture.Database.CreateContext();
         read.AiUsageDaily.Should().BeEmpty();
         var charged = read.AiBudgetCalls.Single();
-        charged.ChargedMicroDollars.Should().Be(6546);
+        charged.ChargedMicroDollars.Should().Be(4498);
         charged.IsSettled.Should().BeTrue();
     }
 
@@ -428,7 +428,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
         fixture.Handler.OmitTerminalEvent = true;
         var service = new AiIntentService(fixture.Client, fixture.Recorder, NullLogger<AiIntentService>.Instance);
         var deltas = 0;
-        for (var attempt = 0; attempt < 3; attempt++)
+        for (var attempt = 0; attempt < 4; attempt++)
         {
             var result = await service.SendWithToolsAsync(new AiToolRequest("write", "system", [], fixture.User.Id),
                 _ =>
@@ -444,18 +444,18 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             _ => Task.CompletedTask);
 
         blocked.ErrorCode.Should().Be(AiBudgetExceededException.Error.Code);
-        fixture.Handler.Completions.Should().Be(3);
-        deltas.Should().Be(3);
+        fixture.Handler.Completions.Should().Be(4);
+        deltas.Should().Be(4);
         using var read = fixture.Database.CreateContext();
-        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(19_638);
+        read.AiBudgetCalls.Sum(call => call.ChargedMicroDollars).Should().Be(17_992);
     }
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, 0)]
     [InlineData(HttpStatusCode.TooManyRequests, 0)]
-    [InlineData(HttpStatusCode.InternalServerError, 6546)]
-    [InlineData(HttpStatusCode.BadGateway, 6546)]
-    [InlineData(HttpStatusCode.GatewayTimeout, 6546)]
+    [InlineData(HttpStatusCode.InternalServerError, 3474)]
+    [InlineData(HttpStatusCode.BadGateway, 3474)]
+    [InlineData(HttpStatusCode.GatewayTimeout, 3474)]
     public async Task UnreportedProviderFailure_ChargesUnlessExplicitlyRejected(HttpStatusCode status, long expectedSpend)
     {
         using var fixture = new BudgetFixture();
@@ -688,7 +688,7 @@ public partial class AiDailyBudgetTests(ITestOutputHelper output)
             Completions++;
             if (Fail && !ReportFailedUsage)
                 return Response(request, FailureStatus, "{}");
-            var response = ResponsesTestData.Response("{\"value\":\"ok\"}", InputTokens, FullToolLoops ? 8192 : 500,
+            var response = ResponsesTestData.Response("{\"value\":\"ok\"}", InputTokens, FullToolLoops ? body.RootElement.GetProperty("max_output_tokens").GetInt32() : 500,
                 FullToolLoops || Completions == 1 ? 0 : 17_350);
             response.Model = model;
             response.Usage.InputTokenDetails.CacheWriteTokenCount = FullToolLoops ? InputTokens : Completions == 1 ? 17_350 : 0;
