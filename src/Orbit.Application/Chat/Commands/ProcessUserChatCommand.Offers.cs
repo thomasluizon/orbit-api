@@ -1,3 +1,4 @@
+using static Orbit.Application.Chat.ProactiveOfferActionKinds;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Queries;
@@ -10,14 +11,16 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
+    private static readonly JsonSerializerOptions OfferSelectionJsonOptions = new(JsonSerializerDefaults.Web);
+
     private async Task<ProcessUserChatCommand> LoadOfferDismissalsAsync(ProcessUserChatCommand request, CancellationToken ct)
     {
         if (!ProactiveProposal.Enabled(request.ClientContext) || offerStore is null) return request;
         var client = request.ClientContext!;
         var conversation = client.ConversationId!.Value;
         if (client.DismissedOfferKeys is { Count: > 0 } keys)
-            await offerStore!.DismissAsync(request.UserId, conversation, keys, ct);
-        var dismissed = await offerStore!.DismissedAsync(request.UserId, conversation, ct);
+            await offerStore.DismissAsync(request.UserId, conversation, keys, ct);
+        var dismissed = await offerStore.DismissedAsync(request.UserId, conversation, ct);
         return request with { ClientContext = client with { DismissedOfferKeys = dismissed.ToArray() } };
     }
 
@@ -30,7 +33,7 @@ public partial class ProcessUserChatCommandHandler
         var selected = await offerStore.FindIssuedAsync(request.UserId, conversation, key, ct);
         var today = await execution.UserDateService.GetUserTodayAsync(request.UserId, ct);
         if (selected is null || selected.LocalDate != today
-            || selected.Action.Kind is not ("preparePreview" or "continueChat") || selected.Action.Prompt is null
+            || selected.Action.Kind is not (PreparePreview or ContinueChat) || selected.Action.Prompt is null
             || !await OfferSourceCurrentAsync(request, selected, ct)
             || (await offerStore.DismissedAsync(request.UserId, conversation, ct)).Contains(key))
             return Result.Failure<ProcessUserChatCommand>("stale_offer");
@@ -59,20 +62,20 @@ public partial class ProcessUserChatCommandHandler
 
     private static string? SelectedOfferScope(AstraOfferFact selected) => (selected.Action.Kind, selected.Family) switch
     {
-        ("preparePreview", "log") => "Prepare a log preview for the typed habit on its supplied local date.",
-        ("continueChat", "reviewHabit") => "Read the typed habit's current configuration and propose one useful adjustment.",
-        ("preparePreview", "restart") => "Call query_habits for the complete current due and overdue set. Prepare a smaller restart plan with only a small set today and a concrete local date for every deferred item.",
-        ("preparePreview", "skip") => "Read the current schedule and resolve an unresolved missed occurrence of the typed habit. Use the supplied date when present; otherwise keep the missed occurrence's original local date. Never replace it with today.",
-        ("preparePreview", "reminder") => "Read the typed habit's current reminder configuration and propose a reminder without changing any other setting.",
-        ("preparePreview", "goalLink") => "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.",
-        ("preparePreview", "goalTarget") => "Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field.",
-        ("continueChat", "smallStep") => "Help the person choose one small step for their local today.",
-        ("continueChat", "notion") => "Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits.",
-        ("preparePreview", "notification") => "Prepare a preview to mark the typed unread alert as read.",
-        ("continueChat", "reuse") when selected.Source?.QueryFamily == "list_tags" => "Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags.",
-        ("continueChat", "reuse") when selected.Source?.QueryFamily == "get_checklist_templates" => "Read the full stored checklist template identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing checklist entries.",
-        ("continueChat", "aim") when selected.PendingOperationId.HasValue => "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in the pending preview, preserving all pending work.",
-        ("continueChat", "aim") => "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.",
+        (PreparePreview, "log") => "Prepare a log preview for the typed habit on its supplied local date.",
+        (ContinueChat, "reviewHabit") => "Read the typed habit's current configuration and propose one useful adjustment.",
+        (PreparePreview, "restart") => "Call query_habits for the complete current due and overdue set. Prepare a smaller restart plan with only a small set today and a concrete local date for every deferred item.",
+        (PreparePreview, "skip") => "Read the current schedule and resolve an unresolved missed occurrence of the typed habit. Use the supplied date when present; otherwise keep the missed occurrence's original local date. Never replace it with today.",
+        (PreparePreview, "reminder") => "Read the typed habit's current reminder configuration and propose a reminder without changing any other setting.",
+        (PreparePreview, "goalLink") => "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.",
+        (PreparePreview, "goalTarget") => "Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field.",
+        (ContinueChat, "smallStep") => "Help the person choose one small step for their local today.",
+        (ContinueChat, "notion") => "Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits.",
+        (PreparePreview, "notification") => "Prepare a preview to mark the typed unread alert as read.",
+        (ContinueChat, "reuse") when selected.Source?.QueryFamily == "list_tags" => "Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags.",
+        (ContinueChat, "reuse") when selected.Source?.QueryFamily == "get_checklist_templates" => "Read the full stored checklist template identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing checklist entries.",
+        (ContinueChat, "aim") when selected.PendingOperationId.HasValue => "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in the pending preview, preserving all pending work.",
+        (ContinueChat, "aim") => "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.",
         _ => null
     };
 
@@ -104,22 +107,22 @@ public partial class ProcessUserChatCommandHandler
         var issued = await offerStore!.IssuedAsync(request.UserId, conversation, ct);
         if (reads.Length == 0 && issued.Count == 0) return (cards, false);
         var facts = await OfferFactsAsync(request.UserId, reads, context, ct);
-        var dismissed = await offerStore!.DismissedAsync(request.UserId, conversation, ct);
+        var dismissed = await offerStore.DismissedAsync(request.UserId, conversation, ct);
         var candidates = ProactiveOfferPlanner.Build(reads, facts, context.Language)
             .Where(candidate => !dismissed.Contains(candidate.Action.OfferKey)).Take(100).ToArray();
         var selected = await SelectOfferAsync(request, candidates, issued, context, ct);
         if (selected is null) return (cards, false);
         var rejected = selected.DismissedOfferKeys?.Where(key => issued.Any(offer => offer.Action.OfferKey == key))
             .Distinct(StringComparer.Ordinal).ToArray() ?? [];
-        if (rejected.Length > 0) await offerStore!.DismissAsync(request.UserId, conversation, rejected, ct);
+        if (rejected.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, rejected, ct);
         var candidate = candidates.SingleOrDefault(candidate => candidate.Id == selected.CandidateId);
         if (candidate is null || rejected.Contains(candidate.Action.OfferKey, StringComparer.Ordinal)
             || candidate.Family == "aim" && selected.Interpretation != "aim"
             || candidate.Family == "calendar" && selected.Interpretation != "dated_event") return (cards, false);
-        if ((await offerStore!.DismissedAsync(request.UserId, conversation, ct)).Contains(candidate.Action.OfferKey))
+        if ((await offerStore.DismissedAsync(request.UserId, conversation, ct)).Contains(candidate.Action.OfferKey))
             return (cards, false);
         if (await execution.UserDateService.GetUserTodayAsync(request.UserId, ct) != candidate.LocalDate) return (cards, false);
-        await offerStore!.IssueAsync(request.UserId, conversation, candidate, ct);
+        await offerStore.IssueAsync(request.UserId, conversation, candidate, ct);
         var updated = blocks.Select(block =>
         {
             var read = ReadBlockTelemetry.Describe(block.Block).Read;
@@ -177,7 +180,7 @@ public partial class ProcessUserChatCommandHandler
             }, cancellationToken: deadline.Token);
             if (response.IsFailure || response.Value.HasToolCalls || response.Value.IsTruncated
                 || response.Value.TextMessage is not { Length: > 0 and <= 4000 } json) return null;
-            return JsonSerializer.Deserialize<OfferSelection>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return JsonSerializer.Deserialize<OfferSelection>(json, OfferSelectionJsonOptions);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
         catch (JsonException) { return null; }

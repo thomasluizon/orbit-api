@@ -55,8 +55,8 @@ public sealed partial class PendingOperationChangePreviewer(
         Guid userId,
         string operationId,
         JsonElement arguments,
-        CancellationToken cancellationToken = default,
-        AgentClientContext? clientContext = null)
+        AgentClientContext? clientContext,
+        CancellationToken cancellationToken)
     {
         if (operationId == AccountChangeSet.OperationName)
             return Result.Success(await AccountChangeSet.PreviewAsync(userId, arguments, this, cancellationToken, clientContext));

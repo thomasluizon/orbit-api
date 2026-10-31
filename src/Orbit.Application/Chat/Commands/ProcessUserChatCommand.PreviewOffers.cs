@@ -36,7 +36,7 @@ public partial class ProcessUserChatCommandHandler
         return (cards, true);
     }
 
-    private static IReadOnlyList<AstraOfferFact> PreviewOffers(PendingAgentOperation preview, ChatContext context)
+    private static List<AstraOfferFact> PreviewOffers(PendingAgentOperation preview, ChatContext context)
     {
         var pt = LocaleHelper.IsPortuguese(context.Language);
         AstraOfferFact Offer(string key, string family, string evidence, AstraNextAction action) =>

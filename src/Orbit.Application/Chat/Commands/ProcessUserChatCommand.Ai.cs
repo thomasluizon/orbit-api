@@ -153,13 +153,17 @@ public partial class ProcessUserChatCommandHandler
                 Scope = SelectedOfferScope(selected)
             }));
 
-    private static string OfferToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, bool sharedTargets, AgentClientContext? client) =>
-        tool.Description + (tool.IsReadOnly ? string.Empty
-            : (sharedTargets ? Environment.NewLine + HabitTargetContext.Instruction : string.Empty)
-                + (tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit"
-                    ? Environment.NewLine + HabitModelInstructions.Titles : string.Empty)
-                + (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name)
-                    ? Environment.NewLine + ProactiveProposal.Instruction : string.Empty));
+    private static string OfferToolDescription(Orbit.Application.Chat.Tools.IAiTool tool, bool sharedTargets, AgentClientContext? client)
+    {
+        if (tool.IsReadOnly) return tool.Description;
+        var description = tool.Description;
+        if (sharedTargets) description += Environment.NewLine + HabitTargetContext.Instruction;
+        if (tool.Name is "create_habit" or "bulk_create_habits" or "create_sub_habit")
+            description += Environment.NewLine + HabitModelInstructions.Titles;
+        if (ProactiveProposal.Enabled(client) && ProactiveProposal.Supports(tool.Name))
+            description += Environment.NewLine + ProactiveProposal.Instruction;
+        return description;
+    }
 
     private object ChatToolSchema(Orbit.Application.Chat.Tools.IAiTool tool, ProcessUserChatCommand request, ChatContext context,
         bool hasAccountRead = false, IReadOnlyList<HabitSetupDraft>? drafts = null)
@@ -169,13 +173,11 @@ public partial class ProcessUserChatCommandHandler
             schema = ProactiveProposal.Schema(schema);
         if (tool.Name == "revise_pending_changes")
             schema = ProactiveProposal.RevisionSchema(schema, ProactiveProposal.Enabled(request.ClientContext));
-        return tool.IsReadOnly
-            ? UsesComposition(request, context)
-                ? tool.Name == "revise_pending_changes"
-                    ? TerminalReadDirective.WithCompletionArgument(schema, description: RevisePendingChangesTool.CompletionArgumentDescription)
-                    : TerminalReadDirective.WithCompletionArgument(schema)
-                : schema
-            : TerminalWriteDirective.WithCompletionArgument(schema);
+        if (!tool.IsReadOnly) return TerminalWriteDirective.WithCompletionArgument(schema);
+        if (!UsesComposition(request, context)) return schema;
+        return tool.Name == "revise_pending_changes"
+            ? TerminalReadDirective.WithCompletionArgument(schema, description: RevisePendingChangesTool.CompletionArgumentDescription)
+            : TerminalReadDirective.WithCompletionArgument(schema);
     }
 
     private static string AppendCardPromptInstructions(

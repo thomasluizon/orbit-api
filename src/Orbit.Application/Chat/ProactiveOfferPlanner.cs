@@ -1,3 +1,4 @@
+using static Orbit.Application.Chat.ProactiveOfferActionKinds;
 using System.Globalization;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -20,14 +21,14 @@ public static class ProactiveOfferPlanner
         ProactiveAccountFacts account, string? language)
     {
         return reads.Where(read => read.Read.Completeness == "complete" && read.Read.Recovery is null)
-            .SelectMany(read => new Builder(read, account, LocaleHelper.IsPortuguese(language)).Build())
+            .SelectMany(read => new Builder(read, account, LocaleHelper.IsPortuguese(language)).CreateOffers())
             .DistinctBy(offer => offer.Id).ToArray();
     }
 
     private sealed class Builder(QueryReadBlock read, ProactiveAccountFacts account, bool pt)
     {
         private readonly List<AstraOfferFact> offers = [];
-        public IReadOnlyList<AstraOfferFact> Build()
+        public List<AstraOfferFact> CreateOffers()
         {
             HabitOffers();
             GoalOffers();
@@ -36,16 +37,22 @@ public static class ProactiveOfferPlanner
             OtherOffers();
             return offers;
         }
-        private void Add(string family, string evidence, string en, string br, string enPrompt, string brPrompt,
-                Guid? entity = null, string kind = "preparePreview", string? surface = null, DateOnly? date = null)
+        private sealed record OfferCopy(string EnglishLabel, string PortugueseLabel, string EnglishPrompt, string PortuguesePrompt);
+        private const string TodayScope = "today";
+
+        private void Add(string family, string evidence, OfferCopy copy,
+                Guid? entity = null, string kind = PreparePreview, string? surface = null, DateOnly? date = null)
         {
             var key = family + ":" + (entity?.ToString() ?? surface ?? "account")
                 + (date is { } day ? ":" + day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "");
+            var prompt = kind == OpenSurface ? null : Localized(copy.EnglishPrompt, copy.PortuguesePrompt);
             offers.Add(new(key, family, evidence,
-                new(key, kind, pt ? br : en, surface, kind == "openSurface" ? null : pt ? brPrompt : enPrompt, entity, date),
+                new(key, kind, Localized(copy.EnglishLabel, copy.PortugueseLabel), surface, prompt, entity, date),
                 read.Read.QueryId, read.Read.Revision, account.Today)
             { Source = read.Read, SourceKind = read.Kind });
         }
+
+        private string Localized(string english, string portuguese) => pt ? portuguese : english;
 
         private IReadOnlyList<HabitListCardItem> HabitRows() => read.Block switch
         {
@@ -66,45 +73,53 @@ public static class ProactiveOfferPlanner
                 if (!Guid.TryParse(item.Id, out var id)) continue;
                 var habit = account.Habits.SingleOrDefault(habit => habit.Id == id && !habit.IsDeleted);
                 if (habit is null || habit.IsBadHabit || habit.IsCompleted || item.IsSkippedOnDate == true) continue;
-                var days = account.LogDays.Where(day => day.HabitId == id).ToArray();
-                var resolved = days.Where(day => day.CompletedCount > 0 || day.SkippedCount > 0).Select(day => day.Date).ToHashSet();
-                if (item.Status == "today" && !resolved.Contains(account.Today)
-                    && HabitScheduleService.WasScheduledOnDate(habit, account.Today, account.WeekStartDay))
-                    Add("log", "A positive scheduled occurrence is due today and unresolved.", "Log this habit", "Registrar hábito",
-                        $"Log {habit.Title} for {account.Today.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}.",
-                        $"Registre {habit.Title} em {account.Today.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}.", id, date: account.Today);
-                if (read.Block is MetricsCard or PeriodInsightCard)
-                    Add("reviewHabit", "A successful habit-specific metrics or attention result identifies this owned habit.",
-                        "Review this habit", "Rever este hábito",
-                        $"Suggest one useful change to {habit.Title} and keep the rest as it is.",
-                        $"Sugira um ajuste útil em {habit.Title} e mantenha o resto como está.", id, kind: "continueChat");
-                var missed = MissedDates(habit, account.Today, account.WeekStartDay, days);
-                if (item.Status == "overdue" && (habit.Schedule == HabitSchedule.OneTime && habit.NextDueDate < account.Today
-                    || HabitScheduleService.HasMissedPastOccurrence(habit, account.Today, account.WeekStartDay, resolvedDates: resolved)))
-                {
-                    Add("restart", "An owned overdue or missed occurrence is unresolved.", "Restart gently", "Retomar aos poucos",
-                        "Help me restart my overdue habits: just a few today and new dates for the rest.",
-                        "Me ajude a retomar meus hábitos atrasados: só alguns hoje e novas datas para o resto.", id, date: account.Today);
-                    AddSkipOffer(habit, id, missed);
-                }
-                if (missed.Count >= 3 && !habit.ReminderEnabled)
-                    Add("reminder", "Reminders are off and at least three scheduled occurrences were missed in the last fourteen local days.",
-                        "Add a reminder", "Adicionar lembrete",
-                        $"Suggest a reminder for {habit.Title} without changing anything else.",
-                        $"Sugira um lembrete para {habit.Title} sem mudar o resto.", id);
+                AddHabitOffers(item, habit);
             }
+        }
+
+        private void AddHabitOffers(HabitListCardItem item, Habit habit)
+        {
+            var id = habit.Id;
+            var days = account.LogDays.Where(day => day.HabitId == id).ToArray();
+            var resolved = days.Where(day => day.CompletedCount > 0 || day.SkippedCount > 0).Select(day => day.Date).ToHashSet();
+            if (item.Status == TodayScope && !resolved.Contains(account.Today)
+                && HabitScheduleService.WasScheduledOnDate(habit, account.Today, account.WeekStartDay))
+                Add("log", "A positive scheduled occurrence is due today and unresolved.", new("Log this habit", "Registrar hábito",
+                    $"Log {habit.Title} for {account.Today.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}.",
+                    $"Registre {habit.Title} em {account.Today.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}."), id, date: account.Today);
+            if (read.Block is MetricsCard or PeriodInsightCard)
+                Add("reviewHabit", "A successful habit-specific metrics or attention result identifies this owned habit.",
+                    new("Review this habit", "Rever este hábito",
+                    $"Suggest one useful change to {habit.Title} and keep the rest as it is.",
+                    $"Sugira um ajuste útil em {habit.Title} e mantenha o resto como está."), id, kind: ContinueChat);
+            var missed = MissedDates(habit, account.Today, account.WeekStartDay, days);
+            if (item.Status == "overdue" && (habit.Schedule == HabitSchedule.OneTime && habit.NextDueDate < account.Today
+                || HabitScheduleService.HasMissedPastOccurrence(habit, account.Today, account.WeekStartDay, resolvedDates: resolved)))
+            {
+                Add("restart", "An owned overdue or missed occurrence is unresolved.", new("Restart gently", "Retomar aos poucos",
+                    "Help me restart my overdue habits: just a few today and new dates for the rest.",
+                    "Me ajude a retomar meus hábitos atrasados: só alguns hoje e novas datas para o resto."), id, date: account.Today);
+                AddSkipOffer(habit, id, missed);
+            }
+            if (missed.Count >= 3 && !habit.ReminderEnabled)
+                Add("reminder", "Reminders are off and at least three scheduled occurrences were missed in the last fourteen local days.",
+                    new("Add a reminder", "Adicionar lembrete",
+                    $"Suggest a reminder for {habit.Title} without changing anything else.",
+                    $"Sugira um lembrete para {habit.Title} sem mudar o resto."), id);
         }
 
         private void AddSkipOffer(Habit habit, Guid id, IReadOnlyList<DateOnly> missed)
         {
-            DateOnly? date = habit.Schedule == HabitSchedule.OneTime ? habit.NextDueDate : missed.Count > 0 ? missed[0] : null;
+            DateOnly? date = habit.NextDueDate;
+            if (habit.Schedule != HabitSchedule.OneTime)
+                date = missed.Count > 0 ? missed[0] : null;
             var en = date is { } day
                 ? $"Skip {habit.Title} on {day.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)}."
                 : $"Skip the day I missed {habit.Title}.";
             var br = date is { } local
                 ? $"Pule {habit.Title} em {local.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}."
                 : $"Pule o dia em que perdi {habit.Title}.";
-            Add("skip", "An owned overdue or missed occurrence is unresolved.", "Skip", "Pular", en, br, id, date: date);
+            Add("skip", "An owned overdue or missed occurrence is unresolved.", new("Skip", "Pular", en, br), id, date: date);
         }
 
         private void GoalOffers()
@@ -114,12 +129,12 @@ public static class ProactiveOfferPlanner
                     if (Guid.TryParse(goal.Id, out var id) && goal.Status == "Active"
                         && (goal.TrackingStatus is "behind" or "at_risk" || goals.OfferTracking?.GetValueOrDefault(id) is "behind" or "at_risk"))
                     {
-                        Add("goalLink", "An active goal is behind or at risk with grounded progress and links.", "Link a habit", "Vincular hábito",
+                        Add("goalLink", "An active goal is behind or at risk with grounded progress and links.", new("Link a habit", "Vincular hábito",
                             $"Suggest a habit to link to my goal {goal.Title}.",
-                            $"Sugira um hábito para vincular à minha meta {goal.Title}.", id);
-                        Add("goalTarget", "An active goal is behind or at risk with grounded progress and target.", "Adjust the target", "Ajustar a meta",
+                            $"Sugira um hábito para vincular à minha meta {goal.Title}."), id);
+                        Add("goalTarget", "An active goal is behind or at risk with grounded progress and target.", new("Adjust the target", "Ajustar a meta",
                             $"Suggest a new target for my goal {goal.Title}.",
-                            $"Sugira um novo valor para a minha meta {goal.Title}.", id);
+                            $"Sugira um novo valor para a minha meta {goal.Title}."), id);
                     }
         }
 
@@ -128,13 +143,13 @@ public static class ProactiveOfferPlanner
             if (read.Block is DaySummaryCard summary && summary.Date == account.Today
                 && (summary.DateTo is null || summary.DateTo == summary.Date) && summary.Due == summary.Done && summary.OverdueCount == 0)
                 Add("smallStep", summary.Due == 0 ? "Nothing is scheduled today." : "Everything scheduled today is complete.",
-                    "Choose one small step", "Escolher um passo pequeno", "Help me choose one small step I can take today.",
-                    "Me ajude a escolher um passo pequeno para hoje.", kind: "continueChat", date: account.Today);
-            if (read.Block is HabitListCard { Scope: "today", Items.Count: 0, TotalCount: 0 }
+                    new("Choose one small step", "Escolher um passo pequeno", "Help me choose one small step I can take today.",
+                    "Me ajude a escolher um passo pequeno para hoje."), kind: ContinueChat, date: account.Today);
+            if (read.Block is HabitListCard { Scope: TodayScope, Items.Count: 0, TotalCount: 0 }
                 && !read.Read.Scope.TryGetProperty("search", out _) && !read.Read.Scope.TryGetProperty("tag", out _)
                 && !read.Read.Scope.TryGetProperty("is_completed", out _))
-                Add("smallStep", "The complete unfiltered current-day schedule is empty.", "Choose one small step", "Escolher um passo pequeno",
-                    "Help me choose one small step I can take today.", "Me ajude a escolher um passo pequeno para hoje.", kind: "continueChat", date: account.Today);
+                Add("smallStep", "The complete unfiltered current-day schedule is empty.", new("Choose one small step", "Escolher um passo pequeno",
+                    "Help me choose one small step I can take today.", "Me ajude a escolher um passo pequeno para hoje."), kind: ContinueChat, date: account.Today);
         }
 
         private void RecordOffers()
@@ -143,49 +158,54 @@ public static class ProactiveOfferPlanner
             foreach (var record in records.Items)
             {
                 if (!Guid.TryParse(record.Id, out var id)) continue;
-                if (records.Kind == "notionTasks" && records.Connection is { Connected: true, Status: nameof(NotionConnectionStatus.Idle) })
-                    Add("notion", "A stored Notion task and connection read grounds this page id.", "Plan in Orbit", "Planejar no Orbit",
-                        $"Turn my Notion task {record.Title} into an Orbit task or habit.",
-                        $"Transforme minha tarefa do Notion {record.Title} em uma tarefa ou hábito no Orbit.", id, kind: "continueChat");
-                if (records.Kind == "notifications" && record.IsRead == false)
-                    Add("notification", "This owned notification is unread.", "Mark as read", "Marcar como lido",
-                        $"Mark the alert {record.Title} as read.", $"Marque o aviso {record.Title} como lido.", id);
-                if (records.Kind is "tags" or "templates")
-                    Add("reuse", "A stored tag or template can be applied only after resolving an owned habit and full template contents.",
-                        "Use with a habit", "Usar em um hábito",
-                        records.Kind == "tags" ? $"Suggest a habit to use my tag {record.Title} with."
-                            : $"Suggest a habit to use my checklist template {record.Title} with.",
-                        records.Kind == "tags" ? $"Sugira um hábito para usar a etiqueta {record.Title}."
-                            : $"Sugira um hábito para usar o modelo de checklist {record.Title}.", id, kind: "continueChat");
+                AddRecordOffers(records, record, id);
             }
+        }
+
+        private void AddRecordOffers(RecordListCard records, RecordListItem record, Guid id)
+        {
+            if (records.Kind == "notionTasks" && records.Connection is { Connected: true, Status: nameof(NotionConnectionStatus.Idle) })
+                Add("notion", "A stored Notion task and connection read grounds this page id.", new("Plan in Orbit", "Planejar no Orbit",
+                    $"Turn my Notion task {record.Title} into an Orbit task or habit.",
+                    $"Transforme minha tarefa do Notion {record.Title} em uma tarefa ou hábito no Orbit."), id, kind: ContinueChat);
+            if (records.Kind == "notifications" && record.IsRead == false)
+                Add("notification", "This owned notification is unread.", new("Mark as read", "Marcar como lido",
+                    $"Mark the alert {record.Title} as read.", $"Marque o aviso {record.Title} como lido."), id);
+            if (records.Kind is "tags" or "templates")
+                Add("reuse", "A stored tag or template can be applied only after resolving an owned habit and full template contents.",
+                    new("Use with a habit", "Usar em um hábito",
+                    records.Kind == "tags" ? $"Suggest a habit to use my tag {record.Title} with."
+                        : $"Suggest a habit to use my checklist template {record.Title} with.",
+                    records.Kind == "tags" ? $"Sugira um hábito para usar a etiqueta {record.Title}."
+                        : $"Sugira um hábito para usar o modelo de checklist {record.Title}."), id, kind: ContinueChat);
         }
 
         private void OtherOffers()
         {
             if (account.SummaryAvailable && read.Block is AccountRowsCard { Kind: "profile" } profile
                 && profile.Rows.Any(row => row is { Key: "aiSummary", Value: "false" }))
-                Add("summary", "Daily summaries are available and disabled in the profile read.", "Review Astra settings", "Ver configurações da Astra",
-                    "", "", kind: "openSurface", surface: "ai-settings");
+                Add("summary", "Daily summaries are available and disabled in the profile read.", new("Review Astra settings", "Ver configurações da Astra",
+                    "", ""), kind: OpenSurface, surface: "ai-settings");
             if (account.CalendarAvailable && !account.CalendarConnected)
                 Add("calendar", "Google Calendar is available and disconnected; requires dated_event interpretation.",
-                    "Connect Google Calendar", "Conectar Google Agenda", "", "", kind: "openSurface", surface: "calendar-sync");
+                    new("Connect Google Calendar", "Conectar Google Agenda", "", ""), kind: OpenSurface, surface: "calendar-sync");
             Add("aim", $"A complete account snapshot with {account.Goals.Count} active goals is provided; requires aim interpretation and no equivalent goal.",
-                "Plan this goal", "Planejar esta meta", "Turn what we just talked about into a goal.",
-                "Transforme o que acabamos de conversar em uma meta.", kind: "continueChat");
+                new("Plan this goal", "Planejar esta meta", "Turn what we just talked about into a goal.",
+                "Transforme o que acabamos de conversar em uma meta."), kind: ContinueChat);
             var surface = read.Block switch
             {
                 GoalListCard => "goals",
                 MetricsCard or PeriodInsightCard or PeriodTotalCard or PeriodComparisonCard or StreakCard or GamificationCard => "progress",
-                RecordListCard { Kind: "tags" or "templates" } => "today",
+                RecordListCard { Kind: "tags" or "templates" } => TodayScope,
                 RecordListCard { Kind: "keys" } => "advanced-api",
                 RecordListCard { Kind: "notifications" } => "notifications",
                 AccountRowsCard { Kind: "referral" } => "referrals",
                 AccountRowsCard => "profile-preferences",
                 CalendarCard => "calendar-overview",
-                _ => "today"
+                _ => TodayScope
             };
             Add("inspect", "The successful typed read supports inspecting its underlying records or settings.",
-                "View details", "Ver detalhes", "", "", kind: "openSurface", surface: surface);
+                new("View details", "Ver detalhes", "", ""), kind: OpenSurface, surface: surface);
         }
     }
 

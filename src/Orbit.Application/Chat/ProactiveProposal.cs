@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Orbit.Domain.Models;
 using Orbit.Domain.Common;
+using Orbit.Application.Chat.Tools;
 
 namespace Orbit.Application.Chat;
 
@@ -9,6 +10,7 @@ public static class ProactiveProposal
 {
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
+    private const string Properties = "properties";
     public const string Instruction = "For offer-enabled clients, put useful unrequested configuration in suggested_fields, separately from requested fields. Consider repeat reminders for activities repeated throughout the day, reminders, schedule and frequency, checklist steps, independently tracked children or a fitting owned parent, goal links, tags, emoji and a bounded end date. Only propose fields this operation supports and omit irrelevant options. Respect the account plan and capability availability; never propose locked features. Never replace requested or stored values, invent a daily target from an interval, or add end dates to OneTime or General items. Keep doctor-prescribed fixed times in scheduled_reminders; neither fixed medication times nor ordinary daily reading calls for a repeat reminder. Resolve existing parents, goals and tags through account reads. Preserve stored checklist entries, tags and goal links when adding. A goal may need a target, unit, deadline or habit links; template reuse needs a grounded relationship and full contents before editing. Each suggestion stays editable and removable in the same approval preview. Nested drafts use their own suggested_fields; revise the exact slash-separated field path shown in the preview. Corrections preserve all other fields and never regenerate rejected suggestions. Do not add habit configuration to log, skip, delete, reorder, account reset, billing, API-key, support or administrator operations.";
 
     public static bool Enabled(AgentClientContext? client) => client is
@@ -36,7 +38,7 @@ public static class ProactiveProposal
     {
         if (enabled) return schema;
         var root = JsonSerializer.SerializeToNode(schema)!.AsObject();
-        (root["properties"]?["items"]?["items"]?["properties"] as JsonObject)?.Remove("remove_suggested_fields");
+        (root[Properties]?[ToolArgumentNames.Items]?[ToolArgumentNames.Items]?[Properties] as JsonObject)?.Remove("remove_suggested_fields");
         return root;
     }
 
@@ -49,20 +51,20 @@ public static class ProactiveProposal
 
     private static void AddSchema(JsonObject schema)
     {
-        if (schema["properties"] is not JsonObject properties) return;
+        if (schema[Properties] is not JsonObject properties) return;
         foreach (var name in new[] { "habits", "sub_habits" })
-            if (properties[name]?["items"] is JsonObject item) AddSchema(item);
-        if (properties["updates"] is JsonObject updates) AddSchema(updates);
-        if (properties.ContainsKey("habits") || properties.ContainsKey("updates")) return;
+            if (properties[name]?[ToolArgumentNames.Items] is JsonObject item) AddSchema(item);
+        if (properties[ToolArgumentNames.Updates] is JsonObject updates) AddSchema(updates);
+        if (properties.ContainsKey("habits") || properties.ContainsKey(ToolArgumentNames.Updates)) return;
         var suggested = new JsonObject();
-        foreach (var property in properties.ToArray())
-            if (Fields.Contains(property.Key)) suggested[property.Key] = property.Value?.DeepClone();
+        foreach (var property in properties.Where(property => Fields.Contains(property.Key)).ToArray())
+            suggested[property.Key] = property.Value?.DeepClone();
         if (suggested.Count == 0) return;
         properties[Argument] = new JsonObject
         {
             ["type"] = "object",
             ["description"] = Instruction,
-            ["properties"] = suggested,
+            [Properties] = suggested,
             ["additionalProperties"] = false
         };
     }
@@ -113,8 +115,8 @@ public static class ProactiveProposal
                 ?? (int.TryParse(itemId, out var i) && i >= 0 && i < habits.Count ? habits[i] as JsonObject : null);
         if (operation == "bulk_update_habits")
             return (root["revised_items"] as JsonArray)?.OfType<JsonObject>()
-                .FirstOrDefault(item => item["habit_id"]?.ToString() == itemId)?["updates"] as JsonObject
-                ?? root["updates"] as JsonObject;
+                .FirstOrDefault(item => item["habit_id"]?.ToString() == itemId)?[ToolArgumentNames.Updates] as JsonObject
+                ?? root[ToolArgumentNames.Updates] as JsonObject;
         return root;
     }
 
@@ -131,12 +133,18 @@ public static class ProactiveProposal
         JsonNode? node = root;
         for (var index = 0; index < segments.Length - 1; index++)
         {
-            node = node is JsonObject obj ? obj[segments[index]]
-                : node is JsonArray array && int.TryParse(segments[index], out var number) && number >= 0 && number < array.Count
-                    ? array[number] : null;
+            node = PathChild(node, segments[index]);
             if (node is null) return null;
         }
         return node as JsonObject;
+    }
+
+    private static JsonNode? PathChild(JsonNode? node, string segment)
+    {
+        if (node is JsonObject obj) return obj[segment];
+        if (node is JsonArray array && int.TryParse(segment, out var number) && number >= 0 && number < array.Count)
+            return array[number];
+        return null;
     }
 
     internal static bool AcceptsEdit(JsonElement schema, string path, JsonElement value)
@@ -144,9 +152,9 @@ public static class ProactiveProposal
         var segments = path.Split('/');
         for (var index = 0; index < segments.Length - 1; index++)
         {
-            if (schema.TryGetProperty("properties", out var properties) && properties.TryGetProperty(segments[index], out var property))
+            if (schema.TryGetProperty(Properties, out var properties) && properties.TryGetProperty(segments[index], out var property))
                 schema = property;
-            else if (schema.TryGetProperty("items", out var item) && int.TryParse(segments[index], out var number) && number >= 0)
+            else if (schema.TryGetProperty(ToolArgumentNames.Items, out var item) && int.TryParse(segments[index], out var number) && number >= 0)
                 schema = item;
             else return false;
         }

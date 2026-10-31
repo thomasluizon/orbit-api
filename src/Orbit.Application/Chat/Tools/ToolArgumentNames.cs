@@ -17,4 +17,8 @@ public static class ToolArgumentNames
     public const string IsBadHabit = "is_bad_habit";
     public const string IsFlexible = "is_flexible";
     public const string BulkCreateHabits = "bulk_create_habits";
+    public const string FrequencyUnitField = "frequency_unit";
+    public const string FrequencyQuantityField = "frequency_quantity";
+    public const string Items = "items";
+    public const string Updates = "updates";
 }

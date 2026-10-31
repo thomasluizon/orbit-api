@@ -22,9 +22,9 @@ public sealed class DismissConversationOffersCommandValidator : AbstractValidato
 public sealed class DismissConversationOffersCommandHandler(IConversationOfferStore store)
     : IRequestHandler<DismissConversationOffersCommand, Result>
 {
-    public async Task<Result> Handle(DismissConversationOffersCommand request, CancellationToken ct)
+    public async Task<Result> Handle(DismissConversationOffersCommand request, CancellationToken cancellationToken)
     {
-        await store.DismissAsync(request.UserId, request.ConversationId, request.OfferKeys, ct);
+        await store.DismissAsync(request.UserId, request.ConversationId, request.OfferKeys, cancellationToken);
         return Result.Success();
     }
 }
