@@ -40,45 +40,54 @@ public sealed partial class AiSummaryService(
         if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingDailySummary(logger, context.DateFrom, context.Language);
 
-        try
+        var names = scheduledHabits.Select(h => h.Title)
+            .Concat(context.PendingHabits?.SelectMany(item => new[] { item.Title, item.ParentTitle ?? string.Empty }) ?? [])
+            .ToArray();
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            var content = await aiClient.CompleteJsonAsync<DailySummaryJson>(
-                SystemPrompt,
-                prompt,
-                temperature: 0.3,
-                cancellationToken: cancellationToken,
-                maxOutputTokens: 8192,
-                purpose: "daily_summary",
-                userId: context.UserId);
+            try
+            {
+                var content = await aiClient.CompleteJsonAsync<DailySummaryJson>(
+                    SystemPrompt,
+                    prompt,
+                    temperature: 0.3,
+                    cancellationToken: cancellationToken,
+                    maxOutputTokens: 600,
+                    purpose: "daily_summary",
+                    userId: context.UserId);
 
-            if (nextStep is not null && (content is null || content.HabitId != nextStep.Id
-                || string.IsNullOrWhiteSpace(content.Summary) || content.Summary.Any(char.IsDigit)))
-                return Result.Success(new DailySummaryContent(string.Empty, string.Empty));
+                if (content is null || string.IsNullOrWhiteSpace(content.Summary)
+                    || nextStep is not null && content.HabitId != nextStep.Id)
+                    continue;
 
-            if (content is null || string.IsNullOrWhiteSpace(content.Summary))
-                return Result.Failure<DailySummaryContent>(ErrorMessages.AiEmptyResponse);
+                var summary = AiPlainText.Normalize(content.Summary, names);
+                if (string.IsNullOrWhiteSpace(summary) || summary.Length > MaxSummaryChars
+                    || AiPlainText.WithoutLiteralNames(summary, names).Any(char.IsDigit))
+                    continue;
 
-            var names = scheduledHabits.Select(h => h.Title)
-                .Concat(scheduledHabits.SelectMany(h => h.Goals).Select(g => g.Title));
-            var summary = CapToSentence(AiPlainText.Normalize(content.Summary, names), MaxSummaryChars);
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogDailySummaryGenerated(logger, summary.Length);
+                return Result.Success(new DailySummaryContent(summary, string.Empty));
+            }
+            catch (AiBudgetExceededException)
+            {
+                return Result.Failure<DailySummaryContent>(AiBudgetExceededException.Error);
+            }
+            catch (JsonException)
+            {
+                LogInvalidDailySummary(logger);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                if (attempt == 1)
+                    LogDailySummaryFailed(logger, ex);
+                else
+                    logger.LogWarning(ex, "Daily summary generation failed; retrying");
+            }
+        }
 
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogDailySummaryGenerated(logger, summary.Length);
-            return Result.Success(new DailySummaryContent(summary, string.Empty));
-        }
-        catch (AiBudgetExceededException)
-        {
-            return Result.Failure<DailySummaryContent>(AiBudgetExceededException.Error);
-        }
-        catch (JsonException) when (nextStep is not null)
-        {
-            return Result.Success(new DailySummaryContent(string.Empty, string.Empty));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogDailySummaryFailed(logger, ex);
-            return Result.Failure<DailySummaryContent>(ErrorMessages.AiSummaryUnavailable);
-        }
+        LogInvalidDailySummary(logger);
+        return Result.Failure<DailySummaryContent>(ErrorMessages.AiSummaryUnavailable);
     }
 
     private sealed record DailySummaryJson(string? Summary, Guid? HabitId = null);
@@ -502,6 +511,9 @@ public sealed partial class AiSummaryService(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Daily summary generated successfully ({Length} chars)")]
     private static partial void LogDailySummaryGenerated(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "AI returned an unusable daily summary")]
+    private static partial void LogInvalidDailySummary(ILogger logger);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for daily summary")]
     private static partial void LogDailySummaryFailed(ILogger logger, Exception ex);

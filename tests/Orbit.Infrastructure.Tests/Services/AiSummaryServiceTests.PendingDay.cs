@@ -75,7 +75,7 @@ public partial class AiSummaryServiceTests
     [InlineData("pt-BR", "missing")]
     [InlineData("en", "malformed")]
     [InlineData("pt-BR", "malformed")]
-    public async Task DailySummary_UnboundOrInvalidNextStepDropsOnlyNarrative(string language, string focus)
+    public async Task DailySummary_UnboundOrInvalidNextStepReturnsFailure(string language, string focus)
     {
         var replay = await ReplayPendingDay(language, habits => focus == "malformed" ? "{\"habitId\":\"invalid\"}"
             : JsonSerializer.Serialize(new
@@ -83,7 +83,7 @@ public partial class AiSummaryServiceTests
                 habitId = focus == "missing" ? (Guid?)null : focus == "unknown" ? Guid.Empty
                     : habits.Single(habit => habit.Title == focus).Id,
                 summary = "A recap that must not reach the person."
-            }));
+            }), expectFailure: true);
 
         replay.Summary.Should().BeEmpty();
     }
@@ -129,7 +129,7 @@ public partial class AiSummaryServiceTests
     }
 
     private static async Task<(string Request, string Summary, List<Habit> Habits, string[] StoredTitles)> ReplayPendingDay(
-        string language, Func<List<Habit>, string>? modelReply = null, bool nearlyClosed = false)
+        string language, Func<List<Habit>, string>? modelReply = null, bool nearlyClosed = false, bool expectFailure = false)
     {
         var habits = new List<Habit>();
         Habit Add(string title, int position, Guid? parent = null, TimeOnly? time = null, TimeOnly? end = null)
@@ -199,7 +199,7 @@ public partial class AiSummaryServiceTests
 
         var result = await handler.Handle(new(ValidUserId, Today, Today, language == "pt-BR" ? "en" : "pt-BR"), default);
 
-        result.IsSuccess.Should().BeTrue();
-        return (body!, result.Value.Summary, habits, storedTitles);
+        result.IsFailure.Should().Be(expectFailure);
+        return (body!, result.IsSuccess ? result.Value.Summary : string.Empty, habits, storedTitles);
     }
 }
