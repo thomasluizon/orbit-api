@@ -83,6 +83,12 @@ public sealed partial class AiIntentService(
             conversationContext.Options is not CreateResponseOptions options)
             return Result.Failure<AiResponse>(ErrorMessages.AiNoActiveConversation);
 
+        if (conversationContext.ResponseValidationFeedback is { } feedback)
+        {
+            messages.Add(ResponseItem.CreateSystemMessageItem(feedback));
+            conversationContext.ResponseValidationFeedback = null;
+        }
+
         foreach (var update in BuildToolCatalog(conversationContext.ToolDeclarationUpdates))
         {
             var existing = options.Tools.OfType<FunctionTool>().SingleOrDefault(tool => tool.FunctionName == update.Key);
@@ -184,10 +190,18 @@ public sealed partial class AiIntentService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
+            var convCtx = new AiConversationContext
+            {
+                Messages = messages,
+                Options = options,
+                UserId = userId,
+                Telemetry = telemetry
+            };
             if (round.IsTruncated)
                 return Result.Success(new AiResponse
                 {
                     TextMessage = round.Text,
+                    ConversationContext = convCtx,
                     ReportedTokenCount = round.ReportedTokenCount,
                     RequestBudgetTokenCount = round.RequestBudgetTokenCount,
                     IsTruncated = true
@@ -203,13 +217,6 @@ public sealed partial class AiIntentService(
                     LogAiReturnedToolCalls(logger, toolCalls.Count, toolNames);
                 }
 
-                var convCtx = new AiConversationContext
-                {
-                    Messages = messages,
-                    Options = options,
-                    UserId = userId,
-                    Telemetry = telemetry
-                };
                 return Result.Success(new AiResponse
                 {
                     TextMessage = round.Text,
@@ -229,6 +236,7 @@ public sealed partial class AiIntentService(
             return Result.Success(new AiResponse
             {
                 TextMessage = round.Text,
+                ConversationContext = convCtx,
                 ReportedTokenCount = round.ReportedTokenCount,
                 RequestBudgetTokenCount = round.RequestBudgetTokenCount,
                 IsTruncated = round.IsTruncated

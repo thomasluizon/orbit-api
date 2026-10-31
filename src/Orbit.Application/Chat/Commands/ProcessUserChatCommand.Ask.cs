@@ -26,6 +26,8 @@ public partial class ProcessUserChatCommandHandler
     private static string AddAskContext(string dynamicContext, ProcessUserChatCommand request, ChatContext context)
     {
         var askEnabled = AskEnabled(request, context);
+        if (askEnabled && UsesComposition(request, context))
+            dynamicContext = string.Join(Environment.NewLine, dynamicContext, TerminalAnswerDirective.Instruction);
         if (askEnabled)
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 AskTool.AccountReadInstruction,
