@@ -10,7 +10,6 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Enums;
-using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat;
 
@@ -270,20 +269,7 @@ public sealed partial class PendingOperationChangePreviewer
         JsonNode? Value(string name) => source[name] ?? suggestions[name] ?? stored.GetValueOrDefault(name);
         if (field == "end_date") return Value(IsGeneralField)?.ToString() == "true"
             || Value(FrequencyUnitField) is null || Value(FrequencyUnitField)?.ToString() == "OneTime";
-        if (field != "repeat_reminder") return false;
-        if (HasFixedReminders(source, stored)) return true;
-        var schedule = OfferHabitSchedule(Value(IsGeneralField), Value("is_flexible"));
-        var unit = Enum.TryParse<FrequencyUnit>(Value(FrequencyUnitField)?.ToString(), out var parsed) ? parsed : (FrequencyUnit?)null;
-        var quantity = int.TryParse(Value(FrequencyQuantityField)?.ToString(), out var count) ? count : (int?)null;
-        var interval = int.TryParse(Value("interval_weeks")?.ToString(), out var weeks) ? weeks : (int?)null;
-        var days = (Value("days") as JsonArray)?.Select(day => Enum.TryParse<DayOfWeek>(day?.ToString(), out var weekday) ? weekday : (DayOfWeek)(-1));
-        return !RepeatReminderOptions.SupportsSchedule(schedule, unit, quantity, days, interval);
-    }
-
-    private static HabitSchedule OfferHabitSchedule(JsonNode? general, JsonNode? flexible)
-    {
-        if (general?.ToString() == "true") return HabitSchedule.General;
-        return flexible?.ToString() == "true" ? HabitSchedule.Flexible : HabitSchedule.Recurring;
+        return field == "repeat_reminder" && HasFixedReminders(source, stored);
     }
 
     private static bool IsExplicitlyCleared(JsonObject source, string field) =>

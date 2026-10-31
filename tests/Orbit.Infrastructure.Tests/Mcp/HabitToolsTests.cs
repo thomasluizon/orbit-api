@@ -74,6 +74,58 @@ public class HabitToolsTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RepeatReminder_RoutesThroughTheExistingPreviewGateway(bool update)
+    {
+        StubExecutor(AgentOperationStatus.PendingConfirmation, pendingOperationId: Guid.NewGuid());
+        const string repeat = """{"interval_minutes":480,"active_start":"08:00","active_end":"22:00"}""";
+        string result = "";
+        var request = await CapturedRequestAsync(async () => result = update
+            ? await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), repeatReminder: repeat)
+            : await _tools.CreateHabit(_user, "Reminder", "2027-09-26", repeatReminder: repeat));
+        request.OperationId.Should().Be(update ? "update_habit" : "create_habit");
+        request.Arguments.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(480);
+        result.Should().Contain("Confirmation required");
+        await _mediator.DidNotReceive().Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>());
+        await _mediator.DidNotReceive().Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RepeatReminder_ChildAndBulkCreatePreserveTheSettings()
+    {
+        StubExecutor(AgentOperationStatus.PendingConfirmation, pendingOperationId: Guid.NewGuid());
+        var child = await CapturedRequestAsync(async () =>
+            await _tools.CreateSubHabit(_user, Guid.NewGuid().ToString(), "Reminder",
+                repeatReminder: """{"interval_minutes":480}"""));
+        child.Arguments.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(480);
+        child.Arguments.GetProperty("reminder_enabled").GetBoolean().Should().BeTrue();
+        var bulk = await CapturedRequestAsync(async () => await _tools.BulkCreateHabits(_user,
+            """[{"title":"Reminder","repeatReminder":{"interval_minutes":480},"subHabits":[{"title":"Child","repeatReminder":{"interval_minutes":30}}]}]"""));
+        var item = bulk.Arguments.GetProperty("habits")[0];
+        item.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(480);
+        item.GetProperty("sub_habits")[0].GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(30);
+    }
+
+    [Fact]
+    public async Task RepeatReminder_UpdateCanClearItExplicitly()
+    {
+        StubExecutor(AgentOperationStatus.PendingConfirmation, pendingOperationId: Guid.NewGuid());
+        var request = await CapturedRequestAsync(async () =>
+            await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), repeatReminder: "null"));
+        request.Arguments.GetProperty("clear_fields").EnumerateArray().Select(field => field.GetString())
+            .Should().Contain("repeat_reminder");
+    }
+
+    [Fact]
+    public async Task RepeatReminder_InvalidJsonNeverReachesTheGateway()
+    {
+        var result = await _tools.CreateHabit(_user, "Reminder", "2027-09-26", repeatReminder: "{");
+        result.Should().Be("Error: repeat_reminder must be valid JSON.");
+        await _executor.DidNotReceive().ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     public async Task UpdateHabit_DueTime_OmitKeepsAndEmptyClears(string? dueTime)

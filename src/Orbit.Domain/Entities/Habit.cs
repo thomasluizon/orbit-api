@@ -258,8 +258,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (relativeValidation is not null)
             return Result.Failure<Habit>(relativeValidation);
 
-        if (p.RepeatReminder is { } repeat && (!repeat.IsValid()
-            || !RepeatReminderOptions.SupportsSchedule(p.Schedule, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks)))
+        if (p.RepeatReminder is { } repeat && !repeat.IsValid())
             return Result.Failure<Habit>(DomainErrors.InvalidRepeatReminder);
 
         return CreateWithSchedule(p);
@@ -818,8 +817,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private AppError? ValidateUpdatedRepeat(HabitUpdateParams p)
     {
         var effective = p.ClearRepeatReminder ? null : p.RepeatReminder ?? RepeatReminder;
-        return effective is { } repeat && (!repeat.IsValid()
-            || !RepeatReminderOptions.SupportsSchedule(p.Schedule, p.FrequencyUnit, p.FrequencyQuantity, p.Days, p.IntervalWeeks))
+        return effective is { } repeat && !repeat.IsValid()
             ? DomainErrors.InvalidRepeatReminder : null;
     }
 
