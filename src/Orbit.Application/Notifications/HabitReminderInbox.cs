@@ -1,4 +1,5 @@
 using System.Globalization;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -16,8 +17,10 @@ public static class HabitReminderInbox
         if (reminder.HabitId is not { } habitId)
             throw new ArgumentException("Habit reminder must have a habit id.", nameof(reminder));
         var key = Key(habitId, date);
-        var startAtUtc = TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone);
-        var endAtUtc = TimeZoneInfo.ConvertTimeToUtc(date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone);
+        var startAtUtc = RepeatReminderClock.LocalInstant(date.ToDateTime(TimeOnly.MinValue), zone)
+            ?? throw new ArgumentOutOfRangeException(nameof(sentAtUtc));
+        var endAtUtc = RepeatReminderClock.LocalInstant(date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone)
+            ?? throw new ArgumentOutOfRangeException(nameof(sentAtUtc));
         var candidates = await notifications.FindTrackedIgnoringFiltersAsync(n => n.UserId == reminder.UserId
             && n.HabitId == reminder.HabitId && (n.DedupeKey == key
                 || !n.IsDeleted && n.DedupeKey == null && n.Url == NotificationUrls.Home

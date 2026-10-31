@@ -5,11 +5,33 @@ using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public partial class ReminderSchedulerServiceTests
 {
+    [Theory]
+    [InlineData(-30)]
+    [InlineData(30)]
+    public async Task Inbox_MidnightDaylightSavingGapDoesNotPreventRecording(int minutes)
+    {
+        var db = CreateSqliteDbContext();
+        var (habit, _) = await SeedRepeat();
+        var midnight = new DateTime(1, 1, 1, 0, 0, 0);
+        var rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(new(2027, 1, 1), new(2027, 12, 31),
+            TimeSpan.FromHours(1), TimeZoneInfo.TransitionTime.CreateFixedDateRule(midnight, 3, 1),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(midnight, 11, 1));
+        var zone = TimeZoneInfo.CreateCustomTimeZone("Midnight change", TimeSpan.Zero, "Midnight change", "Standard", "Daylight", [rule]);
+        var sentAtUtc = new DateTime(2027, 3, 1, 0, 0, 0, DateTimeKind.Utc).AddMinutes(minutes);
+        var reminder = Notification.Create(habit.UserId, habit.Title, "Latest", "/", habit.Id);
+
+        await HabitReminderInbox.RefreshAsync(new GenericRepository<Notification>(db), reminder, zone, sentAtUtc, default);
+        await db.SaveChangesAsync();
+
+        (await db.Notifications.SingleAsync()).CreatedAtUtc.Should().Be(sentAtUtc);
+    }
+
     [Fact]
     public async Task Repeat_InboxStartsANewRowAtLocalMidnight()
     {
