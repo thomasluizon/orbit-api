@@ -675,9 +675,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return result;
     }
 
-    public Result<HabitLog> Unlog(DateOnly date)
+    public Result<HabitLog> Unlog(DateOnly date) =>
+        Unlog(date, _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted));
+
+    public Result<HabitLog> Unlog(DateOnly date, Guid logId) =>
+        Unlog(date, _logs.Find(l => l.Id == logId && l.Date == date && l.Value > 0 && !l.IsDeleted));
+
+    private Result<HabitLog> Unlog(DateOnly date, HabitLog? log)
     {
-        var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
         if (log is null)
             return Result.Failure<HabitLog>(DomainErrors.LogNotFoundForDate);
 
