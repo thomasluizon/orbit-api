@@ -14,7 +14,7 @@ public static class RepeatReminderPlanner
     /// An unsent overdue occurrence fires at the next opportunity, retaining its original reminder instant.
     /// </summary>
     public static RepeatReminderPlan? Next(Habit habit, DateTime nowAtUtc, TimeZoneInfo zone, int weekStartDay,
-        DateTime? doseAtUtc, IReadOnlySet<DateOnly> loggedDates, IReadOnlyCollection<SentReminder> sentReminders)
+        DateTime? doseAtUtc, RepeatReminderEligibility eligibility, IReadOnlyCollection<SentReminder> sentReminders)
     {
         if (EnabledOptions(habit) is not { } options
             || options.StartAtUtc is not { } startAtUtc)
@@ -39,8 +39,7 @@ public static class RepeatReminderPlanner
                 candidateAtUtc = startAt;
                 continue;
             }
-            if (!CanSend(habit, date, weekStartDay)
-                || habit.Schedule == HabitSchedule.Recurring && loggedDates.Contains(date))
+            if (!eligibility.CanSend(habit, date, weekStartDay))
             {
                 if (date == DateOnly.MaxValue || habit.Schedule == HabitSchedule.OneTime)
                     return null;
@@ -79,8 +78,4 @@ public static class RepeatReminderPlanner
         && sent.DoseAnchorAtUtc == anchorAtUtc
         && RepeatReminderClock.MoveIntoWindow(followUpAtUtc, options, zone) == followUpAtUtc
         && !sentReminders.Any(r => r.ParentReminderId == sent.Id);
-
-    private static bool CanSend(Habit habit, DateOnly date, int weekStartDay) =>
-        habit.Schedule == HabitSchedule.General
-            ? date >= habit.StartDate : HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay);
 }

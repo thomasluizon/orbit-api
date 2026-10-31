@@ -53,6 +53,21 @@ public class CreateHabitCommandHandlerTests
             });
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(FrequencyUnit.Week, false)]
+    [InlineData(null, true)]
+    public async Task Handle_RepeatReminderAcceptsEverySchedule(FrequencyUnit? unit, bool general)
+    {
+        var command = new CreateHabitCommand(UserId, "Reminder", null, unit, unit is null ? null : 1,
+            IsGeneral: general, DueDate: Today, Options: new(ReminderEnabled: true, RepeatReminder: new(480)));
+        new Orbit.Application.Habits.Validators.CreateHabitCommandValidator().Validate(command).IsValid.Should().BeTrue();
+        (await _handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(Arg.Is<Habit>(habit => habit.RepeatIntervalMinutes == 480
+            && habit.Schedule == (general ? HabitSchedule.General : unit == null ? HabitSchedule.OneTime : HabitSchedule.Recurring)),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Handle_ExplicitStartAtCalendarBoundary_ReturnsDomainFailure()
     {

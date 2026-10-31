@@ -55,7 +55,7 @@ public partial class ReminderSchedulerServiceTests
             new MutableTimeProvider(new(doseAtUtc.AddHours(8)))).CheckAndSendReminders(default);
 
         reads.Commands.Where(c => c.Sql.Contains("FROM \"HabitLogs\"", StringComparison.Ordinal))
-            .Sum(c => c.Rows).Should().BeLessThanOrEqualTo(2);
+            .Sum(c => c.Rows).Should().BeLessThanOrEqualTo(3);
         (await db.SentReminders.SingleAsync()).ReminderAtUtc.Should().Be(doseAtUtc.AddHours(8));
     }
 
@@ -110,7 +110,7 @@ public partial class ReminderSchedulerServiceTests
     public async Task Repeat_LateOrCorrectedDoseMovesNextReminder(bool corrected)
     {
         var db = CreateSqliteDbContext();
-        var (habit, start) = await SeedRepeat();
+        var (habit, start) = await SeedRepeat(schedule: HabitSchedule.General);
         var dose = start.AddHours(8).AddMinutes(30);
         var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, dose);
         log.CorrectTakenAtUtc(corrected ? dose.AddMinutes(-30) : dose, dose);
@@ -147,7 +147,7 @@ public partial class ReminderSchedulerServiceTests
     public async Task Repeat_TimeZoneChangeDoesNotReclassifyAnActualDoseAsABackfill()
     {
         var db = CreateSqliteDbContext();
-        var (habit, startAtUtc) = await SeedRepeat();
+        var (habit, startAtUtc) = await SeedRepeat(schedule: HabitSchedule.General);
         var user = await db.Users.SingleAsync();
         var doseAtUtc = UtcToday.ToDateTime(new(1, 0), DateTimeKind.Utc);
         var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, doseAtUtc, doseAtUtc,
@@ -193,9 +193,9 @@ public partial class ReminderSchedulerServiceTests
 
     [Theory]
     [InlineData(HabitSchedule.Recurring, 0)]
-    [InlineData(HabitSchedule.Flexible, 1)]
+    [InlineData(HabitSchedule.Flexible, 0)]
     [InlineData(HabitSchedule.General, 1)]
-    public async Task Repeat_OnlyRecurringStopsAfterDailyCompletion(HabitSchedule schedule, int expected)
+    public async Task Repeat_ScheduledHabitsStopAfterDailyCompletion(HabitSchedule schedule, int expected)
     {
         var db = CreateSqliteDbContext();
         var (habit, start) = await SeedRepeat(schedule: schedule);

@@ -167,7 +167,7 @@ public partial class ReminderSchedulerServiceTests
             var reader = new RepeatReminderReader(db, ReadDates(user.Id, start), new MutableTimeProvider(new(start)));
             var result = await reader.GetNextAsync(user.Id, habits.Select(h => h.Id).ToList(), default);
             result.Should().HaveCount(count);
-            result.Values.Should().OnlyContain(next => next == start.AddHours(8));
+            result.Values.Should().OnlyContain(next => next == UtcToday.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
             var commandCount = reads.CommandCount;
             (await reader.GetNextAsync(Guid.NewGuid(), habits.Select(h => h.Id).ToList(), default)).Should().BeEmpty();
             return commandCount;

@@ -109,7 +109,7 @@ public partial class ReminderSchedulerService(
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        var (repeatAnchors, repeatLoggedDates, repeatSent) = await LoadRepeatSnapshot(
+        var (repeatAnchors, repeatEligibility, repeatSent) = await LoadRepeatSnapshot(
             dbContext, repeatHabits, users, nowUtc, minLocalDate, ct);
 
         var habitIds = relativeHabits.Select(h => h.Id).ToList();
@@ -158,7 +158,7 @@ public partial class ReminderSchedulerService(
             .ToHashSet();
 
         return new ReminderSnapshot(nowUtc, probe, relativeHabits, scheduledHabits,
-            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatLoggedDates, repeatSent);
+            users, loggedHabitDates, sentReminderSet, sentClockSet, sentScheduledSet, repeatHabits, repeatAnchors, repeatEligibility, repeatSent);
     }
 
     private async Task ProcessRelativeReminders(ReminderSnapshot snapshot, OrbitDbContext dbContext,
@@ -452,7 +452,7 @@ public partial class ReminderSchedulerService(
         HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc, ScheduledReminderWhen? When)> SentScheduledSet,
         List<Habit> RepeatHabits,
         Dictionary<Guid, DateTime> RepeatAnchors,
-        HashSet<(Guid HabitId, DateOnly Date)> RepeatLoggedDates,
+        RepeatReminderEligibility RepeatEligibility,
         List<SentReminder> RepeatSent);
 
     private static bool HasEnded(Habit habit, DateOnly today) =>

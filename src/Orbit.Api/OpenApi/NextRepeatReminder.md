@@ -18,12 +18,14 @@ occurs on a scheduler tick and depends on successful notification delivery.
 It uses `RepeatReminderClock`, the original dose eligibility from
 `RepeatReminderDoseLoader`, saved consumption and follow-up state, the account
 timezone, active windows, daily stop and resume, and the local end date.
-Daily completion suppresses only recurring repeat reminders. General and
-flexible habits continue their repeat cadence. Dose correction and notification
+Every schedule accepts repeat reminders. Scheduled habits notify only while
+due today or overdue under the schedule read model, and stop for the local day
+after completion or skip. Flexible habits also respect their remaining period
+target. General habits follow their own completion state. Dose correction and notification
 Done read back the resulting persisted anchor without a response cache.
 
 No input, enum or existing response field changes. Existing repeat-option
-validators and domain guards still govern the supported cadence and schedule.
+validators and domain guards still govern the supported cadence and active window.
 The reader batches state for the repeat habits visible in a response, with an
 ownership filter before loading their doses and reminder state.
 
