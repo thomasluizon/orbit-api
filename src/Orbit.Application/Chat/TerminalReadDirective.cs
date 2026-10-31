@@ -32,6 +32,7 @@ public static class TerminalReadDirective
             ["description"] = description
         });
         schema["required"]!.AsArray().Add(argument);
+        ChatToolControlOrder.Apply(schema);
         return schema;
     }
 

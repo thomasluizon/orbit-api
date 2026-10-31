@@ -19,6 +19,7 @@ existing readable habit and goal lists when the client advertises no part kinds.
 The model receives no instruction to write fallback prose in this mode. A false
 completion signal, failed read or missing projection retains normal continuation.
 No message pattern changes the tools, their arguments or the answer.
+Provider-facing schemas put server control fields before tool payload fields in both `properties` and `required`, preserving tool field order, because strict generation can emit runaway whitespace when a large payload precedes required controls.
 
 The following model-facing copy is English at runtime in both locales; pt-BR is
 supplied for coordinator review. Person-visible fallback strings are unchanged.

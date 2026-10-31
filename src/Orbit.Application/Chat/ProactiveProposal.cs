@@ -36,9 +36,10 @@ public static class ProactiveProposal
 
     public static object RevisionSchema(object schema, bool enabled)
     {
-        if (enabled) return schema;
         var root = JsonSerializer.SerializeToNode(schema)!.AsObject();
-        (root[Properties]?[ToolArgumentNames.Items]?[ToolArgumentNames.Items]?[Properties] as JsonObject)?.Remove("remove_suggested_fields");
+        if (!enabled)
+            (root[Properties]?[ToolArgumentNames.Items]?[ToolArgumentNames.Items]?[Properties] as JsonObject)?.Remove("remove_suggested_fields");
+        ChatToolControlOrder.Apply(root);
         return root;
     }
 
@@ -79,6 +80,7 @@ public static class ProactiveProposal
                 ["enum"] = new JsonArray(eligible.Select(property => JsonValue.Create(property.Key)).ToArray())
             }
         };
+        ChatToolControlOrder.Apply(schema);
     }
 
     internal static bool NormalizeSuggestions(JsonNode? node, out string? invalidField)

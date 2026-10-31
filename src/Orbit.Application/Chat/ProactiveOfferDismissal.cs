@@ -20,6 +20,7 @@ internal static class ProactiveOfferDismissal
             ["description"] = "Exact keys from previously_issued_offers dismissed by the person in this turn. Empty when none.",
             ["items"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 200 }
         };
+        ChatToolControlOrder.Apply(root);
         return root;
     }
 

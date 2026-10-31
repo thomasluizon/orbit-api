@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Orbit.Application.Chat;
 
 namespace Orbit.Infrastructure.AI;
 
@@ -29,6 +30,7 @@ internal static class StrictToolSchema
             foreach (var definition in definitions) Normalize(definition.Value!.AsObject());
         if (schema["properties"] is JsonObject properties)
         {
+            ChatToolControlOrder.Apply(schema);
             var required = schema["required"]?.AsArray().Select(value => value!.GetValue<string>()).ToHashSet()
                 ?? [];
             foreach (var (name, value) in properties)
