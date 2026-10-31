@@ -20,6 +20,7 @@ public sealed partial class AiSummaryService(
     internal const string SystemPrompt = """
         You are Astra, a warm, perceptive friend helping the person see where their whole day stands.
         Write exactly one short sentence, under 300 characters, in the profileLanguage supplied in the fact sheet.
+        Join clauses with a comma or a semicolon; the only sentence-ending mark (period, question mark or exclamation mark) must be the last character; punctuation inside an exact supplied stored title is part of the title, not a sentence end.
         Summarize the day across the person's routines in words: what is done, nearly done, not started, and what remains, choosing the facts that best describe the day rather than listing every item.
         End the sentence by naturally naming the server-selected next step. The model never selects a task.
         If nextStep is null, close the day without inventing, implying or suggesting a remaining task.
@@ -77,7 +78,8 @@ public sealed partial class AiSummaryService(
 
                 var summary = AiPlainText.Normalize(content.Summary, names);
                 if (!summary.Any(char.IsLetterOrDigit) || summary.Length > MaxSummaryChars
-                    || NarrativeText.WithoutTitles(summary, names).Any(char.IsDigit))
+                    || NarrativeText.WithoutTitles(summary, names).Any(char.IsDigit)
+                    || HasMultipleSentences(summary, names))
                     continue;
 
                 if (logger.IsEnabled(LogLevel.Debug))
@@ -110,6 +112,27 @@ public sealed partial class AiSummaryService(
     }
 
     private sealed record DailySummaryJson(string? Summary, Guid? NextStepHabitId = null);
+
+    private static bool HasMultipleSentences(string summary, IEnumerable<string> titles)
+    {
+        var characters = summary.ToCharArray();
+        foreach (var title in titles.Where(title => title.IndexOfAny(SentenceEnds) >= 0).Distinct(StringComparer.Ordinal))
+        {
+            var start = summary.IndexOf(title, StringComparison.Ordinal);
+            while (start >= 0)
+            {
+                for (var index = 0; index < title.Length; index++)
+                {
+                    if (SentenceEnds.Contains(title[index]))
+                        characters[start + index] = ' ';
+                }
+                start = summary.IndexOf(title, start + 1, StringComparison.Ordinal);
+            }
+        }
+        return characters.Take(characters.Length - 1).Any(character => SentenceEnds.Contains(character));
+    }
+
+    private static readonly char[] SentenceEnds = ['.', '?', '!'];
 
     private static DailySummaryPendingHabit? SelectNextStep(DailySummaryContext context) =>
         DailySummaryPendingProjection.SelectNextStep(context.PendingHabits);
