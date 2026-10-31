@@ -20,10 +20,11 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
+using Xunit.Abstractions;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
-public sealed partial class ProviderToolControlOrderTests
+public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper output)
 {
     private static readonly HashSet<string> Controls = new(StringComparer.Ordinal)
     {
@@ -42,6 +43,24 @@ public sealed partial class ProviderToolControlOrderTests
     [InlineData("offers", "post-read")]
     [InlineData("offers", "draft-revision")]
     public async Task AllProviderDeclarations_PutControlsBeforePayloads(string client, string phase)
+    {
+        var (registry, sdkCatalog) = await BuildProviderCatalogAsync(client, phase);
+        sdkCatalog.Should().NotBeEmpty();
+        var violations = new List<string>();
+        foreach (var (name, tool) in sdkCatalog)
+        {
+            using var wire = JsonDocument.Parse(ModelReaderWriter.Write(tool).ToString());
+            var parameters = wire.RootElement.GetProperty("parameters");
+            AssertControlOrder(parameters, name, violations);
+            var source = registry.GetTool(name) is AskTool ask
+                ? ask.GetCacheableParameterSchema() : registry.GetTool(name)!.GetParameterSchema();
+            AssertPayloadOrder(JsonSerializer.SerializeToElement(source), parameters, name);
+        }
+        violations.Should().BeEmpty("strict generation emits properties in declaration order; controls after a large payload caused whitespace runaway");
+    }
+
+    private static async Task<(AiToolRegistry Registry, IDictionary<string, ResponseTool> Tools)> BuildProviderCatalogAsync(
+        string client, string phase)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [] });
         foreach (var name in new[] { "AddAiPlatformServices", "AddAiChatTools" })
@@ -86,14 +105,17 @@ public sealed partial class ProviderToolControlOrderTests
         await (Task<Result<AiResponse>>)handlerType.GetMethod("RequestInitialAiResponseAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(handler, [request, context, null, new AiTurnTelemetry(), state, CancellationToken.None])!;
         captured.Should().NotBeNull();
-        var declarations = captured!.ToolDeclarations.ToList();
+        var sdkCatalog = (IDictionary<string, ResponseTool>)typeof(AiIntentService)
+            .GetMethod("BuildToolCatalog", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [captured!.ToolDeclarations])!;
+        var options = new CreateResponseOptions();
+        foreach (var tool in sdkCatalog.Values) options.Tools.Add(tool);
         var draft = new HabitSetupDraft("draft", "Activity", "frequency_unit", Guid.Empty);
         if (phase != "initial")
         {
             var resultsType = handlerType.GetNestedType("ToolExecutionAccumulator", BindingFlags.NonPublic)!;
             var results = Activator.CreateInstance(resultsType, nonPublic: true)!;
-            resultsType.GetProperty("HasSuccessfulAccountRead")!.SetValue(results, phase == "post-read");
-            if (phase == "draft-revision")
+            resultsType.GetProperty("HasSuccessfulAccountRead")!.SetValue(results, phase is "post-read" or "post-read-draft");
+            if (phase is "draft-revision" or "post-read-draft")
             {
                 ((IDictionary<string, HabitSetupDraft>)resultsType.GetProperty("MissingHabitDrafts")!.GetValue(results)!).Add(draft.CallId, draft);
             }
@@ -101,23 +123,10 @@ public sealed partial class ProviderToolControlOrderTests
             handlerType.GetMethod("RefreshAskSchema", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .Invoke(handler, [conversation, request, context, results]);
             conversation.ToolDeclarationUpdates.Should().HaveCount(client == "legacy" ? 0 : 1);
-            declarations.AddRange(conversation.ToolDeclarationUpdates);
+            typeof(AiIntentService).GetMethod("AppendToolConstraints", BindingFlags.NonPublic | BindingFlags.Static)!
+                .Invoke(null, [new List<ResponseItem>(), options, conversation.ToolDeclarationUpdates]);
         }
-        var sdkCatalog = (IDictionary<string, ResponseTool>)typeof(AiIntentService)
-            .GetMethod("BuildToolCatalog", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [declarations.GroupBy(declaration => JsonSerializer.SerializeToElement(declaration).GetProperty("name").GetString()).Select(group => group.Last()).ToArray()])!;
-        sdkCatalog.Should().NotBeEmpty();
-        var violations = new List<string>();
-        foreach (var (name, tool) in sdkCatalog)
-        {
-            using var wire = JsonDocument.Parse(ModelReaderWriter.Write(tool).ToString());
-            var parameters = wire.RootElement.GetProperty("parameters");
-            AssertControlOrder(parameters, name, violations);
-            var source = registry.GetTool(name) is AskTool ask
-                ? phase == "initial" || client == "legacy" ? ask.GetCacheableParameterSchema() : ask.GetParameterSchema(phase == "post-read", phase == "draft-revision" ? [draft] : null)
-                : registry.GetTool(name)!.GetParameterSchema();
-            AssertPayloadOrder(JsonSerializer.SerializeToElement(source), parameters, name);
-        }
-        violations.Should().BeEmpty("strict generation emits properties in declaration order; controls after a large payload caused whitespace runaway");
+        return (registry, options.Tools.Cast<FunctionTool>().ToDictionary(tool => tool.FunctionName, tool => (ResponseTool)tool));
     }
 
     private static void AssertControlOrder(JsonElement schema, string path, List<string> violations)

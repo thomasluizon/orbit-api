@@ -62,6 +62,54 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
+    [InlineData("en", "repeat-en-r1")]
+    [InlineData("pt-BR", "repeat-pt-BR-r3")]
+    public async Task OfferFieldNames_RepairUnsupportedNameBeforeTheOnlyApprovalPreview(string language, string capture)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        var tool = new CreateHabitTool(_userDateService, _mediator);
+        var handler = CreateHandler(tool);
+        var outcomes = R9fWriteExecutor(tool);
+        var accepted = R9fCall(capture, tool.Name);
+        var invalid = JsonNode.Parse(accepted.Args.GetRawText())!.AsObject();
+        invalid["suggested_fields"]!.AsArray().Add("unsupported_offer_field");
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [accepted with { Args = JsonSerializer.SerializeToElement(invalid) }],
+            ConversationContext = TestConversationContext
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                var failure = call.Arg<IReadOnlyList<AiToolCallResult>>().Single();
+                failure.Success.Should().BeFalse();
+                failure.Error.Should().Contain("unsupported_offer_field");
+                return Result.Success(new AiResponse
+                {
+                    ToolCalls = [accepted with { Id = "repair" }],
+                    ConversationContext = TestConversationContext
+                });
+            });
+
+        var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(language)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        outcomes.Select(value => value.Operation.Status).Should().Equal(AgentOperationStatus.Failed, AgentOperationStatus.PendingConfirmation);
+        outcomes[0].Operation.ErrorCode.Should().Be("invalid_offer");
+        var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
+        var fields = preview.Items!.Single().Fields;
+        fields.Should().Contain(field => field.Field == "title" && field.Provenance == "requested"
+            && field.NewValue == accepted.Args.GetProperty("title").GetString());
+        fields.Should().Contain(field => field.Field == "repeat_reminder" && field.Provenance == "suggested"
+            && field.IsEditable && field.Removal != null);
+        fields.Should().NotContain(field => field.Field == "unsupported_offer_field");
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await _mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.Habits.Commands.CreateHabitCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData("metadata-en-r1", "emoji", "requested")]
     [InlineData("dated-reminder-pt-BR-r2", "emoji", "suggested")]
     [InlineData("repeat-en-r1", "repeat_reminder", "suggested")]

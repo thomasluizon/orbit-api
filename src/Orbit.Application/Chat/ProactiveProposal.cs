@@ -74,10 +74,10 @@ public static class ProactiveProposal
         {
             ["type"] = "array",
             ["description"] = Instruction,
+            ["maxItems"] = eligible.Length,
             ["items"] = new JsonObject
             {
-                ["type"] = "string",
-                ["enum"] = new JsonArray(eligible.Select(property => JsonValue.Create(property.Key)).ToArray())
+                ["type"] = "string"
             }
         };
         ChatToolControlOrder.Apply(schema);
