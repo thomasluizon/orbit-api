@@ -13,7 +13,9 @@ public static class HabitReminderInbox
         Notification reminder, TimeZoneInfo zone, DateTime sentAtUtc, CancellationToken ct)
     {
         var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(sentAtUtc, zone));
-        var key = Key(reminder.HabitId!.Value, date);
+        if (reminder.HabitId is not { } habitId)
+            throw new ArgumentException("Habit reminder must have a habit id.", nameof(reminder));
+        var key = Key(habitId, date);
         var startAtUtc = TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(TimeOnly.MinValue), zone);
         var endAtUtc = TimeZoneInfo.ConvertTimeToUtc(date.AddDays(1).ToDateTime(TimeOnly.MinValue), zone);
         var candidates = await notifications.FindTrackedIgnoringFiltersAsync(n => n.UserId == reminder.UserId
@@ -30,5 +32,20 @@ public static class HabitReminderInbox
         row.RefreshReminder(reminder, key, sentAtUtc);
         foreach (var duplicate in candidates.Where(n => n.Id != row.Id))
             duplicate.SoftDelete();
+    }
+
+    public static async Task MarkReadAsync(IGenericRepository<Notification> notifications,
+        Guid userId, Guid habitId, DateOnly localDate, IUserDateService dates, CancellationToken ct)
+    {
+        var key = Key(habitId, localDate);
+        var rows = await notifications.FindTrackedAsync(n => n.UserId == userId && n.HabitId == habitId
+            && !n.IsRead && (n.DedupeKey == key || n.DedupeKey == null && n.Url == NotificationUrls.Home), ct);
+        var zone = rows.Any(n => n.DedupeKey is null) ? await dates.GetUserTimeZoneAsync(userId, ct) : null;
+        foreach (var row in rows)
+        {
+            if (row.DedupeKey == key || zone is { } legacyZone
+                && DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(row.CreatedAtUtc, legacyZone)) == localDate)
+                row.MarkAsRead();
+        }
     }
 }

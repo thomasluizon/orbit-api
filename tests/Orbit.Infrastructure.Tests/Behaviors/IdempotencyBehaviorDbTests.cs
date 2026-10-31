@@ -224,7 +224,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var context = new StubIdempotencyContext(true, _userId, "shared-http-key", trackOrdinals: true);
         if (skip)
         {
-            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
+            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache, new GenericRepository<Notification>(_dbContext));
             var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(context, _store, _unitOfWork);
             mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
                 .Returns(call =>
@@ -244,7 +244,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
                     Arg.Any<bool>(), Arg.Any<CancellationToken>())
                 .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
             var handler = new BulkLogHabitsCommandHandler(habitRepository, logRepository,
-                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>(), new GenericRepository<Notification>(_dbContext)),
                 goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
             var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(context, _store, _unitOfWork);
             mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
@@ -305,7 +305,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         var interrupt = true;
         if (skip)
         {
-            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache);
+            var handler = new BulkSkipHabitsCommandHandler(habitRepository, logRepository, dateService, _unitOfWork, cache, new GenericRepository<Notification>(_dbContext));
             var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(context, _store, _unitOfWork);
             mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
                 .Returns(call =>
@@ -329,7 +329,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
                     Arg.Any<bool>(), Arg.Any<CancellationToken>())
                 .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
             var handler = new BulkLogHabitsCommandHandler(habitRepository, logRepository,
-                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+                new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>(), new GenericRepository<Notification>(_dbContext)),
                 goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
             var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(context, _store, _unitOfWork);
             mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
@@ -469,7 +469,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
                 Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<GoalCompletionUpdate>)Array.Empty<GoalCompletionUpdate>());
         var handler = new BulkLogHabitsCommandHandler(habitRepository, new GenericRepository<HabitLog>(_dbContext),
-            new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>()),
+            new BulkLogServices(dateService, Substitute.For<IUserStreakService>(), Substitute.For<IGamificationService>(), new GenericRepository<Notification>(_dbContext)),
             goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
         var context = new StubIdempotencyContext(true, _userId, "chat-retry", trackOrdinals: true);
         var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(
@@ -715,7 +715,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkLogHabitsCommandHandler(
             new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            new BulkLogServices(dateService, streakService, gamificationService),
+            new BulkLogServices(dateService, streakService, gamificationService, new GenericRepository<Notification>(_dbContext)),
             goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
         var context = new StubIdempotencyContext(true, _userId, "identical-invocations", trackOrdinals: true);
         var behavior = new IdempotencyBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>(
@@ -759,7 +759,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkSkipHabitsCommandHandler(
             new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            CreateUserDateService(today), _unitOfWork, cache);
+            CreateUserDateService(today), _unitOfWork, cache, new GenericRepository<Notification>(_dbContext));
         var context = new StubIdempotencyContext(true, _userId, "identical-skip-invocations", trackOrdinals: true);
         var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(
             context, _store, _unitOfWork);
@@ -917,7 +917,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
                 new GenericRepository<Habit>(_dbContext),
                 new GenericRepository<HabitLog>(_dbContext),
                 new GenericRepository<User>(_dbContext),
-                new GenericRepository<SentReminder>(_dbContext)),
+                new GenericRepository<SentReminder>(_dbContext), new GenericRepository<Notification>(_dbContext)),
             new LogHabitServices(userDateService, streakService, gamificationService,
                 goalService, mediator, payGate),
             _unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);
@@ -994,7 +994,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkSkipHabitsCommandHandler(
             new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            dateService, _unitOfWork, cache);
+            dateService, _unitOfWork, cache, new GenericRepository<Notification>(_dbContext));
         var command = new BulkSkipHabitsCommand(_userId, habits.Select(h => new BulkSkipItem(h.Id)).ToList());
         var behavior = CreateBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>();
         RequestHandlerDelegate<Result<BulkSkipResult>> next = ct =>
@@ -1028,7 +1028,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkSkipHabitsCommandHandler(
             new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            CreateUserDateService(today), _unitOfWork, cache);
+            CreateUserDateService(today), _unitOfWork, cache, new GenericRepository<Notification>(_dbContext));
         var command = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habit.Id, today)]);
         var context = new StubIdempotencyContext(true, _userId, "legacy-skip-key", trackOrdinals: true);
         var behavior = new IdempotencyBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(
@@ -1084,7 +1084,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkLogHabitsCommandHandler(
             new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            new BulkLogServices(dateService, streakService, gamificationService),
+            new BulkLogServices(dateService, streakService, gamificationService, new GenericRepository<Notification>(_dbContext)),
             goalService, _unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
         var command = new BulkLogHabitsCommand(_userId, habits.Select(h => new BulkLogItem(h.Id)).ToList());
         var behavior = CreateBehavior<BulkLogHabitsCommand, Result<BulkLogResult>>();
@@ -1125,7 +1125,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new BulkSkipHabitsCommandHandler(
             new GenericRepository<Habit>(_dbContext), new GenericRepository<HabitLog>(_dbContext),
-            CreateUserDateService(today), _unitOfWork, cache);
+            CreateUserDateService(today), _unitOfWork, cache, new GenericRepository<Notification>(_dbContext));
         var firstCommand = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habits[0].Id)]);
         var secondCommand = new BulkSkipHabitsCommand(_userId, [new BulkSkipItem(habits[1].Id)]);
         var firstBehavior = CreateBehavior<BulkSkipHabitsCommand, Result<BulkSkipResult>>(key: "chunk-1");
