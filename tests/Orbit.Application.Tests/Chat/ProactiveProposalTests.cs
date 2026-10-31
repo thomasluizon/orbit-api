@@ -209,6 +209,24 @@ public sealed class ProactiveProposalTests
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
     [Fact]
+    public async Task FieldNameParentOffersResolveTheOwnedParentInThePreview()
+    {
+        var parent = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, user, "Routine", FrequencyUnit.Day, 1,
+            new DateOnly(2026, 10, 30))).Value;
+        habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        habits.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(), Arg.Any<CancellationToken>()).Returns([parent]);
+        var args = JsonSerializer.SerializeToElement(new
+        {
+            habits = new[] { new { title = "Stretch", parent_habit_id = parent.Id, suggested_fields = new[] { "parent_habit_id" } } }
+        });
+        var result = await previewer.PreviewAsync(user, "bulk_create_habits", args, clientContext: client);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.ExecutionArguments!.Value.GetProperty("habits")[0].GetProperty("parent_habit_id").GetGuid().Should().Be(parent.Id);
+        result.Value.Items![0].Fields.Should().Contain(field => field.Field == "parent_habit_id"
+            && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
+    }
+
+    [Fact]
     public async Task FieldNameOffersAtMaximumDepthKeepTheirRevisionAndRemovalPaths()
     {
         JsonObject child = new()
