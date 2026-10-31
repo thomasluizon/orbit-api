@@ -175,7 +175,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             AgentExecutionSurface.Chat, AgentAuthMethod.Jwt), default);
 
         held.PendingOperation.Should().BeNull();
-        held.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        held.Operation.Status.Should().Be(duplicate ? AgentOperationStatus.Failed : AgentOperationStatus.Denied);
         (await RestartReadbackAsync()).Should().BeEquivalentTo(original);
     }
 

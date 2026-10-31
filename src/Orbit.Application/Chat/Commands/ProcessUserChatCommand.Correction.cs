@@ -127,20 +127,21 @@ public partial class ProcessUserChatCommandHandler
             foreach (var candidate in candidates)
             {
                 var matches = _unresolved.Where(item => item.Call.Name == candidate.Name
-                    && SameArgumentTargets(item.Call.Args, candidate.Args) && repairs.All(repair => repair.Item2 != item)).ToArray();
+                    && SameArgumentTargets(item.Call.Args, candidate.Args, item.Call.Name) && repairs.All(repair => repair.Item2 != item)).ToArray();
                 if (matches.Length != 1) return [];
                 repairs.Add((candidate, matches[0]));
             }
             return repairs;
         }
 
-        private static bool SameArgumentTargets(JsonElement original, JsonElement candidate)
+        private static bool SameArgumentTargets(JsonElement original, JsonElement candidate, string operationId)
         {
             if (original.ValueKind != JsonValueKind.Object || candidate.ValueKind != JsonValueKind.Object) return false;
             foreach (var property in original.EnumerateObject())
             {
                 if (property.Value.ValueKind == JsonValueKind.Null) continue;
-                if (property.Name is "habit_id" or "goal_id" or "template_id" or "parent_habit_id" or "title" or "name" or "habit_ids" or "filter")
+                if (property.Name == "name" && operationId == "update_profile_preferences") continue;
+                if (property.Name is "habit_id" or "goal_id" or "template_id" or "parent_habit_id" or "title" or "name" or "habit_ids" or "filter" or "action")
                 {
                     if (!candidate.TryGetProperty(property.Name, out var value) || !JsonElement.DeepEquals(property.Value, value)) return false;
                 }
@@ -148,7 +149,7 @@ public partial class ProcessUserChatCommandHandler
                 {
                     if (!candidate.TryGetProperty(property.Name, out var items) || items.ValueKind != JsonValueKind.Array
                         || items.GetArrayLength() != property.Value.GetArrayLength()
-                        || !property.Value.EnumerateArray().Zip(items.EnumerateArray()).All(pair => SameArgumentTargets(pair.First, pair.Second))) return false;
+                        || !property.Value.EnumerateArray().Zip(items.EnumerateArray()).All(pair => SameArgumentTargets(pair.First, pair.Second, operationId))) return false;
                 }
             }
             return true;

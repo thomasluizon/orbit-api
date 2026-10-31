@@ -1434,11 +1434,14 @@ and empty arrays are absent for offer eligibility and provenance. A listed name
 without a value is dropped while every filled valid suggestion and the requested
 write remain intact. Unknown names, invalid shapes and unusable values return
 repairable tool failures naming the affected field, rather than policy denials.
-Argument failures retain their domain code, including `GENERAL_HABIT_HAS_FREQUENCY`.
+Pre-confirmation argument-check failures across operations return repairable `Failed`
+outcomes with their domain code, including `GENERAL_HABIT_HAS_FREQUENCY`.
 A chat turn may repair such a rejection once before approval, using the same tool
-and preserving supplied target IDs, names, bulk filters and nested target structure. Successful
+and preserving supplied target IDs, target names, actions, bulk filters and nested target structure.
+For profile `set_name`, the proposed name is editable rather than a target identity. Successful
 siblings are not replayed. The repaired arguments run through the ordinary checks
-and still require approval. Policy denials retain their policy status.
+and still require approval. Typed `PAY_GATE`, `HABIT_NOT_FOUND` and `TEMPLATE_NOT_FOUND`
+argument-check failures retain `Denied`, as do ownership and policy denials.
 This avoids duplicating nested draft schemas inside offers.
 The preview also accepts the earlier value-object representation for pending drafts.
 The API resolves effective values before ordinary tool validation and command

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -411,12 +412,12 @@ public partial class AgentOperationExecutor(
             var validation = await check.CheckArgumentsAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
             if (validation.IsFailure)
             {
-                if (execution.Operation.Id == "assign_tags")
-                    return new RepairableArgumentResponse(await BuildToolOutcomeResponseAsync(execution,
-                        new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, execution.Capability),
-                        ToolResult.FromFailure(validation), cancellationToken));
-                return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode ?? validation.Error));
+                if (validation.ErrorCode is Result.PayGateErrorCode or ErrorCodes.HabitNotFound or ErrorCodes.TemplateNotFound)
+                    return await DenyByPolicyAsync(execution, new AgentPolicyDecision(
+                        AgentPolicyDecisionStatus.Denied, execution.Capability, validation.ErrorCode));
+                return new RepairableArgumentResponse(await BuildToolOutcomeResponseAsync(execution,
+                    new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, execution.Capability),
+                    ToolResult.FromFailure(validation), cancellationToken));
             }
         }
 

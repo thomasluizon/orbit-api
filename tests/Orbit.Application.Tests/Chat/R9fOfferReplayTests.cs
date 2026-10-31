@@ -47,7 +47,7 @@ public partial class ProcessUserChatCommandHandlerTests
         ownership.GetDenialReasonAsync(Arg.Any<string>(), UserId, Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
         var real = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
             ownership, Substitute.For<IAgentStepUpAuthorizationBridge>(), registry,
-            new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService, registry),
+            new PendingOperationChangePreviewer(_habitRepo, _goalRepo, _tagRepo, _userDateService, registry, templateRepository: _checklistTemplateRepo),
             _pendingOperationStore, _unitOfWork, NullLogger<AgentOperationExecutor>.Instance);
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
