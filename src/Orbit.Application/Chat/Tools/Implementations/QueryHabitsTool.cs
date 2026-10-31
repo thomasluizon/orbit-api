@@ -25,7 +25,8 @@ public class QueryHabitsTool(
         + "pair with query_goals for the goals. A daily summary does not replace this listing. Call before answering habit questions; indexes do not ground replies. "
         + "For a habit's completion or skip state on a day, use date with is_completed null to include done, remaining and skipped entries. "
         + "For a requested skip, call skip_habit or bulk_skip_habits after resolving the target, even when isSkippedOnDate is true; this read does not perform that action. "
-        + "For choosing records or resolving a write target, set for_selection=true and orbit_read_complete=false, then call ask. "
+        + "Use an explicit habit ID supplied by the person directly in the matching write tool; no selection lookup or ask is needed. "
+        + "For choosing records or resolving an unclear write target, set for_selection=true and orbit_read_complete=false, then call ask. "
         + "For a restart proposal, set for_selection=false and orbit_read_complete=false, then prepare the complete bulk_reschedule_habits preview yourself; this account read needs no selection question. "
         + "A selection lookup never finishes the answer or authorizes a write, even with one candidate. Multiple matches require the person's choice.";
 

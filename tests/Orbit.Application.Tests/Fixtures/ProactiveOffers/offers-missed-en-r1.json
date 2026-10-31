@@ -1,0 +1,26 @@
+{
+  "source": "offers-missed-en-r1.json",
+  "sha256": "1de43f6da0b5d5c8fee5b25e54fd3818ae30a5003bac140ed2802a6d37b61f96",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": null,
+        "search": null,
+        "date": "today",
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": false,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

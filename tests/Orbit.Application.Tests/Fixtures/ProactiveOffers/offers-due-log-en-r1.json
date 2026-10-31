@@ -1,0 +1,26 @@
+{
+  "source": "offers-due-log-en-r1.json",
+  "sha256": "edc58eb902ff6fa8476e5e20dbbe476ab1b7f74102eb6e900166ab52ff6e54f5",
+  "toolCalls": [
+    {
+      "name": "query_habits",
+      "arguments": {
+        "for_selection": false,
+        "relative_period": "today",
+        "search": null,
+        "date": null,
+        "include_overdue": true,
+        "is_general": null,
+        "is_completed": null,
+        "is_bad_habit": null,
+        "frequency": null,
+        "tag": null,
+        "include_sub_habits": true,
+        "include_metrics": false,
+        "offset": 0,
+        "limit": 50,
+        "orbit_read_complete": true
+      }
+    }
+  ]
+}

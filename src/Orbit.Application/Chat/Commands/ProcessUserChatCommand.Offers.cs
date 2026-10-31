@@ -116,6 +116,7 @@ public partial class ProcessUserChatCommandHandler
             .Distinct(StringComparer.Ordinal).ToArray() ?? [];
         if (rejected.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, rejected, ct);
         var candidate = candidates.SingleOrDefault(candidate => candidate.Id == selected.CandidateId);
+        candidate = PreferFamilyOffer(candidate, candidates, selected, rejected);
         if (candidate is null || rejected.Contains(candidate.Action.OfferKey, StringComparer.Ordinal)
             || candidate.Family == "aim" && selected.Interpretation != "aim"
             || candidate.Family == "calendar" && selected.Interpretation != "dated_event") return (cards, false);
@@ -130,6 +131,19 @@ public partial class ProcessUserChatCommandHandler
                 ? block with { Block = ReadBlockFactory.Attach(block.Block, read with { NextAction = candidate.Action }) } : block;
         }).ToArray();
         return (cards with { Parts = updated, AiMessage = null, ServerComposedText = true }, true);
+    }
+
+    private static AstraOfferFact? PreferFamilyOffer(AstraOfferFact? candidate, AstraOfferFact[] candidates,
+        OfferSelection selected, string[] rejected)
+    {
+        if (candidate?.Family == "inspect")
+            candidate = candidates.Where(fact => fact.Family != "inspect"
+                && !rejected.Contains(fact.Action.OfferKey, StringComparer.Ordinal)
+                && (fact.Family != "aim" || selected.Interpretation == "aim")
+                && (fact.Family != "calendar" || selected.Interpretation == "dated_event"))
+                .OrderBy(fact => fact.Family switch { "reminder" => 0, "restart" => 1, "skip" => 2, _ => 3 })
+                .FirstOrDefault() ?? candidate;
+        return candidate;
     }
 
     private bool CanComposeOffer(ProcessUserChatCommand request, ToolExecutionAccumulator results) =>

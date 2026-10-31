@@ -59,7 +59,7 @@ public sealed class BulkRescheduleHabitsTool(IMediator mediator) : IAiTool, IArg
     public async Task<Orbit.Domain.Common.Result> CheckArgumentsAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         var result = await ExecuteCoreAsync(args, userId, ct, checkOnly: true);
-        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!);
+        return result.Success ? Orbit.Domain.Common.Result.Success() : Orbit.Domain.Common.Result.Failure(result.Error!, result.ErrorCode);
     }
 
     private async Task<ToolResult> ExecuteCoreAsync(JsonElement args, Guid userId, CancellationToken ct, bool checkOnly)

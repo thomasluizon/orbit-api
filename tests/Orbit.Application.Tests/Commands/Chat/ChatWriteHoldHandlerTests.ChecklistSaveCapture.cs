@@ -62,7 +62,8 @@ public sealed partial class ChatWriteHoldHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         result.Value.PendingOperations.Should().BeNullOrEmpty();
-        result.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Denied);
+        result.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Failed);
+        result.Value.PolicyDenials.Should().BeNullOrEmpty();
         result.Value.Operations.Single().PolicyReason.Should().Contain("preserve every stored item's text, order and checked state");
         habit.ChecklistItems.Should().Equal(existing);
         _dbContext.PendingAgentOperations.Should().BeEmpty();
