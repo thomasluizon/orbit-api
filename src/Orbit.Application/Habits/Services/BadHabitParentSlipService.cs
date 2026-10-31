@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -7,31 +8,41 @@ namespace Orbit.Application.Habits.Services;
 
 internal static class BadHabitParentSlipService
 {
-    public static async Task<Result<HabitLog?>> LogAsync(
+    public static async Task<Result<IReadOnlyList<HabitLog>>> LogAsync(
         Habit child, DateOnly date, DateOnly today, int weekStartDay,
         IGenericRepository<Habit> habits, CancellationToken cancellationToken)
     {
-        var parent = await LoadParentAsync(child, date, habits, cancellationToken);
-        if (parent is null || parent.Logs.Any(log => IsSlipOnDate(log, date))
-            || !await AllChildrenSlippedAsync(parent, date, habits, cancellationToken))
-            return Result.Success<HabitLog?>(null);
-
-        var logged = parent.Log(date, advanceDueDate: date >= today,
-            weekStartDay: weekStartDay, loggedOnLocalDate: today);
-        return logged.IsSuccess
-            ? Result.Success<HabitLog?>(logged.Value)
-            : new Result<HabitLog?>(null, false, logged.Error, logged.ErrorCode, logged.ErrorArgs);
+        var logs = new List<HabitLog>();
+        var visited = new HashSet<Guid> { child.Id };
+        while (await LoadParentAsync(child, date, habits, cancellationToken) is { } parent && visited.Add(parent.Id))
+        {
+            if (!await AllChildrenSlippedAsync(parent, date, habits, cancellationToken))
+                break;
+            if (!parent.Logs.Any(log => IsSlipOnDate(log, date)))
+            {
+                var logged = parent.Log(date, advanceDueDate: date >= today,
+                    weekStartDay: weekStartDay, loggedOnLocalDate: today);
+                if (logged.IsFailure)
+                    return logged.PropagateError<IReadOnlyList<HabitLog>>();
+                logs.Add(logged.Value);
+            }
+            child = parent;
+        }
+        return Result.Success<IReadOnlyList<HabitLog>>(logs);
     }
 
     public static async Task RemoveIfIncompleteAsync(
         Habit child, DateOnly date, IGenericRepository<Habit> habits, CancellationToken cancellationToken)
     {
-        var parent = await LoadParentAsync(child, date, habits, cancellationToken);
-        if (parent is null || await AllChildrenSlippedAsync(parent, date, habits, cancellationToken))
-            return;
-
-        while (parent.Logs.Any(log => IsSlipOnDate(log, date)))
-            parent.Unlog(date);
+        var visited = new HashSet<Guid> { child.Id };
+        while (await LoadParentAsync(child, date, habits, cancellationToken) is { } parent && visited.Add(parent.Id))
+        {
+            if (await AllChildrenSlippedAsync(parent, date, habits, cancellationToken))
+                break;
+            while (parent.Logs.Any(log => IsSlipOnDate(log, date)))
+                parent.Unlog(date);
+            child = parent;
+        }
     }
 
     private static Task<Habit?> LoadParentAsync(

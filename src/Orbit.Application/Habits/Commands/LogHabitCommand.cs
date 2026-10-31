@@ -247,7 +247,7 @@ public partial class LogHabitCommandHandler(
     }
 
     /// <summary>The rows a log persists, carried out of the lock so the derived work below can run outside it.</summary>
-    internal sealed record PersistedLog(Guid LogId, bool IsFirstCompletionToday, LinkedGoalSyncResult GoalSync, int PreviousStreak, Guid? DerivedParentHabitId = null);
+    internal sealed record PersistedLog(Guid LogId, bool IsFirstCompletionToday, LinkedGoalSyncResult GoalSync, int PreviousStreak, IReadOnlyList<Guid>? DerivedParentHabitIds = null);
 
     private async Task<Result<LogHabitResponse>> HandleLogAsync(
         Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today, int weekStartDay,
@@ -288,7 +288,7 @@ public partial class LogHabitCommandHandler(
         var goalSync = persisted.Value.GoalSync;
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
-        if (persisted.Value.DerivedParentHabitId is { } parentHabitId)
+        foreach (var parentHabitId in persisted.Value.DerivedParentHabitIds ?? [])
             await ProcessGamificationSafeAsync(request.UserId, parentHabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
 
@@ -353,11 +353,11 @@ public partial class LogHabitCommandHandler(
                         cancellationToken: cancellationToken);
                     reminder?.TryConsume(logEntity.CreatedAtUtc);
                 }
-                var parentLog = await BadHabitParentSlipService.LogAsync(
+                var parentLogs = await BadHabitParentSlipService.LogAsync(
                     habit, targetDate, today, weekStartDay, repos.HabitRepository, cancellationToken);
-                if (parentLog.IsFailure)
-                    return parentLog.PropagateError<PersistedLog>();
-                if (parentLog.Value is { } derivedLog)
+                if (parentLogs.IsFailure)
+                    return parentLogs.PropagateError<PersistedLog>();
+                foreach (var derivedLog in parentLogs.Value)
                     await repos.HabitLogRepository.AddAsync(derivedLog, cancellationToken);
 
                 var updates = await services.GoalCompletionService.SyncDerivedGoalsAsync(
@@ -366,7 +366,7 @@ public partial class LogHabitCommandHandler(
                     today,
                     cancellationToken: cancellationToken);
                 return Result.Success(new PersistedLog(
-                    logEntity.Id, isFirstCompletionToday, ToLinkedGoalSyncResult(updates), previousStreak?.CurrentStreak ?? 0, parentLog.Value?.HabitId));
+                    logEntity.Id, isFirstCompletionToday, ToLinkedGoalSyncResult(updates), previousStreak?.CurrentStreak ?? 0, parentLogs.Value.Select(log => log.HabitId).ToList()));
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
             {

@@ -109,11 +109,11 @@ public partial class BulkLogHabitsCommandHandler(
             foreach (var result in results.Where(result => result.Status == BulkItemStatus.Success && result.LogId is not null))
             {
                 var targetDate = request.Items[result.Index].Date ?? today;
-                var parentLog = await BadHabitParentSlipService.LogAsync(
+                var parentLogs = await BadHabitParentSlipService.LogAsync(
                     habitMap[result.HabitId], targetDate, today, weekStartDay, habitRepository, ct);
-                if (parentLog.IsFailure)
-                    throw new InvalidOperationException(parentLog.Error);
-                if (parentLog.Value is { } derivedLog)
+                if (parentLogs.IsFailure)
+                    throw new InvalidOperationException(parentLogs.Error);
+                foreach (var derivedLog in parentLogs.Value)
                 {
                     await habitLogRepository.AddAsync(derivedLog, ct);
                     derivedParentIds.Add(derivedLog.HabitId);

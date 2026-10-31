@@ -76,6 +76,8 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
         ActiveSlips(parent).Should().BeEmpty();
         await LogAsync(second, astra);
         ActiveSlips(parent).Should().ContainSingle().Which.LoggedOnLocalDate.Should().Be(Today);
+        (await _single.Handle(new LogHabitCommand(_userId, second.Id, ToggleExisting: false), default))
+            .IsFailure.Should().BeTrue();
         await _bulk.Handle(new BulkLogHabitsCommand(_userId, [new(first.Id), new(second.Id)]), default);
         ActiveSlips(parent).Should().ContainSingle();
         await _gamification.Received(1).ProcessHabitLogged(_userId, parent.Id, Arg.Any<CancellationToken>());
@@ -163,6 +165,39 @@ public sealed class BadHabitParentSlipTests : IAsyncDisposable
         await _context.SaveChangesAsync();
         (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
         ActiveSlips(parent).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NestedParents_LogAndUndo_ApplyAllChildrenRuleAtEachLevel(bool bulk)
+    {
+        var (parent, first, second) = await SeedAsync();
+        var root = CreateHabit("Root", true);
+        parent.SetParentHabitId(root.Id);
+        var peer = CreateHabit("Peer", true, root.Id);
+        _context.Habits.AddRange(root, peer);
+        await _context.SaveChangesAsync();
+        if (bulk)
+            (await _bulk.Handle(new BulkLogHabitsCommand(_userId,
+                [new(peer.Id), new(first.Id), new(second.Id)]), default)).IsSuccess.Should().BeTrue();
+        else
+        {
+            await LogAsync(peer, false);
+            await LogAsync(first, false);
+            ActiveSlips(root).Should().BeEmpty();
+            await LogAsync(second, false);
+        }
+        ActiveSlips(parent).Should().ContainSingle();
+        ActiveSlips(root).Should().ContainSingle();
+
+        (await _unlogTool.ExecuteAsync(Args(first), _userId, default)).Success.Should().BeTrue();
+
+        ActiveSlips(parent).Should().BeEmpty();
+        ActiveSlips(root).Should().BeEmpty();
+        await LogAsync(first, false);
+        ActiveSlips(parent).Should().ContainSingle();
+        ActiveSlips(root).Should().ContainSingle();
     }
 
     private async Task LogAsync(Habit habit, bool astra)
