@@ -46,6 +46,10 @@ public partial class ProcessUserChatCommandHandler
             || operation.Payload is not DailySummaryResponse summary || string.IsNullOrWhiteSpace(summary.Summary)
             || operation.ReadBlock is not { Kind: "daySummary" } read)
             return null;
+        var titles = (read.Block as DaySummaryCard)?.Rows?
+            .SelectMany(row => new[] { row.Title, row.ParentTitle ?? string.Empty }) ?? [];
+        if (NarrativeText.WithoutTitles(summary.Summary, titles).Any(char.IsDigit))
+            return null;
         return read.Read.Scope.TryGetProperty("generate_narrative", out var requested)
             && requested.ValueKind == JsonValueKind.True ? summary.Summary : null;
     }

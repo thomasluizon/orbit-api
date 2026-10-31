@@ -18,118 +18,62 @@ public partial class AiSummaryServiceTests
     [Theory]
     [InlineData("en")]
     [InlineData("pt-BR")]
-    public async Task DailySummary_PendingDaySelectsOneStepBeforeGeneratingNarrative(string language)
+    public async Task DailySummary_PendingDayIncludesWholeDayAndServerSelectedStep(string language)
     {
         var replay = await ReplayPendingDay(language);
         using var request = JsonDocument.Parse(replay.Request);
         var prompt = request.RootElement.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!;
-        const string marker = "Selected next step (JSON):\n";
-        prompt.Should().Contain(marker);
-        var pendingJson = prompt.Split(marker, StringSplitOptions.None)[1].Split('\n')[0];
-        using var pending = JsonDocument.Parse(pendingJson);
-        var selected = pending.RootElement;
-
-        selected.GetProperty("habitId").GetGuid().Should().Be(replay.Habits.Single(habit => habit.Title == "Lunch").Id);
-        selected.GetProperty("title").GetString().Should().Be("Lunch");
+        using var facts = ReadFacts(prompt);
+        var selected = facts.RootElement.GetProperty("nextStep");
+        selected.GetProperty("id").GetGuid().Should().Be(replay.Habits.Single(habit => habit.Title == "Lunch").Id);
         selected.GetProperty("parentTitle").GetString().Should().Be("Meals");
         selected.GetProperty("orderBasis").GetString().Should().Be("first scheduled time");
-        selected.GetProperty("closesRoutine").GetBoolean().Should().BeFalse();
-        prompt.Should().Contain("The server selected this item from the complete pending day by due date, then DueTime or DueEndTime, then DayOrder; untimed items follow timed items.");
-        prompt.Should().Contain("Return only a JSON object with exactly these fields: \"habitId\" (copy the selected habitId exactly) and \"summary\" (the sentence).");
-        prompt.Should().NotContain("Afternoon snack").And.NotContain("Dinner").And.NotContain("Water");
-        prompt.Should().NotContain("Today's habits:").And.NotContain("history:").And.NotContain("Progress:");
-        prompt.Should().NotContain("Breakfast", "a next-step generation must not receive completed rows to recap");
-        replay.Summary.Should().NotContain("Afternoon snack");
-    }
-
-    [Theory]
-    [InlineData("en", "English", "Your lunch is the next step because it is the earliest pending meal.")]
-    [InlineData("pt-BR", "Brazilian Portuguese", "Seu almoço é o próximo passo por ser a primeira refeição pendente.")]
-    public async Task DailySummary_LocalizesForeignTitlesWithoutChangingStoredData(
-        string language, string languageName, string expectedSentence)
-    {
-        var replay = await ReplayPendingDay(language);
-        using var request = JsonDocument.Parse(replay.Request);
-        var system = request.RootElement.GetProperty("input")[0].GetProperty("content")[0].GetProperty("text").GetString()!;
-        var prompt = request.RootElement.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!;
-
-        system.Should().Contain("Refer to a stored title in another language naturally in the profile language");
-        system.Should().Contain("never insert the raw foreign-language title into the sentence");
-        prompt.Should().Contain($"Write exactly one sentence naming only this item naturally in {languageName}, followed by one short reason based on orderBasis.");
-        prompt.Should().NotContain("using its supplied title in natural phrasing");
-        replay.Summary.Should().Be(expectedSentence).And.NotContain("Lunch").And.NotContain("Afternoon snack");
-        replay.Habits.Select(habit => habit.Title).Should().Contain("Lunch").And.Contain("Afternoon snack");
+        prompt.Should().Contain("Afternoon snack").And.Contain("Dinner").And.Contain("Water - 710ml");
+        prompt.Should().NotContain("history");
         replay.Habits.Select(habit => habit.Title).Should().Equal(replay.StoredTitles);
-    }
-
-    [Theory]
-    [InlineData("en", "Breakfast")]
-    [InlineData("pt-BR", "Breakfast")]
-    [InlineData("en", "Meals")]
-    [InlineData("pt-BR", "Meals")]
-    [InlineData("en", "Afternoon snack")]
-    [InlineData("pt-BR", "Afternoon snack")]
-    [InlineData("en", "unknown")]
-    [InlineData("pt-BR", "unknown")]
-    [InlineData("en", "missing")]
-    [InlineData("pt-BR", "missing")]
-    [InlineData("en", "malformed")]
-    [InlineData("pt-BR", "malformed")]
-    public async Task DailySummary_UnboundOrInvalidNextStepDropsOnlyNarrative(string language, string focus)
-    {
-        var replay = await ReplayPendingDay(language, habits => focus == "malformed" ? "{\"habitId\":\"invalid\"}"
-            : JsonSerializer.Serialize(new
-            {
-                habitId = focus == "missing" ? (Guid?)null : focus == "unknown" ? Guid.Empty
-                    : habits.Single(habit => habit.Title == focus).Id,
-                summary = "A recap that must not reach the person."
-            }));
-
-        replay.Summary.Should().BeEmpty();
-    }
-
-    [Theory]
-    [InlineData("en")]
-    [InlineData("pt-BR")]
-    public async Task DailySummary_WithoutPendingStepsKeepsHistoryInsights(string language)
-    {
-        var habit = CreateHabit("Reading", dueDate: Today.AddDays(-2));
-        habit.Log(Today.AddDays(-2)).IsSuccess.Should().BeTrue();
-        habit.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
-        habit.Log(Today).IsSuccess.Should().BeTrue();
-        string? body = null;
-        var sentence = language == "pt-BR" ? "A leitura tem feito parte da sua rotina."
-            : "Reading has been part of your routine.";
-        var service = BuildSummaryService(JsonSerializer.Serialize(new { summary = sentence }), request => body = request);
-
-        var result = await service.GenerateSummaryAsync([habit], new(Today, Today, Today, language,
-            null, 0, 0, new Dictionary<Guid, DateOnly>(), UserId: ValidUserId, PendingHabits: []));
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Summary.Should().Be(sentence);
-        body.Should().Contain("14-day history: done=3, skipped=0, missed=0").And.NotContain("Selected next step");
-    }
-
-    [Theory]
-    [InlineData("en")]
-    [InlineData("pt-BR")]
-    public async Task DailySummary_AlmostClosedRoutineUsesAClosingFactWithoutCompletedRows(string language)
-    {
-        var replay = await ReplayPendingDay(language, nearlyClosed: true);
-        using var request = JsonDocument.Parse(replay.Request);
-        var prompt = request.RootElement.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!;
-        var selectedJson = prompt.Split("Selected next step (JSON):\n", StringSplitOptions.None)[1].Split('\n')[0];
-        using var selected = JsonDocument.Parse(selectedJson);
-
-        selected.RootElement.GetProperty("title").GetString().Should().Be("Lunch");
-        selected.RootElement.GetProperty("closesRoutine").GetBoolean().Should().BeTrue();
-        prompt.Should().Contain("When closesRoutine is true, the reason may connect this next step to closing its parent routine without describing any completed step.");
-        prompt.Should().NotContain("Breakfast").And.NotContain("Afternoon snack").And.NotContain("Dinner");
         replay.Summary.Should().NotBeEmpty();
     }
 
-    private static async Task<(string Request, string Summary, List<Habit> Habits, string[] StoredTitles)> ReplayPendingDay(
-        string language, Func<List<Habit>, string>? modelReply = null, bool nearlyClosed = false)
+    [Theory]
+    [InlineData("en", "Meals has open steps, starting with lunch.")]
+    [InlineData("pt-BR", "As refeições seguem em aberto, começando pelo almoço.")]
+    public async Task DailySummary_LocalizesForeignTitlesWithoutChangingStoredData(string language, string expectedSentence)
+    {
+        var replay = await ReplayPendingDay(language);
+        replay.Summary.Should().Be(expectedSentence);
+        replay.Habits.Select(habit => habit.Title).Should().Equal(replay.StoredTitles);
+        replay.Habits.Select(habit => habit.Title).Should().Contain("Lunch");
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task DailySummary_AlmostClosedRoutineIncludesCompletedProgress(string language)
+    {
+        var replay = await ReplayPendingDay(language, nearlyClosed: true);
+        using var request = JsonDocument.Parse(replay.Request);
+        using var facts = ReadFacts(request.RootElement.GetProperty("input")[1].GetProperty("content")[0].GetProperty("text").GetString()!);
+        var meals = facts.RootElement.GetProperty("routines").EnumerateArray().Single(item => item.GetProperty("title").GetString() == "Meals");
+        meals.GetProperty("state").GetString().Should().Be("nearly done");
+        meals.GetProperty("completedSteps").GetInt32().Should().Be(3);
+        meals.GetProperty("totalSteps").GetInt32().Should().Be(4);
+        meals.GetProperty("pendingSteps").EnumerateArray().Should().ContainSingle()
+            .Which.GetProperty("title").GetString().Should().Be("Lunch");
+    }
+
+    [Fact]
+    public async Task DailySummary_RejectedOutputIsNotCachedAndSecondRequestCallsModelAgain()
+    {
+        var replay = await ReplayPendingDay("pt-BR", habits => JsonSerializer.Serialize(new
+        {
+            nextStepHabitId = habits.Single(habit => habit.Title == "Lunch").Id,
+            summary = "Faltam 99 hábitos, começando pelo almoço."
+        }), expectFailure: true, repeatRequests: 2);
+        replay.Calls.Should().Be(4);
+    }
+
+    private static async Task<(string Request, string Summary, List<Habit> Habits, string[] StoredTitles, int Calls)> ReplayPendingDay(
+        string language, Func<List<Habit>, string>? modelReply = null, bool nearlyClosed = false, bool expectFailure = false, int repeatRequests = 1)
     {
         var habits = new List<Habit>();
         Habit Add(string title, int position, Guid? parent = null, TimeOnly? time = null, TimeOnly? end = null)
@@ -187,19 +131,23 @@ public partial class AiSummaryServiceTests
         summaryLogs.ReadAsync(Arg.Any<IReadOnlyCollection<HabitSummaryLogWindow>>(), Arg.Any<CancellationToken>())
             .Returns(logs.Select(log => new HabitSummaryLogFact(log.HabitId, log.Date, log.Value)).ToList());
         string? body = null;
+        var calls = 0;
         var sentence = language == "pt-BR"
-            ? "Seu almoço é o próximo passo por ser a primeira refeição pendente."
-            : "Your lunch is the next step because it is the earliest pending meal.";
+            ? "As refeições seguem em aberto, começando pelo almoço."
+            : "Meals has open steps, starting with lunch.";
         var service = BuildSummaryService(modelReply?.Invoke(habits)
-            ?? JsonSerializer.Serialize(new { habitId = habits.Single(habit => habit.Title == "Lunch").Id, summary = sentence }),
-            request => body = request);
+            ?? JsonSerializer.Serialize(new { nextStepHabitId = habits.Single(habit => habit.Title == "Lunch").Id, summary = sentence }),
+            request => { body = request; calls++; });
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var handler = new GetDailySummaryQueryHandler(repo, users, Substitute.For<IGenericRepository<HabitLog>>(),
             summaryLogs, gate, service, cache, dates, mediator);
 
-        var result = await handler.Handle(new(ValidUserId, Today, Today, language == "pt-BR" ? "en" : "pt-BR"), default);
-
-        result.IsSuccess.Should().BeTrue();
-        return (body!, result.Value.Summary, habits, storedTitles);
+        Result<DailySummaryResponse>? result = null;
+        for (var request = 0; request < repeatRequests; request++)
+        {
+            result = await handler.Handle(new(ValidUserId, Today, Today, language == "pt-BR" ? "en" : "pt-BR"), default);
+            result.IsFailure.Should().Be(expectFailure);
+        }
+        return (body!, result!.IsSuccess ? result.Value.Summary : string.Empty, habits, storedTitles, calls);
     }
 }
