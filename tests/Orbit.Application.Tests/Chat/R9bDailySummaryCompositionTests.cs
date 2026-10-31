@@ -24,6 +24,10 @@ public partial class ProcessUserChatCommandHandlerTests
 
         prompt.Should().Contain("Never include figures, times, dates, counts, durations, rates or quantities, even when supplied; the daySummary block already shows them.");
         prompt.Should().Contain("Never restate a completed, skipped or pending status from the block; name only the next actionable item with a short reason based on its order.");
+        prompt.Should().Contain("Never invent habit or goal names; use only supplied facts");
+        prompt.Should().Contain("An overdue or time-bound item in another group may take priority only when clearly more urgent; explain the priority in one short clause based on its order, without figures or times");
+        prompt.Should().Contain("Use supplied timing and progress only to choose the next item, never in the sentence. This applies equally to English and Brazilian Portuguese.");
+        prompt.Should().NotContain("using supplied timing or order");
         prompt.Should().NotContain("Mention a completion only as the reason");
     }
 
