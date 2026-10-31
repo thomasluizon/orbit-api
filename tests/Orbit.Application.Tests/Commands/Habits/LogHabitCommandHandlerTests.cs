@@ -43,7 +43,7 @@ public class LogHabitCommandHandlerTests
     public LogHabitCommandHandlerTests()
     {
         _unitOfWork.PassThroughTransactions<Result<LogHabitCommandHandler.PersistedLog>>();
-        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _userRepo, Substitute.For<IGenericRepository<SentReminder>>());
+        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _userRepo, Substitute.For<IGenericRepository<SentReminder>>(), Substitute.For<IGenericRepository<Notification>>());
         var services = new LogHabitServices(
             _userDateService,
             _userStreakService,

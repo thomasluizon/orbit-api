@@ -212,7 +212,7 @@ public class HabitScheduleSnapshotInvalidationTests
         if (bulk)
         {
             var handler = new BulkLogHabitsCommandHandler(habits, logs,
-                new BulkLogServices(dates, streak, gamification), goals,
+                new BulkLogServices(dates, streak, gamification, new GenericRepository<Notification>(context)), goals,
                 unitOfWork, cache, NullLogger<BulkLogHabitsCommandHandler>.Instance);
             var result = await handler.Handle(new BulkLogHabitsCommand(user.Id, [new(oneTime.Id)]), CancellationToken.None);
 
@@ -222,7 +222,7 @@ public class HabitScheduleSnapshotInvalidationTests
         else
         {
             var handler = new LogHabitCommandHandler(
-                new LogHabitRepositories(habits, logs, new GenericRepository<User>(context), new GenericRepository<SentReminder>(context)),
+                new LogHabitRepositories(habits, logs, new GenericRepository<User>(context), new GenericRepository<SentReminder>(context), new GenericRepository<Notification>(context)),
                 new LogHabitServices(dates, streak, gamification, goals,
                     Substitute.For<MediatR.IMediator>(), Substitute.For<IPayGateService>()),
                 unitOfWork, cache, NullLogger<LogHabitCommandHandler>.Instance);
