@@ -80,8 +80,10 @@ public class AiRetryLoggingPolicyTests
     [InlineData("rate_limit_exceeded", "requests", false, 3)]
     [InlineData("rate_limit_exceeded", "insufficient_quota", false, 3)]
     [InlineData(null, null, false, 3)]
-    [InlineData("insufficient_quota", "insufficient_quota", true, 3)]
-    public async Task Send_Provider429_ClassifiesBodyAndPreservesRetryAfter(
+    [InlineData("insufficient_quota", "insufficient_quota", true, 1)]
+    [InlineData(null, "credit_balance_exhausted", true, 1)]
+    [InlineData("rate_limit_exceeded", "requests", true, 3)]
+    public async Task Send_Provider429_StopsOnQuotaBodyAndRetriesRateLimits(
         string? code, string? type, bool retryAfter, int expectedAttempts)
     {
         var body = System.Text.Json.JsonSerializer.Serialize(new

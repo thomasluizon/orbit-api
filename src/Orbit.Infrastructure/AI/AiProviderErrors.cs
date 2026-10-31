@@ -8,7 +8,7 @@ namespace Orbit.Infrastructure.AI;
 internal static class AiProviderErrors
 {
     internal static bool IsQuotaCandidate([NotNullWhen(true)] PipelineResponse? response) =>
-        response?.Status == 429 && !response.Headers.TryGetValue("Retry-After", out _);
+        response?.Status == 429;
 
     internal static bool IsQuotaExhausted(Exception exception) =>
         exception is ClientResultException clientException
