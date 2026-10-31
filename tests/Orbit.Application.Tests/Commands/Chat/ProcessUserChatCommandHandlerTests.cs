@@ -3333,7 +3333,9 @@ public partial class ProcessUserChatCommandHandlerTests
                 SupportsFollowUps: true, SupportsPendingOperationPlacement: true)), CancellationToken.None);
 
         var expected = new List<string> { "dynamic prompt", HabitModelInstructions.TitleLanguage("en"), TerminalWriteDirective.Instruction, "dynamic supplement",
-            HabitPlacementContext.Build([], "Show goals calendar notifications and my week"), RelativeReadPeriod.Instruction };
+            HabitPlacementContext.Build([], "Show goals calendar notifications and my week"),
+            "Proactive offers are unavailable for this client. Do not add unrequested configuration. Leave suggested_fields and orbit_dismissed_offer_keys empty and remove_suggested_fields unset.",
+            "The ask tool is unavailable for this client. Request missing input in plain text using the current message language.", RelativeReadPeriod.Instruction };
         var subtypeInstruction = "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
             + "Habit lists with skipped rows require supportsSkippedHabitRows. "
             + "habitHistory recordList blocks require supportsHabitHistoryCard. Other card flags do not establish subtype support. "

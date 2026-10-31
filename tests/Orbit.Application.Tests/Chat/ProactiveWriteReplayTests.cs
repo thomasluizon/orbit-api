@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProactiveWriteReplay_GuidanceAndSchemasAreNegotiatedForEverySupportedTool(bool supports)
+    public async Task ProactiveWriteReplay_KeepsSchemasStaticAndNegotiatesContextForEverySupportedTool(bool supports)
     {
         SetupUserAndPayGate();
         var tools = new IAiTool[]
@@ -37,15 +37,17 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: OfferClient("en") with { SupportsProactiveOffers = supports }), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
+        if (supports) request.DynamicContext.Should().Contain(ProactiveProposal.Instruction);
+        else request.DynamicContext.Should().Contain("Proactive offers are unavailable for this client");
         foreach (var declaration in request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value)))
         {
             var name = declaration.GetProperty("name").GetString();
             var schema = declaration.GetProperty("parameters");
-            schema.GetProperty("properties").TryGetProperty("orbit_dismissed_offer_keys", out _).Should().Be(supports);
+            schema.GetProperty("properties").TryGetProperty("orbit_dismissed_offer_keys", out _).Should().BeTrue();
             if (name == "revise_pending_changes")
             {
                 schema.GetProperty("properties").GetProperty("items").GetProperty("items").GetProperty("properties")
-                    .TryGetProperty("remove_suggested_fields", out _).Should().Be(supports);
+                    .TryGetProperty("remove_suggested_fields", out _).Should().BeTrue();
                 continue;
             }
             if (name is "bulk_create_habits" or "bulk_update_habits")
@@ -54,12 +56,11 @@ public partial class ProcessUserChatCommandHandlerTests
                 schema = name == "bulk_create_habits" ? schema.GetProperty("properties").GetProperty("habits").GetProperty("items")
                     : schema.GetProperty("properties").GetProperty("updates");
             }
-            schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
-            if (supports)
-                schema.GetProperty("properties").GetProperty("suggested_fields").GetProperty("type").GetString().Should().Be("array");
+            schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeTrue(name);
+            schema.GetProperty("properties").GetProperty("suggested_fields").GetProperty("type").GetString().Should().Be("array");
             if (schema.GetProperty("properties").TryGetProperty("sub_habits", out var children))
-                children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
-            declaration.GetProperty("description").GetString()!.Contains(ProactiveProposal.Instruction, StringComparison.Ordinal).Should().Be(supports, name);
+                children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeTrue(name);
+            declaration.GetProperty("description").GetString()!.Contains(ProactiveProposal.Instruction, StringComparison.Ordinal).Should().BeTrue(name);
         }
     }
 
