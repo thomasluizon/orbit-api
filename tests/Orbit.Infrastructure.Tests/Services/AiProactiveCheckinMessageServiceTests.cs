@@ -535,6 +535,16 @@ public sealed class AiProactiveCheckinMessageServiceTests(ITestOutputHelper outp
             .Be(AiProactiveCheckinMessageService.Template(facts, "en"));
     }
 
+    [Theory]
+    [InlineData("en", "{{habit:0}} can fit your day.", "Psyllium 5g can fit your day.")]
+    [InlineData("pt-BR", "{{habit:0}} pode caber no seu dia.", "Psyllium 5g pode caber no seu dia.")]
+    public async Task StoredTitleDigits_AreNotInventedFigures(string language, string text, string expected)
+    {
+        var facts = Facts(ProactiveTrigger.EveningCheckin) with { HabitTitles = ["Psyllium 5g"], HabitCount = 1 };
+        var result = await Service(text, line: Line(text, facts)).GenerateAsync(facts, language, facts.HabitTitles, default);
+        result.Text.Should().Be(expected);
+    }
+
     private static AiProactiveCheckinMessageService.ProactiveLine Line(string? text, ProactiveFacts facts) => new(text,
         facts.HabitTitles.Where((_, index) => text?.Contains("{{habit:" + index.ToString(CultureInfo.InvariantCulture) + "}}",
             StringComparison.Ordinal) == true).ToArray(),

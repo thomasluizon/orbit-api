@@ -59,6 +59,8 @@ public class AiSlipAlertMessageServiceGenerationTests
 
     [Theory]
     [InlineData("Smoking", "en")]
+    [InlineData("Nicotine 5%", "en")]
+    [InlineData("Nicotina 5%", "pt-BR")]
     [InlineData("Fumar", "pt-BR")]
     [InlineData("Pizza", "en")]
     [InlineData("Pizza", "pt-BR")]
