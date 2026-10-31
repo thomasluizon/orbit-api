@@ -125,7 +125,6 @@ public partial class ProcessUserChatCommandHandler
         var concrete = PreferredTypedOffer(candidates);
         var selected = concrete is not null ? new OfferSelection(concrete.Id, null, null)
             : await SelectOfferAsync(request, candidates, issued, context, ct);
-        selected ??= PreferredTypedOffer(candidates) is { } fallback ? new OfferSelection(fallback.Id, null, null) : null;
         if (selected is null) return (cards, false);
         var rejected = selected.DismissedOfferKeys?.Where(key => issued.Any(offer => offer.Action.OfferKey == key))
             .Distinct(StringComparer.Ordinal).ToArray() ?? [];

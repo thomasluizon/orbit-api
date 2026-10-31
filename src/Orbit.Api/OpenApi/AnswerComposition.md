@@ -1510,8 +1510,9 @@ budget apply. Its cancellation deadline is three seconds. Input is
 the request, typed eligible candidates, complete active-goal facts and previously
 issued offer keys. Output selects one candidate or none and may report typed
 natural-language dismissals. The selector cannot call a tool or write prose.
-Unknown IDs, malformed output, failures and timeouts fall back to the same typed
-priority; when no concrete candidate exists, they retain the readable answer.
+Unknown IDs, malformed output, failures and timeouts retain the readable answer
+when no concrete candidate exists. Concrete priority is applied before a selector
+can reach its deadline, so a timeout cannot remove an eligible concrete action.
 When the selector picks `inspect`, an eligible concrete family action outranks it.
 Repeated reminder gaps take priority, followed by restart and skip, then the other
 eligible family actions. Aim and calendar candidates enter this choice only with
