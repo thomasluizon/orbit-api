@@ -135,7 +135,7 @@ public partial class ReminderSchedulerServiceTests
     public async Task NextReminder_TimeZoneChangePreservesOriginalDoseEligibility(bool backfill)
     {
         var db = CreateSqliteDbContext();
-        var (habit, start) = await SeedRepeat();
+        var (habit, start) = await SeedRepeat(schedule: HabitSchedule.General);
         var doseAtUtc = UtcToday.ToDateTime(new(1, 0), DateTimeKind.Utc);
         db.HabitLogs.Add(HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id,
             backfill ? UtcToday.AddDays(-1) : UtcToday, 1, 0, doseAtUtc, doseAtUtc,

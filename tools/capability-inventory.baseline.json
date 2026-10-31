@@ -6015,6 +6015,9 @@
             "name": "habitsJson[].isGeneral"
           },
           {
+            "name": "habitsJson[].repeatReminder"
+          },
+          {
             "name": "habitsJson[].subHabits"
           },
           {
@@ -6905,6 +6908,12 @@
             "default": "false"
           },
           {
+            "name": "repeatReminder",
+            "type": "string?",
+            "required": false,
+            "default": "null"
+          },
+          {
             "name": "title",
             "type": "string",
             "required": true
@@ -7041,6 +7050,12 @@
           {
             "name": "reminderTimes",
             "type": "int[]?",
+            "required": false,
+            "default": "null"
+          },
+          {
+            "name": "repeatReminder",
+            "type": "string?",
             "required": false,
             "default": "null"
           },
@@ -8205,6 +8220,12 @@
               "day_before",
               "same_day"
             ]
+          },
+          {
+            "name": "repeatReminder",
+            "type": "string?",
+            "required": false,
+            "default": "null"
           },
           {
             "name": "slipAlertEnabled",

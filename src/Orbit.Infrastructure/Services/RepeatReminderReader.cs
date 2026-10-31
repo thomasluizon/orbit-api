@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
@@ -25,15 +24,12 @@ public sealed class RepeatReminderReader(OrbitDbContext db, IUserDateService dat
         var weekStartDay = await dates.GetUserWeekStartDayAsync(userId, cancellationToken);
         var anchors = await RepeatReminderDoseLoader.LoadLatestAsync(new GenericRepository<HabitLog>(db),
             habits.ToDictionary(h => h.Id, _ => zone), cancellationToken);
-        var recurringIds = habits.Where(h => h.Schedule == HabitSchedule.Recurring).Select(h => h.Id).ToList();
-        var loggedDates = (await db.HabitLogs.AsNoTracking()
-            .Where(l => recurringIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= today)
-            .Select(l => new { l.HabitId, l.Date }).Distinct().ToListAsync(cancellationToken))
-            .ToLookup(l => l.HabitId, l => l.Date);
+        var eligibility = await RepeatReminderEligibility.LoadAsync(new HabitScheduleLogReader(db),
+            habits, today, today.AddDays(2), cancellationToken);
         var sent = (await RepeatReminderSnapshotQueries.LoadSentAsync(db, habitIds, nowAtUtc, cancellationToken))
             .ToLookup(r => r.HabitId);
         return habits.ToDictionary(h => h.Id, h => RepeatReminderPlanner.Next(h, nowAtUtc, zone, weekStartDay,
             anchors.TryGetValue(h.Id, out var anchorAtUtc) ? anchorAtUtc : null,
-            loggedDates[h.Id].ToHashSet(), sent[h.Id].ToList())?.DispatchAtUtc);
+            eligibility, sent[h.Id].ToList())?.DispatchAtUtc);
     }
 }

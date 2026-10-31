@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
@@ -10,11 +11,13 @@ public sealed record RepeatReminderPlan(DateTime DispatchAtUtc, DateTime Reminde
 public static class RepeatReminderPlanner
 {
     /// <summary>
-    /// Projects the first eligible scheduler opportunity from the persisted dose and delivery state.
+    /// Projects the first eligible scheduler opportunity within the shared schedule range limit.
     /// An unsent overdue occurrence fires at the next opportunity, retaining its original reminder instant.
+    /// A dispatch cutoff keeps scheduler ticks from searching future opportunities.
     /// </summary>
     public static RepeatReminderPlan? Next(Habit habit, DateTime nowAtUtc, TimeZoneInfo zone, int weekStartDay,
-        DateTime? doseAtUtc, IReadOnlySet<DateOnly> loggedDates, IReadOnlyCollection<SentReminder> sentReminders)
+        DateTime? doseAtUtc, RepeatReminderEligibility eligibility, IReadOnlyCollection<SentReminder> sentReminders,
+        DateTime? dispatchThroughAtUtc = null)
     {
         if (EnabledOptions(habit) is not { } options
             || options.StartAtUtc is not { } startAtUtc)
@@ -23,15 +26,19 @@ public static class RepeatReminderPlanner
         if (RepeatReminderClock.Next(anchorAtUtc, options, zone) is not { } firstAtUtc)
             return null;
         var candidateAtUtc = nowAtUtc > firstAtUtc ? nowAtUtc : firstAtUtc;
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, zone));
+        var lastDayNumber = Math.Min(DateOnly.MaxValue.DayNumber, today.DayNumber + AppConstants.MaxRangeDays);
         while (true)
         {
             if (RepeatReminderClock.MoveIntoWindow(candidateAtUtc, options, zone) is not { } windowAtUtc)
                 return null;
             candidateAtUtc = windowAtUtc;
-            var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(candidateAtUtc, zone));
-            if (habit.EndDate is { } end && date > end)
+            if (dispatchThroughAtUtc is { } cutoffAtUtc && candidateAtUtc > cutoffAtUtc)
                 return null;
-            var start = habit.Schedule == HabitSchedule.General ? habit.StartDate : habit.NextDueDate;
+            var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(candidateAtUtc, zone));
+            if (date.DayNumber > lastDayNumber || habit.EndDate is { } end && date > end)
+                return null;
+            var start = habit.NextDueDate;
             if (date < start)
             {
                 if (RepeatReminderClock.LocalInstant(start.ToDateTime(TimeOnly.MinValue), zone) is not { } startAt)
@@ -39,8 +46,7 @@ public static class RepeatReminderPlanner
                 candidateAtUtc = startAt;
                 continue;
             }
-            if (!CanSend(habit, date, weekStartDay)
-                || habit.Schedule == HabitSchedule.Recurring && loggedDates.Contains(date))
+            if (!eligibility.CanSend(habit, date, weekStartDay))
             {
                 if (date == DateOnly.MaxValue || habit.Schedule == HabitSchedule.OneTime)
                     return null;
@@ -79,8 +85,4 @@ public static class RepeatReminderPlanner
         && sent.DoseAnchorAtUtc == anchorAtUtc
         && RepeatReminderClock.MoveIntoWindow(followUpAtUtc, options, zone) == followUpAtUtc
         && !sentReminders.Any(r => r.ParentReminderId == sent.Id);
-
-    private static bool CanSend(Habit habit, DateOnly date, int weekStartDay) =>
-        habit.Schedule == HabitSchedule.General
-            ? date >= habit.StartDate : HabitScheduleService.IsHabitDueOnDate(habit, date, weekStartDay);
 }

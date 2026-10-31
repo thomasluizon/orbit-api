@@ -35,10 +35,14 @@ public sealed partial class ReminderDoneTests : IDisposable
         Audience = "orbit"
     }));
 
-    [Fact]
-    public async Task TwoDevices_ConsumeOneTokenThroughTheRealLogCommandExactlyOnce()
+    [Theory]
+    [InlineData(HabitSchedule.OneTime)]
+    [InlineData(HabitSchedule.Recurring)]
+    [InlineData(HabitSchedule.Flexible)]
+    [InlineData(HabitSchedule.General)]
+    public async Task TwoDevices_ConsumeOneTokenThroughTheRealLogCommandExactlyOnce(HabitSchedule schedule)
     {
-        var (handler, habit, token) = await Seed();
+        var (handler, habit, token) = await Seed(schedule);
         (await handler.Handle(new(token), default)).IsSuccess.Should().BeTrue();
         (await handler.Handle(new(token), default)).IsFailure.Should().BeTrue();
         var log = await _factory.Context.HabitLogs.SingleAsync();
@@ -275,8 +279,9 @@ public sealed partial class ReminderDoneTests : IDisposable
         var today = DateOnly.FromDateTime(_clock.GetUtcNow().UtcDateTime);
         var user = User.Create("Alex", "alex@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(schedule, user.Id, "Drink water",
-            schedule == HabitSchedule.General ? null : FrequencyUnit.Day, schedule == HabitSchedule.General ? null : 1,
-            today.AddDays(-2), EndDate: schedule == HabitSchedule.General ? null : today,
+            schedule is HabitSchedule.General or HabitSchedule.OneTime ? null : FrequencyUnit.Day,
+            schedule is HabitSchedule.General or HabitSchedule.OneTime ? null : 1,
+            today.AddDays(-2), EndDate: schedule is HabitSchedule.General or HabitSchedule.OneTime ? null : today,
             ReminderEnabled: true, RepeatReminder: new(480))).Value;
         var reminderAtUtc = _clock.Now.UtcDateTime.AddMinutes(-30);
         var reminder = SentReminder.CreateRepeat(habit.Id, today, reminderAtUtc,

@@ -7,11 +7,17 @@ namespace Orbit.Application.Tests.Chat;
 public sealed partial class PendingOperationChangePreviewerTests
 {
     [Theory]
-    [InlineData("create_habit", "en", "Every 8 hours")]
-    [InlineData("bulk_create_habits", "pt-BR", "A cada 8 horas")]
-    public async Task Repeat_CreatePreviewShowsTheModelArgumentsBeforeAnyWrite(string operation, string locale, string expected)
+    [InlineData("create_habit", "en", "Every 8 hours", "OneTime")]
+    [InlineData("create_habit", "en", "Every 8 hours", "Recurring")]
+    [InlineData("bulk_create_habits", "pt-BR", "A cada 8 horas", "General")]
+    public async Task Repeat_CreatePreviewShowsTheModelArgumentsBeforeAnyWrite(string operation, string locale, string expected, string schedule)
     {
-        const string item = """{"title":"Water","is_general":true,"repeat_reminder":{"interval_minutes":480}}""";
+        var item = schedule switch
+        {
+            "OneTime" => """{"title":"Reminder","due_date":"2026-09-25","repeat_reminder":{"interval_minutes":480}}""",
+            "Recurring" => """{"title":"Reminder","frequency_unit":"Week","frequency_quantity":1,"repeat_reminder":{"interval_minutes":480}}""",
+            _ => """{"title":"Reminder","is_general":true,"repeat_reminder":{"interval_minutes":480}}"""
+        };
         var args = operation == "create_habit" ? item : "{\"habits\":[" + item + "]}";
         var preview = await Preview(operation, args, new(Locale: locale));
         preview.Should().NotBeNull();
