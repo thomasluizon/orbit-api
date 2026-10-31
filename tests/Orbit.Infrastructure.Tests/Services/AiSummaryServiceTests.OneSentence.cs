@@ -60,8 +60,12 @@ public partial class AiSummaryServiceTests
     [InlineData("en", "Psyllium 5.5g", "Your routine is nearly done. Psyllium 5.5g is next.", false)]
     [InlineData("en", "Psyllium 5.5g", "Psyllium 5.5g is next. Your routine is nearly done.", false)]
     [InlineData("en", "Psyllium 5.5g", "Your routine is nearly done, with Psyllium 6.5g next.", false)]
-    [InlineData("en", "Read. Rest", "Your next step is Read. Rest.", false)]
-    public async Task DailySummary_OnlyDecimalsInsideExactStoredTitlesAreExempt(string language, string title, string summary, bool accepted)
+    [InlineData("en", "Read. Rest", "Your next step is Read. Rest.", true)]
+    [InlineData("en", "Call Dr. Lee", "Your routine is nearly done, with Call Dr. Lee next.", true)]
+    [InlineData("pt-BR", "Ligar pro Dr. Lee?", "Sua rotina está quase pronta, com Ligar pro Dr. Lee? a seguir.", true)]
+    [InlineData("en", "Call Dr. Lee", "Your routine is nearly done. Call Dr. Lee is next.", false)]
+    [InlineData("en", "Call Dr. Lee", "Your routine is nearly done, with Call Dr. Smith next. Rest after.", false)]
+    public async Task DailySummary_PunctuationInsideExactStoredTitlesIsExempt(string language, string title, string summary, bool accepted)
     {
         var habit = CreateHabit(title);
         var context = new DailySummaryContext(Today, Today, Today, language, null, 0, 0, new Dictionary<Guid, DateOnly>());
