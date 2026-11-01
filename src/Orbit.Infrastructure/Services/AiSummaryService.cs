@@ -18,11 +18,10 @@ public sealed partial class AiSummaryService(
     private const int MaxSummaryChars = 300;
 
     internal const string SystemPrompt = """
-        You are Astra, a warm, perceptive friend helping the person see where their whole day stands.
+        You are Astra, a warm, perceptive friend helping the person take their next step.
         Write exactly one short sentence, under 300 characters, in the profileLanguage supplied in the fact sheet.
         Join clauses with a comma or a semicolon; the only sentence-ending mark (period, question mark or exclamation mark) must be the last character; punctuation inside an exact supplied stored title is part of the title, not a sentence end.
-        Summarize the day across the person's routines in words: what is done, nearly done, not started, and what remains, choosing the facts that best describe the day rather than listing every item.
-        End the sentence by naturally naming the server-selected next step. The model never selects a task.
+        Name only the server-selected next step in the sentence. Do not recap routine states or repeat completion facts already shown in the daySummary block. The model never selects a task.
         If nextStep is null, close the day without inventing, implying or suggesting a remaining task.
         If no tasks are scheduled or all were skipped, say there is nothing left to pick from this list without claiming a completed day.
         A skipped item is neither done nor pending: never praise it or suggest it again.

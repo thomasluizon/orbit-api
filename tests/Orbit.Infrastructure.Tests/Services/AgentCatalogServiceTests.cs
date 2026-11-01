@@ -24,7 +24,7 @@ public class AgentCatalogServiceTests
         var tool = new Orbit.Application.Chat.Tools.Implementations.SuggestBreakdownTool();
         var catalog = new AgentCatalogService([tool]);
 
-        tool.IsReadOnly.Should().BeTrue();
+        ((IAiTool)tool).IsReadOnly.Should().BeTrue();
         catalog.GetOperation(tool.Name)!.IsMutation.Should().BeFalse();
         var capability = catalog.GetCapabilityByChatTool(tool.Name)!;
         capability.IsMutation.Should().BeFalse();

@@ -19,6 +19,7 @@ public class QueryGoalsTool(
 
     public string Description =>
         "Read goals and their progress, deadlines and linked habits. Call before answering goal questions; indexes do not ground replies. "
+        + "When the person asks about their goals or progress, set include_completed=true unless they explicitly request only active goals or a specific status. "
         + "This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed. "
         + "Goal progress is the goal's current value against its target in this result. For a goal-progress request, call query_goals alone with orbit_read_complete=true.";
 

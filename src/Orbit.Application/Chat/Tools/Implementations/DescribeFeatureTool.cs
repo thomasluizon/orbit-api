@@ -21,7 +21,7 @@ public class DescribeFeatureTool(IFeatureExplanationService features, IAppSurfac
         + "related_surfaces lists destinations, not editing instructions. "
         + "app_surfaces comes from the same catalog as list_app_surfaces_v2; use only its documented destinations and steps. "
         + "Never infer a habit edit screen or creation workflow from a related destination. "
-        + "When the requested detail is absent, say that the explanation does not cover it; do not invent navigation or settings. "
+        + "Say that the explanation does not cover the requested detail only when no step in markdown or app_surfaces answers the question; do not invent navigation or settings. "
         + "Answer in the person's language. Use at most three short steps, one complete sentence per line, at most 180 characters per line. Do not join steps into a paragraph.";
 
     public string Name => "describe_feature";
