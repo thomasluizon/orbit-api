@@ -22,7 +22,6 @@ WITH eligible AS (
     FROM "Habits" h
     WHERE h."Schedule" = 3
       AND h."IsCompleted" = false
-      AND h."IsDeleted" = false
       AND EXISTS (
           SELECT 1
           FROM "HabitLogs" l
@@ -55,12 +54,13 @@ COMMIT;
 ```
 
 Migration `20261101145236_CompleteGeneralTasks` runs during the normal API startup
-migration. It completes nondeleted General tasks with a surviving positive log
+migration. It completes General tasks with a surviving positive log
 created after every known unlog. A deleted positive log's `DeletedAtUtc` is its
 unlog instant. Missing unlog timestamps conservatively leave the task open.
 Log dates do not determine completion, including when a person logged a past date.
-Soft-deleted tasks, tasks with no positive logs, tasks with later unlogs, already
-completed tasks and every other schedule remain unchanged.
+Tasks with no positive logs, tasks with later unlogs, already completed tasks
+and every other schedule remain unchanged. The same predicate covers deleted
+General rows with surviving positive logs, preserving their deletion state.
 
 Only `Habits.IsCompleted` changes. Existing log rows, titles, due dates, timestamps,
 reminder settings and all other stored fields remain intact.

@@ -21,7 +21,6 @@ namespace Orbit.Infrastructure.Migrations
                 FROM "Habits" h
                 WHERE h."Schedule" = 3
                   AND h."IsCompleted" = false
-                  AND h."IsDeleted" = false
                   AND EXISTS (
                       SELECT 1
                       FROM "HabitLogs" l

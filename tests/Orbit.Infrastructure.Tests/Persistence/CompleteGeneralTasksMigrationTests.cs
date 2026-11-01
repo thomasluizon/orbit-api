@@ -52,8 +52,8 @@ public class CompleteGeneralTasksMigrationTests
         foreach (var operation in up) Execute(connection, operation.Sql);
         var migrated = ReadRows(connection);
         migrated.Where(pair => pair.Value != original[pair.Key]).Select(pair => pair.Key)
-            .Should().BeEquivalentTo("past", "repeat", "relogged");
-        foreach (var id in new[] { "past", "repeat", "relogged" })
+            .Should().BeEquivalentTo("past", "repeat", "relogged", "deleted");
+        foreach (var id in new[] { "past", "repeat", "relogged", "deleted" })
             migrated[id].Should().Be(original[id] with { IsCompleted = true });
 
         foreach (var operation in up) Execute(connection, operation.Sql);
