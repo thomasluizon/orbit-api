@@ -133,7 +133,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var stored = new Dictionary<Guid, PendingAgentOperationExecution>();
         _pendingOperationStore.GetExecution(UserId, Arg.Any<Guid>()).Returns(call => stored.GetValueOrDefault(call.ArgAt<Guid>(1)));
         _pendingOperationStore.Create(UserId, Arg.Any<AgentCapability>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>(), AgentExecutionSurface.Chat).Returns(call =>
+            Arg.Any<string>(), Arg.Any<string>(), AgentExecutionSurface.Chat, Arg.Any<PendingOperationConversation?>()).Returns(call =>
                 new PendingAgentOperation(Guid.NewGuid(), call.Arg<AgentCapability>().Id, "Review", "Review",
                     AgentRiskClass.Low, AgentConfirmationRequirement.FreshConfirmation, DateTime.UtcNow.AddMinutes(10)));
         _pendingOperationStore.Revise(UserId, Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())

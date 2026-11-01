@@ -392,10 +392,13 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task PickListAnswer_ReturnsPreviewWithoutModelOrDailyCharge()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PickListAnswer_ReturnsPreviewWithoutModelOrDailyCharge(bool recordingEnabled)
     {
         SetupUserAndPayGate(payGatePass: false);
+        if (recordingEnabled) EnableRecording();
         _unitOfWork.PassThroughTransactions<Result<Orbit.Application.Chat.PreparedAstraBlockAnswer>>();
         var item = new AstraBlockItem("a", "Walk", ParseArguments("{\"title\":\"Walk\"}"));
         var block = IssuedAstraBlock.Create(UserId, new("pickList", "Choose", [], [item], true, Action: "create_habits"));
@@ -412,9 +415,12 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.MessageAllowanceConsumed.Should().BeFalse();
         result.Value.PendingOperations.Should().ContainSingle();
-        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
-            !turn.UsedModel && turn.UserContent == "Walk" && turn.ToolCallsJson.Contains("bulk_create_habits")
-            && turn.ToolCallsJson.Contains("PendingConfirmation")));
+        if (recordingEnabled)
+            _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
+                !turn.UsedModel && turn.UserContent == "Walk" && turn.ToolCallsJson.Contains("bulk_create_habits")
+                && turn.ToolCallsJson.Contains("PendingConfirmation")));
+        else
+            _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);
         await _payGate.DidNotReceiveWithAnyArgs().TryConsumeAiMessage(default, default!, default);
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_block_answered", Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object>>());
