@@ -1,0 +1,39 @@
+{
+  "message": "I want to run five kilometers. Show me the goals I already have.",
+  "history": "[]",
+  "clientContext": {
+    "platform": "web",
+    "locale": "en",
+    "timeFormat": "24h",
+    "currentAppArea": "chat",
+    "supportsHabitListCard": true,
+    "supportsHabitListDoneStatus": true,
+    "supportsDatedHabitListCard": true,
+    "supportsSkippedHabitRows": true,
+    "supportsHabitHistoryCard": true,
+    "supportsGoalListCard": true,
+    "supportsMetricsCard": true,
+    "supportsPeriodInsightCard": true,
+    "supportsDaySummaryCard": true,
+    "supportsStreakCard": true,
+    "supportsCalendarCard": true,
+    "supportsRecordListCard": true,
+    "supportsAccountRowsCard": true,
+    "supportsPendingOperationChanges": true,
+    "supportsPendingOperationPlacement": true,
+    "supportsToolSteps": true,
+    "supportsFollowUps": true,
+    "supportsFollowUpContext": true,
+    "supportsStartingStepContext": true,
+    "supportsMessageAllowance": true,
+    "supportsCompletedHabitsMetric": true,
+    "supportsParts": true,
+    "partKinds": [
+      "habitList", "goalList", "metrics", "periodTotal", "periodComparison", "periodInsight",
+      "daySummary", "streak", "gamification", "calendar", "recordList", "accountRows",
+      "choice", "pickList", "question", "habitRanking", "habitMonth", "habitSuggestions", "oneSmallStep"
+    ],
+    "supportsProactiveOffers": true,
+    "conversationId": "422cab4f-4463-5976-8b8d-d5202357aaf1"
+  }
+}
