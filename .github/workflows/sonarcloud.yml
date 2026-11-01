@@ -17,6 +17,20 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: orbit_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orbit_test -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v7
@@ -68,7 +82,7 @@ jobs:
         run: |
           dotnet test tests/Orbit.Domain.Tests --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           dotnet test tests/Orbit.Application.Tests --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-          dotnet test tests/Orbit.Infrastructure.Tests --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          ORBIT_POSTGRES_TEST_CONNECTION='Host=localhost;Port=5432;Database=postgres;Username=orbit_test' dotnet test tests/Orbit.Infrastructure.Tests --no-build --collect:"XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
       - name: Test infra scripts with coverage
         run: |
