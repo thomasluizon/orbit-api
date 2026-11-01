@@ -24,8 +24,8 @@ Every schedule accepts repeat reminders. Scheduled habits notify only while
 due today or overdue under the schedule read model, and stop for the local day
 after completion or skip. Flexible habits continue after partial completion until
 their period target is met, and a skip suppresses the rest of the local day.
-General habits follow their own completion state and a skip postpones reminders
-until their next due date. Scheduler ticks only plan dispatches due now; response
+General is a one-time task with no date. Completion stops its repeat reminders
+until unlogged; General tasks cannot be skipped. Scheduler ticks only plan dispatches due now; response
 reads project future dispatches within the bounded horizon. Dose correction and notification
 Done read back the resulting persisted anchor without a response cache.
 

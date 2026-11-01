@@ -217,6 +217,27 @@ public class HabitListCardBuilderTests
         card.Items.Single(item => item.Title == "Taxes").Status.Should().Be(HabitListCardBuilder.StatusNone);
     }
 
+    [Theory]
+    [InlineData(true, HabitListCardBuilder.StatusDone)]
+    [InlineData(false, HabitListCardBuilder.StatusNone)]
+    public void Build_CompletedGeneralAncestor_UsesStoredCompletionOnLaterDays(bool supportsDone, string expected)
+    {
+        var parent = CreateHabit("Parent", Today.AddDays(-1), isGeneral: true);
+        var child = CreateHabit("Child", Today, isGeneral: true, parentId: parent.Id);
+        parent.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        typeof(Habit).GetProperty(nameof(Habit.IsCompleted))!.SetValue(parent, true);
+
+        var card = HabitListCardBuilder.Build([parent, child], Today, HabitListCardBuilder.ScopeAll,
+            supportsDoneStatus: supportsDone);
+
+        card.Items.Single(item => item.Id == parent.Id.ToString()).Status.Should().Be(expected);
+        card.Items.Single(item => item.Id == child.Id.ToString()).Status.Should().Be(HabitListCardBuilder.StatusGeneral);
+        parent.Unlog(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        HabitListCardBuilder.Build([parent, child], Today, HabitListCardBuilder.ScopeAll,
+            supportsDoneStatus: supportsDone).Items.Single(item => item.Id == parent.Id.ToString())
+            .Status.Should().Be(HabitListCardBuilder.StatusGeneral);
+    }
+
     [Fact]
     public void Build_PreservesPositionOrder()
     {
