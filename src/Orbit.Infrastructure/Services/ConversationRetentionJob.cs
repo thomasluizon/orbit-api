@@ -29,7 +29,6 @@ public sealed class ConversationRetentionJob(IServiceScopeFactory scopeFactory) 
                     && conversation.TurnId == turn.Id && conversation.CreatedAtUtc < cutoffAtUtc))
                 .ExecuteDeleteAsync(token);
             await db.ConversationTurns.Where(turn => turn.CreatedAtUtc < cutoffAtUtc).ExecuteDeleteAsync(token);
-            await db.ChatConversationTurns.Where(turn => turn.CreatedAtUtc < cutoffAtUtc).ExecuteDeleteAsync(token);
         }, cancellationToken);
     }
 }

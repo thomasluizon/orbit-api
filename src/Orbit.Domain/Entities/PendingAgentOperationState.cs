@@ -9,6 +9,7 @@ public class PendingAgentOperationState : Entity
 
     public int ArgumentSchemaVersion { get; private set; }
     public Guid UserId { get; private set; }
+    public Guid? ConversationId { get; private set; }
     public string CapabilityId { get; private set; } = null!;
     public string OperationId { get; private set; } = null!;
     public string ArgumentsJson { get; private set; } = "{}";
@@ -35,6 +36,7 @@ public class PendingAgentOperationState : Entity
         {
             ArgumentSchemaVersion = CurrentArgumentSchemaVersion,
             UserId = request.UserId,
+            ConversationId = request.Conversation?.Id,
             CapabilityId = request.Capability.Id,
             OperationId = request.OperationId,
             ArgumentsJson = string.IsNullOrWhiteSpace(request.ArgumentsJson) ? "{}" : request.ArgumentsJson,
@@ -44,7 +46,7 @@ public class PendingAgentOperationState : Entity
             Surface = request.Surface,
             RiskClass = request.Capability.RiskClass,
             ConfirmationRequirement = request.Capability.ConfirmationRequirement,
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = request.Conversation?.StartedAtUtc ?? DateTime.UtcNow,
             ExpiresAtUtc = request.ExpiresAtUtc
         };
     }
@@ -134,4 +136,5 @@ public sealed class PendingAgentOperationStateCreateRequest
     public required string OperationFingerprint { get; init; }
     public required AgentExecutionSurface Surface { get; init; }
     public required DateTime ExpiresAtUtc { get; init; }
+    public PendingOperationConversation? Conversation { get; init; }
 }

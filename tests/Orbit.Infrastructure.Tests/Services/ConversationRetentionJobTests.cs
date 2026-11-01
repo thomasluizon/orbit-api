@@ -24,9 +24,6 @@ public class ConversationRetentionJobTests
         var expired = ConversationTurn.Create(user.Id, Guid.NewGuid(), "user", DateTime.UtcNow.AddDays(-31), null, "Expired", "[]").Value;
         var recent = ConversationTurn.Create(user.Id, Guid.NewGuid(), "assistant", DateTime.UtcNow.AddDays(-29), "model", "Recent", "[]").Value;
         database.Context.ConversationTurns.AddRange(expired, recent);
-        database.Context.ChatConversationTurns.AddRange(
-            ChatConversationTurn.Create(user.Id, Guid.NewGuid(), Guid.NewGuid(), expired.CreatedAtUtc, "{}", false, false).Value,
-            ChatConversationTurn.Create(user.Id, Guid.NewGuid(), Guid.NewGuid(), recent.CreatedAtUtc, "{}", false, false).Value);
         var expiredReplay = ChatTurn.Create(user.Id, new string('A', 64), new string('B', 64), DateTime.UtcNow.AddDays(-31));
         expiredReplay.Complete(ChatStreamEvent.Final(new ChatResponse("Expired response", [])).ToJson());
         var expiredReservation = ChatTurn.Create(user.Id, new string('C', 64), new string('D', 64), DateTime.UtcNow.AddDays(-31));
@@ -53,7 +50,6 @@ public class ConversationRetentionJobTests
         await job.RunAsync(CancellationToken.None);
         await job.RunAsync(CancellationToken.None);
         (await database.Context.ConversationTurns.AsNoTracking().ToListAsync()).Should().ContainSingle().Which.Id.Should().Be(recent.Id);
-        (await database.Context.ChatConversationTurns.AsNoTracking().ToListAsync()).Should().ContainSingle().Which.CreatedAtUtc.Should().Be(recent.CreatedAtUtc);
         (await database.Context.ChatTurns.AsNoTracking().Select(turn => turn.Id).ToListAsync())
             .Should().BeEquivalentTo([recentReplay.Id, otherRecent.Id]);
     }

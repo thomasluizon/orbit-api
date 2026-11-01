@@ -33,7 +33,6 @@ public class ExportUserDataQueryHandlerTests
     private readonly IGenericRepository<NotionTask> _notionTasks = Substitute.For<IGenericRepository<NotionTask>>();
     private readonly IGenericRepository<ConversationTurn> _conversations = Substitute.For<IGenericRepository<ConversationTurn>>();
     private readonly IGenericRepository<ConversationOffer> _conversationOffers = Substitute.For<IGenericRepository<ConversationOffer>>();
-    private readonly IGenericRepository<ChatConversationTurn> _conversationContext = Substitute.For<IGenericRepository<ChatConversationTurn>>();
     private readonly ExportUserDataQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -45,7 +44,7 @@ public class ExportUserDataQueryHandlerTests
             new ExportUserDataRepositories(
                 _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo,
                 _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-                _proactiveRepo, _notionConnections, _notionTasks, _conversations, _conversationOffers, _conversationContext),
+                _proactiveRepo, _notionConnections, _notionTasks, _conversations, _conversationOffers),
             _userDateService, _goalProgressReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -214,22 +213,7 @@ public class ExportUserDataQueryHandlerTests
             "exportedAtUtc", "account", "settings", "subscription", "habits", "goals", "tags",
             "notifications", "checklistTemplates", "achievements", "streakFreezes", "referrals",
             "apiKeys", "friendships", "cheers", "blockedUsers", "reports", "friendFeedEvents",
-            "proactiveItems", "notionConnection", "notionTasks", "conversations", "conversationOffers", "conversationContext");
-    }
-
-    [Fact]
-    public async Task Handle_ExportsOnlyRetainedContextForTheOwner()
-    {
-        ArrangeUser(CreateTestUser());
-        var mine = ChatConversationTurn.Create(UserId, Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow,
-            "{\"Image\":\"base64-data\"}", true, false).Value;
-        var expired = ChatConversationTurn.Create(UserId, Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow.AddDays(-31), "{}", false, false).Value;
-        var foreign = ChatConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow, "{}", false, false).Value;
-        _conversationContext.FindAsync(Arg.Any<Expression<Func<ChatConversationTurn, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(call => new[] { mine, expired, foreign }.Where(call.Arg<Expression<Func<ChatConversationTurn, bool>>>().Compile()).ToArray());
-        var result = await _handler.Handle(new(UserId), default);
-        result.IsSuccess.Should().BeTrue();
-        result.Value.ConversationContext.Should().ContainSingle().Which.DataJson.Should().Be(mine.DataJson);
+            "proactiveItems", "notionConnection", "notionTasks", "conversations", "conversationOffers");
     }
 
     [Fact]

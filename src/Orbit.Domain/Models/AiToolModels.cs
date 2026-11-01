@@ -23,10 +23,7 @@ public sealed record AiToolRequest(
     public string? AccountContext { get; init; }
     public string? DynamicContext { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();
-    public IReadOnlyList<AiConversationAttachment> ConversationAttachments { get; init; } = [];
 }
-
-public sealed record AiConversationAttachment(string UserMessage, byte[] ImageData, string ImageMimeType);
 
 public record AiToolCallResult(
     string Name,

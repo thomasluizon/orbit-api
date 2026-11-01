@@ -18,12 +18,13 @@
     "pending",
     "approved",
     "edited",
-    "rejected"
+    "rejected",
+    "expired"
   ],
   "assertions": [
     "Preview due_date is 2026-12-31 with requested provenance and editable date type.",
     "Preview due_time is 20:30 with requested provenance.",
-    "Next provider request includes the same image and conversation proposal with its outcome.",
+    "Next model request includes this conversation's last proposal, date, time and current outcome from pending operations. Previous images are not stored or resent; image continuity belongs to #1948.",
     "Follow-up answers about this proposal without an ask block."
   ]
 }

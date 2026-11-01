@@ -193,8 +193,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionConnection>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.NotionTask>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ConversationTurn>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ConversationOffer>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChatConversationTurn>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ConversationOffer>>()));
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<GoogleSignInFlow>();
         builder.Services.AddScoped<AccountReactivation>();

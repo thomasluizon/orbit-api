@@ -11,7 +11,8 @@ public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
     IPendingOperationChangePreviewer previewer, IAgentCatalogService catalog, AiToolRegistry registry)
 {
     public async Task<PendingAccountChangeSet?> CombineAsync(Guid userId, IReadOnlyList<PendingAgentOperation> operations,
-        CancellationToken ct, AgentClientContext? clientContext = null, bool requireAllMembers = false)
+        CancellationToken ct, AgentClientContext? clientContext = null, bool requireAllMembers = false,
+        PendingOperationConversation? conversation = null)
     {
         if (operations.Count < 2) return null;
         var eligible = new List<PendingAgentOperationExecution>();
@@ -34,7 +35,9 @@ public sealed class AccountChangeSetService(IPendingAgentOperationStore store,
         };
         var fingerprint = AgentOperationFingerprint.Compute(AccountChangeSet.OperationName, arguments.GetRawText());
         var pending = store.Create(userId, capability, AccountChangeSet.OperationName,
-            arguments.GetRawText(), "Review account changes", fingerprint, AgentExecutionSurface.Chat);
+            arguments.GetRawText(), "Review account changes", fingerprint, AgentExecutionSurface.Chat,
+            clientContext?.ConversationId is { } id && id != Guid.Empty
+                ? conversation ?? new(id, TimeProvider.System.GetUtcNow().UtcDateTime) : null);
         try
         {
             if (!store.Revise(userId, pending.Id, fingerprint, arguments.GetRawText(), fingerprint, preview.PreviewFingerprint!))

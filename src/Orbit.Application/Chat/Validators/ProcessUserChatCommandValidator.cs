@@ -22,6 +22,10 @@ public class ProcessUserChatCommandValidator : AbstractValidator<ProcessUserChat
             RuleFor(x => x.BlockAnswer!).SetValidator(new AstraBlockAnswerValidator()));
 
         RuleFor(x => x.ClientContext)
+            .Must(context => context?.ConversationId is null || context.ConversationId != Guid.Empty)
+            .WithCopy(ErrorCodes.InvalidClientContext);
+
+        RuleFor(x => x.ClientContext)
             .Must(context => context?.SupportsProactiveOffers != true
                 || context.ConversationId is { } id && id != Guid.Empty
                     && context.SupportsParts == true && context.SupportsPendingOperationChanges == true)

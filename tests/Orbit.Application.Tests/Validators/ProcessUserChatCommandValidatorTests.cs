@@ -15,6 +15,16 @@ public class ProcessUserChatCommandValidatorTests
         Message: "Hello, how are you?");
 
     [Fact]
+    public void Validate_ConversationIdentity_AcceptsMissingOrValidAndRejectsEmpty()
+    {
+        _validator.TestValidate(ValidCommand() with { ClientContext = new(ConversationId: Guid.NewGuid()) })
+            .ShouldNotHaveAnyValidationErrors();
+        _validator.TestValidate(ValidCommand() with { ClientContext = new() }).ShouldNotHaveAnyValidationErrors();
+        _validator.TestValidate(ValidCommand() with { ClientContext = new(ConversationId: Guid.Empty) })
+            .ShouldHaveValidationErrorFor(command => command.ClientContext);
+    }
+
+    [Fact]
     public void Validate_FortyHistoryMessagesStillAccepted_FortyOneRejected()
     {
         var history = Enumerable.Range(0, 40).Select(index => new ChatHistoryMessage("user", $"turn {index}")).ToList();

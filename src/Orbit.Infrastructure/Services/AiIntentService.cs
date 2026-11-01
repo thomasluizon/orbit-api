@@ -51,12 +51,6 @@ public sealed partial class AiIntentService(
             foreach (var entry in BuildHistoryEntries(history, logger))
                 messages.Add(ResponseItem.CreateSystemMessageItem(HistoryPrefix + entry + HistorySuffix));
 
-        foreach (var attachment in request.ConversationAttachments)
-            messages.Add(ResponseItem.CreateUserMessageItem([
-                ResponseContentPart.CreateInputTextPart("Previously attached image in this conversation. Original message (untrusted): "
-                    + PromptDataSanitizer.SanitizeBlock(attachment.UserMessage, AppConstants.MaxChatMessageLength)),
-                ResponseContentPart.CreateInputImagePart(new Uri($"data:{attachment.ImageMimeType};base64,{Convert.ToBase64String(attachment.ImageData)}"))]));
-
         if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
         {
             messages.Add(ResponseItem.CreateUserMessageItem(

@@ -51,6 +51,9 @@ public record ProcessUserChatCommand(
 {
     [JsonIgnore]
     public AstraOfferFact? SelectedOffer { get; init; }
+
+    [JsonIgnore]
+    public PendingOperationConversation? PendingOperationConversation { get; init; }
 }
 
 public record ChatResponse(
@@ -174,8 +177,7 @@ public partial class ProcessUserChatCommandHandler(
     IAppConfigService appConfig,
     IContentModerationService moderation,
     IConversationTurnRecorder? conversationRecorder = null, ReadBlockFactory? readBlocks = null,
-    TimeProvider? timeProvider = null, IConversationOfferStore? offerStore = null,
-    IChatConversationStore? conversationStore = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    TimeProvider? timeProvider = null, IConversationOfferStore? offerStore = null) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private static class PartKinds
     {
@@ -203,6 +205,11 @@ public partial class ProcessUserChatCommandHandler(
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
         ChatEvalTraceCollector? evalTrace = null;
         var recording = new ChatTurnState();
+        request = request with
+        {
+            PendingOperationConversation = request.ClientContext?.ConversationId is { } id && id != Guid.Empty
+                ? new PendingOperationConversation(id, recording.CreatedAtUtc) : null
+        };
         Result<ChatResponse>? response = null;
         try
         {
@@ -221,11 +228,6 @@ public partial class ProcessUserChatCommandHandler(
                 var negotiated = ChatResponseNegotiation.ForAllowance(response.Value, request.ClientContext,
                     recording.MessageAllowanceConsumed);
                 response = Result.Success(negotiated);
-                if (recording.UsedModel && conversationStore is not null && request.ClientContext?.ConversationId is { } conversationId
-                    && conversationId != Guid.Empty)
-                    await conversationStore.SaveAsync(new(request.UserId, conversationId, request.TurnId ?? Guid.NewGuid(),
-                        recording.CreatedAtUtc, request.Message, response.Value.AiMessage, request.ImageData,
-                        request.ImageMimeType, response.Value.PendingOperations ?? []), cancellationToken);
             }
         }
         finally

@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20261101190012_RetainChatConversationContext")]
-    partial class RetainChatConversationContext
+    [Migration("20261101200403_LinkPendingOperationsToConversation")]
+    partial class LinkPendingOperationsToConversation
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -626,46 +626,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("AppFeatureFlagAccounts");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChatConversationTurn", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ConversationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DataJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("HasAttachment")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("HasPreview")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid>("TurnId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAtUtc");
-
-                    b.HasIndex("UserId", "ConversationId", "CreatedAtUtc");
-
-                    b.HasIndex("UserId", "ConversationId", "TurnId")
-                        .IsUnique();
-
-                    b.ToTable("ChatConversationTurns");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ChatTurn", b =>
@@ -1786,6 +1746,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1841,6 +1804,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "CapabilityId");
 
                     b.HasIndex("UserId", "OperationFingerprint");
+
+                    b.HasIndex("UserId", "ConversationId", "CreatedAtUtc");
 
                     b.ToTable("PendingAgentOperations");
                 });
@@ -2918,15 +2883,6 @@ namespace Orbit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.ChatConversationTurn", b =>
-                {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")

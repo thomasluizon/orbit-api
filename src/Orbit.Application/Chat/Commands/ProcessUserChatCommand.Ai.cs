@@ -21,10 +21,10 @@ public partial class ProcessUserChatCommandHandler
         CancellationToken cancellationToken)
     {
         using var promptPhase = ChatTurnTimer.Measure(ChatPhase.PromptBuild);
-        var memory = await LoadConversationMemoryAsync(request, cancellationToken);
+        var lastPreviews = await LoadConversationPreviewsAsync(request, cancellationToken);
         var promptRequest = new PromptBuildRequest(
             context.PromptHabits,
-            HasImage: HasConversationImage(request, memory),
+            HasImage: request.ImageData is not null,
             UserTags: context.UserTags,
             UserToday: context.UserToday,
             ActiveGoals: context.ActiveGoals,
@@ -86,7 +86,7 @@ public partial class ProcessUserChatCommandHandler
         dynamicContext = AddSelectedOfferContext(dynamicContext, request.SelectedOffer);
         systemPrompt = AddAskContext(systemPrompt, request, context);
         dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
-        dynamicContext = AddConversationPreviews(dynamicContext, memory);
+        dynamicContext = AddConversationPreviews(dynamicContext, lastPreviews);
 
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
@@ -145,12 +145,11 @@ public partial class ProcessUserChatCommandHandler
                 request.UserId,
                 request.ImageData,
                 request.ImageMimeType,
-                ConversationHistory(memory, request.History))
+                request.History)
             {
                 Telemetry = telemetry,
                 AccountContext = accountContext,
-                DynamicContext = dynamicContext,
-                ConversationAttachments = memory?.Attachments ?? []
+                DynamicContext = dynamicContext
             },
             aiStreamSink,
             cancellationToken);
