@@ -30,7 +30,8 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns([FeatureFlagKeys.AstraBlockFirst, FeatureFlagKeys.AstraEvalTrace]);
         var promptBuilder = new SystemPromptBuilder();
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns(call => promptBuilder.BuildStatic(call.Arg<PromptBuildRequest>()));
-        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns(call => promptBuilder.BuildDynamic(call.Arg<PromptBuildRequest>()));
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns(call => promptBuilder.BuildAccountContext(call.Arg<PromptBuildRequest>()));
+        _promptBuilder.BuildTurnContext(Arg.Any<PromptBuildRequest>()).Returns(call => promptBuilder.BuildTurnContext(call.Arg<PromptBuildRequest>()));
         var pt = language == "pt-BR";
         var habits = new[] { CreateHabit(pt ? "Beber água" : "Water"), CreateHabit(pt ? "Caminhada" : "Walk") };
         for (var index = 0; index < habits.Length; index++) habits[index].SetPosition(index);

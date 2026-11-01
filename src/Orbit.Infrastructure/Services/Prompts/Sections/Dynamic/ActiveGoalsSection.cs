@@ -26,7 +26,7 @@ public class ActiveGoalsSection : IPromptSection
         sb.AppendLine();
         sb.AppendLine("### Active Goals:");
 
-        foreach (var goal in goals.OrderBy(g => g.Position))
+        foreach (var goal in goals.OrderBy(g => g.Position).ThenBy(goal => goal.Id))
         {
             AppendGoalEntry(sb, goal);
         }
@@ -56,7 +56,7 @@ public class ActiveGoalsSection : IPromptSection
 
         if (goal.Habits.Count > 0)
         {
-            var habitNames = string.Join(", ", goal.Habits.Select(h => $"{PromptDataSanitizer.QuoteInline(h.Title, 100)} ({h.Id})"));
+            var habitNames = string.Join(", ", goal.Habits.OrderBy(habit => habit.Id).Select(h => $"{PromptDataSanitizer.QuoteInline(h.Title, 100)} ({h.Id})"));
             sb.AppendLine(CultureInfo.InvariantCulture, $"  Linked habits: {habitNames}");
         }
     }

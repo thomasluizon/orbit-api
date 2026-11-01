@@ -318,7 +318,7 @@ public class AstraBlockAnswerRecoveryTests
             }));
         var prompt = Substitute.For<ISystemPromptBuilder>();
         prompt.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("static");
-        prompt.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("dynamic");
+        prompt.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns("dynamic");
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
         var syncer = Substitute.For<IGoalProgressReadSyncer>();

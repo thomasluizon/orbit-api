@@ -46,14 +46,14 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
-        request.DynamicContext.Should().Contain("\"habitTargets\"");
-        var line = request.DynamicContext!.Split(Environment.NewLine).Single(value => value.StartsWith("{\"habitTargets\":"));
+        request.AccountContext.Should().Contain("\"habitTargets\"");
+        var line = request.AccountContext!.Split(Environment.NewLine).Single(value => value.StartsWith("{\"habitTargets\":"));
         using var context = JsonDocument.Parse(line);
         var targets = context.RootElement.GetProperty("habitTargets").EnumerateArray().ToArray();
         foreach (var target in targets)
             target.GetProperty("sharesTitle").GetBoolean().Should().Be(target.GetProperty("title").GetString() == "Caminhada");
         targets.Select(target => target.GetProperty("id").GetString()).Should().BeEquivalentTo(habits.Take(2).Select(habit => habit.Id.ToString()));
-        request.DynamicContext.Should().Contain(SharedTitleGuidance);
+        request.AccountContext.Should().Contain(SharedTitleGuidance);
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Block.Should()
             .BeOfType<AstraChoiceBlock>().Which.Options.Select(option => option.Id).Should().Equal(habits.Take(2).Select(habit => habit.Id.ToString()));
         await _operationExecutor.DidNotReceive().ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(value => value.OperationId == write.Name), Arg.Any<CancellationToken>());

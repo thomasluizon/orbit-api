@@ -32,6 +32,8 @@ public interface IAgentCatalogService
     /// caller's snapshot. Emitted after all static content so it never poisons the cacheable prefix.
     /// </summary>
     string BuildDynamicSupplement(AgentContextSnapshot snapshot);
+
+    string BuildClientHints(AgentClientContext? client);
 }
 
 public interface IAgentPolicyEvaluator

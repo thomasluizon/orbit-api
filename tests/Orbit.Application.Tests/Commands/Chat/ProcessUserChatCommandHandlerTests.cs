@@ -230,7 +230,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("static prompt");
-        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -1044,7 +1044,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 .Which.Status.Should().Be(HabitListCardBuilder.StatusDone);
         else
             result.Value.HabitList.Items.Should().BeEmpty();
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.TodayHabitIds!.Contains(habit.Id)
             && request.DoneTodayHabitIds!.Contains(habit.Id)
             && request.ActiveHabits.Single().NextDueDate == Today.AddDays(1)));
@@ -1094,7 +1094,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 .Status.Should().Be(HabitListCardBuilder.StatusNone);
         else
             result.Value.HabitList.Items.Select(item => item.Title).Should().NotContain("Filed taxes");
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveHabits.Any(habit => habit.Id == completedToday.Id)
             && request.TodayHabitIds!.Contains(completedToday.Id)
             && request.DoneTodayHabitIds!.Contains(completedToday.Id)
@@ -1134,7 +1134,7 @@ public partial class ProcessUserChatCommandHandlerTests
         else
             result.Value.HabitList.Items.Should().ContainSingle()
                 .Which.Status.Should().Be(HabitListCardBuilder.StatusNone);
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.DoneTodayHabitIds!.Contains(habit.Id)));
     }
 
@@ -2258,7 +2258,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create morning walk"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveHabits.Count == 1 &&
             request.ActiveHabits[0].Id == activeHabit.Id));
     }
@@ -2291,7 +2291,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _goalProgressReadSyncer.DidNotReceiveWithAnyArgs().ComputeFreshValuesAsync(default, default, default);
         await _goalRepo.Received(1).FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(), null, Arg.Any<CancellationToken>());
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null &&
             request.ActiveGoals.Count == 1 &&
             request.ActiveGoals[0].CurrentValue == 0));
@@ -2341,7 +2341,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.GoalList.Items.Should().Contain(item => item.Title == "Read books" && item.Current == 3);
         result.Value.GoalList.Items.Should().Contain(item => item.Title == "Save money" && item.Current == 7);
         await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null && request.ActiveGoals.Count == 2));
         _catalogService.Received(1).BuildDynamicSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>
             snapshot.RecentGoalTitles != null &&
@@ -2381,7 +2381,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Update my push-ups habit"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildAccountContext(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveHabits.Select(habit => habit.Id).ToHashSet().SetEquals(new[]
             {
                 completedParent.Id,
@@ -3283,13 +3283,13 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("STATIC_SECTIONS");
         _catalogService.BuildStaticSupplement().Returns("STATIC_SUPPLEMENT");
-        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("DYNAMIC_SECTIONS");
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns("DYNAMIC_SECTIONS");
         _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("DYNAMIC_SUPPLEMENT");
 
         string? capturedPrompt = null;
-        string? capturedDynamic = null;
+        string? capturedAccount = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => { capturedPrompt = request.SystemPrompt; capturedDynamic = request.DynamicContext; }),
+            Arg.Do<AiToolRequest>(request => { capturedPrompt = request.SystemPrompt; capturedAccount = request.AccountContext; }),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
 
@@ -3307,7 +3307,7 @@ public partial class ProcessUserChatCommandHandlerTests
         staticSections.Should().BeLessThan(staticSupplement);
         dynamicSections.Should().Be(-1, "volatile content must be outside the static system message");
         dynamicSupplement.Should().Be(-1);
-        capturedDynamic.Should().Contain("DYNAMIC_SECTIONS").And.Contain("DYNAMIC_SUPPLEMENT");
+        capturedAccount.Should().Contain("DYNAMIC_SECTIONS").And.Contain("DYNAMIC_SUPPLEMENT");
     }
 
     [Theory]
@@ -3323,7 +3323,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
                 .Returns([FeatureFlagKeys.AstraPartsDisabled]);
         string? prompt = null;
-        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt + Environment.NewLine + request.DynamicContext),
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt + Environment.NewLine + request.AccountContext + Environment.NewLine + request.DynamicContext),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
         var instructions = new[]
@@ -3385,7 +3385,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         string? capturedPrompt = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt + Environment.NewLine + request.DynamicContext),
+            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt + Environment.NewLine + request.AccountContext + Environment.NewLine + request.DynamicContext),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));

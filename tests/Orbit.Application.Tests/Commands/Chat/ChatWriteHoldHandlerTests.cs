@@ -653,7 +653,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
         _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(new Dictionary<Guid, int>());
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("static prompt");
-        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
         _scheduleLogReader.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
             Arg.Any<DateOnly>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),

@@ -38,8 +38,10 @@ usage comes from the captured response; the structured write's argument tokens a
 estimated because its trace has no provider usage envelope.
 
 The D147 comparison assumes another account has already sent the same static prefix.
-Only an observed matching prefix of at least 1,024 tokens qualifies for reuse, rounded
-conservatively down to 128 tokens; every new input token uses the cache-write rate.
+Only a matching prefix previously written at an eligible message endpoint or explicit
+cache boundary qualifies for reuse. A common substring alone does not qualify. The
+estimate requires at least 1,024 tokens and rounds conservatively down to 128 tokens;
+every new input token uses the cache-write rate.
 The test asserts a warm mean at most $0.0009 for each client type. It also reports every cold
 call and the mean including a cold start. Cold requests exceed the warmed D147 target;
 that target is not a guarantee for cold requests, arbitrary account sizes, cache eviction,
@@ -65,15 +67,54 @@ validation feedback for a six-level structured call.
 
 | Client | Tool tokens before | Tool tokens after | Warm mean USD | Mean with cold start USD | First cold call USD |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| legacy | 45636 | 30656 | 0.0006171 | 0.0012921 | 0.0052931 |
-| composition | 50099 | 34855 | 0.0006753 | 0.0014386 | 0.0059744 |
-| offers | 54949 | 39302 | 0.0007351 | 0.0015826 | 0.0066293 |
+| legacy | 45636 | 30656 | 0.0006136 | 0.0012887 | 0.0052981 |
+| composition | 50099 | 34855 | 0.0006782 | 0.0014415 | 0.0059794 |
+| offers | 54949 | 39302 | 0.0007338 | 0.0015812 | 0.0066343 |
 
 Cold-call ceilings are $0.0054, $0.0061 and $0.0068 respectively; means including a
 cold start are bounded by $0.00132, $0.00147 and $0.00162. The original inlined
 schemas fail all three cold ceilings. Per-section token tables, every tool above 3,000
 JSON characters, fixture provenance and regeneration commands are in the
 [schema evidence](tests/Orbit.Infrastructure.Tests/Fixtures/ToolSchemas/README.md).
+
+`AiInputBudgetTests.LiveCache.cs` adds the four-turn live sequence with 72 habits,
+including children, eight tags, six goals, reminders, a held preview after the second
+turn, an advancing clock and production offer planning. Repository rows rotate between
+turns to exercise reads without an ordering guarantee. A second variant supplies growing
+client history and both variants change the current app area. The full account context
+precedes turn context and history, with explicit cache boundaries after the static system
+message and the account message. The tool catalog stays identical after the preview.
+
+The warm sequence assumes this person's static and account boundaries were written by an earlier batch.
+It gives no warm credit for an identical first message or earlier turn state.
+All provider chat calls count, including legacy continuations. With 204 output tokens per
+call, rounded from the ticket's 814-token four-call measurement, the estimated means are:
+
+| Client | Without history USD | With history USD |
+| --- | ---: | ---: |
+| legacy | 0.0008780 | 0.0008994 |
+| composition | 0.0007707 | 0.0008070 |
+| offers | 0.0008614 | 0.0008977 |
+
+These estimates do not establish the released service's cache hit rate. The offline
+[cache report](tests/Orbit.Infrastructure.Tests/Fixtures/ToolSchemas/CacheEvidence.md)
+records the original first differing bytes, SDK evidence, log observations and model.
+
+Keep Luna's default cache lifetime. The
+[OpenAI guide](https://developers.openai.com/api/docs/guides/prompt-caching) specifies
+`prompt_cache_options.ttl` values `30m` and `12h`; they use total write rates of
+$0.125 and $0.25 per million Luna tokens, with the same $0.01 read rate. The installed
+SDK's `PromptCacheRetentionPolicy` writes the separate `prompt_cache_retention` field,
+not this lifetime setting. The report links the inspected SDK revision.
+
+Production's daily line for 2026/10/31 records 1,328 AI calls, including 1,160 chat calls;
+its account quota summary has a mean of two messages and a 95th percentile of three.
+The daily model uses a 66,000-token reusable prefix, 1,000 changing input tokens and 204
+output tokens per call, with two sessions separated by two hours. For two to four calls
+per day, default retention estimates $0.0084770 to $0.0046820 per call; 12-hour retention
+estimates $0.0089320 to $0.0049720. It costs more for this spacing, so it is not enabled.
+Three separate cold sessions within twelve hours reverse that comparison. Daily totals
+do not reveal session spacing; the report states the assumption and that sensitivity.
 
 ## Launch gate
 

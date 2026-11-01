@@ -80,6 +80,13 @@ public partial class AgentCatalogService : IAgentCatalogService
         return sb.ToString();
     }
 
+    public string BuildClientHints(AgentClientContext? client)
+    {
+        var sb = new StringBuilder();
+        AppendClientHints(sb, client);
+        return sb.ToString();
+    }
+
     private static void AppendAgentPolicy(StringBuilder sb)
     {
         sb.AppendLine("## Orbit Agent Policy");
@@ -125,16 +132,21 @@ public partial class AgentCatalogService : IAgentCatalogService
         if (snapshot.RecentGoalTitles is { Count: > 0 })
             sb.AppendLine(CultureInfo.InvariantCulture, $"Recent goals: {string.Join(", ", snapshot.RecentGoalTitles)}");
 
-        if (snapshot.ClientContext is not null)
+        AppendClientHints(sb, snapshot.ClientContext);
+    }
+
+    private static void AppendClientHints(StringBuilder sb, AgentClientContext? client)
+    {
+        if (client is not null)
         {
             sb.AppendLine();
             sb.AppendLine("## Untrusted Client Hints");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Platform: {snapshot.ClientContext.Platform ?? UnknownContextValue}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Locale: {snapshot.ClientContext.Locale ?? UnknownContextValue}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Time format: {snapshot.ClientContext.TimeFormat ?? UnknownContextValue}");
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Current app area: {snapshot.ClientContext.CurrentAppArea ?? UnknownContextValue}");
-            if (snapshot.ClientContext.ShowGeneralOnToday.HasValue)
-                sb.AppendLine(CultureInfo.InvariantCulture, $"Show general on today: {snapshot.ClientContext.ShowGeneralOnToday.Value}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Platform: {client.Platform ?? UnknownContextValue}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Locale: {client.Locale ?? UnknownContextValue}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Time format: {client.TimeFormat ?? UnknownContextValue}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Current app area: {client.CurrentAppArea ?? UnknownContextValue}");
+            if (client.ShowGeneralOnToday.HasValue)
+                sb.AppendLine(CultureInfo.InvariantCulture, $"Show general on today: {client.ShowGeneralOnToday.Value}");
         }
     }
 

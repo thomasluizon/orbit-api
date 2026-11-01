@@ -28,8 +28,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         var oldId = older.Value.PendingOperations!.Single().Id;
         var oldArguments = _pendingOperationStore.GetExecution(_userId, oldId)!.Arguments.GetRawText();
         _userDateService.GetUserTodayAsync(_userId, Arg.Any<CancellationToken>()).Returns(localToday);
-        _promptBuilder.BuildDynamic(Arg.Any<Orbit.Domain.Interfaces.PromptBuildRequest>())
-            .Returns(call => new SystemPromptBuilder().BuildDynamic(call.Arg<Orbit.Domain.Interfaces.PromptBuildRequest>()));
+        _promptBuilder.BuildTurnContext(Arg.Any<Orbit.Domain.Interfaces.PromptBuildRequest>())
+            .Returns(call => new SystemPromptBuilder().BuildTurnContext(call.Arg<Orbit.Domain.Interfaces.PromptBuildRequest>()));
         var args = JsonNode.Parse(captured.GetProperty("arguments").GetRawText())!.AsObject();
         args["habits"]![0]!["due_date"] = "2026-10-27";
         args["habits"]![2]!["due_date"] = "2026-10-28";

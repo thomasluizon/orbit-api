@@ -1,0 +1,163 @@
+[
+  {
+    "id": "eb1cd2ae-7554-4239-92e7-d5887d40e433",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-fpldp"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-25: total=$0.0310 over 87 calls; top: chat=$0.0160, daily_summary=$0.0094, proactive_item=$0.0051; Astra quota 2026-10-25: free_cap_hits=0; pro_cap_hits=0; mean_messages_per_active_user=2.33; p95_messages_per_active_user=3",
+    "timestamp": "2026-10-26T20:57:58.586869449Z"
+  },
+  {
+    "id": "63a20782-b224-4bcb-9b9e-1b00d42ae891",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-vvgzx"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-26: total=$0.1270 over 107 calls; top: chat=$0.1139, proactive_item=$0.0056, daily_summary=$0.0053; Astra quota 2026-10-26: free_cap_hits=0; pro_cap_hits=0; mean_messages_per_active_user=8.00; p95_messages_per_active_user=16",
+    "timestamp": "2026-10-27T12:23:59.795209094Z"
+  },
+  {
+    "id": "6f4a4d9c-d92d-490e-b359-78136e34917b",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-dbk4t"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-27: total=$0.0488 over 99 calls; top: chat=$0.0279, daily_summary=$0.0111, proactive_item=$0.0051; Astra quota 2026-10-27: free_cap_hits=0; pro_cap_hits=0; mean_messages_per_active_user=4.00; p95_messages_per_active_user=6",
+    "timestamp": "2026-10-28T08:04:30.198264531Z"
+  },
+  {
+    "id": "4350db5e-d5f3-4bb9-a8e8-f4d698a97fbf",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-mvd6k"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-28: total=$0.0364 over 106 calls; top: daily_summary=$0.0149, chat=$0.0142, proactive_item=$0.0069; Astra quota 2026-10-28: free_cap_hits=0; pro_cap_hits=0; mean_messages_per_active_user=2.00; p95_messages_per_active_user=2",
+    "timestamp": "2026-10-29T23:44:12.911987443Z"
+  },
+  {
+    "id": "c7497dbc-b12e-4f37-9206-65d2d831858c",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-6dv6v"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-29: total=$0.3355 over 200 calls; top: chat=$0.3123, daily_summary=$0.0165, proactive_item=$0.0061; Astra quota 2026-10-29: free_cap_hits=0; pro_cap_hits=0; mean_messages_per_active_user=3.00; p95_messages_per_active_user=5",
+    "timestamp": "2026-10-30T23:51:55.480003022Z"
+  },
+  {
+    "id": "0f93dd35-29cc-4038-a934-6b9d77bdbcc8",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-cpsgx"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-30: total=$3.7336 over 1002 calls; purposes: chat=$3.6776 calls=832 cost_per_call=$0.004420 uncached_input=27374379 cached_input=19380560 output=124210 reasoning=0 uncached_per_call=32901.9 cached_per_call=23293.9 output_per_call=149.3 reasoning_per_call=0.0; daily_summary=$0.0322 calls=68 cost_per_call=$0.000474 uncached_input=215865 cached_input=105649 output=8389 reasoning=0 uncached_per_call=3174.5 cached_per_call=1553.7 output_per_call=123.4 reasoning_per_call=0.0; habit_drafts=$0.0144 calls=46 cost_per_call=$0.000314 uncached_input=39665 cached_input=3110 output=19929 reasoning=0 uncached_per_call=862.3 cached_per_call=67.6 output_per_call=433.2 reasoning_per_call=0.0; proactive_item=$0.0074 calls=42 cost_per_call=$0.000175 uncached_input=38314 cached_input=0 output=7018 reasoning=0 uncached_per_call=912.2 cached_per_call=0.0 output_per_call=167.1 reasoning_per_call=0.0; retrospective=$0.0016 calls=12 cost_per_call=$0.000132 uncached_input=3534 cached_input=0 output=2468 reasoning=0 uncached_per_call=294.5 cached_per_call=0.0 output_per_call=205.7 reasoning_per_call=0.0; habit_suggest=$0.0003 calls=2 cost_per_call=$0.000140 uncached_input=1644 cached_input=0 output=230 reasoning=0 uncached_per_call=822.0 cached_per_call=0.0 output_per_call=115.0 reasoning_per_call=0.0; Astra quota 2026-10-30: free_cap_hits=1; pro_cap_hits=0; mean_messages_per_active_user=4.00; p95_messages_per_active_user=6",
+    "timestamp": "2026-10-31T23:00:44.367443979Z"
+  },
+  {
+    "id": "16e38594-558d-463d-8e97-9f1fc7749e27",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "srv-d6tc2isr85hc739bf75g"
+      },
+      {
+        "name": "instance",
+        "value": "srv-d6tc2isr85hc739bf75g-ccvvb"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "      AI cost 2026-10-31: total=$3.6374 over 1328 calls; purposes: chat=$3.6030 calls=1160 cost_per_call=$0.003106 uncached_input=26073873 cached_input=27581261 output=139914 reasoning=0 uncached_per_call=22477.5 cached_per_call=23776.9 output_per_call=120.6 reasoning_per_call=0.0; daily_summary=$0.0223 calls=100 cost_per_call=$0.000223 uncached_input=136856 cached_input=41859 output=11108 reasoning=469 uncached_per_call=1368.6 cached_per_call=418.6 output_per_call=111.1 reasoning_per_call=4.7; proactive_item=$0.0057 calls=34 cost_per_call=$0.000166 uncached_input=30688 cached_input=0 output=5173 reasoning=0 uncached_per_call=902.6 cached_per_call=0.0 output_per_call=152.1 reasoning_per_call=0.0; habit_drafts=$0.0036 calls=12 cost_per_call=$0.000296 uncached_input=12056 cached_input=0 output=4211 reasoning=0 uncached_per_call=1004.7 cached_per_call=0.0 output_per_call=350.9 reasoning_per_call=0.0; retrospective=$0.0020 calls=16 cost_per_call=$0.000125 uncached_input=4687 cached_input=0 output=3071 reasoning=0 uncached_per_call=292.9 cached_per_call=0.0 output_per_call=191.9 reasoning_per_call=0.0; habit_suggest=$0.0009 calls=6 cost_per_call=$0.000146 uncached_input=4936 cached_input=0 output=761 reasoning=67 uncached_per_call=822.7 cached_per_call=0.0 output_per_call=126.8 reasoning_per_call=11.2; Astra quota 2026-10-31: free_cap_hits=0; pro_cap_hits=0; mean_messages_per_active_user=2.00; p95_messages_per_active_user=3",
+    "timestamp": "2026-11-01T08:38:22.78212059Z"
+  }
+]

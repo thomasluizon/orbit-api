@@ -97,7 +97,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
-        var snapshot = request.DynamicContext!.Split(Environment.NewLine).Single(line => line.StartsWith("{\"offer_account_facts\":", StringComparison.Ordinal));
+        var snapshot = request.AccountContext!.Split(Environment.NewLine).Single(line => line.StartsWith("{\"offer_account_facts\":", StringComparison.Ordinal));
         using var facts = JsonDocument.Parse(snapshot);
         var account = facts.RootElement.GetProperty("offer_account_facts");
         account.GetProperty("Habits")[0].GetProperty("Id").GetGuid().Should().Be(habit.Id);
@@ -129,7 +129,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(call =>
             {
                 var request = call.Arg<AiToolRequest>();
-                snapshot = request.DynamicContext!.Split(Environment.NewLine)
+                snapshot = request.AccountContext!.Split(Environment.NewLine)
                     .Single(line => line.StartsWith("{\"offer_account_facts\":", StringComparison.Ordinal));
                 return Result.Success(ToolResponse(query.Name, "read", """{"relative_period":"today","orbit_read_complete":true}""") with
                 {

@@ -95,12 +95,12 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             var currentPrefix = CacheablePrefix(root);
             prefixes.TryAdd(supportsAsk, currentPrefix);
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefixes[supportsAsk]));
-            input.GetArrayLength().Should().Be(4);
+            input.GetArrayLength().Should().Be(5);
             input[0].GetProperty("role").GetString().Should().Be("system");
-            input[2].GetRawText().Should().Contain($"private-habit-{index}").And.Contain(date.ToString("yyyy-MM-dd"));
-            input[2].GetRawText().Should().Contain($"Language: {user.Language}");
-            input[1].GetRawText().Should().Contain($"private-history-{index}");
-            input[3].GetProperty("role").GetString().Should().Be("user");
+            input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain($"Language: {user.Language}");
+            input[2].GetRawText().Should().Contain(date.ToString("yyyy-MM-dd"));
+            input[3].GetRawText().Should().Contain($"private-history-{index}");
+            input[4].GetProperty("role").GetString().Should().Be("user");
             currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");
             root.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
@@ -176,7 +176,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
 
     private static ProcessUserChatCommandHandler BuildHandler(IAiIntentService service,
         IReadOnlyList<IAiTool> tools, User user, IReadOnlyList<Habit> habits, DateOnly date,
-        bool recordingEnabled = false, IConversationTurnRecorder? recorder = null, IProductAnalytics? analytics = null, IReadOnlyList<string>? enabledFlags = null)
+        bool recordingEnabled = false, IConversationTurnRecorder? recorder = null, IProductAnalytics? analytics = null,
+        IReadOnlyList<string>? enabledFlags = null, LiveCacheAccount? account = null)
     {
         var habitRepo = Substitute.For<IGenericRepository<Habit>>();
         habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -207,15 +208,23 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         var logs = Substitute.For<IHabitScheduleLogReader>();
         logs.ReadDaysAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
             Arg.Any<CancellationToken>()).Returns(Array.Empty<HabitScheduleLogDay>());
+        var pending = Substitute.For<IPendingAgentOperationStore>();
+        var executor = Substitute.For<IAgentOperationExecutor>();
+        var registry = new AiToolRegistry(tools);
+        var previewer = new PendingOperationChangePreviewer(habitRepo, goalRepo, tags, dates, registry);
+        account?.Configure(habitRepo, goalRepo, tags, dates, users, logs, pending, executor, previewer);
+        var readServices = new ServiceCollection().AddSingleton(executor)
+            .AddSingleton(Substitute.For<IPendingClarificationStore>()).BuildServiceProvider();
         return new ProcessUserChatCommandHandler(
             new(habitRepo, goalRepo, users, tags, templates, flags),
             new(service, new AiToolRegistry(tools), new SystemPromptBuilder(), new AgentCatalogService()),
             new(dates, Substitute.For<IUserStreakService>(), quota, Substitute.For<IUnitOfWork>(),
-                Substitute.For<IServiceScopeFactory>(), Substitute.For<IAgentOperationExecutor>(),
+                readServices.GetRequiredService<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), progress, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), analytics ?? Substitute.For<IProductAnalytics>(), logs,
-                Substitute.For<IIssuedAstraBlockStore>(), Substitute.For<IPendingAgentOperationStore>()),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), recorder);
+                Substitute.For<IIssuedAstraBlockStore>(), pending, PendingOperationPreviewer: previewer),
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), recorder,
+            timeProvider: account?.Clock, offerStore: account?.Offers);
     }
 
     private static AiIntentService BuildService(HttpMessageHandler handler, IAiUsageRecorder? usage = null, AiSettings? settings = null)
