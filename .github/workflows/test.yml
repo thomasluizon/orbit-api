@@ -47,6 +47,20 @@ jobs:
     name: Unit Tests
     needs: build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: orbit_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orbit_test -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v7
@@ -66,6 +80,8 @@ jobs:
         run: dotnet test tests/Orbit.Application.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
 
       - name: Run Infrastructure Tests
+        env:
+          ORBIT_POSTGRES_TEST_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=orbit_test
         run: dotnet test tests/Orbit.Infrastructure.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
 
       - name: Run Analyzer Tests

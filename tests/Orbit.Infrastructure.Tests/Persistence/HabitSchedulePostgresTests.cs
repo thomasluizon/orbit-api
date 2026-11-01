@@ -20,15 +20,15 @@ public class HabitSchedulePostgresTests
             var user = User.Create("Alex", "legacy-schedule@example.test").Value;
             var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, user.Id,
                 "Read", FrequencyUnit.Week, 3, Start)).Value;
-            context.Users.Add(user);
-            context.Habits.Add(habit);
-            await context.SaveChangesAsync();
+            await InsertUserBeforeDropAsync(context, user);
+            await InsertHabitBeforeDropAsync(context, habit);
 
             await context.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE "Habits" SET "IsGeneral" = true, "IsFlexible" = false WHERE "Id" = {habit.Id}
                 """);
 
-            var stored = await context.Habits.AsNoTracking().SingleAsync();
+            var stored = await context.Habits.AsNoTracking()
+                .Select(row => new { row.Schedule, row.NextDueDate, row.StartDate }).SingleAsync();
             stored.Schedule.Should().Be(HabitSchedule.Flexible);
             stored.NextDueDate.Should().Be(Start);
             stored.StartDate.Should().Be(Start);
@@ -40,16 +40,15 @@ public class HabitSchedulePostgresTests
         PostgresTestDatabase.WithDatabase(async context =>
         {
             var user = User.Create("Alex", "canonical-schedule@example.test").Value;
-            context.Users.Add(user);
+            await InsertUserBeforeDropAsync(context, user);
             foreach (var initial in Enum.GetValues<HabitSchedule>())
             {
                 var recurring = initial is HabitSchedule.Recurring or HabitSchedule.Flexible;
                 var habit = Habit.Create(new HabitCreateParams(initial, user.Id, "Read",
                     recurring ? FrequencyUnit.Day : null, recurring ? 1 : null, Start)).Value;
-                context.Habits.Add(habit);
-                await context.SaveChangesAsync();
-                (await context.Habits.AsNoTracking().SingleAsync(row => row.Id == habit.Id))
-                    .Schedule.Should().Be(initial);
+                await InsertHabitBeforeDropAsync(context, habit);
+                (await context.Habits.AsNoTracking().Where(row => row.Id == habit.Id)
+                    .Select(row => row.Schedule).SingleAsync()).Should().Be(initial);
                 await AssertLegacyColumnsAsync(context);
 
                 foreach (var target in Enum.GetValues<HabitSchedule>())
@@ -58,8 +57,9 @@ public class HabitSchedulePostgresTests
                     habit.Update(new HabitUpdateParams(target, "Read", null,
                         recurring ? FrequencyUnit.Day : null, recurring ? 1 : null, null, false,
                         Start.AddDays(7), UserToday: Start)).IsSuccess.Should().BeTrue();
-                    await context.SaveChangesAsync();
-                    var stored = await context.Habits.AsNoTracking().SingleAsync(row => row.Id == habit.Id);
+                    await UpdateHabitBeforeDropAsync(context, habit);
+                    var stored = await context.Habits.AsNoTracking().Where(row => row.Id == habit.Id)
+                        .Select(row => new { row.Schedule, row.NextDueDate, row.StartDate }).SingleAsync();
                     stored.Schedule.Should().Be(target);
                     stored.NextDueDate.Should().Be(habit.NextDueDate);
                     stored.StartDate.Should().Be(Start);
@@ -73,7 +73,7 @@ public class HabitSchedulePostgresTests
         PostgresTestDatabase.WithDatabase(async context =>
         {
             var user = User.Create("Alex", "drop-schedule@example.test").Value;
-            context.Users.Add(user);
+            await InsertUserBeforeDropAsync(context, user);
             var habits = Enum.GetValues<HabitSchedule>().Select(schedule =>
             {
                 var recurring = schedule is HabitSchedule.Recurring or HabitSchedule.Flexible;
@@ -82,12 +82,17 @@ public class HabitSchedulePostgresTests
                 habit.PostponeTo(Start.AddDays(7));
                 return habit;
             }).ToArray();
-            context.Habits.AddRange(habits);
-            await context.SaveChangesAsync();
+            foreach (var habit in habits)
+                await InsertHabitBeforeDropAsync(context, habit);
             habits[1].Log(Start.AddDays(7)).IsSuccess.Should().BeTrue();
             var log = habits[1].Logs.Single();
-            context.HabitLogs.Add(log);
-            await context.SaveChangesAsync();
+            await UpdateHabitBeforeDropAsync(context, habits[1]);
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "HabitLogs" ("Id", "HabitId", "Date", "Value", "CompletionOrdinal",
+                    "IsSlip", "Note", "CreatedAtUtc", "UpdatedAtUtc")
+                VALUES ({log.Id}, {log.HabitId}, {log.Date}, {log.Value}, {log.CompletionOrdinal},
+                    {log.IsSlip}, {log.Note}, {log.CreatedAtUtc}, {log.UpdatedAtUtc})
+                """);
             var before = await ReadHabitsAsync(context);
             var scheduleFunction = await ScalarAsync(context,
                 "SELECT pg_get_functiondef('sync_habit_schedule_expand()'::regprocedure)");
@@ -154,14 +159,41 @@ public class HabitSchedulePostgresTests
 
             var restored = habits[1];
             restored.PostponeTo(Start.AddDays(20));
-            await context.SaveChangesAsync();
+            await UpdateHabitBeforeDropAsync(context, restored);
             await AssertLegacyColumnsAsync(context);
-            (await context.Habits.AsNoTracking().SingleAsync(row => row.Id == restored.Id))
-                .NextDueDate.Should().Be(Start.AddDays(20));
+            (await context.Habits.AsNoTracking().Where(row => row.Id == restored.Id)
+                .Select(row => row.NextDueDate).SingleAsync()).Should().Be(Start.AddDays(20));
             await migrator.MigrateAsync();
             await AssertCompatibilityObjectsAbsentAsync(context);
             (await context.HabitLogs.AsNoTracking().SingleAsync()).Id.Should().Be(log.Id);
         }, BeforeDrop);
+
+    private static Task<int> InsertUserBeforeDropAsync(OrbitDbContext context, User user) =>
+        context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Users" ("Id", "Name", "Email", "CreatedAtUtc")
+            VALUES ({user.Id}, {user.Name}, {user.Email}, {user.CreatedAtUtc})
+            """);
+
+    private static Task<int> InsertHabitBeforeDropAsync(OrbitDbContext context, Habit habit) =>
+        context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Habits" ("Id", "UserId", "Title", "Schedule", "FrequencyUnit", "FrequencyQuantity",
+                "NextDueDate", "StartDate", "ScheduledStartDate", "IsBadHabit", "IsCompleted", "Days",
+                "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES ({habit.Id}, {habit.UserId}, {habit.Title}, {(int)habit.Schedule},
+                {(int?)habit.FrequencyUnit}, {habit.FrequencyQuantity}, {habit.NextDueDate}, {habit.StartDate},
+                {habit.ScheduledStartDate}, {habit.IsBadHabit}, {habit.IsCompleted}, {Array.Empty<string>()},
+                {habit.CreatedAtUtc}, {habit.UpdatedAtUtc})
+            """);
+
+    private static Task<int> UpdateHabitBeforeDropAsync(OrbitDbContext context, Habit habit) =>
+        context.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE "Habits" SET "Schedule" = {(int)habit.Schedule},
+                "FrequencyUnit" = {(int?)habit.FrequencyUnit}, "FrequencyQuantity" = {habit.FrequencyQuantity},
+                "NextDueDate" = {habit.NextDueDate}, "StartDate" = {habit.StartDate},
+                "ScheduledStartDate" = {habit.ScheduledStartDate}, "IsCompleted" = {habit.IsCompleted},
+                "UpdatedAtUtc" = {habit.UpdatedAtUtc}
+            WHERE "Id" = {habit.Id}
+            """);
 
     private static Task<List<(Guid Id, HabitSchedule Schedule, DateOnly NextDueDate, DateOnly StartDate)>>
         ReadHabitsAsync(OrbitDbContext context) => context.Habits.IgnoreQueryFilters().AsNoTracking()

@@ -82,7 +82,8 @@ public partial class OAuthPostgresRetryTests
         WithDatabase(db =>
         {
             var store = new OAuthStateStore(db, TimeProvider.System);
-            var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+            var clockNowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+            var nowAtUtc = clockNowAtUtc.AddTicks(-(clockNowAtUtc.Ticks % TimeSpan.TicksPerMicrosecond));
             var expiresAtUtc = nowAtUtc.AddMinutes(5);
 
             store.Put("expired", "google", "expired", nowAtUtc.AddMinutes(-1), 1).Should().BeTrue();
