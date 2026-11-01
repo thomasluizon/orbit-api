@@ -48,8 +48,6 @@ public sealed class AiConversationContext
     public Guid? UserId { get; init; }
     public string Purpose { get; init; } = "chat";
     public AiTurnTelemetry Telemetry { get; init; } = new();
-    /// <summary>Earlier reads whose full payload is retained by the handler after staging a preview.</summary>
-    public IReadOnlyCollection<string> RetiredReadCallIds { get; set; } = [];
     /// <summary>Per-round ask constraints appended after the immutable provider tool catalog and system prompt.</summary>
     public IReadOnlyList<object> ToolDeclarationUpdates { get; set; } = [];
     /// <summary>Server-authored feedback for an invalid tool-free terminal answer.</summary>

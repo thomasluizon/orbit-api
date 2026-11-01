@@ -48,13 +48,8 @@ public sealed partial class ChatWriteHoldHandlerTests
         sent.SystemPrompt.Should().Contain("Preserve a title the person quoted or named verbatim");
         var languageRule = "Write composed habit titles in " + (portuguese ? "Brazilian Portuguese" : "English");
         sent.DynamicContext.Should().Contain(languageRule);
-        foreach (var declaration in sent.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
-            .Where(value => value.GetProperty("name").GetString() is "create_habit" or "bulk_create_habits"
-                or "create_sub_habit" or "update_habit" or "bulk_update_habits"))
-        {
-            declaration.GetProperty("description").GetString().Should().Contain("use the request language supplied for this turn")
-                .And.Contain("Preserve a title the person quoted or named verbatim");
-        }
+        sent.SystemPrompt.Should().Contain("use the request language supplied for this turn")
+            .And.Contain("Preserve a title the person quoted or named verbatim");
     }
 
     [Theory]

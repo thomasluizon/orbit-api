@@ -35,12 +35,13 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         ];
     }
 
-    public string BuildStatic(PromptBuildRequest request) => Render(_staticSections, ToContext(request));
+    public string BuildStatic(PromptBuildRequest request) =>
+        Render(_staticSections, ToContext(request)) + Environment.NewLine + GlobalRulesSection.BuildFormat(ToContext(request));
 
     public string BuildDynamic(PromptBuildRequest request)
     {
         var context = ToContext(request);
-        return Render(_dynamicSections, context) + Environment.NewLine + GlobalRulesSection.BuildFormat(context);
+        return Render(_dynamicSections, context);
     }
 
     private static string Render(IEnumerable<IPromptSection> sections, PromptContext context)

@@ -30,7 +30,7 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 - **Smart Scheduling** -- Server-side frequency calculations (daily, weekly, monthly, yearly, every N days) with day-of-week filtering and overdue detection
 - **Completion Logging** -- Toggle completion per day with optional notes, full log history
 - **Metrics** -- Current/longest streaks, weekly/monthly completion rates
-- **AI Agent** -- Multi-turn OpenAI-backed chat that creates habits, logs completions, analyzes progress, suggests breakdowns, assigns tags, and reschedules. Exposed to external clients as MCP tools with per-tool ownership/policy scoping and audit logging. Supports image upload
+- **AI Agent** -- Multi-turn OpenAI-backed chat that creates habits, logs completions, analyzes progress, suggests breakdowns, assigns tags, and reschedules. Exposed to external clients as MCP tools with per-tool ownership/policy scoping and audit logging. Supports image upload. Provider tool schemas and the agent operation catalog share repeated blocks with local `$defs` and `$ref`; [offline cost and equivalence checks](TESTING.md#request-cache-and-cost-evidence) cover legacy, composition and offer clients.
 - **AI Assists** -- Cached daily summaries, retrospectives, fact extraction, goal review, habit/tag/reschedule suggestions, proactive check-ins, slip alerts, and batched usage summaries
 - **Gamification** -- XP, levels, streaks, streak freezes, and achievements
 - **Goals** -- Goal tracking with deadlines and AI-assisted review

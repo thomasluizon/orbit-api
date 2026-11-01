@@ -190,7 +190,8 @@ public partial class AiIntentServiceStreamingTests
             var declaration = declarations[0];
             declaration.GetProperty("strict").GetBoolean().Should().BeTrue();
             StrictChatToolSchemaTests.AssertStrict(declaration.GetProperty("parameters"));
-            var forms = declaration.GetProperty("parameters").GetProperty("properties").GetProperty("input").GetProperty("anyOf");
+            var forms = ToolSchemaExpansion.Expand(declaration.GetProperty("parameters"))
+                .GetProperty("properties").GetProperty("input").GetProperty("anyOf");
             foreach (var form in forms.EnumerateArray())
                 form.GetProperty("properties").GetProperty("missing_input").GetProperty("enum").EnumerateArray()
                     .Select(value => value.GetString()).Should().BeEquivalentTo("habit_setup", "preference", "check_in", "record_selection", "bulk_selection");

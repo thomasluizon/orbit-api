@@ -52,13 +52,13 @@ public partial class AgentChatWriteHoldTests
 
         result.Response.IsSuccess.Should().BeTrue();
         result.Transport.Bodies.Count.Should().Be(3);
-        result.Transport.TotalTokens.Should().BeLessThan(AppConstants.MaxAiRequestTotalTokens);
         using var lastRequest = JsonDocument.Parse(result.Transport.Bodies[2]);
-        var read = lastRequest.RootElement.GetProperty("input").EnumerateArray()
-            .Single(item => item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output"
-                && item.GetProperty("call_id").GetString() == "lookup");
-        using var readBody = JsonDocument.Parse(read.GetProperty("output").GetString()!);
-        readBody.RootElement.GetProperty("payload").GetProperty("retired").GetBoolean().Should().BeTrue();
+        using var previousRequest = JsonDocument.Parse(result.Transport.Bodies[1]);
+        var previousInput = previousRequest.RootElement.GetProperty("input").EnumerateArray().Select(item => item.GetRawText()).ToArray();
+        lastRequest.RootElement.GetProperty("input").EnumerateArray().Take(previousInput.Length)
+            .Select(item => item.GetRawText()).Should().Equal(previousInput);
+        result.Transport.TotalTokens.Should().BeGreaterThan(AppConstants.MaxAiRequestTotalTokens,
+            "the captured third response crosses the ceiling, so the held preview must still survive with the read prefix retained");
         AssertTemplatePreview(result.Response.Value, result.Template);
     }
 

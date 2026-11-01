@@ -30,8 +30,8 @@ public partial class ProcessUserChatCommandHandlerTests
         response.Value.AiMessage.Should().Be(answer);
         response.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatTextPart>().Which.Text.Should().Be(answer);
         var sent = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments().OfType<AiToolRequest>()).Single();
-        sent.DynamicContext.Should().Contain(TerminalAnswerDirective.Instruction);
-        sent.DynamicContext.Should().Contain("A clarification must never finish as free-text prose or kind=answer.");
+        sent.SystemPrompt.Should().Contain(TerminalAnswerDirective.Instruction);
+        sent.SystemPrompt.Should().Contain("A clarification must never finish as free-text prose or kind=answer.");
         await AssertNoCompositionContinuation();
         AssertStoredComposition(response.Value, client, language);
     }

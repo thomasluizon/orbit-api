@@ -124,7 +124,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             {
                 var declarations = JsonSerializer.SerializeToElement(call.Arg<AiToolRequest>().ToolDeclarations)
                     .EnumerateArray().ToArray();
-                declarations.Should().NotContain(tool => tool.GetProperty("name").GetString() == "ask");
+                declarations.Should().Contain(tool => tool.GetProperty("name").GetString() == "ask");
                 declarations.Single(tool => tool.GetProperty("name").GetString() == "bulk_reschedule_habits")
                     .GetProperty("description").GetString().Should().Contain("strictly fewer")
                     .And.Contain("exactly").And.Contain("seven days");

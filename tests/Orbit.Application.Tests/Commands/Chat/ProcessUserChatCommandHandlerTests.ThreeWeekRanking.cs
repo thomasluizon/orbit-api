@@ -92,8 +92,8 @@ public partial class ProcessUserChatCommandHandlerTests
             && operation.Status == AgentOperationStatus.Succeeded);
         events.Where(item => item.Type == "delta").Should().BeEmpty();
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request =>
-            request.DynamicContext!.Contains("relative_period=last_n_weeks and period_count=3")
-            && request.DynamicContext.Contains("Do not ask to choose rolling or calendar weeks")),
+            request.SystemPrompt.Contains("relative_period=last_n_weeks and period_count=3")
+            && request.SystemPrompt.Contains("Do not ask to choose rolling or calendar weeks")),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 }

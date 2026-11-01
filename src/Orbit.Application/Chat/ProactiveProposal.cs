@@ -73,7 +73,7 @@ public static class ProactiveProposal
         } : new JsonObject
         {
             ["type"] = "array",
-            ["description"] = Instruction,
+            ["description"] = "Names of unrequested configured fields, following the offer instructions in the system prompt.",
             ["maxItems"] = eligible.Length,
             ["items"] = new JsonObject
             {

@@ -31,7 +31,7 @@ public sealed partial class ProviderToolControlOrderTests
                     foreach (var tool in sizes.OrderByDescending(tool => tool.Size).Take(5))
                         output.WriteLine($"  {tool.Name}: S={tool.Size}");
                 var names = registry.GetAll().Where(tool => tool.Name != "ask").Select(tool => tool.Name);
-                if (client != "legacy" && phase != "initial") names = names.Append("ask");
+                if (client != "legacy") names = names.Append("ask");
                 tools.Keys.Should().BeEquivalentTo(names);
             }
         violations.Should().BeEmpty($"every initial and continuation catalog must have S <= {SchemaStringBudget}");

@@ -53,13 +53,20 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
         yield return ("draft-revision", ask.GetParameterSchema(false, [new HabitSetupDraft("draft", "Activity", "frequency_unit", Guid.NewGuid())]));
     }
 
-    private static int ObjectDepth(JsonElement schema)
+    private static int ObjectDepth(JsonElement schema) => ObjectDepth(schema, schema, []);
+
+    private static int ObjectDepth(JsonElement schema, JsonElement root, HashSet<string> active)
     {
+        var reference = schema.TryGetProperty("$ref", out var target) ? target.GetString() : null;
+        if (reference is not null && !active.Add(reference)) return 0;
+        schema = ToolSchemaReferences.Resolve(schema, root);
         var own = schema.TryGetProperty("properties", out var properties) ? 1 : 0;
         var children = new List<int> { 0 };
-        if (own != 0) children.AddRange(properties.EnumerateObject().Select(property => ObjectDepth(property.Value)));
-        if (schema.TryGetProperty("items", out var items)) children.Add(ObjectDepth(items));
-        if (schema.TryGetProperty("anyOf", out var alternatives)) children.AddRange(alternatives.EnumerateArray().Select(ObjectDepth));
+        if (own != 0) children.AddRange(properties.EnumerateObject().Select(property => ObjectDepth(property.Value, root, active)));
+        if (schema.TryGetProperty("items", out var items)) children.Add(ObjectDepth(items, root, active));
+        if (schema.TryGetProperty("anyOf", out var alternatives))
+            children.AddRange(alternatives.EnumerateArray().Select(alternative => ObjectDepth(alternative, root, active)));
+        if (reference is not null) active.Remove(reference);
         return own + children.Max();
     }
 
@@ -100,6 +107,7 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
         output.WriteLine(wire.RootElement.GetRawText());
         var schema = wire.RootElement.GetProperty("parameters");
         AssertStrict(schema);
+        schema = ToolSchemaExpansion.Expand(schema);
         schema.GetProperty("properties").TryGetProperty("input", out var input).Should().BeTrue(
             "each ask form needs its own non-null required fields inside a nested union");
         var forms = input.GetProperty("anyOf").EnumerateArray().ToArray();
@@ -272,14 +280,18 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
     }
 
     private static void AssertOptionalFields(JsonElement source, JsonElement wire)
+        => AssertOptionalFields(source, ToolSchemaExpansion.Expand(wire), wire);
+
+    private static void AssertOptionalFields(JsonElement source, JsonElement wire, JsonElement root)
     {
+        wire = ToolSchemaReferences.Resolve(wire, root);
         if (source.TryGetProperty("properties", out var properties))
         {
             var required = source.TryGetProperty("required", out var names)
                 ? names.EnumerateArray().Select(name => name.GetString()).ToHashSet() : [];
             foreach (var property in properties.EnumerateObject())
             {
-                var normalized = wire.GetProperty("properties").GetProperty(property.Name);
+                var normalized = ToolSchemaReferences.Resolve(wire.GetProperty("properties").GetProperty(property.Name), root);
                 var optional = !required.Contains(property.Name) || (property.Value.TryGetProperty("nullable", out var marker) && marker.GetBoolean());
                 if (optional)
                 {
@@ -291,13 +303,13 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
                     if (normalized.TryGetProperty("enum", out var options))
                         options.EnumerateArray().Should().Contain(option => option.ValueKind == JsonValueKind.Null);
                 }
-                AssertOptionalFields(property.Value, normalized);
+                AssertOptionalFields(property.Value, normalized, root);
             }
         }
-        if (source.TryGetProperty("items", out var items)) AssertOptionalFields(items, wire.GetProperty("items"));
+        if (source.TryGetProperty("items", out var items)) AssertOptionalFields(items, wire.GetProperty("items"), root);
         if (source.TryGetProperty("anyOf", out var alternatives))
             foreach (var pair in alternatives.EnumerateArray().Zip(wire.GetProperty("anyOf").EnumerateArray()))
-                AssertOptionalFields(pair.First, pair.Second);
+                AssertOptionalFields(pair.First, pair.Second, root);
     }
 
     internal static IReadOnlyList<IAiTool> AllTools() =>

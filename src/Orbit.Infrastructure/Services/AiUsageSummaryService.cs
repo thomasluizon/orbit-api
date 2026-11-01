@@ -15,9 +15,8 @@ using Orbit.Infrastructure.Services.Hosting;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Emits exactly one Information line per day summarising the previous UTC day's AI dollar cost and
-/// local-date Astra quota metrics. An in-memory marker keeps it idempotent across the hourly tick; a
-/// process restart re-emits the prior day's line once.
+/// Summarizes the previous UTC accounting day and emits the current UTC day so far at startup.
+/// In-memory markers keep scheduled ticks idempotent; a process restart emits both lines again.
 /// </summary>
 public partial class AiUsageSummaryService(
     IServiceScopeFactory scopeFactory,
@@ -31,6 +30,7 @@ public partial class AiUsageSummaryService(
     private readonly IReadOnlyDictionary<string, AiModelPrice> _pricing = aiOptions.Value.Pricing;
 
     private DateOnly? _lastSummarizedDate;
+    private bool _startupSummarized;
 
     public string Name => "ai-usage-summary";
 
@@ -42,7 +42,10 @@ public partial class AiUsageSummaryService(
 
     protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
-        await SummarizeYesterdayAsync(stoppingToken);
+        if (_startupSummarized)
+            await SummarizeYesterdayAsync(stoppingToken);
+        else
+            await SummarizeStartupAsync(stoppingToken);
         BackgroundServiceHealthCheck.RecordTick("AiUsageSummary");
     }
 
@@ -51,6 +54,20 @@ public partial class AiUsageSummaryService(
     protected override void LogStopped() => LogServiceStopped(logger);
 
     protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
+
+    internal async Task SummarizeStartupAsync(CancellationToken cancellationToken)
+    {
+        if (_startupSummarized) return;
+        await SummarizeYesterdayAsync(cancellationToken);
+        var today = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().UtcDateTime);
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var rows = await dbContext.AiUsageDaily.AsNoTracking()
+            .Where(usage => usage.Date == today).ToListAsync(cancellationToken);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogAiUsageSummary(logger, BuildSummaryLine(today, rows, _pricing, partial: true));
+        _startupSummarized = true;
+    }
 
     internal async Task SummarizeYesterdayAsync(CancellationToken cancellationToken)
     {
@@ -99,10 +116,12 @@ public partial class AiUsageSummaryService(
     internal static string BuildSummaryLine(
         DateOnly date,
         IReadOnlyList<AiUsageDaily> rows,
-        IReadOnlyDictionary<string, AiModelPrice> pricing)
+        IReadOnlyDictionary<string, AiModelPrice> pricing,
+        bool partial = false)
     {
+        var marker = partial ? " (partial)" : "";
         if (rows.Count == 0)
-            return string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}: no usage recorded");
+            return string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}{marker}: no usage recorded");
 
         var totalCostUsd = rows.Sum(row => row.CostUsd);
         var totalCalls = rows.Sum(row => row.Calls);
@@ -124,7 +143,7 @@ public partial class AiUsageSummaryService(
                     $"{group.Key}=${cost:F4} calls={calls} cost_per_call=${cost / divisor:F6} uncached_input={uncached} cached_input={cached} output={output} reasoning={reasoning} uncached_per_call={(decimal)uncached / divisor:F1} cached_per_call={(decimal)cached / divisor:F1} output_per_call={(decimal)output / divisor:F1} reasoning_per_call={(decimal)reasoning / divisor:F1}");
             });
 
-        var line = string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}: total=${totalCostUsd:F4} over {totalCalls} calls; purposes: {string.Join("; ", purposes)}");
+        var line = string.Create(CultureInfo.InvariantCulture, $"AI cost {date:yyyy-MM-dd}{marker}: total=${totalCostUsd:F4} over {totalCalls} calls; purposes: {string.Join("; ", purposes)}");
 
         var unpricedModels = rows
             .Select(row => row.Model)

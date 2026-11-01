@@ -52,4 +52,29 @@ public class ChatEvalTraceCollectorTests
         payload.items[0].delivery.Should().Be("private-delivery");
         payload.items[0].receipt.Should().Be("private-receipt");
     }
+
+    [Fact]
+    public void Record_RedactsSensitiveFieldsInRecursiveDefinitions()
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns("recursive_contract");
+        tool.GetParameterSchema().Returns(JsonSerializer.Deserialize<JsonElement>("""
+            {"type":"object","properties":{"items":{"type":"array","items":{"$ref":"#/$defs/item"}}},
+             "$defs":{"item":{"type":"object","properties":{
+               "delivery":{"type":"string","sensitive":true},
+               "children":{"type":"array","items":{"$ref":"#/$defs/item"}}
+             }}}}
+            """));
+        var arguments = JsonSerializer.Deserialize<JsonElement>("""
+            {"items":[{"delivery":"private-parent","children":[{"delivery":"private-child","label":"visible"}]}]}
+            """);
+        var collector = new ProcessUserChatCommandHandler.ChatEvalTraceCollector("request", new AiToolRegistry([tool]));
+        collector.Record(new AiToolCall(tool.Name, "call", arguments), null, null, false);
+        var recorded = collector.Build().ToolCalls.Single().Arguments;
+        var item = recorded.GetProperty("items")[0];
+        item.TryGetProperty("delivery", out _).Should().BeFalse();
+        item.GetProperty("children")[0].TryGetProperty("delivery", out _).Should().BeFalse();
+        item.GetProperty("children")[0].GetProperty("label").GetString().Should().Be("visible");
+        arguments.GetProperty("items")[0].GetProperty("delivery").GetString().Should().Be("private-parent");
+    }
 }

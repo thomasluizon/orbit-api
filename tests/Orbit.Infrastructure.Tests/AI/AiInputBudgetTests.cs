@@ -67,7 +67,6 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         users[0].SetLanguage("en-US");
         users[1].SetLanguage("pt-BR");
         var prefixes = new Dictionary<bool, string>();
-        string? staticMessage = null;
         for (var index = 0; index < 4; index++)
         {
             var user = users[index / 2];
@@ -90,25 +89,24 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             body.IndexOf(input[0].GetRawText(), StringComparison.Ordinal).Should().BeLessThan(body.IndexOf(input[1].GetRawText(), StringComparison.Ordinal));
             var names = root.GetProperty("tools").EnumerateArray().Select(tool => tool.GetProperty("name").GetString()).ToList();
             var supportsAsk = index % 2 != 0;
-            names.Should().HaveCount(tools.Count - 1).And.Contain("suggest_habits").And.NotContain("ask");
-            names.Should().Equal(tools.Select(tool => tool.Name).Where(name => name != "ask").Order(StringComparer.Ordinal));
+            names.Should().HaveCount(tools.Count - (supportsAsk ? 0 : 1)).And.Contain("suggest_habits");
+            names.Contains("ask").Should().Be(supportsAsk);
+            names.Should().Equal(tools.Select(tool => tool.Name).Where(name => name != "ask" || supportsAsk).Order(StringComparer.Ordinal));
             var currentPrefix = CacheablePrefix(root);
             prefixes.TryAdd(supportsAsk, currentPrefix);
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefixes[supportsAsk]));
-            staticMessage ??= input[0].GetRawText();
-            input[0].GetRawText().Should().Be(staticMessage);
             input.GetArrayLength().Should().Be(4);
             input[0].GetProperty("role").GetString().Should().Be("system");
-            input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain(date.ToString("yyyy-MM-dd"));
-            input[1].GetRawText().Should().Contain($"Language: {user.Language}");
-            input[2].GetRawText().Should().Contain($"private-history-{index}");
+            input[2].GetRawText().Should().Contain($"private-habit-{index}").And.Contain(date.ToString("yyyy-MM-dd"));
+            input[2].GetRawText().Should().Contain($"Language: {user.Language}");
+            input[1].GetRawText().Should().Contain($"private-history-{index}");
             input[3].GetProperty("role").GetString().Should().Be("user");
             currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");
             root.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
         }
         prefixes.Should().HaveCount(2);
-        prefixes[false].Should().Be(prefixes[true]);
+        prefixes[false].Should().NotBe(prefixes[true], "the negotiated question capability has its own full, stable tool catalog");
     }
 
     [Theory]
@@ -178,7 +176,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
 
     private static ProcessUserChatCommandHandler BuildHandler(IAiIntentService service,
         IReadOnlyList<IAiTool> tools, User user, IReadOnlyList<Habit> habits, DateOnly date,
-        bool recordingEnabled = false, IConversationTurnRecorder? recorder = null, IProductAnalytics? analytics = null)
+        bool recordingEnabled = false, IConversationTurnRecorder? recorder = null, IProductAnalytics? analytics = null, IReadOnlyList<string>? enabledFlags = null)
     {
         var habitRepo = Substitute.For<IGenericRepository<Habit>>();
         habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -198,7 +196,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         templates.FindAsync(Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ChecklistTemplate>());
         var flags = Substitute.For<IFeatureFlagService>();
         flags.GetEnabledKeysForUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns(recordingEnabled ? [FeatureFlagKeys.AstraConversationRecording] : Array.Empty<string>());
+            .Returns(enabledFlags ?? (recordingEnabled ? [FeatureFlagKeys.AstraConversationRecording] : Array.Empty<string>()));
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(date);
         dates.GetUserWeekStartDayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(1);

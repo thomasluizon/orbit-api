@@ -55,7 +55,7 @@ public partial class AgentCatalogService
                     capability.ConfirmationRequirement,
                     !tool.IsReadOnly,
                     true,
-                    CloneJson(tool.GetParameterSchema()),
+                    CloneJson(ToolSchemaReferences.Compact(tool.GetParameterSchema())),
                     responseSchema);
             })
             .Append(new AgentOperation(AccountChangeSet.OperationName, "Account changes", "Apply the approved account changes.",

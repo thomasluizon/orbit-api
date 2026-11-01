@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Orbit.Application.Chat.Tools;
 
 namespace Orbit.Application.Chat;
 
@@ -12,10 +13,13 @@ namespace Orbit.Application.Chat;
 public static class AgentArgumentSchema
 {
     public static bool Declares(JsonElement schema, string field) =>
-        TryGetField(schema, field, out _);
+        TryGetField(ToolSchemaReferences.Resolve(schema, schema), field, out _);
 
     public static bool Accepts(JsonElement schema, string field, JsonElement value) =>
-        TryGetField(schema, field, out var declared) && AcceptsValue(declared, field, value);
+        Accepts(schema, field, value, schema);
+
+    private static bool Accepts(JsonElement schema, string field, JsonElement value, JsonElement root) =>
+        TryGetField(ToolSchemaReferences.Resolve(schema, root), field, out var declared) && AcceptsValue(declared, field, value, root);
 
     public static bool IsDateField(string field) =>
         field is "date" or "deadline" || field.EndsWith("_date", StringComparison.Ordinal);
@@ -33,12 +37,17 @@ public static class AgentArgumentSchema
             && declared.ValueKind == JsonValueKind.Object;
     }
 
-    private static bool AcceptsValue(JsonElement schema, string field, JsonElement value)
+    private static bool AcceptsValue(JsonElement schema, string field, JsonElement value, JsonElement root)
     {
+        schema = ToolSchemaReferences.Resolve(schema, root);
+        if (schema.TryGetProperty("anyOf", out var alternatives))
+            return alternatives.EnumerateArray().Any(alternative => AcceptsValue(alternative, field, value, root));
         if (value.ValueKind == JsonValueKind.Null)
             return (schema.TryGetProperty("nullable", out var nullable) && nullable.ValueKind == JsonValueKind.True)
                 || (schema.TryGetProperty("type", out var types) && types.ValueKind == JsonValueKind.Array
-                    && types.EnumerateArray().Any(type => type.GetString() == "null"));
+                    && types.EnumerateArray().Any(type => type.GetString() == "null"))
+                || (schema.TryGetProperty("type", out var nullType) && nullType.ValueKind == JsonValueKind.String
+                    && nullType.GetString() == "null");
 
         if (schema.TryGetProperty("enum", out var options)
             && !options.EnumerateArray().Any(option => JsonElement.DeepEquals(option, value)))
@@ -54,18 +63,18 @@ public static class AgentArgumentSchema
             "integer" => value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out _),
             "number" => value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out _),
             "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-            "array" => value.ValueKind == JsonValueKind.Array && AcceptsItems(schema, field, value),
-            "object" => value.ValueKind == JsonValueKind.Object && AcceptsFields(schema, value),
+            "array" => value.ValueKind == JsonValueKind.Array && AcceptsItems(schema, field, value, root),
+            "object" => value.ValueKind == JsonValueKind.Object && AcceptsFields(schema, value, root),
             _ => false
         };
     }
 
-    private static bool AcceptsItems(JsonElement schema, string field, JsonElement value) =>
+    private static bool AcceptsItems(JsonElement schema, string field, JsonElement value, JsonElement root) =>
         schema.TryGetProperty("items", out var items)
-            ? value.EnumerateArray().All(item => AcceptsValue(items, field, item))
+            ? value.EnumerateArray().All(item => AcceptsValue(items, field, item, root))
             : value.GetArrayLength() == 0;
 
-    private static bool AcceptsFields(JsonElement schema, JsonElement value)
+    private static bool AcceptsFields(JsonElement schema, JsonElement value, JsonElement root)
     {
         if (schema.TryGetProperty("required", out var required)
             && required.EnumerateArray().Any(name => !value.TryGetProperty(name.GetString()!, out var present)
@@ -73,7 +82,7 @@ public static class AgentArgumentSchema
             return false;
 
         return value.EnumerateObject().All(property =>
-            Accepts(schema, property.Name, property.Value));
+            Accepts(schema, property.Name, property.Value, root));
     }
 
     private static bool HasFormat(string field, string value)

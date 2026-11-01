@@ -92,8 +92,8 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: OfferClient("en") with { SupportsProactiveOffers = supports }), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var request = (AiToolRequest)_aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync").GetArguments()[0]!;
-        if (supports) request.DynamicContext.Should().Contain(ProactiveProposal.Instruction);
-        else request.DynamicContext.Should().NotContain(ProactiveProposal.Instruction);
+        if (supports) request.SystemPrompt.Should().Contain(ProactiveProposal.Instruction);
+        else request.SystemPrompt.Should().NotContain(ProactiveProposal.Instruction);
         foreach (var declaration in request.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value)))
         {
             var name = declaration.GetProperty("name").GetString();
@@ -116,7 +116,7 @@ public partial class ProcessUserChatCommandHandlerTests
             schema.GetProperty("properties").GetProperty("suggested_fields").GetProperty("type").GetString().Should().Be("array");
             if (schema.GetProperty("properties").TryGetProperty("sub_habits", out var children))
                 children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeTrue(name);
-            declaration.GetProperty("description").GetString()!.Contains(ProactiveProposal.Instruction, StringComparison.Ordinal).Should().BeTrue(name);
+            declaration.GetProperty("description").GetString().Should().NotContain(ProactiveProposal.Instruction, name);
         }
     }
 

@@ -134,7 +134,7 @@ public partial class ProcessUserChatCommandHandlerTests
         }
         var request = _aiIntentService.ReceivedCalls().Single(call => call.GetMethodInfo().Name == "SendWithToolsAsync")
             .GetArguments().OfType<AiToolRequest>().Single();
-        request.DynamicContext.Should().Contain("how many habits did I complete this week")
+        request.SystemPrompt.Should().Contain("how many habits did I complete this week")
             .And.Contain("quantos hábitos concluí esta semana").And.Contain("completedHabits")
             .And.Contain("quantas vezes").And.Contain("positiveLogRecords")
             .And.Contain($"Completed habits metric supported: {supportsCompletedHabits}.");

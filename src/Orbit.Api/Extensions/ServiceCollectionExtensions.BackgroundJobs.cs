@@ -121,6 +121,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<CalendarAutoSyncService>(builder);
         AddScheduledJob<NotionAutoSyncService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);
+        builder.Services.AddHostedService<AiUsageSummaryStartupService>();
         AddScheduledJob<FoundingAchievementReconciliationService>(builder);
 
     }

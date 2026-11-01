@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Orbit.Application.Chat;
+using Orbit.Application.Chat.Tools;
 
 namespace Orbit.Infrastructure.AI;
 
@@ -14,7 +15,7 @@ internal static class StrictToolSchema
 
     public static BinaryData Create(string json)
     {
-        var schema = JsonNode.Parse(json)!.AsObject();
+        var schema = ToolSchemaReferences.Compact(JsonNode.Parse(json)!.AsObject());
         Normalize(schema);
         return BinaryData.FromString(schema.ToJsonString());
     }
@@ -49,6 +50,11 @@ internal static class StrictToolSchema
 
     private static void AllowNull(JsonObject schema)
     {
+        if (schema.Remove("$ref", out var reference))
+        {
+            schema["anyOf"] = new JsonArray(new JsonObject { ["$ref"] = reference }, new JsonObject { ["type"] = "null" });
+            return;
+        }
         if (schema["type"] is JsonValue type)
             schema["type"] = new JsonArray(type.GetValue<string>(), "null");
         else if (schema["type"] is JsonArray types && !types.Any(value => value!.GetValue<string>() == "null"))
