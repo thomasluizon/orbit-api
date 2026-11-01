@@ -71,6 +71,28 @@ public class AiUsageSummaryServiceGenerationTests
             "p95_messages_per_active_user=250");
     }
 
+    [Fact]
+    public async Task RunAsync_StartupEmitsTodayPartialAndYesterdayOnce()
+    {
+        var harness = new Harness();
+        var today = Yesterday.AddDays(1);
+        await harness.SeedAsync(Row("chat", calls: 3, costUsd: 0.10m),
+            AiUsageDaily.Create(today, "gpt-4.1-mini", "chat",
+                new AiUsageTotals(2, CachedTokens: 1000, PromptTokens: 1200, CompletionTokens: 40,
+                    TotalTokens: 1240, CostUsd: 0.002m, ReasoningTokens: 10)));
+
+        await harness.Service.RunAsync(CancellationToken.None);
+        await harness.Service.RunAsync(CancellationToken.None);
+
+        var summaries = harness.Logger.Entries.Where(entry => entry.Message.StartsWith("AI cost")).ToArray();
+        summaries.Should().HaveCount(2);
+        summaries.Should().ContainSingle(entry => entry.Message.StartsWith($"AI cost {Yesterday:yyyy-MM-dd}:"));
+        var partial = summaries.Single(entry => entry.Message.StartsWith($"AI cost {today:yyyy-MM-dd} (partial):")).Message;
+        partial.Should().Contain("total=$0.0020 over 2 calls").And.Contain("cached_input=1000")
+            .And.Contain("uncached_input=200").And.Contain("output=40").And.Contain("reasoning=10")
+            .And.Contain("cost_per_call=$0.001000");
+    }
+
     private static AiUsageDaily Row(string purpose, long calls, decimal costUsd) =>
         AiUsageDaily.Create(
             Yesterday, "gpt-4.1-mini", purpose,
