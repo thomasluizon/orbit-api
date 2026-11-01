@@ -91,6 +91,17 @@ and visible fields and execution arguments are retained. The argument validator 
 optional-null walker resolve local references using the owning root schema. The
 OpenAPI documents expose the catalog schema as JSON and need no new DTO fields.
 
+## Required verification
+
+| Command | Exit code | Result |
+| --- | ---: | --- |
+| `dotnet build -c Release` | 0 | Zero errors; 22 existing warnings |
+| `dotnet test Orbit.slnx -c Release` | 0 | 18,093 passed, 29 PostgreSQL-only cases skipped |
+| `python3 .github/scripts/openapi_artifacts.py freshness` | 0 | All supported artifacts match committed generation |
+
+The full suite includes 1,248 domain, 9,855 application, 6,950 infrastructure and
+40 analyzer cases passing. The provider call count for this work is zero.
+
 ## External interface evidence
 
 The [official structured outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas)
