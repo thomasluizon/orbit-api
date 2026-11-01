@@ -34,7 +34,7 @@ public class ImageInstructionsSection : IPromptSection
                - Month labels -> Month, 1
                - Specific days listed -> use Days array
                - No frequency cue -> default to Day, 1 for recurring items; omit for one-time tasks
-            7. Extract due dates from visible dates (YYYY-MM-DD). Default to today if none visible.
+            7. Resolve visible or implied dates and holidays into due_date (YYYY-MM-DD) using the account-local calendar. A named event or holiday is a date signal without a printed date. Preserve the requested date and year; default to today only when the image and message contain no date signal.
             8. Extract times if visible (HH:mm format for dueTime)
             9. Detect completion status: checked/completed items in the image should still be created (user wants the structure, not the state)
 

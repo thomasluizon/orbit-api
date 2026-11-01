@@ -538,6 +538,7 @@ public sealed partial class PendingOperationRevisionService(
             if (OptionalToolArguments.ClearableFields(operationId ?? string.Empty).Contains(field.Name))
                 ReviseClearField(target, field);
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());
+            if (field.Name == "due_date") target.Remove(HabitPreviewDates.DefaultDate);
         }
         return true;
     }

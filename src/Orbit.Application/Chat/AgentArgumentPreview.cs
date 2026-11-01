@@ -59,7 +59,7 @@ public static class AgentArgumentPreview
         var entityName = target?.EntityName ?? ReadName(arguments) ?? string.Empty;
         var entityEmoji = ResolveEmoji(operationId, arguments, target);
         var fields = arguments.EnumerateObject()
-            .Where(property => property.Name != ProactiveProposal.Metadata)
+            .Where(property => property.Name != ProactiveProposal.Metadata && property.Name != HabitPreviewDates.DefaultDate)
             .OrderBy(property => property.Name != "title")
             .ThenBy(property => property.Name, StringComparer.Ordinal)
             .Select(property => new PendingOperationChange(

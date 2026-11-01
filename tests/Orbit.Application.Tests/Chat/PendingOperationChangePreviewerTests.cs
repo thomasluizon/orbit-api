@@ -584,7 +584,9 @@ public sealed partial class PendingOperationChangePreviewerTests
         preview!.Items.Should().HaveCount(2);
         preview.Items!.Select(item => item.ItemId).Should().Equal("0", "1");
         preview.Items.SelectMany(item => item.Fields).Select(field => field.Field)
-            .Should().OnlyContain(field => field == "title" || field == "parent_habit_id");
+            .Should().OnlyContain(field => field == "title" || field == "parent_habit_id" || field == "due_date");
+        preview.Items.Should().OnlyContain(item => item.Fields.Any(field => field.Field == "due_date"
+            && field.ValueType == "date" && field.IsEditable && field.Provenance == "suggested"));
         preview.Items.Should().OnlyContain(item => item.Fields.Any(field => field.Field == "parent_habit_id"
             && field.NewValue == "No parent" && field.ProposedValue.HasValue
             && field.ProposedValue.Value.ValueKind == JsonValueKind.Null && field.IsEditable));
