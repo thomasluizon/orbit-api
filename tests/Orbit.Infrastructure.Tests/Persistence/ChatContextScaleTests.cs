@@ -130,7 +130,7 @@ public class ChatContextScaleTests(ITestOutputHelper output)
         {
             contextCommands = counter.Commands.ToArray();
             contextHabits = entities.Habits;
-            call.Arg<AiToolRequest>().DynamicContext.Should().Contain("Private habit 0").And.Contain("Health");
+            call.Arg<AiToolRequest>().AccountContext.Should().Contain("Private habit 0").And.Contain("Health");
             return Result.Success(new AiResponse
             {
                 ToolCalls = [new(tool.Name, "ranking", JsonSerializer.SerializeToElement(new

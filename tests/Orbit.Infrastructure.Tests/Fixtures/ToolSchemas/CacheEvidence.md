@@ -61,7 +61,8 @@ after the complete account snapshot. Per-turn reports include raw byte offsets, 
 prefix lengths, suffix bytes and costs under `Path.GetTempPath()` as
 `orbit-1916-live-<client>-<history>.txt`. The estimator counts every chat provider call,
 including seven calls for the legacy sequence and four for each composition sequence.
-Small differences in generated preview/query IDs can change the last reported decimals.
+Only the static and account boundaries are prewarmed; no identical first message or
+turn state is assumed. Preview and query identifiers use deterministic fixture values.
 
 ## Provider boundary and SDK evidence
 

@@ -70,7 +70,7 @@ public partial class AiInputBudgetTests
         var report = new StringBuilder();
         var costs = new List<decimal>();
         var warm = ModelInput(bodies[0]);
-        var written = WrittenPrefixes(bodies[0]).ToList();
+        var written = LookupPrefixes(bodies[0]).Where(prefix => prefix.Explicit).Select(prefix => prefix.Prefix).ToList();
         for (var index = 0; index < bodies.Count; index++)
         {
             var current = ModelInput(bodies[index]);
@@ -89,7 +89,7 @@ public partial class AiInputBudgetTests
             report.AppendLine(FormattableString.Invariant($"{client}, history={history}, turn={index + 1}: input={Count(current)}, first request difference={offset} UTF-8 bytes, common model prefix={shared} tokens, cached={cached}, warm=${cost:F7}; next bytes={difference}"));
         }
         report.AppendLine(FormattableString.Invariant($"Warm mean=${costs.Average():F7}"));
-        var allWritten = WrittenPrefixes(bodies[0]).ToList();
+        var allWritten = LookupPrefixes(bodies[0]).Where(prefix => prefix.Explicit).Select(prefix => prefix.Prefix).ToList();
         var allCosts = new List<decimal>();
         foreach (var body in transport.Bodies)
         {
@@ -122,8 +122,10 @@ public partial class AiInputBudgetTests
         }
     }
 
+    private static Guid CacheId(string key) => new(SHA256.HashData(Encoding.UTF8.GetBytes(key)).AsSpan(0, 16));
+
     private static void SetCacheId(Entity entity, string key) => typeof(Entity).GetProperty(nameof(Entity.Id))!
-        .SetValue(entity, new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(key)).AsSpan(0, 16)));
+        .SetValue(entity, CacheId(key));
 
     private sealed class LiveCacheAccount
     {
@@ -155,7 +157,8 @@ public partial class AiInputBudgetTests
             for (var index = 0; index < 24; index++)
             {
                 var parent = Habit.Create(new(HabitSchedule.Recurring, user.Id, $"Daily routine {index}", FrequencyUnit.Day, 1,
-                    Today, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, StartDate: Today.AddDays(-14))).Value;
+                    Today, DueTime: new TimeOnly(9, 0), ReminderEnabled: true, StartDate: Today.AddDays(-14),
+                    CreatedAtUtc: Clock.GetUtcNow().UtcDateTime.AddDays(-14))).Value;
                 SetCacheId(parent, "parent-" + index);
                 parent.AddTag(Tags[index % Tags.Count]);
                 parent.AddGoal(Goals[index % Goals.Count]);
@@ -165,7 +168,7 @@ public partial class AiInputBudgetTests
                 {
                     var habit = Habit.Create(new(HabitSchedule.Recurring, user.Id, $"Routine {index} step {child}", FrequencyUnit.Day, 1,
                         Today, ParentHabitId: parent.Id, DueTime: new TimeOnly(9, 0), ReminderEnabled: true,
-                        StartDate: Today.AddDays(-14))).Value;
+                        StartDate: Today.AddDays(-14), CreatedAtUtc: Clock.GetUtcNow().UtcDateTime.AddDays(-14))).Value;
                     SetCacheId(habit, $"child-{index}-{child}");
                     habit.UpdatedAtUtc = Clock.GetUtcNow().UtcDateTime;
                     habit.AddTag(Tags[(index + child) % Tags.Count]);
@@ -201,7 +204,7 @@ public partial class AiInputBudgetTests
                 due_time = "09:00",
                 sub_habits = new[] { new { title = "morning glass" }, new { title = "afternoon glass" } }
             });
-            var execution = new PendingAgentOperationExecution(Guid.NewGuid(), AgentCapabilityIds.HabitsWrite, "create_habit", CreationArguments,
+            var execution = new PendingAgentOperationExecution(CacheId("pending"), AgentCapabilityIds.HabitsWrite, "create_habit", CreationArguments,
                 AgentExecutionSurface.Chat, AgentConfirmationRequirement.FreshConfirmation);
             pending.GetAwaiting(_user.Id).Returns(_ => Turn >= 2 ? new[] { execution } : []);
             pending.GetExecution(_user.Id, execution.PendingOperationId).Returns(execution);
@@ -223,7 +226,9 @@ public partial class AiInputBudgetTests
                     habit.Title, null, 0, false, "today")).ToArray(), Today, TotalCount: Habits.Count);
                 return new AgentExecuteOperationResponse(new(request.OperationId, request.OperationId, AgentRiskClass.Low,
                     AgentConfirmationRequirement.None, AgentOperationStatus.Succeeded, Payload: card,
-                    ReadBlock: blocks.Capture(request.OperationId, request.Arguments, _user.Id, card)));
+                    ReadBlock: blocks.Capture(request.OperationId, request.Arguments, _user.Id, card,
+                        previous: new(_user.Id, CacheId("read-" + Turn), request.OperationId, request.Arguments,
+                            "habitList", "read-revision", Clock.GetUtcNow().UtcDateTime.AddDays(30), 0))));
             });
         }
     }

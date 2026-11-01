@@ -85,15 +85,16 @@ client history and both variants change the current app area. The full account c
 precedes turn context and history, with explicit cache boundaries after the static system
 message and the account message. The tool catalog stays identical after the preview.
 
-The warm sequence assumes this person's account prefix was written by an earlier batch.
+The warm sequence assumes this person's static and account boundaries were written by an earlier batch.
+It gives no warm credit for an identical first message or earlier turn state.
 All provider chat calls count, including legacy continuations. With 204 output tokens per
 call, rounded from the ticket's 814-token four-call measurement, the estimated means are:
 
 | Client | Without history USD | With history USD |
 | --- | ---: | ---: |
-| legacy | 0.0008763 | 0.0008973 |
-| composition | 0.0007633 | 0.0007997 |
-| offers | 0.0008542 | 0.0008904 |
+| legacy | 0.0008780 | 0.0008994 |
+| composition | 0.0007707 | 0.0008070 |
+| offers | 0.0008614 | 0.0008977 |
 
 These estimates do not establish the released service's cache hit rate. The offline
 [cache report](tests/Orbit.Infrastructure.Tests/Fixtures/ToolSchemas/CacheEvidence.md)
