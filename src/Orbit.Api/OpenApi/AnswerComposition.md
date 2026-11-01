@@ -3,6 +3,10 @@
 Tracks thomasluizon/orbit-tickets#1617. The API owns composition; #1620 owns the consumer
 and #26 owns real-call bilingual assertions in `evals/astra/`. No second eval harness applies.
 
+The date, attachment continuity and bounded tool-result contract for
+thomasluizon/orbit-tickets#1944 is documented in [AstraDateContext.md](AstraDateContext.md),
+including the bilingual copy inventory and unit replay cases supplied to #26.
+
 The database flag `astra_block_first` is seeded off. Composition requires `supportsParts`
 after kill flags. Advertised `partKinds` and existing card/subtype capabilities select
 blocks or readable text from the same typed results; an empty `partKinds` list still

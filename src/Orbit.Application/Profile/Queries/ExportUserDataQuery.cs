@@ -30,7 +30,8 @@ public record ExportUserDataRepositories(
     IGenericRepository<NotionConnection> NotionConnections,
     IGenericRepository<NotionTask> NotionTasks,
     IGenericRepository<ConversationTurn> ConversationTurns,
-    IGenericRepository<ConversationOffer>? ConversationOffers = null);
+    IGenericRepository<ConversationOffer>? ConversationOffers = null,
+    IGenericRepository<ChatConversationTurn>? ConversationContext = null);
 
 public class ExportUserDataQueryHandler(
     ExportUserDataRepositories repos,
@@ -79,6 +80,8 @@ public class ExportUserDataQueryHandler(
         var conversations = await repos.ConversationTurns.FindAsync(
             turn => turn.UserId == request.UserId && turn.CreatedAtUtc >= retentionCutoffAtUtc, cancellationToken);
         var offers = repos.ConversationOffers is null ? [] : await repos.ConversationOffers.FindAsync(offer => offer.UserId == request.UserId, cancellationToken);
+        var conversationContext = repos.ConversationContext is null ? [] : await repos.ConversationContext.FindAsync(
+            turn => turn.UserId == request.UserId && turn.CreatedAtUtc >= retentionCutoffAtUtc, cancellationToken);
 
         var export = new UserDataExport(
             exportedAtUtc,
@@ -138,7 +141,8 @@ public class ExportUserDataQueryHandler(
                 .Select(turn => new ExportedConversationTurn(turn.TurnId, turn.Role, turn.CreatedAtUtc,
                     turn.Model, turn.Content, System.Text.Json.JsonSerializer.Deserialize<
                         Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [], turn.ResponseJson)).ToArray(),
-            offers.Select(offer => new ExportedConversationOffer(offer.ConversationId, offer.OfferKey, offer.Dismissed, offer.DefinitionJson)).ToArray());
+            offers.Select(offer => new ExportedConversationOffer(offer.ConversationId, offer.OfferKey, offer.Dismissed, offer.DefinitionJson)).ToArray(),
+            conversationContext.Select(turn => new ExportedChatConversationTurn(turn.ConversationId, turn.TurnId, turn.CreatedAtUtc, turn.DataJson)).ToArray());
 
         return Result.Success(export);
     }

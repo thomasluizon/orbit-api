@@ -21,9 +21,10 @@ public partial class ProcessUserChatCommandHandler
         CancellationToken cancellationToken)
     {
         using var promptPhase = ChatTurnTimer.Measure(ChatPhase.PromptBuild);
+        var memory = await LoadConversationMemoryAsync(request, cancellationToken);
         var promptRequest = new PromptBuildRequest(
             context.PromptHabits,
-            HasImage: request.ImageData is not null,
+            HasImage: HasConversationImage(request, memory),
             UserTags: context.UserTags,
             UserToday: context.UserToday,
             ActiveGoals: context.ActiveGoals,
@@ -56,6 +57,7 @@ public partial class ProcessUserChatCommandHandler
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildTurnContext(promptRequest),
+            ConversationTimeZone(context.User),
             ai.CatalogService.BuildClientHints(request.ClientContext),
             request.ClientContext?.SupportsPendingOperationPlacement == true
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
@@ -84,6 +86,7 @@ public partial class ProcessUserChatCommandHandler
         dynamicContext = AddSelectedOfferContext(dynamicContext, request.SelectedOffer);
         systemPrompt = AddAskContext(systemPrompt, request, context);
         dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
+        dynamicContext = AddConversationPreviews(dynamicContext, memory);
 
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(
@@ -142,11 +145,12 @@ public partial class ProcessUserChatCommandHandler
                 request.UserId,
                 request.ImageData,
                 request.ImageMimeType,
-                request.History)
+                ConversationHistory(memory, request.History))
             {
                 Telemetry = telemetry,
                 AccountContext = accountContext,
-                DynamicContext = dynamicContext
+                DynamicContext = dynamicContext,
+                ConversationAttachments = memory?.Attachments ?? []
             },
             aiStreamSink,
             cancellationToken);

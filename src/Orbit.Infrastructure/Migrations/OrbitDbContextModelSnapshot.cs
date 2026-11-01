@@ -625,6 +625,46 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("AppFeatureFlagAccounts");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ChatConversationTurn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DataJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("HasAttachment")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasPreview")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TurnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("UserId", "ConversationId", "CreatedAtUtc");
+
+                    b.HasIndex("UserId", "ConversationId", "TurnId")
+                        .IsUnique();
+
+                    b.ToTable("ChatConversationTurns");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.ChatTurn", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2875,6 +2915,15 @@ namespace Orbit.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.ChatConversationTurn", b =>
+                {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")

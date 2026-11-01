@@ -1,0 +1,29 @@
+{
+  "scenario": "reservation-implied-date-and-follow-up",
+  "language": "en",
+  "account_today": "2026-11-01",
+  "account_timezone": "America/Sao_Paulo",
+  "attachment_description": "Confirmed New Year's Eve reservation: Até a virada no Terraço Itália, arrival 20h30. The real screenshot is held by the coordinator outside the repository.",
+  "first_message": "Create this one-time task",
+  "create_arguments": {
+    "title": "Terraço Itália",
+    "frequency_unit": "OneTime",
+    "due_date": "2026-12-31",
+    "due_time": "20:30",
+    "orbit_write_complete": true
+  },
+  "follow_up": "Is it on the right date?",
+  "follow_up_answer": "The proposal is for December 31, 2026 at 20:30.",
+  "outcomes": [
+    "pending",
+    "approved",
+    "edited",
+    "rejected"
+  ],
+  "assertions": [
+    "Preview due_date is 2026-12-31 with requested provenance and editable date type.",
+    "Preview due_time is 20:30 with requested provenance.",
+    "Next provider request includes the same image and conversation proposal with its outcome.",
+    "Follow-up answers about this proposal without an ask block."
+  ]
+}

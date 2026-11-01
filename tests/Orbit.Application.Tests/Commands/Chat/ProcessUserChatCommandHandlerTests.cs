@@ -202,7 +202,8 @@ public partial class ProcessUserChatCommandHandlerTests
             _scheduleLogReader, _blockStore, _pendingOperationStore);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder, timeProvider: _turnClock, offerStore: _offers);
+            dataDeps, aiDeps, executionDeps, _logger, _appConfig, _moderation, _conversationRecorder, timeProvider: _turnClock, offerStore: _offers,
+            conversationStore: _chatConversationStore);
     }
 
     public ProcessUserChatCommandHandlerTests()

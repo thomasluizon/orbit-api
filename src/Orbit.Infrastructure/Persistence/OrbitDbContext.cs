@@ -78,6 +78,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ChatTurn> ChatTurns => Set<ChatTurn>();
     public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<ChatConversationTurn> ChatConversationTurns => Set<ChatConversationTurn>();
     public DbSet<ConversationOffer> ConversationOffers => Set<ConversationOffer>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<ClosedMonthRecap> ClosedMonthRecaps => Set<ClosedMonthRecap>();
@@ -157,6 +158,16 @@ public class OrbitDbContext : DbContext
                 entity.Property(offer => offer.DefinitionJson).HasConversion(encConverter);
             entity.HasIndex(offer => new { offer.UserId, offer.ConversationId, offer.OfferKey }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(offer => offer.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ChatConversationTurn>(entity =>
+        {
+            entity.HasKey(turn => turn.Id);
+            entity.Property(turn => turn.DataJson).IsRequired();
+            if (encConverter is not null) entity.Property(turn => turn.DataJson).HasConversion(encConverter);
+            entity.HasIndex(turn => new { turn.UserId, turn.ConversationId, turn.CreatedAtUtc });
+            entity.HasIndex(turn => new { turn.UserId, turn.ConversationId, turn.TurnId }).IsUnique();
+            entity.HasIndex(turn => turn.CreatedAtUtc);
+            entity.HasOne<User>().WithMany().HasForeignKey(turn => turn.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<ConversationTurn>(entity =>
         {

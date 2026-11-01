@@ -30,7 +30,10 @@ public sealed record UserDataExport(
     ExportedNotionConnection? NotionConnection = null,
     IReadOnlyList<Orbit.Application.Connections.NotionTaskResponse>? NotionTasks = null,
     IReadOnlyList<ExportedConversationTurn>? Conversations = null,
-    IReadOnlyList<ExportedConversationOffer>? ConversationOffers = null);
+    IReadOnlyList<ExportedConversationOffer>? ConversationOffers = null,
+    IReadOnlyList<ExportedChatConversationTurn>? ConversationContext = null);
+
+public sealed record ExportedChatConversationTurn(Guid ConversationId, Guid TurnId, DateTime CreatedAtUtc, string DataJson);
 
 public sealed record ExportedConversationOffer(Guid ConversationId, string OfferKey, bool Dismissed, string DefinitionJson);
 
