@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
@@ -112,6 +113,35 @@ public partial class DistributedRateLimitServiceTests
     }
 
     [Fact]
+    public async Task TryAcquireAsync_Coordination_ServerDeadlineRollsBackAndRestoresCompletionToken()
+    {
+        var commands = new AcquisitionCommands();
+        using var factory = new SqliteOrbitDbContextFactory(commands);
+        commands.Enabled = true;
+        using var previous = new CancellationTokenSource();
+        factory.Context.TransactionCompletionToken = previous.Token;
+        DbTransaction? transaction = null;
+        var service = new CoordinatedService(factory.Context, async token =>
+        {
+            transaction = factory.Context.Database.CurrentTransaction!.GetDbTransaction();
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+        }, new DatabaseConnectionSettings { TransactionTimeoutSeconds = 1 });
+        var acquire = () => service.TryAcquireAsync("auth", "user:deadline");
+
+        await acquire.Should().ThrowAsync<TimeoutException>()
+            .WithMessage("Transaction exceeded the 1s timeout and was rolled back.");
+
+        commands.Count.Should().Be(0);
+        factory.Context.TransactionCompletionToken.Should().Be(previous.Token);
+        factory.Context.Database.CurrentTransaction.Should().BeNull();
+        transaction.Should().NotBeNull();
+        transaction!.Connection.Should().BeNull();
+        factory.Context.ChangeTracker.Entries<DistributedRateLimitBucket>().Should().BeEmpty();
+        (await new DistributedRateLimitService(factory.Context, new FixedTimeProvider(MidWindowInstant))
+            .TryAcquireAsync("auth", "user:deadline")).CurrentCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Coordination_Npgsql_EmitsPartitionLockWithCallerToken()
     {
         var commands = new LockCommandCapture();
@@ -125,7 +155,10 @@ public partial class DistributedRateLimitServiceTests
         await service.AcquireTransactionLockAsync("auth", "user:ordered", cancellation.Token);
 
         commands.Sql.Should().ContainSingle().Which.Should()
-            .Be("SELECT pg_advisory_xact_lock(hashtext(@p0), hashtext(@p1))");
+            .Be("""
+                LOCK TABLE "DistributedRateLimitBuckets" IN ROW EXCLUSIVE MODE;
+                SELECT pg_advisory_xact_lock(hashtext(@p0), hashtext(@p1))
+                """);
         commands.Tokens.Should().ContainSingle().Which.Should().Be(cancellation.Token);
     }
 
@@ -142,8 +175,9 @@ public partial class DistributedRateLimitServiceTests
         commands.Sql.Should().BeEmpty();
     }
 
-    private sealed class CoordinatedService(OrbitDbContext context, Func<CancellationToken, Task> coordinate)
-        : DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant))
+    private sealed class CoordinatedService(OrbitDbContext context, Func<CancellationToken, Task> coordinate,
+        DatabaseConnectionSettings? settings = null)
+        : DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant), settings)
     {
         internal override Task AcquireTransactionLockAsync(string policyName, string partitionKey, CancellationToken cancellationToken) => coordinate(cancellationToken);
     }

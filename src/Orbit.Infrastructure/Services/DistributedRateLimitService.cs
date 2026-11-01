@@ -232,7 +232,11 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
     internal virtual Task AcquireTransactionLockAsync(string policyName, string partitionKey, CancellationToken cancellationToken)
         => dbContext.Database.IsNpgsql()
             ? dbContext.Database.ExecuteSqlRawAsync(
-                "SELECT pg_advisory_xact_lock(hashtext({0}), hashtext({1}))", [policyName, partitionKey], cancellationToken)
+                // https://www.postgresql.org/docs/17/explicit-locking.html#LOCKING-TABLES Table 13.2: exclude legacy SHARE ROW EXCLUSIVE holders while allowing new acquisitions to overlap.
+                """
+                LOCK TABLE "DistributedRateLimitBuckets" IN ROW EXCLUSIVE MODE;
+                SELECT pg_advisory_xact_lock(hashtext({0}), hashtext({1}))
+                """, [policyName, partitionKey], cancellationToken)
             : Task.CompletedTask;
 
     private async Task<DistributedRateLimitDecision> TryAcquireCoreAsync(

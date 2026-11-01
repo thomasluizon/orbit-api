@@ -54,6 +54,31 @@ public partial class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TryAcquireAsync_Expiration_RemovesOnlyExpiredBucketsForThePolicy()
+    {
+        var segmentStartUtc = MidWindowInstant.UtcDateTime.AddSeconds(-30);
+        var expired = DistributedRateLimitBucket.Create("auth", "user:expired",
+            segmentStartUtc.AddMinutes(-1), segmentStartUtc, 10);
+        var active = DistributedRateLimitBucket.Create("auth", "user:active",
+            segmentStartUtc, segmentStartUtc.AddMinutes(1), 10);
+        var otherPolicy = DistributedRateLimitBucket.Create("refresh", "user:expired",
+            segmentStartUtc.AddMinutes(-1), segmentStartUtc, 10);
+        _dbContext.DistributedRateLimitBuckets.AddRange(expired, active, otherPolicy);
+        await _dbContext.SaveChangesAsync();
+
+        var decision = await _service.TryAcquireAsync("auth", "user:expired");
+
+        decision.Allowed.Should().BeTrue();
+        decision.CurrentCount.Should().Be(1);
+        var buckets = await _dbContext.DistributedRateLimitBuckets.AsNoTracking().ToListAsync();
+        buckets.Should().HaveCount(3).And.NotContain(bucket => bucket.Id == expired.Id);
+        buckets.Should().ContainSingle(bucket => bucket.Id == active.Id && bucket.Count == 10);
+        buckets.Should().ContainSingle(bucket => bucket.Id == otherPolicy.Id && bucket.Count == 10);
+        buckets.Should().ContainSingle(bucket => bucket.PolicyName == "auth" && bucket.PartitionKey == "user:expired"
+            && bucket.WindowStartUtc == segmentStartUtc && bucket.Count == 1);
+    }
+
+    [Fact]
     public async Task TryAcquireAsync_ChatPolicy_UsesIndependentPartitions()
     {
         for (var attempt = 0; attempt < 20; attempt++)

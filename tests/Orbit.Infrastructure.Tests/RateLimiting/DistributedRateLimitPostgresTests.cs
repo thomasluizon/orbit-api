@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data;
 using System.Data.Common;
 using System.Net;
 using FluentAssertions;
@@ -54,7 +55,7 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
         var transactions = new TransactionProbe { Committing = () => { if (phase == "commit") caller.Cancel(); } };
         var save = new AfterSave(() => { if (phase == "saved") caller.Cancel(); });
         await using var db = Context(database, commands, transactions, save);
-        var acquire = () => ExecuteFilter(db, "refresh", "192.0.2.1", caller.Token);
+        var acquire = () => ExecuteFilter(db, "refresh", "192.0.2.1", token: caller.Token);
         var failure = await Record.ExceptionAsync(async () => { await acquire(); });
         output.WriteLine($"Phase={phase}; exception={failure}; transactions={string.Join("; ", transactions.Failures)}");
 
@@ -112,6 +113,63 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
 
     [PostgresFact]
     public Task ConcurrentSegmentedWindow_AdmitsExactlyPermitLimit() => ExactLimit("chat", 20);
+
+    [PostgresFact]
+    public Task OldProtocolOverlap_DoesNotAdmitBeyondPermitLimit() => PostgresTestDatabase.WithDatabase(async database =>
+    {
+        var windowStartUtc = new FixedClock().GetUtcNow().UtcDateTime.AddSeconds(-30);
+        database.DistributedRateLimitBuckets.Add(DistributedRateLimitBucket.Create(
+            "auth", "ip:192.0.2.1", windowStartUtc, windowStartUtc.AddMinutes(1), 9));
+        await database.SaveChangesAsync();
+        var starting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transactions = new TransactionProbe
+        {
+            Starting = async () =>
+            {
+                starting.TrySetResult();
+                await resume.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        };
+        await using var current = Context(database, transactions);
+        var acquisition = ExecuteFilter(current, "auth", "192.0.2.1");
+        try
+        {
+            await starting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await using (var legacy = Context(database))
+            {
+                await using var transaction = await legacy.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+                await legacy.Database.ExecuteSqlRawAsync("LOCK TABLE \"DistributedRateLimitBuckets\" IN SHARE ROW EXCLUSIVE MODE");
+                var bucket = await legacy.DistributedRateLimitBuckets.SingleAsync();
+                bucket.Count.Should().Be(9);
+                resume.TrySetResult();
+
+                using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                while (await database.Database.SqlQuery<int>($"""
+                    SELECT COUNT(*)::integer AS "Value" FROM pg_stat_activity
+                    WHERE datname = current_database() AND wait_event_type = 'Lock'
+                    """).SingleAsync(wait.Token) == 0)
+                    await Task.Delay(TimeSpan.FromMilliseconds(10), wait.Token);
+
+                bucket.Increment();
+                await legacy.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+
+            var allowed = await acquisition.WaitAsync(TimeSpan.FromSeconds(10));
+            var persisted = await database.DistributedRateLimitBuckets.SumAsync(bucket => bucket.Count);
+            output.WriteLine($"Seeded=9; old admitted=1; new admitted={(allowed ? 1 : 0)}; persisted={persisted}");
+            (9 + 1 + (allowed ? 1 : 0)).Should().BeLessThanOrEqualTo(10);
+            persisted.Should().Be(10);
+            transactions.CommitAttempts.Should().Be(0);
+            transactions.Failures.Should().BeEmpty();
+        }
+        finally
+        {
+            resume.TrySetResult();
+            await acquisition.WaitAsync(TimeSpan.FromSeconds(15));
+        }
+    });
 
     [PostgresFact]
     public Task ReusedContext_ObservesPermitsCommittedByOtherAcquisitions() => PostgresTestDatabase.WithDatabase(async database =>
@@ -218,8 +276,8 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
         new DbContextOptionsBuilder<OrbitDbContext>().UseNpgsql(database.Database.GetConnectionString())
             .AddInterceptors(interceptors).Options);
 
-    private static async Task<bool> ExecuteFilter(OrbitDbContext db, string policy, string ip, CancellationToken token = default,
-        DatabaseConnectionSettings? settings = null)
+    private static async Task<bool> ExecuteFilter(OrbitDbContext db, string policy, string ip,
+        DatabaseConnectionSettings? settings = null, CancellationToken token = default)
     {
         var http = new DefaultHttpContext { RequestAborted = token };
         http.Connection.RemoteIpAddress = IPAddress.Parse(ip);
@@ -289,6 +347,14 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
         public int CommitAttempts { get; private set; }
         public ConcurrentQueue<string> Failures { get; } = new();
         public Action Committing { get; init; } = () => { };
+        public Func<Task> Starting { get; init; } = () => Task.CompletedTask;
+
+        public override async ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection,
+            TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
+        {
+            await Starting();
+            return result;
+        }
 
         public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction,
             TransactionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
