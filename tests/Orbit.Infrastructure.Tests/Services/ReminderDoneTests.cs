@@ -77,7 +77,12 @@ public sealed partial class ReminderDoneTests : IDisposable
         done.Error.Should().Be(replay.Error);
         (await _factory.Context.HabitLogs.SingleAsync()).Id.Should().Be(app.Value.LogId);
         _factory.Context.ChangeTracker.Clear();
-        (await _factory.Context.SentReminders.SingleAsync()).ConsumedAtUtc.Should().NotBeNull();
+        var consumedAtUtc = (await _factory.Context.SentReminders.SingleAsync()).ConsumedAtUtc;
+        if (schedule == HabitSchedule.General && !withReminder)
+            consumedAtUtc.Should().BeNull();
+        else
+            consumedAtUtc.Should().NotBeNull();
+        habit.IsCompleted.Should().Be(schedule == HabitSchedule.General);
     }
 
     [Fact]
@@ -112,7 +117,7 @@ public sealed partial class ReminderDoneTests : IDisposable
     [InlineData(HabitSchedule.Flexible, true)]
     [InlineData(HabitSchedule.General, false)]
     [InlineData(HabitSchedule.General, true)]
-    public async Task DoneThenAppDose_KeepsTheIntentionalExtraDose(HabitSchedule schedule, bool withReminder)
+    public async Task DoneThenAppDose_OnlyRecurringSchedulesAllowAnotherCompletion(HabitSchedule schedule, bool withReminder)
     {
         var (handler, habit, token) = await Seed(schedule);
         var done = await handler.Handle(new(token), default);
@@ -122,9 +127,10 @@ public sealed partial class ReminderDoneTests : IDisposable
         var app = await _mediator.Send(new LogHabitCommand(habit.UserId, habit.Id, ToggleExisting: false,
             ReminderAtUtc: withReminder ? reminder.ReminderAtUtc : null));
 
-        app.IsSuccess.Should().BeTrue();
-        app.Value.LogId.Should().NotBe(done.Value.LogId);
-        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(2);
+        app.IsSuccess.Should().Be(schedule != HabitSchedule.General);
+        if (schedule != HabitSchedule.General)
+            app.Value.LogId.Should().NotBe(done.Value.LogId);
+        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(schedule == HabitSchedule.General ? 1 : 2);
     }
 
     [Theory]
@@ -132,7 +138,7 @@ public sealed partial class ReminderDoneTests : IDisposable
     [InlineData(HabitSchedule.Flexible, 0)]
     [InlineData(HabitSchedule.General, -1)]
     [InlineData(HabitSchedule.General, 0)]
-    public async Task AppDoseAtReminderBoundary_OnlyEarlierDoseAllowsDone(HabitSchedule schedule, int minutesBefore)
+    public async Task AppDoseAtReminderBoundary_OnlyEarlierRecurringDoseAllowsDone(HabitSchedule schedule, int minutesBefore)
     {
         var (handler, habit, token) = await Seed(schedule);
         var reminder = await _factory.Context.SentReminders.SingleAsync();
@@ -141,8 +147,9 @@ public sealed partial class ReminderDoneTests : IDisposable
 
         var done = await handler.Handle(new(token), default);
 
-        done.IsSuccess.Should().Be(minutesBefore < 0);
-        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(minutesBefore < 0 ? 2 : 1);
+        var allowsAnother = minutesBefore < 0 && schedule != HabitSchedule.General;
+        done.IsSuccess.Should().Be(allowsAnother);
+        (await _factory.Context.HabitLogs.CountAsync()).Should().Be(allowsAnother ? 2 : 1);
     }
 
     [Theory]
@@ -207,7 +214,7 @@ public sealed partial class ReminderDoneTests : IDisposable
     }
 
     [Fact]
-    public async Task NextReminder_DoneAndDoseCorrectionMoveTheAuthoritativeReadback()
+    public async Task NextReminder_CompletedGeneralTaskStaysStoppedAfterDoseCorrection()
     {
         var (done, habit, token) = await Seed(HabitSchedule.General);
         var db = _factory.Context;
@@ -224,12 +231,12 @@ public sealed partial class ReminderDoneTests : IDisposable
 
         var completed = await done.Handle(new(token), default);
         completed.IsSuccess.Should().BeTrue();
-        (await ReadNext()).Should().Be(nowAtUtc.AddHours(8));
+        (await ReadNext()).Should().BeNull();
         var correction = new CorrectHabitDoseCommandHandler(new GenericRepository<Habit>(db),
             new UnitOfWork(db, new DatabaseConnectionSettings()), _dates, _cache);
         (await correction.Handle(new(habit.UserId, habit.Id, completed.Value.LogId, nowAtUtc.AddMinutes(-10)), default))
             .IsSuccess.Should().BeTrue();
-        (await ReadNext()).Should().Be(nowAtUtc.AddHours(8).AddMinutes(-10));
+        (await ReadNext()).Should().BeNull();
         _clock.Now = new DateTimeOffset(nowAtUtc.AddHours(8).AddMinutes(-10));
         using var services = new ServiceCollection().AddSingleton(db)
             .AddSingleton(Substitute.For<IPushNotificationService>())
@@ -238,7 +245,7 @@ public sealed partial class ReminderDoneTests : IDisposable
             NullLogger<ReminderSchedulerService>.Instance, new ConfigurationBuilder().Build(), _clock);
         await scheduler.CheckAndSendReminders(default);
         (await db.SentReminders.OrderByDescending(r => r.ReminderAtUtc).FirstAsync()).ReminderAtUtc
-            .Should().Be(_clock.Now.UtcDateTime);
+            .Should().Be(nowAtUtc.AddMinutes(-30));
     }
 
     [Theory]

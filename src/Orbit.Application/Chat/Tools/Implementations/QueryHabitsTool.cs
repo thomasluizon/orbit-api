@@ -40,7 +40,7 @@ public class QueryHabitsTool(
             search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
             date = new { type = JsonSchemaTypes.String, description = "Schedule on YYYY-MM-DD or today, including done entries. Null is_completed returns the full schedule." },
             include_overdue = new { type = JsonSchemaTypes.Boolean, description = "Include overdue entries with date. Default: true for today, false otherwise." },
-            is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter timeless habits; null includes both." },
+            is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter General items: a one-time task with no date. Completion is permanent until unlogged; null includes both." },
             is_completed = new { type = JsonSchemaTypes.Boolean, description = "With date: false remaining, true done, null all. Without date: false active (default), true completed." },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Filter bad habits; null includes both." },
             frequency = new { type = JsonSchemaTypes.String, @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } },

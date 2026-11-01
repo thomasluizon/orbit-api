@@ -397,7 +397,7 @@ public partial class BulkCreateHabitsTool(
             ["due_time"] = new { type = JsonSchemaTypes.String, description = "HH:mm. Suggestion times with zero seconds are accepted as HH:mm:ss." },
             ["due_end_time"] = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "HH:mm end time or deadline. Suggestion times with zero seconds are accepted as HH:mm:ss. A deadline-only item that ends at an event uses that event's clock time, with due_date on the event date. A restriction starting before the event keeps its own start due_date and its inclusive end_date on the event. Leave due_time absent or null when no start time was supplied; do not drop a supplied collection deadline." },
             ["is_bad_habit"] = new { type = JsonSchemaTypes.Boolean, description = "True for ongoing reduction or slip tracking, with Day/1 unless another cadence was requested. False for a temporary medical commitment." },
-            ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "No schedule or avoid type. Must be false for an ongoing avoid habit. Defaults to false." },
+            ["is_general"] = new { type = JsonSchemaTypes.Boolean, description = "A one-time task with no date. Logging completes it permanently; unlogging reopens it. Must be false for an ongoing avoid habit. Defaults to false." },
             ["is_flexible"] = new { type = JsonSchemaTypes.Boolean, description = "Window-based tracking. Requires frequency_unit." },
             ["checklist_items"] = new
             {
