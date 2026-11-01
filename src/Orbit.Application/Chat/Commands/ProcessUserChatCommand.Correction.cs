@@ -17,6 +17,10 @@ public partial class ProcessUserChatCommandHandler
         outcome.OperationResult is { Status: AgentOperationStatus.Denied, Access: "read", PolicyReason: { } reason }
         && reason.StartsWith("target_not_owned:", StringComparison.Ordinal);
 
+    private static bool HasReadCorrectionCandidate(ToolExecutionAccumulator results) =>
+        results.CorrectionOccurrences.Any(occurrence =>
+            IsOwnershipReadDenial(occurrence.Outcome) || IsFailedStartingStep(occurrence));
+
     private static void OfferCorrections(List<AiToolCallResult> results, IReadOnlyDictionary<string, ToolCallOutcome> outcomes)
     {
         for (var index = 0; index < results.Count; index++)
