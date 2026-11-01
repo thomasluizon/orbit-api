@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
 using Orbit.Application.Chat;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
@@ -15,7 +16,8 @@ namespace Orbit.Infrastructure.Services;
 
 public class PendingAgentOperationStore(
     OrbitDbContext dbContext,
-    IOptions<AgentPlatformSettings> settings) : IPendingAgentOperationStore
+    IOptions<AgentPlatformSettings> settings,
+    IFeatureFlagService? flags = null) : IPendingAgentOperationStore
 {
     private readonly AgentPlatformSettings _settings = settings.Value;
 
@@ -28,6 +30,23 @@ public class PendingAgentOperationStore(
         string operationFingerprint,
         AgentExecutionSurface surface,
         PendingOperationConversation? conversation = null)
+    {
+        if (conversation is not { UsesServerHistory: true })
+            return CreateCore(userId, capability, operationId, argumentsJson, summary, operationFingerprint, surface, conversation);
+        return ConversationWriteFence.Execute(dbContext, [userId], () =>
+        {
+            var user = dbContext.Users.AsNoTracking().SingleOrDefault(user => user.Id == userId);
+            if (user is null || user.IsDeactivated || user.ConversationHistoryClearedAtUtc >= conversation.StartedAtUtc
+                || conversation.ExistingConversation && !dbContext.ConversationTurns.AsNoTracking()
+                    .Any(turn => turn.UserId == userId && turn.ConversationId == conversation.Id))
+                throw new ConversationErasedException();
+            return CreateCore(userId, capability, operationId, argumentsJson, summary, operationFingerprint, surface, conversation);
+        });
+    }
+
+    private PendingAgentOperation CreateCore(Guid userId, AgentCapability capability, string operationId,
+        string argumentsJson, string summary, string operationFingerprint, AgentExecutionSurface surface,
+        PendingOperationConversation? conversation)
     {
         PendingOperationActionKeys.GetRequired(operationId, argumentsJson);
 
@@ -358,20 +377,35 @@ public class PendingAgentOperationStore(
         var changed = dbContext.ChangeTracker.Entries<PendingAgentOperationState>()
             .Where(entry => entry.State == EntityState.Modified && entry.Entity.ConversationId != null)
             .Select(entry => entry.Entity).ToArray();
-        foreach (var group in changed.GroupBy(state => new { state.UserId, state.ConversationId }))
+        var groups = changed.GroupBy(state => new { state.UserId, state.ConversationId })
+            .Where(group => flags?.ResolveForUser(group.Key.UserId)
+                .Any(flag => flag.Key == FeatureFlagKeys.AstraConversationRecording && flag.Enabled) == true).ToArray();
+        if (groups.Length == 0)
         {
-            var earliestAtUtc = group.Min(state => state.CreatedAtUtc);
-            var turns = dbContext.ConversationTurns.Where(turn => turn.UserId == group.Key.UserId
-                && turn.ConversationId == group.Key.ConversationId && turn.Role == "assistant"
-                && turn.CreatedAtUtc >= earliestAtUtc).ToArray();
-            foreach (var state in group)
-            {
-                var preview = ConversationTurnRecorder.Preview(state);
-                foreach (var turn in turns)
-                    turn.UpdatePreviewOutcome(preview.PendingOperationId, preview.Outcome, preview.Arguments, preview.Revision);
-            }
+            dbContext.SaveChanges();
+            return;
         }
-        dbContext.SaveChanges();
+        ConversationWriteFence.Execute(dbContext, groups.Select(group => group.Key.UserId).Distinct().ToArray(), () =>
+        {
+            foreach (var group in groups)
+            {
+                var earliestAtUtc = group.Min(state => state.CreatedAtUtc);
+                foreach (var entry in dbContext.ChangeTracker.Entries<ConversationTurn>().Where(entry =>
+                    entry.State != EntityState.Added && entry.Entity.UserId == group.Key.UserId
+                    && entry.Entity.ConversationId == group.Key.ConversationId && entry.Entity.Role == "assistant").ToArray())
+                    entry.State = EntityState.Detached;
+                var turns = dbContext.ConversationTurns.Where(turn => turn.UserId == group.Key.UserId
+                    && turn.ConversationId == group.Key.ConversationId && turn.Role == "assistant"
+                    && turn.CreatedAtUtc >= earliestAtUtc).ToArray();
+                foreach (var state in group)
+                {
+                    var preview = ConversationTurnRecorder.Preview(state);
+                    foreach (var turn in turns)
+                        turn.UpdatePreviewOutcome(preview.PendingOperationId, preview.Outcome, preview.Arguments, preview.Revision);
+                }
+            }
+            return dbContext.SaveChanges();
+        });
     }
 
     private static PendingAgentOperation Map(PendingAgentOperationState entity)

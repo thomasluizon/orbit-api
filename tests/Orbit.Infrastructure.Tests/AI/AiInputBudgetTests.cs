@@ -124,6 +124,7 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         var transport = new SequenceHandler(ResponsesTestData.Text("Your reply"));
         var user = User.Create("Person", "recording@example.com").Value;
         var recorder = Substitute.For<IConversationTurnRecorder>();
+        recorder.RecordAsync(Arg.Any<ConversationTurnCapture>(), Arg.Any<CancellationToken>()).Returns(true);
         var handler = BuildHandler(BuildService(transport, usage), RegisteredTools(), user, [],
             new DateOnly(2026, 1, 1), recordingEnabled, recorder, analytics);
 

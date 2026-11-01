@@ -20,6 +20,68 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class ConversationTurnRecorderTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreviewOutcomes_IndependentContextsWithStaleSnapshots_PreserveBothApprovals(bool insertAfterApprovals)
+    {
+        using var fixture = new Fixture();
+        var capture = fixture.Capture();
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+        var proposals = new[] { "Reservation", "Travel" }.Select(title =>
+        {
+            var arguments = JsonSerializer.Serialize(new { title, due_date = "2026-12-31" });
+            var fingerprint = Orbit.Domain.Common.AgentOperationFingerprint.Compute("create_habit", arguments);
+            var proposal = pending.Create(fixture.User.Id, new AgentCatalogService().GetCapabilityByChatTool("create_habit")!,
+                "create_habit", arguments, title, fingerprint, AgentExecutionSurface.Chat, new(fixture.ConversationId, capture.CreatedAtUtc));
+            pending.Revise(fixture.User.Id, proposal.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
+            return proposal;
+        }).ToArray();
+        if (!insertAfterApprovals) await fixture.Store.RecordAsync(capture);
+        using var first = fixture.Database.CreateContext();
+        using var second = fixture.Database.CreateContext();
+        if (!insertAfterApprovals)
+        {
+            first.ConversationTurns.Single(turn => turn.Role == "assistant").PreviewOutcomesJson.Should().Contain("pending");
+            second.ConversationTurns.Single(turn => turn.Role == "assistant").PreviewOutcomesJson.Should().Contain("pending");
+        }
+        var firstStore = new PendingAgentOperationStore(first, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+        var secondStore = new PendingAgentOperationStore(second, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+
+        firstStore.Confirm(fixture.User.Id, proposals[0].Id).Should().NotBeNull();
+        secondStore.Confirm(fixture.User.Id, proposals[1].Id).Should().NotBeNull();
+        if (insertAfterApprovals) await fixture.Store.RecordAsync(capture);
+
+        var stored = await fixture.Db.ConversationTurns.AsNoTracking().SingleAsync(turn => turn.Role == "assistant");
+        JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(stored.PreviewOutcomesJson)!
+            .Should().HaveCount(2).And.OnlyContain(preview => preview.Outcome == "approved");
+        (await fixture.Db.PendingAgentOperations.AsNoTracking().ToListAsync()).Should()
+            .OnlyContain(state => state.ConfirmedAtUtc != null);
+    }
+
+    [Fact]
+    public async Task FlagOff_PendingTransitionsAndRecording_DoNotReadOrUpdateStoredTurns()
+    {
+        var commands = new CountingDbCommandInterceptor();
+        using var fixture = new Fixture(interceptor: commands);
+        var capture = fixture.Capture();
+        await fixture.Store.RecordAsync(capture);
+        fixture.Flags.ResolveForUser(fixture.User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, false, null)]);
+        fixture.Flags.GetEnabledKeysForUserAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(Array.Empty<string>());
+        commands.Reset();
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+        const string arguments = "{\"title\":\"Reservation\"}";
+        var fingerprint = Orbit.Domain.Common.AgentOperationFingerprint.Compute("create_habit", arguments);
+        var proposal = pending.Create(fixture.User.Id, new AgentCatalogService().GetCapabilityByChatTool("create_habit")!,
+            "create_habit", arguments, "Reservation", fingerprint, AgentExecutionSurface.Chat,
+            new(fixture.ConversationId, capture.CreatedAtUtc));
+        pending.Revise(fixture.User.Id, proposal.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
+        pending.Confirm(fixture.User.Id, proposal.Id).Should().NotBeNull();
+        (await fixture.Store.RecordAsync(capture with { UserContent = "", ToolCallsJson = "invalid" })).Should().BeFalse();
+
+        commands.Commands.Should().NotContain(command => command.Sql.Contains("ConversationTurns", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Record_WritesBothRowsBeforeReturning_EncryptsContentAndSummaries()
     {
@@ -91,8 +153,8 @@ public class ConversationTurnRecorderTests
         (await fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId)).Should().BeTrue();
         (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
         await fixture.Storage.Received(1).DeleteConversationObjectsAsync(fixture.User.Id, fixture.ConversationId, Arg.Any<CancellationToken>());
-        Func<Task> lateSave = () => fixture.Store.RecordAsync(fixture.Capture() with { ExistingConversation = true });
-        await lateSave.Should().ThrowAsync<InvalidOperationException>();
+        (await fixture.Store.RecordAsync(fixture.Capture() with { ExistingConversation = true })).Should().BeFalse();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -107,8 +169,8 @@ public class ConversationTurnRecorderTests
         await fixture.Db.SaveChangesAsync();
         (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
         await fixture.Storage.Received(1).DeleteConversationObjectsAsync(fixture.User.Id, null, Arg.Any<CancellationToken>());
-        Func<Task> lateSave = () => fixture.Store.RecordAsync(capture with { TurnId = Guid.NewGuid() });
-        await lateSave.Should().ThrowAsync<InvalidOperationException>();
+        (await fixture.Store.RecordAsync(capture with { TurnId = Guid.NewGuid() })).Should().BeFalse();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -133,7 +195,7 @@ public class ConversationTurnRecorderTests
         var conflict = new ConfirmationConflict();
         using var fixture = new Fixture(interceptor: conflict);
         var capture = fixture.Capture();
-        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()));
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
         var catalog = new AgentCatalogService();
         const string arguments = "{\"title\":\"Reservation\",\"due_date\":\"2026-12-31\"}";
         var fingerprint = Orbit.Domain.Common.AgentOperationFingerprint.Compute("create_habit", arguments);
@@ -168,6 +230,7 @@ public class ConversationTurnRecorderTests
         internal User User { get; }
         internal Guid ConversationId { get; } = Guid.NewGuid();
         internal IObjectStorageService Storage { get; } = Substitute.For<IObjectStorageService>();
+        internal IFeatureFlagService Flags { get; } = Substitute.For<IFeatureFlagService>();
         internal ConversationTurnRecorder Store { get; }
         internal Fixture(bool enabled = true, IInterceptor? interceptor = null)
         {
@@ -176,10 +239,10 @@ public class ConversationTurnRecorderTests
             User = User.Create("Person", "recording@example.com").Value;
             Db.Users.Add(User);
             Db.SaveChanges();
-            var flags = Substitute.For<IFeatureFlagService>();
-            flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+            Flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+            Flags.ResolveForUser(User.Id).Returns([new(FeatureFlagKeys.AstraConversationRecording, enabled, null)]);
             Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Image);
-            Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }));
+            Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), Flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }));
         }
         internal ConversationTurnCapture Capture(bool image = false) => new(User.Id, Guid.NewGuid(), DateTime.UtcNow,
             "User private message", "Assistant private reply", "[]", true, ConversationId: ConversationId,

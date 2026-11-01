@@ -29,20 +29,21 @@ public sealed class ConversationTurnRecorder(
 
     public async Task<bool> RecordAsync(ConversationTurnCapture turn, CancellationToken cancellationToken = default)
     {
-        await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, cancellationToken);
-        if (!encryption.IsConfigured || !db.HasEncryptionService)
-            throw new InvalidOperationException("Conversation storage requires configured field encryption.");
         return await work.ExecuteInTransactionAsync(async token =>
         {
             await work.AcquireUserRowLockAsync(turn.UserId, token);
-            var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == turn.UserId, token);
-            EnsureCanRecord(user, turn);
             if (!(await flags.GetEnabledKeysForUserAsync(turn.UserId, token)).Contains(FeatureFlagKeys.AstraConversationRecording))
+                return false;
+            await new ConversationTurnCaptureValidator().ValidateAndThrowAsync(turn, token);
+            if (!encryption.IsConfigured || !db.HasEncryptionService)
+                throw new InvalidOperationException("Conversation storage requires configured field encryption.");
+            var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == turn.UserId, token);
+            if (!CanRecord(user, turn.CreatedAtUtc))
                 return false;
             var conversationId = turn.ConversationId ?? turn.TurnId;
             var query = db.ConversationTurns.Where(row => row.UserId == turn.UserId && row.ConversationId == conversationId);
             if (turn.ExistingConversation && !await query.AnyAsync(token))
-                throw new InvalidOperationException("Conversation was deleted while this turn was running.");
+                return false;
             if (await db.ConversationTurns.AnyAsync(row => row.ConversationId == conversationId && row.UserId != turn.UserId, token))
                 throw new InvalidOperationException("Conversation is unavailable.");
             if (await query.AnyAsync(row => row.TurnId == turn.TurnId, token))
@@ -80,11 +81,8 @@ public sealed class ConversationTurnRecorder(
         }, cancellationToken);
     }
 
-    private static void EnsureCanRecord(User? user, ConversationTurnCapture turn)
-    {
-        if (user is null || user.IsDeactivated || user.ConversationHistoryClearedAtUtc >= turn.CreatedAtUtc)
-            throw new InvalidOperationException("Conversation was cleared while this turn was running.");
-    }
+    private static bool CanRecord(User? user, DateTime startedAtUtc) =>
+        user is { IsDeactivated: false } && !(user.ConversationHistoryClearedAtUtc >= startedAtUtc);
 
     private static (string? Key, string? Sha256) ImageMetadata(ConversationTurnCapture turn, Guid conversationId)
     {

@@ -57,7 +57,7 @@ public class ScheduledJobRegistryTests
     [Fact]
     public void AllRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(15);
+        BuildAll().Should().HaveCount(16);
         BuildAll().Select(job => job.Name).Should().NotContain("openai-batch-poller");
     }
 
@@ -191,6 +191,7 @@ public class ScheduledJobRegistryTests
 
     private static List<IScheduledJob> BuildAll() =>
     [
+        new ChatTurnRetentionJob(ScopeFactory()),
         new ReminderSchedulerService(ScopeFactory(), NullLogger<ReminderSchedulerService>.Instance, EmptyConfiguration),
         new GoalDeadlineNotificationService(ScopeFactory(), NullLogger<GoalDeadlineNotificationService>.Instance, EmptyConfiguration),
         new PeriodCloseNotificationService(ScopeFactory(), NullLogger<PeriodCloseNotificationService>.Instance, EmptyConfiguration),

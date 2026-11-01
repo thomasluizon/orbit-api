@@ -33,6 +33,7 @@ public static partial class ServiceCollectionExtensions
 
             AddDurableJobQueue(builder);
             builder.Services.TryAddSingleton<ScheduledJobRunner>();
+            AddScheduledJob<ChatTurnRetentionJob>(builder);
             builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
 
             if (useDurableQueue)

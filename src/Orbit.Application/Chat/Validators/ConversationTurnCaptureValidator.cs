@@ -1,6 +1,5 @@
 using System.Text.Json;
 using FluentValidation;
-using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Chat.Validators;
 
@@ -18,9 +17,6 @@ public sealed class ConversationTurnCaptureValidator : AbstractValidator<Convers
         RuleFor(turn => turn.UserContent).NotEmpty();
         RuleFor(turn => turn.ToolCallsJson).NotEmpty().Must(IsArray);
         RuleFor(turn => turn.ResponseJson).Must(IsResponseObject);
-        RuleFor(turn => turn).Must(turn => (long)(turn.UserContent?.Length ?? 0)
-            + (turn.AssistantContent?.Length ?? 0) + (turn.ToolCallsJson?.Length ?? 0) + (turn.ResponseJson?.Length ?? 0)
-            <= ConversationTurn.MaxTextLength).WithMessage("Conversation exceeds the recording limit.");
     }
 
     private static bool IsResponseObject(string? json)

@@ -5,7 +5,6 @@ namespace Orbit.Domain.Entities;
 
 public sealed class ConversationTurn : Entity
 {
-    public const int MaxTextLength = 65_536;
     public Guid UserId { get; private set; }
     public Guid TurnId { get; private set; }
     public string Role { get; private set; } = string.Empty;
@@ -36,9 +35,7 @@ public sealed class ConversationTurn : Entity
             return Result.Failure<ConversationTurn>("Conversation role must be user or assistant.");
         if (createdAtUtc.Kind != DateTimeKind.Utc || createdAtUtc == default)
             return Result.Failure<ConversationTurn>("A UTC timestamp is required.");
-        if (model is { Length: > 200 } || content is { Length: > MaxTextLength }
-            || string.IsNullOrWhiteSpace(toolCallsJson) || toolCallsJson.Length > MaxTextLength
-            || responseJson is { Length: > MaxTextLength })
+        if (model is { Length: > 200 } || string.IsNullOrWhiteSpace(toolCallsJson))
             return Result.Failure<ConversationTurn>("Conversation text exceeds the recording limits.");
         if (role == "user" && string.IsNullOrWhiteSpace(content))
             return Result.Failure<ConversationTurn>("User content is required.");
@@ -53,8 +50,6 @@ public sealed class ConversationTurn : Entity
                 return Result.Failure<ConversationTurn>("Tool calls must be a JSON array.");
             foreach (var json in new[] { toolResultsJson, previewOutcomesJson })
             {
-                if (json.Length > MaxTextLength)
-                    return Result.Failure<ConversationTurn>("Conversation text exceeds the recording limits.");
                 using var array = JsonDocument.Parse(json);
                 if (array.RootElement.ValueKind != JsonValueKind.Array)
                     return Result.Failure<ConversationTurn>("Conversation results must be JSON arrays.");
@@ -110,8 +105,6 @@ public sealed class ConversationTurn : Entity
         if (index < 0) return;
         previews[index] = new(pendingOperationId, outcome, arguments, revision);
         var json = JsonSerializer.Serialize(previews);
-        if (json.Length > MaxTextLength)
-            throw new ArgumentException("Conversation text exceeds the recording limits.");
         PreviewOutcomesJson = json;
     }
 }

@@ -20,17 +20,26 @@ account exports; their original thread cannot be recovered from the stored data.
 The existing `ConversationTurns` table stores both ordered roles, encrypted user
 text, assistant text and response parts, tool calls, compact tool results and
 preview outcomes. Both rows are written before a successful final response.
-Persistence failures fail the request. The account row lock orders writes with
-reset and account deletion; reset's clear timestamp and the existence check for
-an already loaded conversation prevent an in-flight save from restoring deleted
-content. Idempotent turn ids do not create duplicate stored pairs.
+Full response parts and text have no diagnostic capture limit; display and export
+retain the negotiated response. Persistence failures fail the request. The account
+row lock orders proposal creation, outcome snapshot updates and turn insertion
+with reset and account deletion. Reset's clear timestamp and the existence check
+for an already loaded conversation reject stale proposals before persistence.
+An erased conversation does not fail the reply or restore content: erasure
+interrupting a proposal or a final recording returns the existing localized
+conversation-unavailable message without storing the stale turn. The final reply
+omits stale parts, proposals and eval traces so idempotency cannot cache deleted
+text. Idempotent turn ids do not create duplicate stored pairs.
 
 Tool summaries use the same structural shortening algorithm as live tool results:
 retained data, original counts, `has_more`, shortened field paths and a truncation
 marker. The stored tool-results field is bounded to 12,002 characters. Preview
 arguments are bounded to 8,000 characters per preview using that algorithm.
-Approvals, edits and rejections update the encrypted outcome snapshot with its
-pending operation id and revision. Approval alone does not prove execution
+Approvals, edits and rejections reload and update the encrypted outcome snapshot
+under that account lock with the pending operation id and revision. Independent
+proposal transitions preserve one another, including transitions before the first
+snapshot is inserted. With recording disabled, transitions do not read or update
+conversation rows. Approval alone does not prove execution
 succeeded. Conversation deletion also erases linked pending operations and
 idempotency response copies, so they cannot restore the deleted conversation.
 
@@ -74,9 +83,14 @@ or another account's id returns `404` with `CONVERSATION_NOT_FOUND`.
 
 ## Retention and export
 
-There is no time-based conversation expiry. The former retention job and its
-recurring schedule are removed. Fresh Start and account erasure delete the rows
-and objects. A conversation delete removes that conversation's rows and objects.
+There is no time-based `ConversationTurns` expiry. The obsolete
+`conversation-retention` schedule is removed. `ChatTurnRetentionJob`, registered
+as `chat-turn-retention` with cron `15 * * * *` in both scheduler modes, purges
+only `ChatTurns` idempotency rows whose `ExpiresAtUtc` is more than 30 days old.
+This includes terminal response copies and runs independently of the recording
+flag. Unexpired and recently expired idempotency rows remain. Fresh Start and
+account erasure delete the rows and objects. A conversation delete removes that
+conversation's rows and objects.
 Export includes all retained text, assistant response parts, tool summaries,
 preview outcomes, conversation ids, display order and image file names. It does
 not inline image bytes or expose storage keys.

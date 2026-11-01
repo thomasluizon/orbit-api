@@ -207,6 +207,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _conversationRecorder.RecordAsync(Arg.Any<ConversationTurnCapture>(), Arg.Any<CancellationToken>()).Returns(true);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ModerationResult(false, false, []));
         _scheduleLogReader.ReadDaysAsync(
             Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),

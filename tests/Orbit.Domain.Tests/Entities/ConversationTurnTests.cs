@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Text.Json;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Domain.Tests.Entities;
@@ -51,7 +52,37 @@ public class ConversationTurnTests
         ConversationTurn.Create(user, Guid.Empty, "user", DateTime.UtcNow, null, "hello", "[]").IsFailure.Should().BeTrue();
         ConversationTurn.Create(user, turn, "user", DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified), null, "hello", "[]").IsFailure.Should().BeTrue();
         ConversationTurn.Create(user, turn, "user", DateTime.UtcNow, new string('m', 201), "hello", "[]").IsFailure.Should().BeTrue();
-        ConversationTurn.Create(user, turn, "user", DateTime.UtcNow, null, new string('c', ConversationTurn.MaxTextLength + 1), "[]").IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_LargeAssistantFields_PreservesFullDisplayData()
+    {
+        var text = new string('a', 100_000);
+        var json = System.Text.Json.JsonSerializer.Serialize(new { text });
+        var result = ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), "assistant", DateTime.UtcNow,
+            null, text, "[" + json + "]", json, previewOutcomesJson: "[" + json + "]");
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Content.Should().Be(text);
+        result.Value.ResponseJson.Should().Be(json);
+        result.Value.ToolCallsJson.Should().Be("[" + json + "]");
+    }
+
+    [Fact]
+    public void UpdatePreviewOutcome_LargeSnapshot_PreservesEveryProposal()
+    {
+        var arguments = JsonSerializer.SerializeToElement(new { text = new string('a', 7_000) });
+        var previews = Enumerable.Range(0, 10).Select(_ => new ConversationPreviewOutcome(Guid.NewGuid(), "pending", arguments, 1)).ToArray();
+        var json = JsonSerializer.Serialize(previews);
+        json.Length.Should().BeGreaterThan(65_536);
+        var turn = ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), "assistant", DateTime.UtcNow, null,
+            "Review these proposals", "[]", previewOutcomesJson: json).Value;
+
+        turn.UpdatePreviewOutcome(previews[^1].PendingOperationId, "approved", arguments, 2);
+
+        var updated = JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(turn.PreviewOutcomesJson)!;
+        updated.Should().HaveCount(10);
+        updated[^1].Outcome.Should().Be("approved");
+        updated.Take(9).Should().OnlyContain(preview => preview.Outcome == "pending");
     }
     [Theory]
     [InlineData(null, 1, false)]

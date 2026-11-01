@@ -234,9 +234,18 @@ public partial class ProcessUserChatCommandHandler(
                 });
             }
         }
+        catch (ConversationErasedException)
+        {
+            evalTrace = null;
+            response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
+        }
         finally
         {
-            await RecordConversationAsync(request, recording, response, cancellationToken);
+            if (!await RecordConversationAsync(request, recording, response, cancellationToken))
+            {
+                evalTrace = null;
+                response = Result.Success(await ConversationErasedReplyAsync(request, recording, cancellationToken));
+            }
             var timing = timer.Complete();
             logger.LogInformation("Astra turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);

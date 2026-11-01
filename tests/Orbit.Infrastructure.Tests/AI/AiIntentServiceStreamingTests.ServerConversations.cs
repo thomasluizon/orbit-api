@@ -17,6 +17,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
@@ -28,6 +29,112 @@ namespace Orbit.Infrastructure.Tests.AI;
 
 public partial class AiIntentServiceStreamingTests
 {
+    [Fact]
+    public async Task ServerConversation_DeletedDuringTextReply_DoesNotRestorePrivateTextInTheFinalResponse()
+    {
+        using var fixture = new ConversationTurnRecorderTests.Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture() with { UserContent = "Private reservation" });
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+        var model = Substitute.For<IAiIntentService>();
+        model.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var text = call.Arg<AiToolRequest>().History!.Single(message => message.Role == "user").Content;
+                (await fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId)).Should().BeTrue();
+                return Result.Success(new AiResponse { TextMessage = text });
+            });
+        var reply = await ConversationHandler(fixture, model, pending).Handle(new(fixture.User.Id, "Repeat it",
+            ClientContext: new(ConversationId: fixture.ConversationId, Locale: "en")), default);
+        reply.IsSuccess.Should().BeTrue(reply.Error);
+        reply.Value.AiMessage.Should().Be(ErrorCopy.English(ConversationErrors.NotFoundCode));
+        Orbit.Application.Chat.Models.ChatStreamEvent.Final(reply.Value).ToJson().Should().NotContain("Private reservation");
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false, "en")]
+    [InlineData(false, "pt-BR")]
+    [InlineData(true, "en")]
+    public async Task ServerConversation_ErasedDuringModelCall_DoesNotRetainDerivedProposals(bool reset, string locale)
+    {
+        using var fixture = new ConversationTurnRecorderTests.Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture() with { UserContent = "Private reservation" });
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+        var model = Substitute.For<IAiIntentService>();
+        model.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var history = call.Arg<AiToolRequest>().History!;
+                var title = history.Single(message => message.Role == "user").Content;
+                title.Should().Be("Private reservation");
+                if (reset)
+                {
+                    var repository = new AccountResetRepository(fixture.Db, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>(), fixture.Storage);
+                    await repository.DeleteAllUserDataAsync(fixture.User.Id);
+                    fixture.User.ResetAccount();
+                    await fixture.Db.SaveChangesAsync();
+                }
+                else
+                    (await fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId)).Should().BeTrue();
+                return Result.Success(new AiResponse
+                {
+                    ToolCalls = [new("create_habit", "private", JsonSerializer.SerializeToElement(new
+                    {
+                        title, frequency_unit = "OneTime", due_date = "2026-12-31", due_time = "20:30"
+                    }))]
+                });
+            });
+        var handler = ConversationHandler(fixture, model, pending);
+
+        Result<ChatResponse>? result = null;
+        var exception = await Record.ExceptionAsync(async () => result = await handler.Handle(new(fixture.User.Id,
+            "Use the proposal", ClientContext: new(ConversationId: fixture.ConversationId,
+                SupportsPendingOperationChanges: true, Locale: locale)), default));
+        fixture.Db.ChangeTracker.Clear();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+        (await fixture.Db.PendingAgentOperations.CountAsync()).Should().Be(0);
+        (await pending.GetLastConversationPreviewsAsync(fixture.User.Id, fixture.ConversationId)).Should().BeEmpty();
+        (await fixture.Store.GetLatestAsync(fixture.User.Id, null, null, 40)).Should().BeNull();
+        exception.Should().BeNull();
+        result!.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.AiMessage.Should().Be(ErrorCopy.Resolve(ConversationErrors.NotFoundCode, locale == "pt-BR"));
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task ServerConversation_LargeHabitRead_PersistsTheFullNegotiatedResponse()
+    {
+        using var fixture = new ConversationTurnRecorderTests.Fixture();
+        var habits = Enumerable.Range(0, 120).Select(index => Habit.Create(new(HabitSchedule.OneTime,
+            fixture.User.Id, $"Reservation {index:D3} " + new string('x', 80), null, null, new DateOnly(2026, 12, 31))).Value).ToArray();
+        fixture.Db.Habits.AddRange(habits);
+        await fixture.Db.SaveChangesAsync();
+        var output = ResponsesTestData.Response();
+        output.OutputItems.Add(ResponseItem.CreateFunctionCallItem("large", "query_habits",
+            BinaryData.FromString("{\"limit\":120,\"orbit_read_complete\":true}")));
+        var transport = new SequenceSseHandler(System.ClientModel.Primitives.ModelReaderWriter.Write(output).ToString(),
+            ResponsesTestData.Text("[[orbit:read:large]]"));
+        var (model, _) = BuildService(transport);
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
+        var handler = ConversationHandler(fixture, model, pending);
+
+        var reply = await handler.Handle(new(fixture.User.Id, "Show my tasks", ClientContext: new(
+            ConversationId: fixture.ConversationId, SupportsParts: true, PartKinds: ["habitList"], SupportsHabitListCard: true)), default);
+
+        reply.IsSuccess.Should().BeTrue(reply.Error);
+        reply.Value.Parts!.OfType<ChatBlockPart>().Select(part => part.Block).OfType<HabitListCard>()
+            .Should().ContainSingle().Which.Items.Should().HaveCount(120);
+        using var terminal = JsonDocument.Parse(Orbit.Application.Chat.Models.ChatStreamEvent.Final(reply.Value).ToJson());
+        var json = terminal.RootElement.GetProperty("response").GetRawText();
+        json.Length.Should().BeGreaterThan(65_536);
+        fixture.Db.ChangeTracker.Clear();
+        var stored = await fixture.Db.ConversationTurns.SingleAsync(turn => turn.Role == "assistant");
+        stored.ResponseJson.Should().Be(json);
+        stored.ToolResultsJson.Length.Should().BeLessThanOrEqualTo(12_002);
+        var reopened = await fixture.Store.GetLatestAsync(fixture.User.Id, null, null, 40);
+        reopened!.Turns.Single(turn => turn.Role == "assistant").ResponseJson.Should().Be(json);
+    }
+
     [Theory]
     [InlineData("pending")]
     [InlineData("approved")]
@@ -44,7 +151,7 @@ public partial class AiIntentServiceStreamingTests
         var transport = new SequenceSseHandler(System.ClientModel.Primitives.ModelReaderWriter.Write(firstOutput).ToString(),
             ResponsesTestData.Text(scenario.GetProperty("follow_up_answer").GetString()!));
         var (model, _) = BuildService(transport);
-        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()));
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags);
         var handler = ConversationHandler(fixture, model, pending);
         var client = new AgentClientContext(ConversationId: fixture.ConversationId, SupportsParts: true,
             SupportsPendingOperationChanges: true, Locale: "pt-BR");
@@ -95,7 +202,7 @@ public partial class AiIntentServiceStreamingTests
         using var fixture = new ConversationTurnRecorderTests.Fixture(enabled: false);
         var transport = new SequenceSseHandler(ResponsesTestData.Text("Reply"));
         var (model, _) = BuildService(transport);
-        var handler = ConversationHandler(fixture, model, new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings())), enabled: false);
+        var handler = ConversationHandler(fixture, model, new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()), fixture.Flags), enabled: false);
         var result = await handler.Handle(new(fixture.User.Id, "New message", History: [new("assistant", "client history")],
             ClientContext: new(ConversationId: fixture.ConversationId)), default);
         result.IsSuccess.Should().BeTrue(result.Error);
@@ -128,7 +235,9 @@ public partial class AiIntentServiceStreamingTests
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 1));
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var registry = new AiToolRegistry([new CreateHabitTool(dates, mediator)]);
+        var registry = new AiToolRegistry([new CreateHabitTool(dates, mediator),
+            new QueryHabitsTool(new GenericRepository<Habit>(db), new GenericRepository<User>(db), dates,
+                Substitute.For<IHabitScheduleLogReader>())]);
         var catalog = new AgentCatalogService(registry.GetAll());
         var habits = new GenericRepository<Habit>(db);
         var goals = new GenericRepository<Goal>(db);
@@ -139,9 +248,12 @@ public partial class AiIntentServiceStreamingTests
         stepUp.GetRequiredConfirmationAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((AgentConfirmationRequirement?)null);
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>()).Returns((string?)null);
+        var blocks = new ReadBlockFactory(dates, Substitute.For<IReadQueryTokenService>(), new GenericRepository<User>(db));
         var executor = new AgentOperationExecutor(catalog, new AgentPolicyEvaluator(db, catalog, pending, stepUp,
             Options.Create(new AgentPlatformSettings()), flags), Substitute.For<IAgentAuditService>(), ownership, stepUp,
-            registry, previewer, pending, work, NullLogger<AgentOperationExecutor>.Instance);
+            registry, previewer, pending, work, NullLogger<AgentOperationExecutor>.Instance, blocks);
+        var services = new ServiceCollection().AddSingleton<IAgentOperationExecutor>(executor)
+            .AddSingleton<IPendingClarificationStore>(Substitute.For<IPendingClarificationStore>()).BuildServiceProvider();
         var payGate = Substitute.For<IPayGateService>();
         payGate.TryConsumeAiMessage(user.Id, work, Arg.Any<CancellationToken>()).Returns(Result.Success());
         var progress = Substitute.For<IGoalProgressReadSyncer>();
@@ -152,9 +264,9 @@ public partial class AiIntentServiceStreamingTests
         prompts.BuildTurnContext(Arg.Any<PromptBuildRequest>()).Returns("dynamic context");
         return new(new(habits, goals, new GenericRepository<User>(db), tags, new GenericRepository<ChecklistTemplate>(db), flags),
             new(model, registry, prompts, catalog),
-            new(dates, Substitute.For<IUserStreakService>(), payGate, work, Substitute.For<IServiceScopeFactory>(), executor,
+            new(dates, Substitute.For<IUserStreakService>(), payGate, work, services.GetRequiredService<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), progress, Substitute.For<IGamificationService>(), mediator,
                 Substitute.For<IProductAnalytics>(), Substitute.For<IHabitScheduleLogReader>(), Substitute.For<IIssuedAstraBlockStore>(), pending, previewer),
-            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), fixture.Store);
+            NullLogger<ProcessUserChatCommandHandler>.Instance, Substitute.For<IAppConfigService>(), ModerationTestDouble.Clean(), fixture.Store, blocks);
     }
 }
