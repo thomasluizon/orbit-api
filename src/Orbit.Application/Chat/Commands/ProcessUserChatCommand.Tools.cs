@@ -241,7 +241,6 @@ public partial class ProcessUserChatCommandHandler
         foreach (var skipped in aiResponse.ToolCalls!.Where(call => toolResults.All(result => result.Id != call.Id)))
             toolResults.Add(new AiToolCallResult(skipped.Name, skipped.Id, false, null, null,
                 "This call was withheld while ask was unresolved. Continue the original request using the ask result; prepare only changes whose inputs are resolved."));
-        RetireConsumedReads(aiResponse.ConversationContext, executionResults, toolResults);
         RefreshAskSchema(aiResponse.ConversationContext, request, context, executionResults);
         cancellationToken.ThrowIfCancellationRequested();
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults,
@@ -268,16 +267,6 @@ public partial class ProcessUserChatCommandHandler
         return new ToolRoundResult(continueResult.Value,
             HadToolFailure: hadToolFailure && correction is null,
             Correction: correction);
-    }
-
-    private void RetireConsumedReads(AiConversationContext? conversation, ToolExecutionAccumulator results,
-        IReadOnlyList<AiToolCallResult> currentResults)
-    {
-        if (results.PendingOperations.Count == 0 || conversation is null) return;
-        conversation.RetiredReadCallIds = results.ToolResults
-            .Where(result => result.Success && currentResults.All(current => current.Id != result.Id)
-                && ai.ToolRegistry.GetTool(result.Name)?.IsReadOnly == true)
-            .Select(result => result.Id).ToArray();
     }
 
     private AiToolCall NormalizeExecutionArguments(AiToolCall call) => ai.ToolRegistry.GetTool(call.Name) is { } tool

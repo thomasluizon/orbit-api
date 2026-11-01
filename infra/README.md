@@ -43,17 +43,20 @@ required completed Render database export before a production release carrying i
 The daily `AI cost` line includes every purpose's calls, dollar cost per call, cached
 input, uncached input, output and reasoning totals, plus per-call token averages.
 Uncached input includes cache writes; reasoning is a subset of output and is billed once.
-The cache hit fraction is `cached_input / (cached_input + uncached_input)`.
+The cache hit fraction is `cached_input / (cached_input + uncached_input)`. Startup also
+emits the same current UTC day cost line marked `(partial)` in both scheduler modes;
+the partial line is a snapshot, not an additional accounting charge.
 Historical rows default reasoning to zero because past reasoning usage cannot be recovered.
 
 The system message and tool schemas are byte-stable for each client capability set.
 Offer data, account context, shared-title guidance, preview constraints and history follow
 that prefix. Offer schema fields are declared only for clients supporting offers.
-The initial catalog omits `ask`; a successful typed account read or a missing-field create
-result unlocks its stable declaration at the end of the catalog. Subsequent rounds retain
-that declaration and append changed ask constraints once. Execution still validates
-client capabilities, account reads and draft bindings. See [TESTING.md](../TESTING.md)
-for the measured comparison against a uniform catalog and the cache-prefix tests.
+Clients supporting questions receive the full stable `ask` declaration from the first
+request. A successful typed account read or missing-field create result unlocks execution;
+subsequent rounds append constraints without changing the catalog. Earlier tool results
+remain byte-identical after a held preview. Execution still validates client capabilities,
+account reads and draft bindings. See [TESTING.md](../TESTING.md)
+for the warmed and cold cost estimates and cache-prefix tests.
 
 Output caps include reasoning: chat allows 4,096 tokens; offer selection, tag suggestions
 and emoji inference allow 1,024; proactive messages and slip alerts allow 512; date

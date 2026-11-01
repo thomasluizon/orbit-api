@@ -1728,3 +1728,12 @@ Existing requested and stored fields remain intact outside the selected scope.
 | continueChat / reuse / get_checklist_templates | Read the full stored checklist template identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing checklist entries. | Leia o modelo de checklist salvo completo identificado pelo alvo tipado e os hábitos atuais. Proponha um uso adequado em uma prévia editável, preservando os itens de checklist existentes. |
 | continueChat / aim / pending preview | Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in the pending preview, preserving all pending work. | Confira primeiro as metas existentes e evite criar uma meta equivalente. Prepare uma proposta de meta para o objetivo expresso na prévia pendente, preservando todo o trabalho pendente. |
 | continueChat / aim / conversation | Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation. | Confira primeiro as metas existentes e evite criar uma meta equivalente. Prepare uma proposta de meta para o objetivo expresso nesta conversa. |
+
+## Provider request continuity
+
+For a negotiated client capability set, the system prompt and complete tool catalog are
+stable across users and rounds. Clients supporting questions receive the stable `ask`
+schema initially; execution still requires the existing typed account read or bound
+missing-field draft. Round-specific constraints and results append to the input. A held
+preview retains previous read results unchanged. This transport behavior preserves the
+existing composition, block ordering and approval rules. See [offline cost verification](../../../TESTING.md).

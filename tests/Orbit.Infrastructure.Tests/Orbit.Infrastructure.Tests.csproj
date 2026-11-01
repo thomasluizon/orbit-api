@@ -29,6 +29,7 @@
     <None Update="Fixtures/AppAttest/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/Notion/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/OAuth/ClaudeClientMetadata.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Orbit.Application.Tests/Fixtures/TerminalReads/*.json.gz" Link="Fixtures/TerminalReads/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Orbit.Application.Tests/Fixtures/BrainDumps/*.json" Link="Fixtures/BrainDumps/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

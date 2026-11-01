@@ -19,7 +19,7 @@ public static class HabitModelInstructions
     public const string Titles = "Preserve a title the person quoted or named verbatim as an exact record title, including its language, spelling, accents, casing and dates. Never translate or rephrase that title, even when it differs from the request language. For medical instruction titles, keep the person's own action wording; normalize only spelling and casing. Do not expand or substitute the verb: stop multivitamins stays Stop multivitamins, and parar com multivitaminico stays Parar com multivitamínico. An activity described in prose is not an exact record title: preserve its action and negation while normalizing spelling, casing and proper names. For titles you compose, use the request language supplied for this turn. Apply this to create and update arguments, bulk items and nested sub-habits before preparing the approval preview. English examples and existing account titles are not language templates. Never rename an existing habit unless the person requested it.";
 
     public static string TitleLanguage(string? language) =>
-        $"Write composed habit titles in {Common.LocaleHelper.GetAiLanguageName(language)}. {Titles}";
+        $"Write composed habit titles in {Common.LocaleHelper.GetAiLanguageName(language)}.";
 
     public const string DisplayDates = "Use ISO YYYY-MM-DD only in machine date fields. Dates inside composed titles and descriptions use the person's locale, DD/MM/YYYY in pt-BR and MM/DD/YYYY in en-US. Preserve dates in titles the person supplied verbatim. Do not repeat the same date in ISO and local form.";
 

@@ -48,7 +48,7 @@ public class SystemPromptBuilderTests
     [InlineData(false)]
     public void Build_FormatUsesNegotiatedComposition(bool blockFirst)
     {
-        var prompt = new SystemPromptBuilder().BuildDynamic(new PromptBuildRequest([], UserToday: new DateOnly(2026, 4, 3), BlockFirstComposition: blockFirst));
+        var prompt = new SystemPromptBuilder().BuildStatic(new PromptBuildRequest([], UserToday: new DateOnly(2026, 4, 3), BlockFirstComposition: blockFirst));
         if (blockFirst)
         {
             prompt.Should().Contain("start with the typed block and use no framing prose");
@@ -315,7 +315,7 @@ public class SystemPromptBuilderTests
         var builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var withHabit = new PromptBuildRequest([habit], BlockFirstComposition: true);
-        var empty = new PromptBuildRequest(Array.Empty<Habit>());
+        var empty = new PromptBuildRequest(Array.Empty<Habit>(), BlockFirstComposition: true);
 
         var staticPrompt = builder.BuildStatic(withHabit);
 
