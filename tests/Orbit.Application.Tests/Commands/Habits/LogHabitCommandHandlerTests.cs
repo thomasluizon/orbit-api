@@ -40,6 +40,46 @@ public class LogHabitCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_GeneralTask_CompletesAndToggleReopens(bool repeat)
+    {
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+
+        var logged = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        logged.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeTrue();
+        var unlogged = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+        unlogged.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.Logs.Should().OnlyContain(log => log.IsDeleted);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_GeneralTaskLoggedYesterday_RefusesAnotherLog(bool repeat)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        habit.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id, ToggleExisting: false), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
+        habit.Logs.Should().ContainSingle();
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+    }
+
     public LogHabitCommandHandlerTests()
     {
         _unitOfWork.PassThroughTransactions<Result<LogHabitCommandHandler.PersistedLog>>();

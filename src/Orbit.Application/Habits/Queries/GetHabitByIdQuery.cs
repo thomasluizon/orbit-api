@@ -123,18 +123,6 @@ public class GetHabitByIdQueryHandler(
             userToday,
             cancellationToken);
         var children = HabitDetailChildMapper.MapChildren(habit, userToday, weekStartDay, descendantLogsByHabitId);
-        var isCompleted = habit.IsCompleted;
-        if (habit.Schedule == HabitSchedule.General)
-        {
-            var currentDateLogs = await habitLogRepository.FindAsync(
-                l => l.HabitId == habit.Id
-                    && l.Date == userToday
-                    && l.Value > 0
-                    && !l.IsDeleted,
-                cancellationToken);
-            isCompleted = currentDateLogs.Count > 0;
-        }
-
         var parentTitle = habit.ParentHabitId is { } parentId
             ? (await habitRepository.FindAsync(h => h.Id == parentId && h.UserId == request.UserId, cancellationToken)).FirstOrDefault()?.Title
             : null;
@@ -146,7 +134,7 @@ public class GetHabitByIdQueryHandler(
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
             habit.IsBadHabit,
-            isCompleted,
+            habit.IsCompleted,
             habit.Schedule == HabitSchedule.General,
             habit.Schedule == HabitSchedule.Flexible,
             habit.NextDueDate,
@@ -241,7 +229,7 @@ internal static class HabitDetailChildMapper
         child.FrequencyUnit,
         child.FrequencyQuantity,
         child.IsBadHabit,
-        GetResponseCompletion(child, userToday, weekStartDay, descendantLogsByHabitId),
+        child.IsCompleted,
         child.Schedule == HabitSchedule.General,
         child.Schedule == HabitSchedule.Flexible,
         child.Days.ToList(),
@@ -267,21 +255,6 @@ internal static class HabitDetailChildMapper
         SlipAlertEnabled: child.SlipAlertEnabled,
         ParentHabitId: child.ParentHabitId,
         ParentTitle: parentTitle);
-
-    private static bool GetResponseCompletion(
-        Habit habit,
-        DateOnly userToday,
-        int weekStartDay,
-        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
-    {
-        if (habit.Schedule != HabitSchedule.General)
-            return habit.IsCompleted;
-
-        return HabitScheduleService.HasCompletedLogInRange(
-            GetLogs(habit, descendantLogsByHabitId),
-            userToday,
-            userToday);
-    }
 
     private static bool DetermineOverdueStatus(
         Habit habit,

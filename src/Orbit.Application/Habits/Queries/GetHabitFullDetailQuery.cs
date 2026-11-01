@@ -64,15 +64,11 @@ public class GetHabitFullDetailQueryHandler(
         var allRootLogs = await habitLogRepository.FindAsync(
             l => l.HabitId == request.HabitId,
             cancellationToken);
-        var isCompleted = habit.Schedule == HabitSchedule.General
-            ? allRootLogs.Any(l => !l.IsDeleted && l.Date == userToday && l.Value > 0)
-            : habit.IsCompleted;
-
         var parentTitle = habits.FirstOrDefault(h => h.Id == habit.ParentHabitId)?.Title;
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
-            habit.IsBadHabit, isCompleted, habit.Schedule == HabitSchedule.General, habit.Schedule == HabitSchedule.Flexible,
+            habit.IsBadHabit, habit.IsCompleted, habit.Schedule == HabitSchedule.General, habit.Schedule == HabitSchedule.Flexible,
             habit.NextDueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.GetScheduledRemindersForLegacyClients(),

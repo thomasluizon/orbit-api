@@ -35,6 +35,25 @@ public class BulkLogHabitsCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_GeneralTask_CompletesAndRefusesAnotherDay(bool repeat)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        SetupHabitsForUser([habit]);
+
+        var result = await _handler.Handle(new BulkLogHabitsCommand(UserId, [new(habit.Id)]), CancellationToken.None);
+
+        result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
+        habit.IsCompleted.Should().BeTrue();
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today.AddDays(1));
+        var second = await _handler.Handle(new BulkLogHabitsCommand(UserId, [new(habit.Id)]), CancellationToken.None);
+        second.Value.Results.Should().ContainSingle().Which.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
+        habit.Logs.Should().ContainSingle();
+    }
+
     public BulkLogHabitsCommandHandlerTests()
     {
         var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService, Substitute.For<IGenericRepository<Notification>>());

@@ -287,36 +287,32 @@ public class HabitTests
     }
 
     [Fact]
-    public void Symptom3_GeneralLoggedYesterday_ShowsCompletedToday()
+    public void Log_GeneralLoggedYesterday_RemainsCompleted()
     {
         var habit = CreateGeneralHabit();
 
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
 
-        habit.IsCompleted.Should().BeFalse();
+        habit.IsCompleted.Should().BeTrue();
     }
 
     [Fact]
-    public void Unlog_GeneralHabit_MissingDateFailsAndExistingDateDeletesOnlyMatchingLog()
+    public void Unlog_GeneralHabit_MissingDatePreservesCompletionAndMatchingDateReopens()
     {
         var habit = CreateGeneralHabit();
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
-        habit.Log(Today).IsSuccess.Should().BeTrue();
 
-        var missingDateResult = habit.Unlog(Today.AddDays(1));
-
-        missingDateResult.IsFailure.Should().BeTrue();
+        habit.Unlog(Today).IsFailure.Should().BeTrue();
+        habit.IsCompleted.Should().BeTrue();
         habit.Logs.Should().OnlyContain(log => !log.IsDeleted);
 
-        var existingDateResult = habit.Unlog(Today);
-
-        existingDateResult.IsSuccess.Should().BeTrue();
-        habit.Logs.Should().ContainSingle(log => log.Date == Yesterday && !log.IsDeleted);
-        habit.Logs.Should().ContainSingle(log => log.Date == Today && log.IsDeleted);
+        habit.Unlog(Yesterday).IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeTrue();
     }
 
     [Fact]
-    public void Compounding_AfterFailedUnlog_TheHabitCannotBeLoggedAgainEither()
+    public void Log_GeneralAfterFailedUnlog_StillRejectsCompletion()
     {
         var habit = CreateGeneralHabit();
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
@@ -324,7 +320,8 @@ public class HabitTests
 
         var result = habit.Log(Today);
 
-        result.IsSuccess.Should().BeTrue();
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
     }
 
     [Fact]
@@ -365,7 +362,7 @@ public class HabitTests
     }
 
     [Fact]
-    public void Update_CompletedOneTimeTaskToGeneral_ClearsPermanentCompletion()
+    public void Update_CompletedOneTimeTaskToGeneral_PreservesCompletion()
     {
         var habit = CreateOneTimeHabit(dueDate: Yesterday);
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
@@ -375,8 +372,8 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         habit.Schedule.Should().Be(HabitSchedule.General);
-        habit.IsCompleted.Should().BeFalse();
-        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeTrue();
+        habit.Log(Today).IsFailure.Should().BeTrue();
     }
 
     [Fact]

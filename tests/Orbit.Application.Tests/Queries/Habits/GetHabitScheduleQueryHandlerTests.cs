@@ -570,7 +570,7 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_GeneralHabitLoggedOnlyYesterday_MapsIncompleteToday()
+    public async Task Handle_GeneralHabitLoggedOnlyYesterday_RemainsCompleted()
     {
         var general = CreateTestHabit(
             title: "General",
@@ -578,6 +578,7 @@ public class GetHabitScheduleQueryHandlerTests
             frequencyQuantity: null,
             isGeneral: true);
         general.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        typeof(Habit).GetProperty(nameof(Habit.IsCompleted))!.SetValue(general, true);
         SetupHabits(general);
 
         var result = await _handler.Handle(
@@ -585,11 +586,11 @@ public class GetHabitScheduleQueryHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Items.Should().ContainSingle().Which.IsCompleted.Should().BeFalse();
+        result.Value.Items.Should().ContainSingle().Which.IsCompleted.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Handle_GeneralHabitsHistoricalSelectedDay_MapsSelectedDayInsteadOfToday()
+    public async Task Handle_GeneralHabitsHistoricalSelectedDay_UsesPermanentCompletion()
     {
         var selectedDay = Today.AddDays(-7);
         var loggedOnSelectedDay = CreateTestHabit(
@@ -612,7 +613,7 @@ public class GetHabitScheduleQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().ContainSingle(h => h.Id == loggedOnSelectedDay.Id && h.IsCompleted);
-        result.Value.Items.Should().ContainSingle(h => h.Id == loggedToday.Id && !h.IsCompleted);
+        result.Value.Items.Should().ContainSingle(h => h.Id == loggedToday.Id && h.IsCompleted);
     }
 
     [Fact]
@@ -623,8 +624,8 @@ public class GetHabitScheduleQueryHandlerTests
             frequencyUnit: null,
             frequencyQuantity: null,
             isGeneral: true);
-        var log = general.Log(Today).Value;
-        log.SoftDelete();
+        general.Log(Today).IsSuccess.Should().BeTrue();
+        general.Unlog(Today).IsSuccess.Should().BeTrue();
         SetupHabits(general);
 
         var result = await _handler.Handle(
@@ -636,7 +637,7 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NestedGeneralChildLoggedToday_MapsDatedCompletion()
+    public async Task Handle_NestedGeneralChildLoggedYesterday_RemainsCompleted()
     {
         var parent = CreateTestHabit(
             title: "Parent",
@@ -649,7 +650,7 @@ public class GetHabitScheduleQueryHandlerTests
             frequencyQuantity: null,
             isGeneral: true,
             parentHabitId: parent.Id);
-        child.Log(Today).IsSuccess.Should().BeTrue();
+        child.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
         SetupHabits(parent, child);
 
         var result = await _handler.Handle(
@@ -663,7 +664,7 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_IncludeGeneral_MapsDatedCompletion()
+    public async Task Handle_IncludeGeneral_UsesPermanentCompletion()
     {
         var scheduled = CreateTestHabit(title: "Scheduled", dueDate: Today);
         var general = CreateTestHabit(
@@ -671,7 +672,7 @@ public class GetHabitScheduleQueryHandlerTests
             frequencyUnit: null,
             frequencyQuantity: null,
             isGeneral: true);
-        general.Log(Today).IsSuccess.Should().BeTrue();
+        general.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
         SetupHabits(scheduled);
         IReadOnlyList<Habit> generalHabits = [general];
         _habitRepo.FindAsync(

@@ -83,7 +83,7 @@ public partial class LogHabitCommandHandler(
             return dateWindowValidation.PropagateError<LogHabitResponse>();
 
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
-        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue))
+        if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible)
         {
             if (!request.ToggleExisting)
                 return Result.Failure<LogHabitResponse>(DomainErrors.AlreadyLoggedForDate);
@@ -132,7 +132,7 @@ public partial class LogHabitCommandHandler(
         var window = ValidateDateWindow(habit, target, today);
         if (window.IsFailure)
             return window;
-        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue))
+        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible)
             return request.ToggleExisting ? Result.Success() : Result.Failure(DomainErrors.AlreadyLoggedForDate);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
         var resolution = await HabitDueDateResolutionLoader.LoadAsync(logs, [habit], today.AddDays(-AppConstants.MaxRangeDays), ct);

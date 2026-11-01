@@ -506,7 +506,7 @@ public class QueryHabitsToolTests
     }
 
     [Fact]
-    public async Task IsCompletedTrue_ExcludesGeneralHabitLoggedBeforeToday()
+    public async Task IsCompletedTrue_ReturnsGeneralHabitLoggedBeforeToday()
     {
         var completedYesterday = CreateHabit(
             "Read yesterday",
@@ -515,12 +515,14 @@ public class QueryHabitsToolTests
             dueDate: Today,
             isGeneral: true);
         completedYesterday.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        typeof(Habit).GetProperty(nameof(Habit.IsCompleted))!.SetValue(completedYesterday, true);
         SetupHabits(completedYesterday);
 
         var result = await Execute("""{"is_completed": true}""");
 
-        result.EntityName.Should().Contain("No habits found");
-        result.EntityName.Should().NotContain("Read yesterday");
+        result.EntityName.Should().Contain("Read yesterday");
+        result.EntityName.Should().Contain("COMPLETED");
+        ((HabitListCard)result.Payload!).Items.Should().ContainSingle().Which.Status.Should().Be(HabitListCardBuilder.StatusDone);
     }
 
     [Fact]
