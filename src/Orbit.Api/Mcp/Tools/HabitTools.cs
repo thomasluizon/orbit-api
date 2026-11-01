@@ -258,11 +258,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return result.Succeeded ? $"Logged habit {habitId}" : result.Message;
     }
 
-    [McpServerTool(Name = "unlog_habit"), Description("Undo a habit completion for a specific date (defaults to today). Fails if no completion exists.")]
+    [McpServerTool(Name = "unlog_habit"), Description("Undo one habit completion. Completed General tasks use their latest completion; other schedules use the specified date or today. Fails if no completion exists. Use log_habit to mark it again.")]
     public async Task<string> UnlogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
-        [Description("Date of the completion in YYYY-MM-DD format (defaults to today)")] string? date = null,
+        [Description("ISO date (YYYY-MM-DD). Defaults to today for dated schedules; ignored for completed General tasks.")] string? date = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "unlog_habit", new

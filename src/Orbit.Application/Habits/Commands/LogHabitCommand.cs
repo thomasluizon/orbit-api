@@ -77,12 +77,15 @@ public partial class LogHabitCommandHandler(
         if (habit.UserId != request.UserId)
             return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned);
 
+        if (habit.Schedule == HabitSchedule.General && habit.IsCompleted && !request.ToggleExisting)
+            return Result.Failure<LogHabitResponse>(DomainErrors.CannotLogCompletedHabit);
+
         var targetDate = request.Date ?? today;
         var dateWindowValidation = ValidateDateWindow(habit, targetDate, today);
         if (dateWindowValidation.IsFailure)
             return dateWindowValidation.PropagateError<LogHabitResponse>();
 
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0 && !l.IsDeleted);
+        var existingLog = HabitCompletionLogResolver.Resolve(habit, targetDate);
         if (existingLog is not null && habit.Schedule != HabitSchedule.Flexible
             && (habit.Schedule != HabitSchedule.General || habit.IsCompleted))
         {
@@ -129,11 +132,13 @@ public partial class LogHabitCommandHandler(
         var habit = matches.FirstOrDefault();
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
+        if (habit.Schedule == HabitSchedule.General && habit.IsCompleted && !request.ToggleExisting)
+            return Result.Failure(DomainErrors.CannotLogCompletedHabit);
         var target = request.Date ?? today;
         var window = ValidateDateWindow(habit, target, today);
         if (window.IsFailure)
             return window;
-        if (habit.Logs.Any(l => l.Date == target && l.Value > 0 && !l.IsDeleted) && habit.Schedule != HabitSchedule.Flexible
+        if (HabitCompletionLogResolver.Resolve(habit, target) is not null && habit.Schedule != HabitSchedule.Flexible
             && (habit.Schedule != HabitSchedule.General || habit.IsCompleted))
             return request.ToggleExisting ? Result.Success() : Result.Failure(DomainErrors.AlreadyLoggedForDate);
         var weekStart = await dates.GetUserWeekStartDayAsync(request.UserId, ct);
@@ -183,6 +188,9 @@ public partial class LogHabitCommandHandler(
 
     private static Result ValidateDateWindow(Habit habit, DateOnly targetDate, DateOnly today)
     {
+        if (habit.Schedule == HabitSchedule.General && habit.IsCompleted)
+            return Result.Success();
+
         if (targetDate > today && habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible)
             return Result.Failure(ErrorMessages.CannotLogFutureDate);
 
@@ -201,12 +209,15 @@ public partial class LogHabitCommandHandler(
         var attempt = 1;
         while (true)
         {
-            var unlogResult = habit.Unlog(targetDate);
+            var completion = HabitCompletionLogResolver.Resolve(habit, targetDate);
+            if (completion is null)
+                return Result.Failure<LogHabitResponse>(DomainErrors.LogNotFoundForDate);
+            var unlogResult = habit.Unlog(completion.Date, completion.Id);
             if (unlogResult.IsFailure)
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;
             var parentUnlog = await BadHabitParentSlipService.RemoveIfIncompleteAsync(
-                habit, targetDate, repos.HabitRepository, cancellationToken);
+                habit, completion.Date, repos.HabitRepository, cancellationToken);
             if (parentUnlog.IsFailure)
                 return parentUnlog.PropagateError<LogHabitResponse>();
 
@@ -389,15 +400,21 @@ public partial class LogHabitCommandHandler(
         }
     }
 
-    private Task<Habit?> LoadLoggableHabitAsync(Guid habitId, DateOnly today, CancellationToken cancellationToken)
+    private async Task<Habit?> LoadLoggableHabitAsync(Guid habitId, DateOnly today, CancellationToken cancellationToken)
     {
         var loggableWindowStart = today.AddDays(-AppConstants.MaxRangeDays);
-        return repos.HabitRepository.FindOneTrackedAsync(
+        var habit = await repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == habitId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart))
                   .Include(h => h.Goals)
                   .AsSplitQuery(),
             cancellationToken);
+        if (habit is { Schedule: HabitSchedule.General, IsCompleted: true })
+            return await repos.HabitRepository.FindOneTrackedAsync(
+                h => h.Id == habitId,
+                q => q.Include(h => h.Logs).Include(h => h.Goals).AsSplitQuery(),
+                cancellationToken);
+        return habit;
     }
 
     private async Task PersistStreakRecalcAsync(Guid userId, CancellationToken cancellationToken)
