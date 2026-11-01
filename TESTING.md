@@ -40,7 +40,7 @@ estimated because its trace has no provider usage envelope.
 The D147 comparison assumes another account has already sent the same static prefix.
 Only an observed matching prefix of at least 1,024 tokens qualifies for reuse, rounded
 conservatively down to 128 tokens; every new input token uses the cache-write rate.
-The test asserts a mean at most $0.0009 for each client type. It also reports every cold
+The test asserts a warm mean at most $0.0009 for each client type. It also reports every cold
 call and the mean including a cold start. Cold requests exceed the warmed D147 target;
 that target is not a guarantee for cold requests, arbitrary account sizes, cache eviction,
 provider routing, or a maximum-size output. Do not replace the release measurement with
@@ -50,6 +50,30 @@ The source for routing, matching and cache-write behavior is the
 [official OpenAI prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching).
 Luna uses automatic cache routing. The existing shared `prompt_cache_key` is retained;
 no observed production routing-overflow evidence justifies splitting its cache.
+
+Tool schemas use a recursive habit definition and share repeated schema blocks under
+`$defs`. The same compaction applies to the provider request and agent catalog exports.
+Internal bounded schemas continue to validate calls before dispatch. The equivalence
+test expands every reference against the captured inlined contract at the server's
+five-level limit (four remaining levels for `create_sub_habit`); it compares every
+field, type, enum, required entry, description and strict object rule. Only the new
+depth sentence and the representation of nullable references are canonicalized.
+The existing leaf excludes `parent_habit_id` and `sub_habits`, so expansion projects
+those fields and their offer-field count out at that boundary. The recursive wire schema
+admits deeper shapes; server validation remains authoritative and returns the existing
+validation feedback for a six-level structured call.
+
+| Client | Tool tokens before | Tool tokens after | Warm mean USD | Mean with cold start USD | First cold call USD |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| legacy | 45636 | 30656 | 0.0006171 | 0.0012921 | 0.0052931 |
+| composition | 50099 | 34855 | 0.0006753 | 0.0014386 | 0.0059744 |
+| offers | 54949 | 39302 | 0.0007351 | 0.0015826 | 0.0066293 |
+
+Cold-call ceilings are $0.0054, $0.0061 and $0.0068 respectively; means including a
+cold start are bounded by $0.00132, $0.00147 and $0.00162. The original inlined
+schemas fail all three cold ceilings. Per-section token tables, every tool above 3,000
+JSON characters, fixture provenance and regeneration commands are in the
+[schema evidence](tests/Orbit.Infrastructure.Tests/Fixtures/ToolSchemas/README.md).
 
 ## Launch gate
 

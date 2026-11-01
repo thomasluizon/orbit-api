@@ -1737,3 +1737,20 @@ schema initially; execution still requires the existing typed account read or bo
 missing-field draft. Round-specific constraints and results append to the input. A held
 preview retains previous read results unchanged. This transport behavior preserves the
 existing composition, block ordering and approval rules. See [offline cost verification](../../../TESTING.md).
+
+Provider tool schemas and the agent operation catalog use local `$defs` and `$ref` entries.
+The shared habit definition recurses through `sub_habits`; repeated schema blocks within
+each tool share definitions. Compaction happens after client-specific schema additions,
+before provider strict normalization. The internal bounded schemas remain the server's
+validation contract: at most five habit levels including the root, with an existing
+parent's depth counted by the command handlers. A six-level call returns validation
+feedback to the model and cannot create an approval preview. Reference expansion preserves
+the former fields, types, enums, required entries, descriptions and strict object rules
+within that limit. See the [schema and cost evidence](../../../tests/Orbit.Infrastructure.Tests/Fixtures/ToolSchemas/README.md).
+
+The depth sentence is model-facing English. The Portuguese text below is supplied for
+copy review; tool descriptions continue to use English for every account language.
+
+| Location | en | pt-BR |
+| --- | --- | --- |
+| `sub_habits.description`, appended once per exported tool schema | Maximum 5 habit levels including the root; the server validates nesting depth. | No máximo 5 níveis de hábitos, incluindo a raiz; o servidor valida a profundidade. |
