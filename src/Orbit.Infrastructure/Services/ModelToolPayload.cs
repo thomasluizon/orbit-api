@@ -5,10 +5,10 @@ namespace Orbit.Infrastructure.Services;
 
 internal static class ModelToolPayload
 {
-    public static JsonNode Fit(string json)
+    public static JsonNode Fit(string json, int maxLength = AppConstants.MaxAiToolPayloadJsonLength)
     {
         var data = JsonNode.Parse(json);
-        if (json.Length <= AppConstants.MaxAiToolPayloadJsonLength)
+        if (json.Length <= maxLength)
             return data!;
 
         var originalCounts = Nodes(data).Where(entry => entry.Node is JsonArray)
@@ -36,14 +36,15 @@ internal static class ModelToolPayload
         while (true)
         {
             var envelope = Envelope();
-            if (envelope.ToJsonString().Length <= AppConstants.MaxAiToolPayloadJsonLength)
+            if (envelope.ToJsonString().Length <= maxLength)
                 return envelope;
             var entries = Nodes(data).ToArray();
             var largestArray = entries.Where(entry => entry.Node is JsonArray { Count: > 1 })
                 .OrderByDescending(entry => entry.Node.ToJsonString().Length).FirstOrDefault();
             if (largestArray.Node is JsonArray array)
             {
-                array.RemoveAt(array.Count - 1);
+                var retained = array.Count > 128 ? array.Count / 2 : array.Count - 1;
+                while (array.Count > retained) array.RemoveAt(array.Count - 1);
                 continue;
             }
             var longestText = entries.Where(entry => entry.Node is JsonValue value

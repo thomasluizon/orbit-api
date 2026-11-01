@@ -531,6 +531,8 @@ public sealed partial class PendingOperationRevisionService(
             if (field.Name.Contains('/', StringComparison.Ordinal))
             {
                 if (!ProactiveProposal.SetPath(target, field.Name, field.Value)) return false;
+                if (ProactiveProposal.AtPath(target, field.Name, out var nestedField) is { } nested && nestedField == DueDate)
+                    nested.Remove(HabitPreviewDates.DefaultDate);
                 continue;
             }
             if (target[ProactiveProposal.Metadata]?["values"] is JsonObject suggestions && suggestions.ContainsKey(field.Name))
@@ -538,7 +540,7 @@ public sealed partial class PendingOperationRevisionService(
             if (OptionalToolArguments.ClearableFields(operationId ?? string.Empty).Contains(field.Name))
                 ReviseClearField(target, field);
             target[field.Name] = JsonNode.Parse(field.Value.GetRawText());
-            if (field.Name == "due_date") target.Remove(HabitPreviewDates.DefaultDate);
+            if (field.Name == DueDate) target.Remove(HabitPreviewDates.DefaultDate);
         }
         return true;
     }

@@ -30,10 +30,13 @@ public sealed partial class PendingOperationChangePreviewer
         }
         var result = await PreviewWithOffersAsync(userId, operationId, arguments, cancellationToken, clientContext);
         if (result.IsFailure || result.Value is not { } preview) return result;
+        if (operationId is not ("create_habit" or "create_sub_habit" or "bulk_create_habits"
+            or "update_habit" or "bulk_update_habits" or "bulk_reschedule_habits")) return result;
         PendingOperationChange DateField(PendingOperationChange field, JsonObject? source) => field.Field is "due_date" or "due_time"
             ? field with
             {
-                IsEditable = field.Field == "due_date" || field.IsEditable,
+                IsEditable = field.IsEditable || field.Field == "due_date"
+                    && source?["frequency_unit"]?.ToString() == "OneTime",
                 Provenance = field.Field == "due_date" && source?[HabitPreviewDates.DefaultDate]?.ToString() == "true"
                     ? "suggested" : field.Provenance ?? "requested"
             } : field;

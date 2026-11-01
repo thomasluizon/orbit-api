@@ -185,7 +185,9 @@ public sealed partial class AiIntentService(
         var serializedPayload = JsonSerializer.Serialize(result.Payload, SerializeOptions);
         if (serializedPayload.Length > AppConstants.MaxAiToolPayloadJsonLength)
         {
-            payload["payload"] = ModelToolPayload.Fit(serializedPayload);
+            var reserved = JsonSerializer.Serialize(payload).Length + 16;
+            payload["payload"] = ModelToolPayload.Fit(serializedPayload,
+                AppConstants.MaxAiToolPayloadJsonLength - Math.Min(reserved, 2000));
             if (logger.IsEnabled(LogLevel.Warning))
                 LogToolPayloadShortened(logger, result.Name, serializedPayload.Length, AppConstants.MaxAiToolPayloadJsonLength);
         }

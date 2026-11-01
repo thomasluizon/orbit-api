@@ -1,11 +1,31 @@
 using System.Text.Json;
 using FluentAssertions;
+using NSubstitute;
 using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat;
 
 public sealed partial class PendingOperationChangePreviewerTests
 {
+    [Fact]
+    public async Task PreparedOneTimeDefault_KeepsItsDateAndProvenanceAcrossMidnight()
+    {
+        var tool = new Orbit.Application.Chat.Tools.Implementations.CreateHabitTool(_userDateService,
+            NSubstitute.Substitute.For<MediatR.IMediator>());
+        var prepared = await tool.PrepareIntentAsync(JsonSerializer.Deserialize<JsonElement>(
+            """{"title":"Reservation","frequency_unit":"OneTime"}"""), UserId, default);
+        prepared.Should().NotBeNull();
+        _userDateService.GetUserTodayAsync(UserId, NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 9, 26));
+        var previewer = new Orbit.Application.Chat.PendingOperationChangePreviewer(_habits, _goals, _tags, _userDateService,
+            new Orbit.Application.Chat.Tools.AiToolRegistry([tool]));
+        var preview = (await previewer.PreviewAsync(UserId, tool.Name, prepared!.ExecutionArguments)).Value;
+        var date = preview!.Items!.Single().Fields.Single(field => field.Field == "due_date");
+        date.ProposedValue!.Value.GetString().Should().Be("2026-09-25");
+        date.Provenance.Should().Be("suggested");
+        date.IsEditable.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]

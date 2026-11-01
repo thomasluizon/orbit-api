@@ -11,6 +11,20 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class SystemPromptBuilderTests
 {
     [Fact]
+    public void DateContext_KeepsResolutionRulesCachedAndUsesTheAccountCalendar()
+    {
+        var builder = new SystemPromptBuilder();
+        var request = new PromptBuildRequest([], HasImage: true, UserToday: new DateOnly(2026, 11, 1));
+        builder.BuildStatic(request).Should().ContainAll("New Year's Eve / a virada means December 31",
+            "Christmas / Natal means December 25", "including one that was rejected", "requested, never suggested");
+        var turn = builder.BuildTurnContext(request);
+        turn.Should().ContainAll("2026-11-01", "2026-10-31", "2026-11-02", "visible or implied dates");
+        turn.Should().NotContain("Default to today if none visible");
+        builder.BuildStatic(request with { UserToday = new DateOnly(2026, 11, 2) })
+            .Should().Be(builder.BuildStatic(request));
+    }
+
+    [Fact]
     public void BuildStatic_KeepsSharedHabitGuidanceOnce()
     {
         var prompt = new SystemPromptBuilder().BuildStatic(new PromptBuildRequest([]));

@@ -465,7 +465,7 @@ public partial class AiIntentServiceStreamingTests
     }
 
     [Fact]
-    public async Task ContinueWithToolResultsAsync_OversizedPayload_SendsValidDropMarker()
+    public async Task ContinueWithToolResultsAsync_OversizedPayload_SendsBoundedItemsAndTotals()
     {
         var handler = new SequenceSseHandler(
             ToolStream("list_tags", "{}"),
@@ -495,9 +495,16 @@ public partial class AiIntentServiceStreamingTests
         toolContent!.Length.Should().BeLessThan(AppConstants.MaxAiToolPayloadJsonLength);
         using var toolDocument = JsonDocument.Parse(toolContent);
         var payload = toolDocument.RootElement.GetProperty("payload");
-        payload.GetProperty("dropped").GetBoolean().Should().BeTrue();
+        payload.TryGetProperty("dropped", out _).Should().BeFalse();
+        payload.GetProperty("truncated").GetBoolean().Should().BeTrue();
+        var items = payload.GetProperty("data");
+        items.GetArrayLength().Should().BeInRange(1, 1999);
+        items[0].GetProperty("name").GetString().Should().Be(oversizedPayload[0].name);
+        var collection = payload.GetProperty("collections")[0];
+        collection.GetProperty("total").GetInt32().Should().Be(2000);
+        collection.GetProperty("returned").GetInt32().Should().Be(items.GetArrayLength());
+        collection.GetProperty("has_more").GetBoolean().Should().BeTrue();
         payload.GetProperty("original_length").GetInt32().Should().BeGreaterThan(AppConstants.MaxAiToolPayloadJsonLength);
-        payload.GetProperty("instruction").GetString().Should().Contain("narrower filter");
         toolContent.Should().NotContain("tag-1999");
     }
 

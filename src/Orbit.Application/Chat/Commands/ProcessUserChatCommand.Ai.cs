@@ -52,12 +52,12 @@ public partial class ProcessUserChatCommandHandler
         var accountContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildAccountContext(promptRequest),
+            ConversationTimeZone(context.User),
             HabitModelInstructions.TitleLanguage(context.Language),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot with { ClientContext = null }));
         var dynamicContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildTurnContext(promptRequest),
-            ConversationTimeZone(context.User),
             ai.CatalogService.BuildClientHints(request.ClientContext),
             request.ClientContext?.SupportsPendingOperationPlacement == true
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)

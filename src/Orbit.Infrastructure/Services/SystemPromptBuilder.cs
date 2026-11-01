@@ -18,6 +18,7 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             new CoreIdentitySection(),
             new EncouragingToneSection(),
             new GlobalRulesSection(),
+            new DateInterpretationSection(),
             new CrisisResponseSection(),
             new StructuringStrategySection(),
             new ClarificationGuidanceSection(),

@@ -11,6 +11,10 @@ reviewed General and repeat-reminder description values within that inlined
 baseline. Its constraints and original structure remain intact; it is not
 replaced with the current compactor's output.
 
+The date-context correction in thomasluizon/orbit-tickets#1944 updates only the
+`due_date` and `due_time` descriptions at their existing schema sites. Every
+constraint and the original inlined structure remain unchanged.
+
 The bounded schema builders remain the execution contract. Export compaction recognizes
 the repeated habit structure, keeps a single recursive habit definition, and shares
 identical schema blocks within a tool when a reference saves space. The strict normalizer

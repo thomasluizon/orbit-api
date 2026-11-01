@@ -67,8 +67,8 @@ public partial class ProcessUserChatCommandHandlerTests
         second.Value.AiMessage.Should().Be(reply);
         second.Value.Parts!.OfType<ChatBlockPart>().Should().BeEmpty();
         followUpRequest!.ConversationAttachments.Should().ContainSingle().Which.ImageData.Should().Equal(image);
-        followUpRequest.DynamicContext.Should().ContainAll("conversation_last_previews", "2026-12-31", "20:30", outcome,
-            "America/Sao_Paulo");
+        followUpRequest.DynamicContext.Should().ContainAll("conversation_last_previews", "2026-12-31", "20:30", outcome);
+        followUpRequest.AccountContext.Should().Contain("America/Sao_Paulo");
         followUpRequest.History.Should().ContainSingle().Which.Content.Should().Be(firstText);
     }
 }

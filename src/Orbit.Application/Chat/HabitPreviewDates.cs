@@ -11,6 +11,9 @@ internal static class HabitPreviewDates
     {
         var oneTime = source["frequency_unit"]?.ToString() is null or "OneTime";
         if (oneTime && source["is_general"]?.ToString() != "true" && source["habit_id"] is null
+            && source["is_flexible"]?.ToString() != "true"
+            && source["days"] is not JsonArray { Count: > 0 }
+            && source["interval_weeks"] is null && source["frequency_quantity"] is null
             && (source["parent_habit_id"] is null || source["frequency_unit"]?.ToString() == "OneTime")
             && source["due_date"] is null)
         {
