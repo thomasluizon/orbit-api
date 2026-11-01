@@ -41,7 +41,8 @@ public class AgentCatalogServiceTests
             : catalog.GetOperation(tool.Name);
 
         operation.Should().NotBeNull();
-        operation!.RequestSchema.GetRawText().Should().Be(JsonSerializer.Serialize(source.GetParameterSchema()));
+        JsonElement.DeepEquals(Orbit.Infrastructure.Tests.AI.ToolSchemaExpansion.Expand(operation!.RequestSchema),
+            JsonSerializer.SerializeToElement(source.GetParameterSchema())).Should().BeTrue();
         catalog.GetOperation(tool.Name).Should().BeSameAs(operation);
         catalog.GetOperations().Single(item => item.Id == tool.Name).Should().BeSameAs(operation);
         tool.SchemaCalls.Should().Be(1, "all operation views must share the catalog's schema cache");

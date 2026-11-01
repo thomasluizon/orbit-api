@@ -68,6 +68,23 @@ replays a six-level provider tool call, runs the real tool argument check, and v
 that the next SDK request returns `success: false` and `Invalid tool arguments.` to the
 model, with no mediator call. Application checks accept five levels and reject six.
 
+The first broad run exposed the resolver's handling of an absent preview schema:
+the unchanged `PendingOperationChangePreviewerTests.HabitPreview_UsesStoredEmoji`
+and other preview cases threw `InvalidOperationException`. The resolver now returns
+non-object schemas unchanged, preserving the former undeclared-field result. The
+entire application project passes after that fix: 9,855 tests, exit 0, using
+`dotnet test tests/Orbit.Application.Tests -c Release`.
+
+Existing SDK and catalog assertions also consumed inlined schemas directly. They now
+expand references before checking payload order, ask constraints and catalog contents;
+control-order and strictness checks still inspect the real referenced wire schema.
+The schema-depth walker follows references and stops at an active recursion edge.
+The affected infrastructure checks pass 253 cases, exit 0:
+
+```sh
+dotnet test tests/Orbit.Infrastructure.Tests -c Release --filter 'FullyQualifiedName~AiInputBudgetTests|FullyQualifiedName~StrictChatToolSchemaTests|FullyQualifiedName~ProviderToolControlOrderTests|FullyQualifiedName~ContinueWithToolResultsAsync_KeepsCatalogAndAppendsTypedAskConstraints|FullyQualifiedName~AgentCatalogServiceTests|FullyQualifiedName~AgentChatWriteHoldTests|FullyQualifiedName~AccountChangeSetRegressionTests' --logger 'console;verbosity=quiet'
+```
+
 The trace collector already traverses every definition exactly once without following
 references. A recursive-definition test verifies nested sensitive fields are removed
 and visible fields and execution arguments are retained. The argument validator and

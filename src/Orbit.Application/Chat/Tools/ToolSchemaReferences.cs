@@ -27,7 +27,7 @@ public static class ToolSchemaReferences
     public static JsonElement Resolve(JsonElement schema, JsonElement root)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
-        while (schema.TryGetProperty("$ref", out var reference))
+        while (schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty("$ref", out var reference))
         {
             var path = reference.GetString()!;
             if (!visited.Add(path)) throw new JsonException("Cyclic schema alias.");

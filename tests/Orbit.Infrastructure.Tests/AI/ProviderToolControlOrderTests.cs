@@ -54,7 +54,8 @@ public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper outp
             AssertControlOrder(parameters, name, violations);
             var source = registry.GetTool(name) is AskTool ask
                 ? ask.GetCacheableParameterSchema() : registry.GetTool(name)!.GetParameterSchema();
-            AssertPayloadOrder(JsonSerializer.SerializeToElement(source), parameters, name);
+            AssertPayloadOrder(JsonSerializer.SerializeToElement(source),
+                ToolSchemaExpansion.Expand(parameters, name == "create_sub_habit" ? 4 : 5), name);
         }
         violations.Should().BeEmpty("strict generation emits properties in declaration order; controls after a large payload caused whitespace runaway");
     }

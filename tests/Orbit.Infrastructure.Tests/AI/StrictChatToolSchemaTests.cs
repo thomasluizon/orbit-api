@@ -53,13 +53,20 @@ public sealed class StrictChatToolSchemaTests(ITestOutputHelper output)
         yield return ("draft-revision", ask.GetParameterSchema(false, [new HabitSetupDraft("draft", "Activity", "frequency_unit", Guid.NewGuid())]));
     }
 
-    private static int ObjectDepth(JsonElement schema)
+    private static int ObjectDepth(JsonElement schema) => ObjectDepth(schema, schema, []);
+
+    private static int ObjectDepth(JsonElement schema, JsonElement root, HashSet<string> active)
     {
+        var reference = schema.TryGetProperty("$ref", out var target) ? target.GetString() : null;
+        if (reference is not null && !active.Add(reference)) return 0;
+        schema = ToolSchemaReferences.Resolve(schema, root);
         var own = schema.TryGetProperty("properties", out var properties) ? 1 : 0;
         var children = new List<int> { 0 };
-        if (own != 0) children.AddRange(properties.EnumerateObject().Select(property => ObjectDepth(property.Value)));
-        if (schema.TryGetProperty("items", out var items)) children.Add(ObjectDepth(items));
-        if (schema.TryGetProperty("anyOf", out var alternatives)) children.AddRange(alternatives.EnumerateArray().Select(ObjectDepth));
+        if (own != 0) children.AddRange(properties.EnumerateObject().Select(property => ObjectDepth(property.Value, root, active)));
+        if (schema.TryGetProperty("items", out var items)) children.Add(ObjectDepth(items, root, active));
+        if (schema.TryGetProperty("anyOf", out var alternatives))
+            children.AddRange(alternatives.EnumerateArray().Select(alternative => ObjectDepth(alternative, root, active)));
+        if (reference is not null) active.Remove(reference);
         return own + children.Max();
     }
 

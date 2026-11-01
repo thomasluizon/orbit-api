@@ -12,6 +12,13 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class ToolSchemaReferencesTests
 {
     [Fact]
+    public void MissingSchema_KeepsPreviewFieldsUndeclared()
+    {
+        AgentArgumentSchema.Declares(default, "title").Should().BeFalse();
+        AgentArgumentSchema.Accepts(default, "title", JsonSerializer.SerializeToElement("Read")).Should().BeFalse();
+    }
+
+    [Fact]
     public void RecursiveSchema_AcceptsNestedValuesAndRejectsInvalidNestedFields()
     {
         var tool = new BulkCreateHabitsTool(Substitute.For<IMediator>());
