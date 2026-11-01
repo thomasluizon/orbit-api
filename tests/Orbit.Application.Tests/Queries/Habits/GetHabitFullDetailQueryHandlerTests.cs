@@ -209,7 +209,7 @@ public class GetHabitFullDetailQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_GeneralHabitLoggedToday_ReturnsCompleted()
+    public async Task Handle_GeneralHabitLoggedYesterday_ReturnsCompleted()
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General,
             UserId,
@@ -217,7 +217,7 @@ public class GetHabitFullDetailQueryHandlerTests
             null,
             null,
             DueDate: Today)).Value;
-        var log = habit.Log(Today).Value;
+        var log = habit.Log(Today.AddDays(-1)).Value;
         var user = CreateTestUser();
 
         _habitRepo.FindAsync(
@@ -240,7 +240,7 @@ public class GetHabitFullDetailQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_GeneralDescendantLoggedToday_ReturnsCompleted()
+    public async Task Handle_GeneralDescendantLoggedYesterday_ReturnsCompleted()
     {
         var parent = CreateTestHabit();
         var child = Habit.Create(new HabitCreateParams(HabitSchedule.General,
@@ -260,7 +260,7 @@ public class GetHabitFullDetailQueryHandlerTests
         createdAtProperty.SetValue(parent, parentCreated);
         createdAtProperty.SetValue(child, childCreated);
         createdAtProperty.SetValue(grandchild, grandchildCreated);
-        var log = child.Log(Today).Value;
+        var log = child.Log(Today.AddDays(-1)).Value;
         var user = CreateTestUser();
         AttachChild(parent, child);
         AttachChild(child, grandchild);

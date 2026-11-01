@@ -194,12 +194,12 @@ public partial class ReminderSchedulerServiceTests
     [Theory]
     [InlineData(HabitSchedule.Recurring, 0)]
     [InlineData(HabitSchedule.Flexible, 1)]
-    [InlineData(HabitSchedule.General, 1)]
+    [InlineData(HabitSchedule.General, 0)]
     public async Task Repeat_ScheduledHabitsStopAfterDailyCompletion(HabitSchedule schedule, int expected)
     {
         var db = CreateSqliteDbContext();
         var (habit, start) = await SeedRepeat(schedule: schedule, frequencyQuantity: 8);
-        var log = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, UtcToday, 1, 0, start);
+        var log = habit.Log(UtcToday).Value;
         db.HabitLogs.Add(log);
         await db.SaveChangesAsync();
         var service = CreateService(db, Substitute.For<IPushNotificationService>(), new MutableTimeProvider(new(start.AddHours(8))));

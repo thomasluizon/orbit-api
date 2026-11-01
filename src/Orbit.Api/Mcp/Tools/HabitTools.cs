@@ -150,7 +150,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Frequency unit: Day, Week, Month, or Year. Omit for one-time tasks.")] string? frequencyUnit = null,
         [Description("Frequency quantity (default 1). Omit for one-time tasks.")] int? frequencyQuantity = null,
         [Description("Whether this is a bad habit to avoid")] bool isBadHabit = false,
-        [Description("Whether this is a general habit with no schedule")] bool isGeneral = false,
+        [Description("Whether this is a one-time task with no date")] bool isGeneral = false,
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due time in HH:mm format")] string? dueTime = null,
         [Description("Repeat interval in weeks. Omit for every week.")] int? intervalWeeks = null,
@@ -200,7 +200,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("New repeat interval in weeks. Use 1 for every week.")] int? intervalWeeks = null,
         [Description("Emoji icon. Omit to keep it, or pass null to clear it.")] string? emoji = "",
         [Description("End time or deadline in HH:mm format. Omit to keep it; null clears it.")] string? dueEndTime = "",
-        [Description("Whether this is a general habit. Children must match their parent.")] bool? isGeneral = null,
+        [Description("Whether this is a one-time task with no date. Children must match their parent.")] bool? isGeneral = null,
         [Description("Enable slip alerts. Requires Pro.")] bool? slipAlertEnabled = null,
         [Description("JSON array of relative reminders: minutes_before, or when (day_before/same_day) and time (HH:mm). Empty array clears them.")] string? relativeReminders = null,
         [Description("Repeat reminder JSON for any schedule: interval_minutes, optional active_start and active_end (HH:mm), and start_at_utc (UTC). Omit to keep current settings; use null JSON to clear on update.")] string? repeatReminder = null,
@@ -258,11 +258,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         return result.Succeeded ? $"Logged habit {habitId}" : result.Message;
     }
 
-    [McpServerTool(Name = "unlog_habit"), Description("Undo a habit completion for a specific date (defaults to today). Fails if no completion exists.")]
+    [McpServerTool(Name = "unlog_habit"), Description("Undo one habit completion. Completed General tasks use their latest completion; other schedules use the specified date or today. Fails if no completion exists. Use log_habit to mark it again.")]
     public async Task<string> UnlogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
-        [Description("Date of the completion in YYYY-MM-DD format (defaults to today)")] string? date = null,
+        [Description("ISO date (YYYY-MM-DD). Defaults to today for dated schedules; ignored for completed General tasks.")] string? date = null,
         CancellationToken cancellationToken = default)
     {
         var result = await executorBridge.ExecuteAsync(user, "unlog_habit", new

@@ -17,6 +17,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Text.Json;
 using Orbit.Application.Tests.Common;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
@@ -39,6 +40,136 @@ public class LogHabitCommandHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_ReopenedLegacyGeneralTask_CompletesWithoutTogglingOlderLog(bool throughTool)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: new Orbit.Domain.ValueObjects.RepeatReminderOptions(480))).Value;
+        var older = habit.Log(Today).Value;
+        var latest = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, Today, 1, 1, older.CreatedAtUtc.AddTicks(1));
+        habit.LoadScheduleLogsForRead([older, latest]);
+        habit.Unlog(Today, latest.Id).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        if (throughTool)
+        {
+            _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => _handler.Handle(call.Arg<LogHabitCommand>(), call.Arg<CancellationToken>()));
+            var tool = new Orbit.Application.Chat.Tools.Implementations.LogHabitTool(_mediator, _habitRepo, _userDateService);
+            var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { habit_id = habit.Id }), UserId, default);
+            result.Success.Should().BeTrue();
+        }
+        else
+        {
+            var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), default);
+            result.IsSuccess.Should().BeTrue();
+        }
+
+        habit.IsCompleted.Should().BeTrue();
+        older.IsDeleted.Should().BeFalse();
+        habit.Logs.Should().ContainSingle(log => log.CompletionOrdinal == 2 && !log.IsDeleted);
+    }
+
+    [Theory]
+    [InlineData(false, 0, false)]
+    [InlineData(true, 0, false)]
+    [InlineData(false, 1, false)]
+    [InlineData(true, 1, false)]
+    [InlineData(false, 1, true)]
+    [InlineData(true, 1, true)]
+    [InlineData(false, 45, false)]
+    [InlineData(true, 45, true)]
+    public async Task Handle_GeneralTask_CompletesAndToggleReopens(bool repeat, int daysLater, bool sendToday)
+    {
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+
+        var logged = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        logged.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeTrue();
+        var later = Today.AddDays(daysLater);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(later);
+        var unlogged = await _handler.Handle(new LogHabitCommand(UserId, habit.Id, sendToday ? later : null), CancellationToken.None);
+        unlogged.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.Logs.Should().OnlyContain(log => log.IsDeleted);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, -500)]
+    [InlineData(true, 1)]
+    public async Task Handle_OldGeneralCompletion_UndoesOnlyLatestSurvivingLog(bool repeat, int? requestOffset)
+    {
+        var date = Today.AddDays(-400);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: date, RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        habit.Log(date).IsSuccess.Should().BeTrue();
+        var createdAtUtc = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var older = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, date, 1, 0, createdAtUtc);
+        var completion = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, date, 1, 1, createdAtUtc.AddMinutes(1));
+        var deleted = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, date, 1, 2, createdAtUtc.AddMinutes(2));
+        deleted.SoftDelete();
+        habit.LoadScheduleLogsForRead([older, completion, deleted]);
+        var options = new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using (var seed = new OrbitDbContext(options))
+        {
+            seed.Habits.Add(habit);
+            await seed.SaveChangesAsync();
+        }
+        await using var context = new OrbitDbContext(options);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var repositories = new LogHabitRepositories(new GenericRepository<Habit>(context), new GenericRepository<HabitLog>(context),
+            _userRepo, Substitute.For<IGenericRepository<SentReminder>>(), Substitute.For<IGenericRepository<Notification>>());
+        var handler = new LogHabitCommandHandler(repositories, new LogHabitServices(_userDateService, _userStreakService,
+            _gamificationService, _goalCompletionService, _mediator, _payGate), _unitOfWork, _cache, _logger);
+
+        var result = await handler.Handle(new LogHabitCommand(UserId, habit.Id,
+            requestOffset.HasValue ? Today.AddDays(requestOffset.Value) : null), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value.LogId.Should().Be(completion.Id);
+        await using var verify = new OrbitDbContext(options);
+        (await verify.Habits.SingleAsync()).IsCompleted.Should().BeFalse();
+        var logs = await verify.HabitLogs.IgnoreQueryFilters().ToListAsync();
+        logs.Should().HaveCount(3);
+        logs.Single(log => log.Id == older.Id).IsDeleted.Should().BeFalse();
+        logs.Single(log => log.Id == completion.Id).IsDeleted.Should().BeTrue();
+        logs.Single(log => log.Id == deleted.Id).IsDeleted.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, -1)]
+    [InlineData(true, -1)]
+    [InlineData(false, -400)]
+    [InlineData(true, -400)]
+    public async Task Handle_GeneralTaskLoggedYesterday_RefusesAnotherLog(bool repeat, int? requestOffset)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        habit.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+
+        var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id,
+            requestOffset.HasValue ? Today.AddDays(requestOffset.Value) : null, ToggleExisting: false), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
+        habit.Logs.Should().ContainSingle();
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+    }
 
     public LogHabitCommandHandlerTests()
     {

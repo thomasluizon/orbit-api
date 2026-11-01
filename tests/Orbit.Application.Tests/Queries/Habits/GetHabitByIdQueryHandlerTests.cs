@@ -250,7 +250,7 @@ public class GetHabitByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_GeneralHabitLoggedToday_ReturnsCompleted()
+    public async Task Handle_GeneralHabitLoggedYesterday_ReturnsCompleted()
     {
         var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General,
             UserId,
@@ -258,7 +258,7 @@ public class GetHabitByIdQueryHandlerTests
             null,
             null,
             DueDate: Today)).Value;
-        var log = habit.Log(Today).Value;
+        var log = habit.Log(Today.AddDays(-1)).Value;
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -268,7 +268,8 @@ public class GetHabitByIdQueryHandlerTests
         _habitLogRepo.FindAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<HabitLog> { log }.AsReadOnly());
+            .Returns(call => new List<HabitLog> { log }
+                .Where(call.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile()).ToList().AsReadOnly());
 
         var result = await _handler.Handle(
             new GetHabitByIdQuery(UserId, habit.Id),
@@ -279,7 +280,7 @@ public class GetHabitByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_GeneralDescendantLoggedToday_ReturnsCompleted()
+    public async Task Handle_GeneralDescendantLoggedYesterday_ReturnsCompleted()
     {
         var parent = CreateTestHabit("Parent Habit");
         var child = Habit.Create(new HabitCreateParams(HabitSchedule.General,
@@ -297,7 +298,7 @@ public class GetHabitByIdQueryHandlerTests
         createdAtProperty.SetValue(parent, parentCreated);
         createdAtProperty.SetValue(child, childCreated);
         createdAtProperty.SetValue(grandchild, grandchildCreated);
-        var log = child.Log(Today).Value;
+        var log = child.Log(Today.AddDays(-1)).Value;
         AttachChild(parent, child);
         AttachChild(child, grandchild);
 

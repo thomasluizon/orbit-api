@@ -884,7 +884,7 @@ title field to the stored spelling before holding the proposal.
 
 Bulk creation preview `items` append optional nullable string `habitType`: `Task`
 for one-time items, `Habit` for recurring or flexible items, and `General` for
-unscheduled general items. The server derives it from structured schedule fields
+one-time tasks with no date. The server derives it from structured schedule fields
 and the stored schedule for reused items whose cadence is unchanged. Absence or
 null means unknown. This adds no value to an existing strict enum. Other preview
 operations may omit it. Revision and refresh recompute the type from the proposal;
@@ -1254,7 +1254,7 @@ is introduced; the API-key text already belongs to the localization catalog.
 | Suggestion exclusion schema | Activities already planned for the combined preview. Return new activities outside this list and the account's existing habits, including synonyms; never offer those activities as adjustments. For ordinary suggestions, omit this field or use null; requested topics are not exclusions. | Atividades já planejadas para a prévia conjunta. Retorne atividades novas fora desta lista e dos hábitos existentes da conta, incluindo sinônimos; nunca ofereça essas atividades como ajustes. Para sugestões comuns, omita este campo ou use null; os temas pedidos não são exclusões. |
 | Existing API-key verification fallback, reused | Confirm the emailed code before managing API keys. | Confirme o código enviado por e-mail antes de gerenciar chaves de API. |
 | Today catalog read steps, forwarded verbatim | Open Today. Review scheduled habits and overdue items. Log, skip, or inspect the day's tasks. | Abra Hoje. Confira os hábitos agendados e os itens atrasados. Registre, pule ou consulte as tarefas do dia. |
-| Today catalog notes, forwarded verbatim | Uses timezone-aware dates from the backend. General habits can be hidden locally on some clients. | Usa datas calculadas pelo servidor com o fuso horário da pessoa. Alguns clientes permitem ocultar hábitos gerais localmente. |
+| Today catalog notes, forwarded verbatim | Uses timezone-aware dates from the backend. General is a one-time task with no date in Geral; log completes, unlog reopens. | Usa datas calculadas pelo servidor com o fuso horário da pessoa. Geral é uma tarefa única sem data na aba Geral; registrar a conclusão a encerra, desfazer o registro a reabre. |
 | Notifications catalog steps, forwarded verbatim | Open Notifications. Mark items read or manage subscriptions. Delete individual items only after confirmation. | Abra Notificações. Marque itens como lidos ou gerencie assinaturas de notificações. Exclua itens individuais somente após confirmação. |
 | Notifications catalog notes, forwarded verbatim | Push subscription cryptographic material is never AI-readable. Deletion requires confirmation. | O material criptográfico das assinaturas de notificações push nunca é legível pela IA. A exclusão exige confirmação. |
 | Gamification catalog steps, forwarded verbatim | Open streak profile or achievements. Review freeze availability. Activate a freeze when needed. | Abra o perfil de sequência ou as conquistas. Confira as proteções de sequência disponíveis. Ative uma proteção quando necessário. |

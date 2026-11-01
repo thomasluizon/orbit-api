@@ -40,7 +40,7 @@ public class QueryHabitsTool(
             search = new { type = JsonSchemaTypes.String, description = "Match every word to a title word prefix, ignoring case, accents and order." },
             date = new { type = JsonSchemaTypes.String, description = "Schedule on YYYY-MM-DD or today, including done entries. Null is_completed returns the full schedule." },
             include_overdue = new { type = JsonSchemaTypes.Boolean, description = "Include overdue entries with date. Default: true for today, false otherwise." },
-            is_general = new { type = JsonSchemaTypes.Boolean, description = "Filter timeless habits; null includes both." },
+            is_general = new { type = JsonSchemaTypes.Boolean, description = "General: a one-time task with no date. Null includes both." },
             is_completed = new { type = JsonSchemaTypes.Boolean, description = "With date: false remaining, true done, null all. Without date: false active (default), true completed." },
             is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Filter bad habits; null includes both." },
             frequency = new { type = JsonSchemaTypes.String, @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } },
@@ -178,8 +178,8 @@ public class QueryHabitsTool(
                 : schedule.Facts.DoneTodayIds.Contains(habit.Id) ? HabitListCardBuilder.StatusDone
                 : schedule.Facts.OverdueIds.Contains(habit.Id) ? HabitListCardBuilder.StatusOverdue
                 : HabitListCardBuilder.StatusToday
-            : habit.Schedule == HabitSchedule.General ? HabitListCardBuilder.StatusGeneral
-                : GetResponseCompletion(habit, today) ? HabitListCardBuilder.StatusDone
+            : habit.IsCompleted ? HabitListCardBuilder.StatusDone
+                : habit.Schedule == HabitSchedule.General ? HabitListCardBuilder.StatusGeneral
                 : habit.NextDueDate < today ? HabitListCardBuilder.StatusOverdue
                 : habit.NextDueDate == today ? HabitListCardBuilder.StatusToday : HabitListCardBuilder.StatusNone;
         rows.Add(new(habit.Id.ToString(), habit.Title, habit.Emoji, depth, habit.IsBadHabit, status, habit.StartDate, habit.ParentHabitId,
@@ -285,7 +285,7 @@ public class QueryHabitsTool(
 
         var expectedCompletion = f.IsCompleted ?? false;
         return new HabitQueryResult(habits
-            .Where(h => GetResponseCompletion(h, today) == expectedCompletion)
+            .Where(h => h.IsCompleted == expectedCompletion)
             .ToList(), null);
     }
 
@@ -383,7 +383,7 @@ public class QueryHabitsTool(
     private static List<string> BuildLabels(Habit habit, DateOnly today, int weekStartDay, bool includeMetrics, ScheduleContext? schedule)
     {
         var labels = new List<string>();
-        var isCompleted = GetResponseCompletion(habit, today);
+        var isCompleted = habit.IsCompleted;
         if (habit.Schedule == HabitSchedule.General) labels.Add("GENERAL");
         if (schedule is not null)
         {
@@ -417,14 +417,9 @@ public class QueryHabitsTool(
         return labels;
     }
 
-    private static bool GetResponseCompletion(Habit habit, DateOnly today) =>
-        habit.Schedule == HabitSchedule.General
-            ? HabitScheduleService.HasCompletedLogInRange(habit, today, today)
-            : habit.IsCompleted;
-
     private static void AddNotDueLabel(List<string> labels, Habit habit, DateOnly today)
     {
-        if (habit.Schedule != HabitSchedule.General && !GetResponseCompletion(habit, today) && habit.NextDueDate > today)
+        if (habit.Schedule != HabitSchedule.General && !habit.IsCompleted && habit.NextDueDate > today)
             labels.Add(string.Create(CultureInfo.InvariantCulture, $"NOT DUE: {habit.NextDueDate:yyyy-MM-dd}"));
     }
 

@@ -176,7 +176,9 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
-        if (habit.Schedule != HabitSchedule.Flexible && !(habit.Schedule == HabitSchedule.General && habit.RepeatIntervalMinutes.HasValue) && habit.Logs.Any(l => l.Date == targetDate && !l.IsDeleted && (!habit.IsBadHabit || l.Value > 0)))
+        if (habit.Schedule != HabitSchedule.Flexible
+            && (habit.Schedule != HabitSchedule.General || habit.IsCompleted)
+            && habit.Logs.Any(l => l.Date == targetDate && !l.IsDeleted && (!habit.IsBadHabit || l.Value > 0)))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 
         if (habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible

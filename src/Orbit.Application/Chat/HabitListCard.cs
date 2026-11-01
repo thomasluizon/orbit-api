@@ -174,6 +174,9 @@ public static partial class HabitListCardBuilder
         HabitTodaySnapshot todayFacts,
         bool supportsDoneStatus)
     {
+        if (habit.Schedule == HabitSchedule.General && habit.IsCompleted)
+            return supportsDoneStatus ? StatusDone : StatusNone;
+
         if (!supportsDoneStatus)
         {
             if (habit.IsCompleted && todayFacts.DoneTodayIds.Contains(habit.Id))

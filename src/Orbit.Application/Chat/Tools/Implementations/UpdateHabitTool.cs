@@ -55,7 +55,7 @@ public class UpdateHabitTool(
             end_date = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "YYYY-MM-DD cutoff; clear via clear_fields." },
             due_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "New due time (HH:mm). Use clear_fields to clear." },
             due_end_time = new { type = new[] { JsonSchemaTypes.String, "null" }, description = "End time or deadline (HH:mm). Use clear_fields to clear." },
-            is_general = new { type = JsonSchemaTypes.Boolean, description = "General habit without a schedule. Children must match their parent." },
+            is_general = new { type = JsonSchemaTypes.Boolean, description = "A one-time task with no date. Children must match their parent." },
             slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alerts. Requires Pro." },
             relative_reminders = BulkHabitToolArguments.RelativeRemindersSchema(),
             repeat_reminder = RepeatReminderToolArguments.RepeatReminderSchema(forUpdate: true),
