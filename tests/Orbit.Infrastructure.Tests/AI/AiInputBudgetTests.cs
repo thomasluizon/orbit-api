@@ -95,12 +95,12 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             var currentPrefix = CacheablePrefix(root);
             prefixes.TryAdd(supportsAsk, currentPrefix);
             Encoding.UTF8.GetBytes(currentPrefix).Should().Equal(Encoding.UTF8.GetBytes(prefixes[supportsAsk]));
-            input.GetArrayLength().Should().Be(4);
+            input.GetArrayLength().Should().Be(5);
             input[0].GetProperty("role").GetString().Should().Be("system");
-            input[2].GetRawText().Should().Contain($"private-habit-{index}").And.Contain(date.ToString("yyyy-MM-dd"));
-            input[2].GetRawText().Should().Contain($"Language: {user.Language}");
-            input[1].GetRawText().Should().Contain($"private-history-{index}");
-            input[3].GetProperty("role").GetString().Should().Be("user");
+            input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain($"Language: {user.Language}");
+            input[2].GetRawText().Should().Contain(date.ToString("yyyy-MM-dd"));
+            input[3].GetRawText().Should().Contain($"private-history-{index}");
+            input[4].GetProperty("role").GetString().Should().Be("user");
             currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");
             root.GetProperty("prompt_cache_key").GetString().Should().Be("orbit:gpt-6-luna");
@@ -213,11 +213,13 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         var registry = new AiToolRegistry(tools);
         var previewer = new PendingOperationChangePreviewer(habitRepo, goalRepo, tags, dates, registry);
         account?.Configure(habitRepo, goalRepo, tags, dates, users, logs, pending, executor, previewer);
+        var readServices = new ServiceCollection().AddSingleton(executor)
+            .AddSingleton(Substitute.For<IPendingClarificationStore>()).BuildServiceProvider();
         return new ProcessUserChatCommandHandler(
             new(habitRepo, goalRepo, users, tags, templates, flags),
             new(service, new AiToolRegistry(tools), new SystemPromptBuilder(), new AgentCatalogService()),
             new(dates, Substitute.For<IUserStreakService>(), quota, Substitute.For<IUnitOfWork>(),
-                Substitute.For<IServiceScopeFactory>(), executor,
+                readServices.GetRequiredService<IServiceScopeFactory>(), executor,
                 Substitute.For<IPendingClarificationStore>(), progress, Substitute.For<IGamificationService>(),
                 Substitute.For<IMediator>(), analytics ?? Substitute.For<IProductAnalytics>(), logs,
                 Substitute.For<IIssuedAstraBlockStore>(), pending, PendingOperationPreviewer: previewer),

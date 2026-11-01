@@ -20,6 +20,7 @@ public sealed record AiToolRequest(
     IReadOnlyList<ChatHistoryMessage>? History = null)
 {
     public string Purpose { get; init; } = "chat";
+    public string? AccountContext { get; init; }
     public string? DynamicContext { get; init; }
     public AiTurnTelemetry Telemetry { get; init; } = new();
 }

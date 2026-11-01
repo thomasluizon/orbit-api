@@ -26,7 +26,8 @@ public partial class ProcessUserChatCommandHandler
             h => h.UserId == request.UserId,
             q => ChatHabitCandidate.Select(q, userToday, includeChecklists),
             cancellationToken);
-        var userHabits = candidates.Select(candidate => candidate.ToHabit(request.UserId)).ToArray();
+        var userHabits = candidates.OrderBy(candidate => candidate.Position).ThenBy(candidate => candidate.Schedule.Id)
+            .Select(candidate => candidate.ToHabit(request.UserId)).ToArray();
         var doneTodayIds = candidates.Where(candidate => candidate.CompletedToday)
             .Select(candidate => candidate.Schedule.Id).ToHashSet();
         var (promptHabitIndex, todayFacts) = await SelectPromptHabitIndexAsync(
@@ -79,8 +80,8 @@ public partial class ProcessUserChatCommandHandler
             user,
             ChatLocale.Resolve(request.ClientContext, user?.Language),
             hasProAccess,
-            activeGoals,
-            userTags,
+            activeGoals.OrderBy(goal => goal.Position).ThenBy(goal => goal.Id).ToArray(),
+            userTags.OrderBy(tag => tag.Id).ToArray(),
             checklistTemplateNames,
             enabledFeatureFlags,
             userToday,

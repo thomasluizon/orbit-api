@@ -9,7 +9,7 @@ namespace Orbit.Infrastructure.Services;
 public class SystemPromptBuilder : ISystemPromptBuilder
 {
     private readonly IReadOnlyList<IPromptSection> _staticSections;
-    private readonly IReadOnlyList<IPromptSection> _dynamicSections;
+    private readonly IReadOnlyList<IPromptSection> _accountSections;
 
     public SystemPromptBuilder()
     {
@@ -23,14 +23,12 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             new ClarificationGuidanceSection(),
             new ToolFailureSection(),
         ];
-        _dynamicSections =
+        _accountSections =
         [
             new ActiveHabitsSection(),
             new ActiveGoalsSection(),
             new UserTagsSection(),
             new RoutinePatternsSection(),
-            new TodayDateSection(),
-            new ImageInstructionsSection(),
             new HabitCountSection(),
         ];
     }
@@ -38,11 +36,12 @@ public class SystemPromptBuilder : ISystemPromptBuilder
     public string BuildStatic(PromptBuildRequest request) =>
         Render(_staticSections, ToContext(request)) + Environment.NewLine + GlobalRulesSection.BuildFormat(ToContext(request));
 
-    public string BuildDynamic(PromptBuildRequest request)
-    {
-        var context = ToContext(request);
-        return Render(_dynamicSections, context);
-    }
+    public string BuildDynamic(PromptBuildRequest request) => BuildAccountContext(request) + BuildTurnContext(request);
+
+    public string BuildAccountContext(PromptBuildRequest request) => Render(_accountSections, ToContext(request));
+
+    public string BuildTurnContext(PromptBuildRequest request) =>
+        Render([new TodayDateSection(), new ImageInstructionsSection()], ToContext(request));
 
     private static string Render(IEnumerable<IPromptSection> sections, PromptContext context)
     {

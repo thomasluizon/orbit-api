@@ -38,15 +38,18 @@ public sealed partial class AiIntentService(
 
         var messages = new List<ResponseItem>
         {
-            ResponseItem.CreateSystemMessageItem(systemPrompt)
+            CreatePrefixMessage(systemPrompt, request.Purpose)
         };
+
+        if (!string.IsNullOrWhiteSpace(request.AccountContext))
+            messages.Add(CreatePrefixMessage(request.AccountContext, request.Purpose));
+
+        if (!string.IsNullOrWhiteSpace(request.DynamicContext))
+            messages.Add(ResponseItem.CreateSystemMessageItem(request.DynamicContext));
 
         if (history is { Count: > 0 })
             foreach (var entry in BuildHistoryEntries(history, logger))
                 messages.Add(ResponseItem.CreateSystemMessageItem(HistoryPrefix + entry + HistorySuffix));
-
-        if (!string.IsNullOrWhiteSpace(request.DynamicContext))
-            messages.Add(ResponseItem.CreateSystemMessageItem(request.DynamicContext));
 
         if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
         {
@@ -68,6 +71,19 @@ public sealed partial class AiIntentService(
             options.Tools.Add(tool.Value);
         return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken,
             telemetry: request.Telemetry, purpose: request.Purpose);
+    }
+
+    private MessageResponseItem CreatePrefixMessage(string text, string purpose)
+    {
+        if (purpose != "chat" || !aiClient.Inner.ChatModel.StartsWith("gpt-6", StringComparison.OrdinalIgnoreCase))
+            return ResponseItem.CreateSystemMessageItem(text);
+        var content = ModelReaderWriter.Read<ResponseContentPart>(BinaryData.FromObjectAsJson(new
+        {
+            type = "input_text",
+            text,
+            prompt_cache_breakpoint = new { mode = "explicit" }
+        })) ?? throw new InvalidOperationException("The provider prefix content could not be serialized.");
+        return ResponseItem.CreateSystemMessageItem([content]);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(

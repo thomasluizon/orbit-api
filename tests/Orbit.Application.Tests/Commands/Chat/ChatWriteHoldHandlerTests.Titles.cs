@@ -23,7 +23,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             .Returns([FeatureFlagKeys.AstraBlockFirst]);
         var builder = new SystemPromptBuilder();
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns(call => builder.BuildStatic(call.Arg<PromptBuildRequest>()));
-        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns(call => builder.BuildDynamic(call.Arg<PromptBuildRequest>()));
+        _promptBuilder.BuildAccountContext(Arg.Any<PromptBuildRequest>()).Returns(call => builder.BuildAccountContext(call.Arg<PromptBuildRequest>()));
         var portuguese = language == "pt-BR";
         var titles = coaching
             ? new[] { portuguese ? "Separar roupa e tênis para caminhar" : "Set out walking clothes and shoes" }
@@ -47,7 +47,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         var sent = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments()).OfType<AiToolRequest>().Single();
         sent.SystemPrompt.Should().Contain("Preserve a title the person quoted or named verbatim");
         var languageRule = "Write composed habit titles in " + (portuguese ? "Brazilian Portuguese" : "English");
-        sent.DynamicContext.Should().Contain(languageRule);
+        sent.AccountContext.Should().Contain(languageRule);
         sent.SystemPrompt.Should().Contain("use the request language supplied for this turn")
             .And.Contain("Preserve a title the person quoted or named verbatim");
     }

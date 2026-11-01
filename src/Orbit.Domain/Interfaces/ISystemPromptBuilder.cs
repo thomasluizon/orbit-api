@@ -33,4 +33,10 @@ public interface ISystemPromptBuilder
     /// so it never poisons the cacheable prefix.
     /// </summary>
     string BuildDynamic(PromptBuildRequest request);
+
+    /// <summary>Builds the account indexes before date, image, preview and conversation state.</summary>
+    string BuildAccountContext(PromptBuildRequest request);
+
+    /// <summary>Builds the current account-local date and image instructions after the account indexes.</summary>
+    string BuildTurnContext(PromptBuildRequest request);
 }

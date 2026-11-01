@@ -48,17 +48,21 @@ public partial class ProcessUserChatCommandHandler
             ai.PromptBuilder.BuildStatic(promptRequest),
             ai.CatalogService.BuildStaticSupplement());
         var habitTargets = HabitTargetContext.Build(context.PromptHabits, context.UserHabits);
+        var accountContext = string.Join(
+            Environment.NewLine,
+            ai.PromptBuilder.BuildAccountContext(promptRequest),
+            HabitModelInstructions.TitleLanguage(context.Language),
+            ai.CatalogService.BuildDynamicSupplement(agentSnapshot with { ClientContext = null }));
         var dynamicContext = string.Join(
             Environment.NewLine,
-            ai.PromptBuilder.BuildDynamic(promptRequest),
-            HabitModelInstructions.TitleLanguage(context.Language),
-            ai.CatalogService.BuildDynamicSupplement(agentSnapshot),
+            ai.PromptBuilder.BuildTurnContext(promptRequest),
+            ai.CatalogService.BuildClientHints(request.ClientContext),
             request.ClientContext?.SupportsPendingOperationPlacement == true
                 ? HabitPlacementContext.Build(context.UserHabits, request.Message)
                 : "The client cannot display placement choices. Keep the requested parent and independently tracked sub-habits. Do not recommend checklist placement or a separate parent for additions to an existing routine.");
 
         if (habitTargets.HasSharedTargets)
-            dynamicContext = string.Join(Environment.NewLine, dynamicContext, HabitTargetContext.Instruction, habitTargets.Context);
+            accountContext = string.Join(Environment.NewLine, accountContext, HabitTargetContext.Instruction, habitTargets.Context);
 
         var availableTools = ai.ToolRegistry.GetAll().Where(tool => tool.Name != "ask" || AskEnabled(request, context)).ToArray();
         var toolNames = availableTools.Select(tool => tool.Name).ToArray();
@@ -69,10 +73,11 @@ public partial class ProcessUserChatCommandHandler
                 : await offerStore.IssuedAsync(request.UserId, request.ClientContext!.ConversationId!.Value, cancellationToken);
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, ProactiveProposal.Instruction,
                 ProactiveOfferDismissal.Instruction, ProactiveOfferAccountFacts.Instruction);
+            accountContext = string.Join(Environment.NewLine, accountContext,
+                ProactiveOfferAccountFacts.Serialize(context.PromptHabits, context.ActiveGoals, context.UserTags,
+                    !context.IsPromptHabitIndexPartial));
             dynamicContext = string.Join(Environment.NewLine, dynamicContext,
                 JsonSerializer.Serialize(new { previously_issued_offers = issued.Take(100).Select(offer => new { offer.Action.OfferKey, offer.Action.Label }) }),
-                ProactiveOfferAccountFacts.Serialize(context.PromptHabits, context.ActiveGoals, context.UserTags,
-                    !context.IsPromptHabitIndexPartial),
                 "Dismissed offer keys: " + JsonSerializer.Serialize(request.ClientContext!.DismissedOfferKeys ?? []));
         }
 
@@ -140,6 +145,7 @@ public partial class ProcessUserChatCommandHandler
                 request.History)
             {
                 Telemetry = telemetry,
+                AccountContext = accountContext,
                 DynamicContext = dynamicContext
             },
             aiStreamSink,

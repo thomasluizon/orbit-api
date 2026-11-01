@@ -53,7 +53,7 @@ public class ActiveHabitsSection : IPromptSection
 
         sb.AppendLine("### Active Habit Index:");
         sb.AppendLine("Completed one-time tasks logged today appear for today's schedule. Other completed parents may preserve the path to active sub-habits. Only non-COMPLETED entries count for duplicate checks.");
-        var orderedParents = parents.OrderBy(habit => habit.Position).ToList();
+        var orderedParents = parents.OrderBy(habit => habit.Position).ThenBy(habit => habit.Id).ToList();
         var parentSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(orderedParents);
         foreach (var habit in orderedParents)
         {
@@ -90,7 +90,7 @@ public class ActiveHabitsSection : IPromptSection
 
         if (habit.Goals.Count > 0)
         {
-            var goalNames = string.Join(", ", habit.Goals.Select(g => PromptDataSanitizer.QuoteInline(g.Title, 100)));
+            var goalNames = string.Join(", ", habit.Goals.OrderBy(goal => goal.Id).Select(g => PromptDataSanitizer.QuoteInline(g.Title, 100)));
             sb.AppendLine(CultureInfo.InvariantCulture, $"  Goals: {goalNames}");
         }
     }
@@ -118,7 +118,7 @@ public class ActiveHabitsSection : IPromptSection
         labels.Add(habit.ParentHabitId is { } parentId
             ? $"Parent: {PromptDataSanitizer.QuoteInline(context.ActiveHabits.FirstOrDefault(parent => parent.Id == parentId)?.Title, 100)} ({parentId})"
             : "Parent: none");
-        labels.Add($"Tags: {(habit.Tags.Count == 0 ? "none" : string.Join(", ", habit.Tags.Select(t => $"{PromptDataSanitizer.QuoteInline(t.Name, 100)} ({t.Id})")))}");
+        labels.Add($"Tags: {(habit.Tags.Count == 0 ? "none" : string.Join(", ", habit.Tags.OrderBy(tag => tag.Id).Select(t => $"{PromptDataSanitizer.QuoteInline(t.Name, 100)} ({t.Id})")))}");
         return $" | {string.Join(" | ", labels)}";
     }
 
@@ -161,7 +161,7 @@ public class ActiveHabitsSection : IPromptSection
         var indent = new string(' ', depth * 2);
         var children = allHabits
             .Where(h => h.ParentHabitId == parentId && ShouldIncludeInIndex(h, allHabits, context))
-            .OrderBy(h => h.Position)
+            .OrderBy(h => h.Position).ThenBy(h => h.Id)
             .ToList();
         var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(children);
         foreach (var child in children)

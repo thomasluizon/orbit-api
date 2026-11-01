@@ -72,8 +72,10 @@ public partial class AiInputBudgetTests
         var service = BuildService(transport);
         (await service.SendWithToolsAsync(first)).IsSuccess.Should().BeTrue();
         (await service.SendWithToolsAsync(next)).IsSuccess.Should().BeTrue();
-        var earlier = InputItems(transport.Bodies[0]).Skip(1).Take(history.Length).ToArray();
-        InputItems(transport.Bodies[1]).Skip(1).Take(earlier.Length).Should().Equal(earlier);
+        var earlier = InputItems(transport.Bodies[0]).Where(item => item.Contains("conversation_history", StringComparison.Ordinal)).ToArray();
+        earlier.Should().HaveCount(history.Length);
+        InputItems(transport.Bodies[1]).Where(item => item.Contains("conversation_history", StringComparison.Ordinal))
+            .Take(earlier.Length).Should().Equal(earlier);
     }
 
     [Theory]
@@ -108,19 +110,19 @@ public partial class AiInputBudgetTests
                 previous = null;
                 turn = capture.Turn;
             }
-            var shared = seen.Count == 0 ? 0 : seen.Max(earlier => CommonTokens(earlier, prefix));
+            var shared = CachedPrefixTokens(seen, capture.Body);
             var cached = shared >= 1024 ? shared / 128 * 128 : 0;
             var counts = SectionTokens(capture.Body);
             var total = Count(prefix);
-            var coldShared = coldSeen.Count == 0 ? 0 : coldSeen.Max(earlier => CommonTokens(earlier, prefix));
+            var coldShared = CachedPrefixTokens(coldSeen, capture.Body);
             var coldCached = coldShared >= 1024 ? coldShared / 128 * 128 : 0;
             var coldCost = ((total - coldCached) * price.CacheWritePerMillionUsd!.Value + coldCached * price.CachedInputPerMillionUsd + capture.OutputTokens * price.OutputPerMillionUsd) / 1_000_000;
             coldCosts.Add(coldCost);
-            coldSeen.Add(prefix);
+            coldSeen.AddRange(WrittenPrefixes(capture.Body));
             var cost = ((total - cached) * price.CacheWritePerMillionUsd!.Value + cached * price.CachedInputPerMillionUsd + capture.OutputTokens * price.OutputPerMillionUsd) / 1_000_000;
             costs.Add(cost);
             table.AppendLine(FormattableString.Invariant($"| {client}/{capture.Name} | {string.Join(" | ", counts)} | {SharedPrefix(previous is null ? null : ModelInput(previous), prefix)} | {SharedPrefix(previousTurn is null ? null : ModelInput(previousTurn), prefix)} | {SharedPrefix(ModelInput(capture.Turn == "other-user" ? captures[0].Body : otherUser), prefix)} | {cached} | {cost:F7} | {coldCost:F7} |"));
-            seen.Add(prefix);
+            seen.AddRange(WrittenPrefixes(capture.Body));
             previous = capture.Body;
         }
         table.AppendLine(FormattableString.Invariant($"D147 mean with previously sent static prefix: ${costs.Average():F7}; mean including cold start: ${coldCosts.Average():F7}"));
@@ -270,6 +272,33 @@ public partial class AiInputBudgetTests
         using var document = JsonDocument.Parse(body);
         return Canonical(document.RootElement.GetProperty("tools")) + string.Concat(document.RootElement.GetProperty("input").EnumerateArray().Select(Canonical));
     }
+
+    private static IReadOnlyList<(string Prefix, bool Explicit)> LookupPrefixes(string body)
+    {
+        using var document = JsonDocument.Parse(body);
+        var prefix = new StringBuilder(Canonical(document.RootElement.GetProperty("tools")));
+        var prefixes = new List<(string, bool)>();
+        foreach (var item in document.RootElement.GetProperty("input").EnumerateArray())
+        {
+            prefix.Append(Canonical(item));
+            var explicitBoundary = item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array
+                && content.EnumerateArray().Any(part => part.TryGetProperty("prompt_cache_breakpoint", out _));
+            var eligible = item.TryGetProperty("role", out var role) && role.GetString() == "user"
+                || item.TryGetProperty("type", out var type) && type.GetString() == "function_call_output";
+            if (explicitBoundary || eligible) prefixes.Add((prefix.ToString(), explicitBoundary));
+        }
+        return prefixes;
+    }
+
+    private static IEnumerable<string> WrittenPrefixes(string body)
+    {
+        var prefixes = LookupPrefixes(body);
+        return prefixes.Where((prefix, index) => prefix.Explicit || index == prefixes.Count - 1).Select(prefix => prefix.Prefix);
+    }
+
+    private static int CachedPrefixTokens(IReadOnlyCollection<string> written, string body) => LookupPrefixes(body)
+        .Where(candidate => written.Contains(candidate.Prefix, StringComparer.Ordinal))
+        .Select(candidate => Count(candidate.Prefix)).DefaultIfEmpty().Max();
 
     private static int[] SectionTokens(string body)
     {
