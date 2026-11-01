@@ -114,6 +114,20 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
     public Task ConcurrentSegmentedWindow_AdmitsExactlyPermitLimit() => ExactLimit("chat", 20);
 
     [PostgresFact]
+    public Task ReusedContext_ObservesPermitsCommittedByOtherAcquisitions() => PostgresTestDatabase.WithDatabase(async database =>
+    {
+        await using var first = Context(database);
+        (await ExecuteFilter(first, "auth", "192.0.2.1")).Should().BeTrue();
+        var others = Enumerable.Range(0, 9)
+            .Select(_ => AcquireSeparately(database, "auth", "192.0.2.1")).ToArray();
+        (await Task.WhenAll(others)).Should().OnlyContain(allowed => allowed);
+
+        (await ExecuteFilter(first, "auth", "192.0.2.1")).Should().BeFalse();
+
+        (await database.DistributedRateLimitBuckets.SumAsync(bucket => bucket.Count)).Should().Be(10);
+    });
+
+    [PostgresFact]
     public Task RejectedAcquisition_DoesNotCommit() => PostgresTestDatabase.WithDatabase(async database =>
     {
         await using var db = Context(database);

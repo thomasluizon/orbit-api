@@ -206,6 +206,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                 try
                 {
                     await AcquireTransactionLockAsync(policyName, partitionKey, token);
+                    DetachBuckets();
                     var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, token);
                     if (decision.Allowed)
                     {
@@ -216,8 +217,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                 }
                 catch
                 {
-                    foreach (var entry in dbContext.ChangeTracker.Entries<DistributedRateLimitBucket>().ToList())
-                        entry.State = EntityState.Detached;
+                    DetachBuckets();
                     throw;
                 }
             }, deadline.OperationToken);
@@ -296,6 +296,12 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
     }
 
     internal virtual AcquisitionExecutionStrategy CreateAcquisitionStrategy() => new(dbContext);
+
+    private void DetachBuckets()
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries<DistributedRateLimitBucket>().ToList())
+            entry.State = EntityState.Detached;
+    }
 
     private async Task DeleteExpiredBucketsAsync(string policyName, DateTime nowAtUtc, CancellationToken cancellationToken)
     {
