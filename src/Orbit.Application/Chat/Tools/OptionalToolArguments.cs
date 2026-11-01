@@ -80,22 +80,24 @@ public static class OptionalToolArguments
     public static JsonElement OmitOptionalNulls(JsonElement arguments, object parameterSchema)
     {
         var node = JsonNode.Parse(arguments.GetRawText())!;
-        OmitOptionalNulls(node, JsonSerializer.SerializeToElement(parameterSchema));
+        var schema = JsonSerializer.SerializeToElement(parameterSchema);
+        OmitOptionalNulls(node, schema, schema);
         return JsonSerializer.SerializeToElement(node);
     }
 
-    private static void OmitOptionalNulls(JsonNode node, JsonElement schema)
+    private static void OmitOptionalNulls(JsonNode node, JsonElement schema, JsonElement root)
     {
+        schema = ToolSchemaReferences.Resolve(schema, root);
         if (node is JsonObject obj && schema.TryGetProperty("properties", out var properties))
-            OmitObjectNulls(obj, schema, properties);
+            OmitObjectNulls(obj, schema, properties, root);
         if (node is JsonArray array && schema.TryGetProperty("items", out var items))
             foreach (var item in array)
-                if (item is not null) OmitOptionalNulls(item, items);
+                if (item is not null) OmitOptionalNulls(item, items, root);
         if (schema.TryGetProperty("anyOf", out var alternatives))
-            foreach (var alternative in alternatives.EnumerateArray()) OmitOptionalNulls(node, alternative);
+            foreach (var alternative in alternatives.EnumerateArray()) OmitOptionalNulls(node, alternative, root);
     }
 
-    private static void OmitObjectNulls(JsonObject obj, JsonElement schema, JsonElement properties)
+    private static void OmitObjectNulls(JsonObject obj, JsonElement schema, JsonElement properties, JsonElement root)
     {
         var required = schema.TryGetProperty("required", out var names)
             ? names.EnumerateArray().Select(name => name.GetString()).ToHashSet() : [];
@@ -106,7 +108,7 @@ public static class OptionalToolArguments
             {
                 if (!required.Contains(property.Key)) obj.Remove(property.Key);
             }
-            else OmitOptionalNulls(property.Value, declared);
+            else OmitOptionalNulls(property.Value, declared, root);
         }
     }
 

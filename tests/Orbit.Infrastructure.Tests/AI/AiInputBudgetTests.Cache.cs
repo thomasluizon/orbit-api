@@ -127,6 +127,14 @@ public partial class AiInputBudgetTests
         output.WriteLine(table.ToString());
         await File.WriteAllTextAsync(Path.Combine(Path.GetTempPath(), $"orbit-1916-cache-{client}.md"), table.ToString());
         costs.Average().Should().BeLessThanOrEqualTo(0.0009m);
+        var (firstCallLimit, coldMeanLimit) = client switch
+        {
+            "legacy" => (0.0054m, 0.00132m),
+            "composition" => (0.0061m, 0.00147m),
+            _ => (0.0068m, 0.00162m)
+        };
+        coldCosts[0].Should().BeLessThanOrEqualTo(firstCallLimit, "a session's first call must fit the compact catalog budget");
+        coldCosts.Average().Should().BeLessThanOrEqualTo(coldMeanLimit);
     }
 
     private static async Task<List<CacheCapture>> CaptureCacheTurnsAsync(string client)

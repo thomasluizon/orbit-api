@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Fixtures/ToolSchemas/*.json.gz" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/AiReservation/*.json.gz" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/Push/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/AppAttest/*.json" CopyToOutputDirectory="PreserveNewest" />
