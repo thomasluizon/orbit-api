@@ -47,8 +47,8 @@ and current unlogged dates are not missed. Positive logs for habits being reduce
 are reported as slip days, never completions or missed days. Flexible habits are
 identified; their day counts describe calendar cells, not frequency targets.
 The complete `CalendarMonthResponse` stays in the block, refresh and legacy text
-fallback. The existing model payload cap and other tools' drop behavior apply
-without changes.
+fallback. The shared model payload cap shortens oversized results with retained
+facts and omission metadata.
 
 ## Refresh contract for the paired UI
 

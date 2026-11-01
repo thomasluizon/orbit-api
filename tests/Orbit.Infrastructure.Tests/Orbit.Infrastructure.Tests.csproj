@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../../evals/astra/*.json" Link="Fixtures/AstraDates/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/ToolSchemas/*.json.gz" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/AiReservation/*.json.gz" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/Push/*.json" CopyToOutputDirectory="PreserveNewest" />

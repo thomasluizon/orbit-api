@@ -150,7 +150,8 @@ public class AgentPolicyEvaluator(
             context.OperationArgumentsJson ?? "{}",
             context.OperationSummary,
             context.OperationFingerprint!,
-            context.Surface);
+            context.Surface,
+            context.Conversation);
 
         return new AgentPolicyDecision(
             AgentPolicyDecisionStatus.ConfirmationRequired,

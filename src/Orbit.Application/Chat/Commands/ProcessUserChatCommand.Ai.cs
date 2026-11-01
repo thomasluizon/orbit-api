@@ -21,6 +21,7 @@ public partial class ProcessUserChatCommandHandler
         CancellationToken cancellationToken)
     {
         using var promptPhase = ChatTurnTimer.Measure(ChatPhase.PromptBuild);
+        var lastPreviews = await LoadConversationPreviewsAsync(request, cancellationToken);
         var promptRequest = new PromptBuildRequest(
             context.PromptHabits,
             HasImage: request.ImageData is not null,
@@ -51,6 +52,7 @@ public partial class ProcessUserChatCommandHandler
         var accountContext = string.Join(
             Environment.NewLine,
             ai.PromptBuilder.BuildAccountContext(promptRequest),
+            ConversationTimeZone(context.User),
             HabitModelInstructions.TitleLanguage(context.Language),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot with { ClientContext = null }));
         var dynamicContext = string.Join(
@@ -84,6 +86,7 @@ public partial class ProcessUserChatCommandHandler
         dynamicContext = AddSelectedOfferContext(dynamicContext, request.SelectedOffer);
         systemPrompt = AddAskContext(systemPrompt, request, context);
         dynamicContext = AddStartingStepContext(dynamicContext, request.ClientContext?.PreviousStartingStep);
+        dynamicContext = AddConversationPreviews(dynamicContext, lastPreviews);
 
         var pendingPreviews = new List<object>();
         var previewer = execution.PendingOperationPreviewer ?? new PendingOperationChangePreviewer(

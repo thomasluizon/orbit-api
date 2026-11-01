@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class PendingAgentOperationStoreTests : IDisposable
+public partial class PendingAgentOperationStoreTests : IDisposable
 {
     private static readonly IReadOnlyDictionary<string, string> GatedOperationKeys = new Dictionary<string, string>
     {

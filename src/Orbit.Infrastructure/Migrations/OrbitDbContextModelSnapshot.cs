@@ -1743,6 +1743,9 @@ namespace Orbit.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1798,6 +1801,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId", "CapabilityId");
 
                     b.HasIndex("UserId", "OperationFingerprint");
+
+                    b.HasIndex("UserId", "ConversationId", "CreatedAtUtc");
 
                     b.ToTable("PendingAgentOperations");
                 });

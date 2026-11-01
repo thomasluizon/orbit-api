@@ -26,14 +26,19 @@ public class PendingAgentOperationStore(
         string argumentsJson,
         string summary,
         string operationFingerprint,
-        AgentExecutionSurface surface)
+        AgentExecutionSurface surface,
+        PendingOperationConversation? conversation = null)
     {
         PendingOperationActionKeys.GetRequired(operationId, argumentsJson);
 
+        var conversationId = conversation?.Id;
+        var startedAtUtc = conversation?.StartedAtUtc;
         var existing = dbContext.PendingAgentOperations
             .Where(item =>
                 item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion &&
                 item.UserId == userId &&
+                item.ConversationId == conversationId &&
+                (!startedAtUtc.HasValue || item.CreatedAtUtc == startedAtUtc) &&
                 item.CapabilityId == capability.Id &&
                 item.OperationFingerprint == operationFingerprint &&
                 item.ConsumedAtUtc == null &&
@@ -53,6 +58,7 @@ public class PendingAgentOperationStore(
             Summary = summary,
             OperationFingerprint = operationFingerprint,
             Surface = surface,
+            Conversation = conversation,
             ExpiresAtUtc = DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.PendingOperationTtlMinutes))
         });
 
@@ -60,6 +66,35 @@ public class PendingAgentOperationStore(
         dbContext.SaveChanges();
 
         return Map(entity);
+    }
+
+    public async Task<IReadOnlyList<PendingAgentOperationPreview>> GetLastConversationPreviewsAsync(
+        Guid userId, Guid conversationId, CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty || conversationId == Guid.Empty) return [];
+        var query = dbContext.PendingAgentOperations.AsNoTracking().Where(item => item.UserId == userId
+            && item.ConversationId == conversationId && item.Surface == AgentExecutionSurface.Chat
+            && item.ArgumentSchemaVersion == PendingAgentOperationState.CurrentArgumentSchemaVersion
+            && item.PreviewFingerprint != null);
+        var latestAtUtc = await query.OrderByDescending(item => item.CreatedAtUtc)
+            .Select(item => (DateTime?)item.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
+        if (latestAtUtc is null) return [];
+        var batch = await query.Where(item => item.CreatedAtUtc == latestAtUtc).OrderBy(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var members = batch.Where(item => item.OperationId == AccountChangeSet.OperationName)
+            .SelectMany(item => AccountChangeSet.Reservations(ParseArguments(item.ArgumentsJson)))
+            .Select(item => item.PendingOperationId).ToHashSet();
+        var nowAtUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
+        return batch.Where(item => !members.Contains(item.Id)).Select(item => ConversationPreview(item, nowAtUtc)).ToArray();
+    }
+
+    private static PendingAgentOperationPreview ConversationPreview(PendingAgentOperationState state, DateTime nowAtUtc)
+    {
+        var outcome = state.ConsumedAtUtc.HasValue ? state.ConfirmationTokenHash is null ? "rejected" : "approved"
+            : state.ConfirmedAtUtc.HasValue ? "approved"
+            : state.IsExpired(nowAtUtc) ? "expired"
+            : state.RevisionNumber > 1 ? "edited" : "pending";
+        return new(Map(state), outcome, state.RevisionNumber, ParseArguments(state.ArgumentsJson));
     }
 
     public PendingAgentOperationConfirmation? Confirm(Guid userId, Guid pendingOperationId)

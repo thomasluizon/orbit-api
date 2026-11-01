@@ -51,6 +51,9 @@ public record ProcessUserChatCommand(
 {
     [JsonIgnore]
     public AstraOfferFact? SelectedOffer { get; init; }
+
+    [JsonIgnore]
+    public PendingOperationConversation? PendingOperationConversation { get; init; }
 }
 
 public record ChatResponse(
@@ -202,6 +205,11 @@ public partial class ProcessUserChatCommandHandler(
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
         ChatEvalTraceCollector? evalTrace = null;
         var recording = new ChatTurnState();
+        request = request with
+        {
+            PendingOperationConversation = request.ClientContext?.ConversationId is { } id && id != Guid.Empty
+                ? new PendingOperationConversation(id, recording.CreatedAtUtc) : null
+        };
         Result<ChatResponse>? response = null;
         try
         {

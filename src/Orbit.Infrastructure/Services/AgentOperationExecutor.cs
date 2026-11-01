@@ -219,8 +219,13 @@ public partial class AgentOperationExecutor(
             execution.Request.ConfirmationToken,
             IsReadOnlyCredential: execution.Request.IsReadOnlyCredential,
             ConfirmationRequirementOverride: execution.EscalatedRequirement,
-            PreviewOnly: execution.Request.PreviewOnly));
+            PreviewOnly: execution.Request.PreviewOnly,
+            Conversation: PendingConversation(execution.Request)));
     }
+
+    private static PendingOperationConversation? PendingConversation(AgentExecuteOperationRequest request) =>
+        request.Surface == AgentExecutionSurface.Chat && request.ClientContext?.ConversationId is { } id && id != Guid.Empty
+            ? request.PendingOperationConversation ?? new(id, TimeProvider.System.GetUtcNow().UtcDateTime) : null;
 
     private async Task<AgentExecuteOperationResponse> DenyByPolicyAsync(
         OperationExecutionContext execution,
@@ -635,7 +640,8 @@ public partial class AgentOperationExecutor(
         var arguments = JsonSerializer.SerializeToElement(root);
         var pending = pendingOperationStore.Create(execution.Request.UserId, execution.Capability,
             execution.Operation.Id, arguments.GetRawText(), execution.Summary,
-            AgentOperationFingerprint.Compute(execution.Operation.Id, arguments.GetRawText()), execution.Request.Surface);
+            AgentOperationFingerprint.Compute(execution.Operation.Id, arguments.GetRawText()), execution.Request.Surface,
+            PendingConversation(execution.Request));
         var retry = await RequireConfirmationAsync(execution with { Arguments = arguments },
             new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, execution.Capability,
                 PendingOperation: pending), cancellationToken);

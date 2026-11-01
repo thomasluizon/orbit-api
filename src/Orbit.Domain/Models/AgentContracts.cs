@@ -120,7 +120,8 @@ public record AgentPolicyEvaluationContext(
     bool StepUpSatisfied = false,
     bool IsReadOnlyCredential = false,
     AgentConfirmationRequirement? ConfirmationRequirementOverride = null,
-    bool PreviewOnly = false);
+    bool PreviewOnly = false,
+    PendingOperationConversation? Conversation = null);
 
 public record AgentPolicyDecision(
     AgentPolicyDecisionStatus Status,
@@ -245,7 +246,11 @@ public record AgentExecuteOperationRequest(
     bool IncludeChangePreview = false,
     Func<Task>? OnExecutionStarted = null,
     bool PreviewOnly = false,
-    AgentClientContext? ClientContext = null);
+    AgentClientContext? ClientContext = null)
+{
+    [JsonIgnore]
+    public PendingOperationConversation? PendingOperationConversation { get; init; }
+}
 
 public record AgentOperationResult(
     string OperationId,

@@ -18,6 +18,45 @@ public sealed partial class PendingOperationChangePreviewer
     public async Task<Result<PendingOperationChangePreview?>> PreviewAsync(Guid userId, string operationId,
         JsonElement arguments, CancellationToken cancellationToken = default, AgentClientContext? clientContext = null)
     {
+        if (operationId is "create_habit" or "bulk_create_habits")
+        {
+            var node = JsonNode.Parse(arguments.GetRawText())!.AsObject();
+            var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+            var sources = node["habits"] is JsonArray habits ? habits.OfType<JsonObject>().ToArray() : [node];
+            foreach (var source in sources)
+                if (node["parent_habit_id"] is null || source["frequency_unit"]?.ToString() == "OneTime")
+                    HabitPreviewDates.Bind(source, today);
+            arguments = JsonSerializer.SerializeToElement(node);
+        }
+        var result = await PreviewWithOffersAsync(userId, operationId, arguments, cancellationToken, clientContext);
+        if (result.IsFailure || result.Value is not { } preview) return result;
+        if (operationId is not ("create_habit" or "create_sub_habit" or "bulk_create_habits"
+            or "update_habit" or "bulk_update_habits" or "bulk_reschedule_habits")) return result;
+        PendingOperationChange DateField(PendingOperationChange field, JsonObject? source) => field.Field is "due_date" or "due_time"
+            ? field with
+            {
+                IsEditable = field.IsEditable || field.Field == "due_date"
+                    && source?["frequency_unit"]?.ToString() == "OneTime",
+                Provenance = field.Field == "due_date" && source?[HabitPreviewDates.DefaultDate]?.ToString() == "true"
+                    ? "suggested" : field.Provenance ?? "requested"
+            } : field;
+        var root = JsonNode.Parse(arguments.GetRawText())!.AsObject();
+        var updated = preview.Items?.Select(item => item with
+        {
+            Fields = item.Fields.Select(field => DateField(field, ProactiveProposal.Source(root, operationId, item.ItemId))).ToArray()
+        }).ToArray();
+        return Result.Success<PendingOperationChangePreview?>(preview with
+        {
+            Items = updated,
+            Changes = preview.Changes.Select(field => DateField(field, root)).ToArray(),
+            PreviewFingerprint = updated is null ? preview.PreviewFingerprint
+                : AgentOperationFingerprint.Compute(operationId, JsonSerializer.Serialize(updated))
+        });
+    }
+
+    private async Task<Result<PendingOperationChangePreview?>> PreviewWithOffersAsync(Guid userId, string operationId,
+        JsonElement arguments, CancellationToken cancellationToken, AgentClientContext? clientContext)
+    {
         arguments = ProactiveProposal.OmitEmptySuggestions(arguments);
         var offersEnabled = ProactiveProposal.Enabled(clientContext) && ProactiveProposal.Supports(operationId);
         if (operationId == AccountChangeSet.OperationName || (!ProactiveProposal.Contains(arguments) && !offersEnabled))

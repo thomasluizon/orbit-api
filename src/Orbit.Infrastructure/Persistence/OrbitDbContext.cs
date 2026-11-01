@@ -517,6 +517,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<PendingAgentOperationState>(entity =>
         {
+            entity.HasIndex(item => new { item.UserId, item.ConversationId, item.CreatedAtUtc });
             entity.HasIndex(item => new { item.UserId, item.CapabilityId });
             entity.HasIndex(item => new { item.UserId, item.OperationFingerprint });
             entity.Property(item => item.CapabilityId).HasMaxLength(100);

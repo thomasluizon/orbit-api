@@ -42,6 +42,7 @@
     <None Update="Fixtures/ChecklistSaves/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/ProactiveOffers/**/*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures/GateTenPreviews/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../evals/astra/*.json" Link="Fixtures/AstraDates/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

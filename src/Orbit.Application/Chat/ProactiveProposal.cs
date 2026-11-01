@@ -213,6 +213,7 @@ public static class ProactiveProposal
         {
             obj.Remove(ProactiveOfferDismissal.Argument);
             obj.Remove(Metadata);
+            obj.Remove(HabitPreviewDates.DefaultDate);
             if (suggestions) obj.Remove(Argument);
             else if (obj.TryGetPropertyValue(Argument, out var proposed) && EmptyPlaceholder(proposed)) obj.Remove(Argument);
             foreach (var property in obj.ToArray()) Strip(property.Value, suggestions);

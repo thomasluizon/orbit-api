@@ -1,0 +1,14 @@
+{
+  "scenario": "large-account-read",
+  "tool": "query_habits",
+  "fixture": "LargeAccountPayload_ProductionHabitReadKeepsMatchingItemsAtProvider",
+  "account_items": 120,
+  "arguments": {
+    "limit": 120
+  },
+  "assertions": [
+    "The provider receives matching items within 12000 serialized payload characters.",
+    "The full matching total remains 120.",
+    "Partial results carry truncated=true and has_more=true with original and returned collection counts."
+  ]
+}

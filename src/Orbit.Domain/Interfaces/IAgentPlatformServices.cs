@@ -50,7 +50,11 @@ public interface IPendingAgentOperationStore
         string argumentsJson,
         string summary,
         string operationFingerprint,
-        AgentExecutionSurface surface);
+        AgentExecutionSurface surface,
+        PendingOperationConversation? conversation = null);
+
+    Task<IReadOnlyList<PendingAgentOperationPreview>> GetLastConversationPreviewsAsync(
+        Guid userId, Guid conversationId, CancellationToken cancellationToken = default);
 
     PendingAgentOperationConfirmation? Confirm(Guid userId, Guid pendingOperationId);
     PendingAgentOperationExecution? GetExecution(Guid userId, Guid pendingOperationId);

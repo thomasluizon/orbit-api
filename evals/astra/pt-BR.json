@@ -1,0 +1,30 @@
+{
+  "scenario": "reservation-implied-date-and-follow-up",
+  "language": "pt-BR",
+  "account_today": "2026-11-01",
+  "account_timezone": "America/Sao_Paulo",
+  "attachment_description": "Confirmed New Year's Eve reservation: Até a virada no Terraço Itália, arrival 20h30. The real screenshot is held by the coordinator outside the repository.",
+  "first_message": "cria essa tarefa unica",
+  "create_arguments": {
+    "title": "Terraço Itália",
+    "frequency_unit": "OneTime",
+    "due_date": "2026-12-31",
+    "due_time": "20:30",
+    "orbit_write_complete": true
+  },
+  "follow_up": "ta criando na data certa?",
+  "follow_up_answer": "A proposta está para 31 de dezembro de 2026 às 20:30.",
+  "outcomes": [
+    "pending",
+    "approved",
+    "edited",
+    "rejected",
+    "expired"
+  ],
+  "assertions": [
+    "Preview due_date is 2026-12-31 with requested provenance and editable date type.",
+    "Preview due_time is 20:30 with requested provenance.",
+    "Next model request includes this conversation's last proposal, date, time and current outcome from pending operations. Previous images are not stored or resent; image continuity belongs to #1948.",
+    "Follow-up answers about this proposal without an ask block."
+  ]
+}
