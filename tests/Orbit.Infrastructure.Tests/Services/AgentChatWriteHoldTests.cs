@@ -114,7 +114,6 @@ public partial class AgentChatWriteHoldTests : IDisposable
         var data = new TheoryData<string>();
         foreach (var operation in BuildCatalog().GetOperations()
             .Where(operation => operation.IsMutation && operation.IsAgentExecutable)
-            .Where(operation => !AgentChatWriteHold.ExemptOperationIds.Contains(operation.Id))
             .OrderBy(operation => operation.Id, StringComparer.Ordinal))
         {
             data.Add(operation.Id);
@@ -156,9 +155,9 @@ public partial class AgentChatWriteHoldTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecuteAsync_ExemptOperation_RunsAtOnce()
+    public async Task ExecuteAsync_NonSavingSuggestionAcceptsReadOnlyCredentialsWithoutApproval()
     {
-        var tool = new StubTool("suggest_breakdown");
+        var tool = new Orbit.Application.Chat.Tools.Implementations.SuggestBreakdownTool();
         var executor = CreateExecutor(new AiToolRegistry([tool]));
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -166,12 +165,13 @@ public partial class AgentChatWriteHoldTests : IDisposable
             "suggest_breakdown",
             Parse("""{"title":"Clean the flat"}"""),
             AgentExecutionSurface.Chat,
-            AgentAuthMethod.Jwt));
+            AgentAuthMethod.ApiKey,
+            GrantedScopes: [AgentScopes.ReadHabits],
+            IsReadOnlyCredential: true));
 
         response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         response.PendingOperation.Should().BeNull();
-        tool.Calls.Should().Be(1);
-        AgentChatWriteHold.ExemptOperationIds.Should().BeEquivalentTo(["suggest_breakdown"]);
+        response.Operation.TargetName.Should().Be("Clean the flat");
     }
 
     [Theory]

@@ -11,9 +11,10 @@ public class SuggestBreakdownTool : IAiTool, IArgumentCheckTool
     public const string SmallerStepInstruction = "For a smaller refinement, use the typed previousStartingStep.goal and previousStartingStep.step to compare effort before choosing the action. Keep the same activity and return only the first preparatory physical motion, stopping before the previous action is completed. When the previous step is already one short action, reduce it to contact or positioning and stop there. Picking up material can take as much effort as opening it. Tapping material to open it still completes the previous action. For opening study material, use a motion such as resting one fingertip on its closed cover: 'Rest one finger on the closed cover' / 'Encostar um dedo na capa fechada'. Do not append opening, reading or another action to that motion. Apply this comparison in both en and pt-BR.";
 
     public string Name => "suggest_breakdown";
+    public bool IsReadOnly => true;
 
     public string Description =>
-        "Suggest sub-habits without creating them. When the person cannot get themselves to do an activity, is stuck starting it, or asks for one concrete first step, call suggest_breakdown with one_small_step=true even if they do not say start. "
+        "Suggest sub-habits without creating them. Call it once per request; do not repeat identical arguments. When the person cannot get themselves to do an activity, is stuck starting it, or asks for one concrete first step, call suggest_breakdown with one_small_step=true even if they do not say start. "
         + ReadAimInstruction + " "
         + "Set language to en or pt-BR matching their message, title to the activity and suggested_sub_habits to exactly one concrete starting action. Never return an empty array. "
         + "For a smaller refinement, use structured previousStartingStep as the baseline, keep its goal and return a proper part of its step or its first physical action, taking strictly less time and effort. A paraphrase or a different action of equal or greater effort is not smaller. "

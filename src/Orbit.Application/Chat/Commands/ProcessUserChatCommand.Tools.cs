@@ -389,7 +389,8 @@ public partial class ProcessUserChatCommandHandler
                 outcome.OperationResult,
                 outcome.PolicyDenial,
                 outcome.PendingOperation);
-            if (!isCorrection && (ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true || IsOwnershipReadDenial(outcome)))
+            if (!isCorrection && (ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true
+                || IsStartingStepCall(call) || IsOwnershipReadDenial(outcome)))
                 executionResults.CorrectionOccurrences.Add(new CorrectionOccurrence(call, outcome));
         }
 
