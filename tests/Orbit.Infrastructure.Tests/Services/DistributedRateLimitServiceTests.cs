@@ -54,6 +54,31 @@ public partial class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TryAcquireAsync_Expiration_RemovesOnlyExpiredBucketsForThePolicy()
+    {
+        var segmentStartUtc = MidWindowInstant.UtcDateTime.AddSeconds(-30);
+        var expired = DistributedRateLimitBucket.Create("auth", "user:expired",
+            segmentStartUtc.AddMinutes(-1), segmentStartUtc, 10);
+        var active = DistributedRateLimitBucket.Create("auth", "user:active",
+            segmentStartUtc, segmentStartUtc.AddMinutes(1), 10);
+        var otherPolicy = DistributedRateLimitBucket.Create("refresh", "user:expired",
+            segmentStartUtc.AddMinutes(-1), segmentStartUtc, 10);
+        _dbContext.DistributedRateLimitBuckets.AddRange(expired, active, otherPolicy);
+        await _dbContext.SaveChangesAsync();
+
+        var decision = await _service.TryAcquireAsync("auth", "user:expired");
+
+        decision.Allowed.Should().BeTrue();
+        decision.CurrentCount.Should().Be(1);
+        var buckets = await _dbContext.DistributedRateLimitBuckets.AsNoTracking().ToListAsync();
+        buckets.Should().HaveCount(3).And.NotContain(bucket => bucket.Id == expired.Id);
+        buckets.Should().ContainSingle(bucket => bucket.Id == active.Id && bucket.Count == 10);
+        buckets.Should().ContainSingle(bucket => bucket.Id == otherPolicy.Id && bucket.Count == 10);
+        buckets.Should().ContainSingle(bucket => bucket.PolicyName == "auth" && bucket.PartitionKey == "user:expired"
+            && bucket.WindowStartUtc == segmentStartUtc && bucket.Count == 1);
+    }
+
+    [Fact]
     public async Task TryAcquireAsync_ChatPolicy_UsesIndependentPartitions()
     {
         for (var attempt = 0; attempt < 20; attempt++)
@@ -509,20 +534,21 @@ public partial class DistributedRateLimitServiceTests : IDisposable
 
         await acquire.Should().ThrowAsync<OperationCanceledException>();
 
-        strategy.CallerToken.Should().Be(cancellation.Token);
+        strategy.CallerToken.Should().NotBe(cancellation.Token);
+        strategy.CallerToken.IsCancellationRequested.Should().BeTrue();
         strategy.Waits.Should().Be(2);
         strategy.MaxRetryCount.Should().Be(2);
         strategy.MaxRetryDelay.Should().Be(TimeSpan.FromSeconds(5));
         scope.Save.Attempts.Should().Be(2);
         scope.Transactions.Starts.Should().Be(2);
         scope.Transactions.Commits.Should().Be(0);
-        scope.Save.Tokens.Should().OnlyContain(token => token == cancellation.Token);
-        scope.Transactions.Tokens.Should().OnlyContain(token => token == cancellation.Token);
+        scope.Save.Tokens.Should().OnlyContain(token => token.CanBeCanceled && !token.IsCancellationRequested);
+        scope.Transactions.Tokens.Should().OnlyContain(token => token == strategy.CallerToken);
         (await scope.Context.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
     }
 
     [Fact]
-    public async Task TryAcquireAsync_ActualStrategy_SuccessForwardsTokenThroughCommit()
+    public async Task TryAcquireAsync_ActualStrategy_UsesIndependentCompletionToken()
     {
         using var scope = new ProviderRateLimitScope();
         using var cancellation = new CancellationTokenSource();
@@ -530,8 +556,11 @@ public partial class DistributedRateLimitServiceTests : IDisposable
         var decision = await scope.Service.TryAcquireAsync("auth", "user:token", cancellation.Token);
 
         decision.Allowed.Should().BeTrue();
-        scope.Save.Tokens.Should().ContainSingle().Which.Should().Be(cancellation.Token);
-        scope.Transactions.Tokens.Should().HaveCount(2).And.OnlyContain(token => token == cancellation.Token);
+        scope.Save.Tokens.Should().ContainSingle().Which.Should().NotBe(cancellation.Token);
+        scope.Transactions.Tokens.Should().HaveCount(2);
+        scope.Transactions.Tokens[0].Should().NotBe(scope.Transactions.Tokens[1]);
+        scope.Transactions.Tokens[1].Should().Be(scope.Save.Tokens.Single());
+        scope.Transactions.Tokens.Should().OnlyContain(token => token.CanBeCanceled && !token.IsCancellationRequested);
         var strategy = scope.Save.Strategies.Single();
         strategy.Should().BeAssignableTo<NpgsqlRetryingExecutionStrategy>();
         strategy!.MaxRetryCount.Should().Be(2);
