@@ -19,6 +19,14 @@ existing readable habit and goal lists when the client advertises no part kinds.
 The model receives no instruction to write fallback prose in this mode. A false
 completion signal, failed read or missing projection retains normal continuation.
 No message pattern changes the tools, their arguments or the answer.
+
+An empty or whitespace-only final model response after a typed read can be
+composed from that read without another completion. A mixed read and write turn
+retains a held preview when its stored confirmation state, schema version and
+fingerprint are current. A cancelled preview is removed from the response; a
+successful typed read from the same turn remains available for composition.
+These recoveries do not execute an unapproved write or invent narrative.
+
 The static catalog is selected by client capabilities, never by message or habit-title
 keywords. Unsupported clients do not receive proactive-offer schema fields. Recursively
 empty or null `suggested_fields` placeholders mean no offer and preserve requested-only

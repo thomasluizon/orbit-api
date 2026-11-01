@@ -31,12 +31,13 @@ using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.AI;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
-public sealed class OfferDeadlineControllerTests
+public sealed partial class OfferDeadlineControllerTests
 {
     [Theory]
     [InlineData(false, false)]
@@ -97,7 +98,7 @@ public sealed class OfferDeadlineControllerTests
     }
 
     private static (ChatController Controller, Goal Goal, IConversationOfferStore Offers, IMediator Mediator, List<string> Messages)
-        CreateController(HttpClient http, CancellationToken caller)
+        CreateController(HttpClient http, CancellationToken caller, OrbitDbContext? db = null)
     {
         var user = User.Create("Reader", "offer-deadline@example.test").Value;
         user.SetLanguage("en");
@@ -121,10 +122,18 @@ public sealed class OfferDeadlineControllerTests
         var dates = Substitute.For<IUserDateService>();
         dates.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 11, 1));
         dates.GetUserTimeZoneAsync(user.Id, Arg.Any<CancellationToken>()).Returns(TimeZoneInfo.Utc);
+        mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                using var validationServices = new ServiceCollection().AddSingleton(dates).BuildServiceProvider();
+                return await new CheckChatCommandQueryHandler(validationServices)
+                    .Handle(call.Arg<CheckChatCommandQuery>(), call.Arg<CancellationToken>());
+            });
         var progress = Substitute.For<IGoalProgressReadSyncer>();
         progress.ComputeFreshValuesAsync(user.Id, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
         IAiTool[] tools = [new QueryGoalsTool(goals, dates, progress), new GetNotificationsTool(mediator)];
+        if (db is not null) tools = [.. tools, new CreateGoalTool(mediator)];
         var registry = new AiToolRegistry(tools);
         var catalog = new AgentCatalogService(tools);
         var tokens = new ReadQueryTokenService(Options.Create(new JwtSettings
@@ -134,13 +143,23 @@ public sealed class OfferDeadlineControllerTests
             Audience = "test"
         }));
         var blocks = new ReadBlockFactory(dates, tokens, users);
-        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        IAgentPolicyEvaluator policy = Substitute.For<IAgentPolicyEvaluator>();
         policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>()).Returns(call => new AgentPolicyDecision(
             AgentPolicyDecisionStatus.Allowed, catalog.GetCapability(call.Arg<AgentPolicyEvaluationContext>().CapabilityId)!));
         var work = Substitute.For<IUnitOfWork>();
         work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
             .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
-        var pending = Substitute.For<IPendingAgentOperationStore>();
+        IPendingAgentOperationStore pending = Substitute.For<IPendingAgentOperationStore>();
+        var previewer = new PendingOperationChangePreviewer(habits, goals, Repository<Tag>(), dates, registry);
+        if (db is not null)
+        {
+            db.Users.Add(user);
+            db.Goals.Add(goal);
+            db.SaveChanges();
+            pending = new PendingAgentOperationStore(db, Options.Create(new AgentPlatformSettings()));
+            policy = new AgentPolicyEvaluator(db, catalog, pending, Substitute.For<IAgentStepUpAuthorizationBridge>(),
+                Options.Create(new AgentPlatformSettings()), Substitute.For<IFeatureFlagService>());
+        }
         var ownership = Substitute.For<IAgentTargetOwnershipService>();
         ownership.GetDenialReasonAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<JsonElement>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
@@ -149,7 +168,7 @@ public sealed class OfferDeadlineControllerTests
             .Returns((AgentConfirmationRequirement?)null);
         var executor = new AgentOperationExecutor(catalog, policy, Substitute.For<IAgentAuditService>(),
             ownership, bridge, registry,
-            Substitute.For<IPendingOperationChangePreviewer>(), pending, work, NullLogger<AgentOperationExecutor>.Instance, blocks);
+            previewer, pending, work, NullLogger<AgentOperationExecutor>.Instance, blocks);
         var services = Substitute.For<IServiceProvider>();
         services.GetService(typeof(IAgentOperationExecutor)).Returns(executor);
         var clarifications = Substitute.For<IPendingClarificationStore>();
