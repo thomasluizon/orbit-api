@@ -28,6 +28,10 @@ public class StagingSeedServiceTests
         var task = await db.Habits.SingleAsync(h => h.Title == "Submit a document");
         task.NextDueDate.Should().Be(Today);
         task.IsCompleted.Should().BeFalse();
+        var general = await db.Habits.Include(habit => habit.Logs)
+            .SingleAsync(habit => habit.Schedule == Orbit.Domain.Enums.HabitSchedule.General);
+        general.IsCompleted.Should().BeFalse();
+        general.Logs.Should().BeEmpty();
         (await db.Goals.SingleAsync(g => g.Title == "Build a hydration streak")).CurrentValue.Should().BeGreaterThan(0);
         (await db.Habits.SingleAsync(h => h.Title == "Drink water")).CreatedAtUtc.Should().BeBefore(DateTime.UtcNow.AddDays(-28));
     }

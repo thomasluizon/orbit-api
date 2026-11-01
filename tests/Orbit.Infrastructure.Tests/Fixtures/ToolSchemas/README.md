@@ -6,6 +6,11 @@ schema for every registered chat tool and the normalized provider schemas for le
 composition and offer clients. No request reaches OpenAI. The snapshot contains schemas
 only, without account data, API credentials or provider response text.
 
+The General task correction in thomasluizon/orbit-tickets#1940 updates only the
+reviewed General and repeat-reminder description values within that inlined
+baseline. Its constraints and original structure remain intact; it is not
+replaced with the current compactor's output.
+
 The bounded schema builders remain the execution contract. Export compaction recognizes
 the repeated habit structure, keeps a single recursive habit definition, and shares
 identical schema blocks within a tool when a reference saves space. The strict normalizer

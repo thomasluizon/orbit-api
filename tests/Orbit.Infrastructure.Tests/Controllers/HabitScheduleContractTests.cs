@@ -63,7 +63,7 @@ public class HabitScheduleContractTests
         var parent = Create(user.Id, type);
         var child = Create(user.Id, type, parent.Id);
         foreach (var habit in new[] { parent, child })
-            for (var offset = 0; offset < (type == HabitSchedule.OneTime ? 1 : 10); offset++)
+            for (var offset = 0; offset < (type is HabitSchedule.OneTime or HabitSchedule.General ? 1 : 10); offset++)
                 habit.Log(Start.AddDays(offset)).IsSuccess.Should().BeTrue();
         if (edit)
             foreach (var habit in new[] { parent, child })

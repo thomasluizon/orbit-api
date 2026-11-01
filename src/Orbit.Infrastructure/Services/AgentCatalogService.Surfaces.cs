@@ -28,7 +28,7 @@ public partial class AgentCatalogService
                     "Open a habit's details and choose Edit habit.",
                     "In Frequency, choose the repeat interval or flexible target, then set the number and unit.",
                     "Adjust the habit's date, weekdays or end date in the same form, then save."],
-                ["Uses timezone-aware dates from the backend.", "General is a one-time task with no date, shown in the Geral tab. Logging completes it permanently; unlogging reopens it."],
+                ["Uses timezone-aware dates from the backend.", "General is a one-time task with no date in Geral; log completes, unlog reopens."],
                 [AgentCapabilityIds.HabitsRead, AgentCapabilityIds.HabitsWrite, AgentCapabilityIds.DailySummaryRead],
                 ["HabitsController.GetHabits", "HabitsController.GetDailySummary"]),
 

@@ -193,11 +193,10 @@ public sealed class StagingSeedService(OrbitDbContext db)
     }
 
     private static bool ShouldLog(Habit habit, DateOnly date, int offset) =>
-        habit.Schedule != HabitSchedule.OneTime
-        && (habit.Schedule == HabitSchedule.General || HabitScheduleService.IsHabitDueOnDate(habit, date))
+        habit.Schedule is HabitSchedule.Recurring or HabitSchedule.Flexible
+        && HabitScheduleService.IsHabitDueOnDate(habit, date)
         && (offset == 0 || (date.DayNumber + habit.Title.Length) % 6 != 0)
         && (!habit.IsBadHabit || offset % 11 == 0)
-        && (habit.Schedule != HabitSchedule.General || offset % 3 == 0)
         && (habit.Schedule != HabitSchedule.Flexible || date.DayOfWeek is DayOfWeek.Monday or DayOfWeek.Wednesday or DayOfWeek.Friday);
 
     private async Task SeedGoalsAsync(Guid userId, Dictionary<string, Habit> habits, DateOnly today,

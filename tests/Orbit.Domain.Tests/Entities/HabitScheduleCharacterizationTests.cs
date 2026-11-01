@@ -15,7 +15,7 @@ public class HabitScheduleCharacterizationTests
     [InlineData(0, 0, true)]
     [InlineData(1, 1, false)]
     [InlineData(2, 0, false)]
-    [InlineData(3, 0, false)]
+    [InlineData(3, 0, true)]
     public void LogAndUnlog_KeepFourTypeBehavior(int type, int dueOffset, bool completed)
     {
         var habit = Create(type);

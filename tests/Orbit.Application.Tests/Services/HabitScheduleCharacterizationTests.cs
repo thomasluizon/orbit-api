@@ -35,7 +35,7 @@ public class HabitScheduleCharacterizationTests
     [InlineData(0, 1, 1, 100, 1, 0)]
     [InlineData(1, 1, 2, 75, 3, 3)]
     [InlineData(2, 1, 1, 50, 3, 3)]
-    [InlineData(3, 1, 1, 100, 3, 3)]
+    [InlineData(3, 1, 1, 100, 1, 0)]
     public void Metrics_WithGapsKeepTypeSpecificResults(
         int type, int currentStreak, int longestStreak, int rate, int completions, int lastOffset)
     {
@@ -44,7 +44,7 @@ public class HabitScheduleCharacterizationTests
             type == 2 ? 2 : type == 1 ? 1 : null, Today,
             CreatedAtUtc: Today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))).Value;
         habit.Log(Today, advanceDueDate: false).IsSuccess.Should().BeTrue();
-        if (type != 0)
+        if (type is 1 or 2)
         {
             habit.Log(Today.AddDays(1), advanceDueDate: false).IsSuccess.Should().BeTrue();
             habit.Log(Today.AddDays(3), advanceDueDate: false).IsSuccess.Should().BeTrue();
