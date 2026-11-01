@@ -15,6 +15,8 @@ using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Tests.Persistence;
@@ -111,8 +113,75 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
     [PostgresFact]
     public Task ConcurrentSegmentedWindow_AdmitsExactlyPermitLimit() => ExactLimit("chat", 20);
 
+    [PostgresFact]
+    public Task RejectedAcquisition_DoesNotCommit() => PostgresTestDatabase.WithDatabase(async database =>
+    {
+        await using var db = Context(database);
+        for (var i = 0; i < 3; i++)
+            (await ExecuteFilter(db, "support", "192.0.2.1")).Should().BeTrue();
+        var transactions = new TransactionProbe();
+        await using var rejected = Context(database, transactions);
+
+        (await ExecuteFilter(rejected, "support", "192.0.2.1")).Should().BeFalse();
+
+        transactions.CommitAttempts.Should().Be(0);
+        transactions.Failures.Should().BeEmpty();
+        rejected.Database.CurrentTransaction.Should().BeNull();
+        (await database.DistributedRateLimitBuckets.SumAsync(bucket => bucket.Count)).Should().Be(3);
+    });
+
+    [PostgresFact]
+    public Task LockWait_HonorsServerDeadlineAndRestoresCompletionToken() => PostgresTestDatabase.WithDatabase(async database =>
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var commands = new AcquisitionCommands
+        {
+            Before = async command =>
+        {
+            if (IsBucketRead(command))
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            }
+        }
+        };
+        await using var heldContext = Context(database, commands);
+        var held = ExecuteFilter(heldContext, "refresh", "192.0.2.1");
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var transactions = new TransactionProbe();
+            await using var waiting = Context(database, transactions);
+            using var previous = new CancellationTokenSource();
+            waiting.TransactionCompletionToken = previous.Token;
+            var acquire = () => ExecuteFilter(waiting, "refresh", "192.0.2.1",
+                settings: new DatabaseConnectionSettings { TransactionTimeoutSeconds = 1 });
+
+            await acquire.Should().ThrowAsync<TimeoutException>();
+
+            waiting.TransactionCompletionToken.Should().Be(previous.Token);
+            waiting.Database.CurrentTransaction.Should().BeNull();
+            transactions.Failures.Should().BeEmpty();
+            (await database.DistributedRateLimitBuckets.CountAsync()).Should().Be(0);
+        }
+        finally
+        {
+            release.TrySetResult();
+            (await held).Should().BeTrue();
+        }
+    });
+
     private static Task ExactLimit(string policy, int limit) => PostgresTestDatabase.WithDatabase(async database =>
     {
+        var previousSegmentCount = policy == "chat" ? 7 : 0;
+        if (previousSegmentCount > 0)
+        {
+            var previousSegment = new FixedClock().GetUtcNow().UtcDateTime.AddSeconds(-15);
+            database.DistributedRateLimitBuckets.Add(DistributedRateLimitBucket.Create(
+                policy, "ip:192.0.2.1", previousSegment, previousSegment.AddMinutes(1), previousSegmentCount));
+            await database.SaveChangesAsync();
+        }
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var tasks = Enumerable.Range(0, 40).Select(async _ =>
         {
@@ -121,7 +190,7 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
         }).ToArray();
         start.SetResult();
         var decisions = await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(45));
-        decisions.Count(allowed => allowed).Should().Be(limit);
+        decisions.Count(allowed => allowed).Should().Be(limit - previousSegmentCount);
         (await database.DistributedRateLimitBuckets.SumAsync(bucket => bucket.Count)).Should().Be(limit);
     });
 
@@ -135,7 +204,8 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
         new DbContextOptionsBuilder<OrbitDbContext>().UseNpgsql(database.Database.GetConnectionString())
             .AddInterceptors(interceptors).Options);
 
-    private static async Task<bool> ExecuteFilter(OrbitDbContext db, string policy, string ip, CancellationToken token = default)
+    private static async Task<bool> ExecuteFilter(OrbitDbContext db, string policy, string ip, CancellationToken token = default,
+        DatabaseConnectionSettings? settings = null)
     {
         var http = new DefaultHttpContext { RequestAborted = token };
         http.Connection.RemoteIpAddress = IPAddress.Parse(ip);
@@ -143,7 +213,7 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
         http.Request.Path = "/oauth/token";
         var context = new ActionExecutingContext(new ActionContext(http, new RouteData(), new ActionDescriptor()),
             [], new Dictionary<string, object?>(), new object());
-        var filter = new DistributedRateLimitFilter(policy, new DistributedRateLimitService(db, new FixedClock()),
+        var filter = new DistributedRateLimitFilter(policy, new DistributedRateLimitService(db, new FixedClock(), settings),
             Substitute.For<IAuthSessionService>(), new BffClientIpResolver(Options.Create(new BffForwardingSettings())),
             NullLogger<DistributedRateLimitFilter>.Instance);
         var allowed = false;
@@ -202,12 +272,14 @@ public class DistributedRateLimitPostgresTests(ITestOutputHelper output)
 
     private sealed class TransactionProbe : DbTransactionInterceptor
     {
+        public int CommitAttempts { get; private set; }
         public ConcurrentQueue<string> Failures { get; } = new();
         public Action Committing { get; init; } = () => { };
 
         public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction,
             TransactionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
         {
+            CommitAttempts++;
             Committing();
             return ValueTask.FromResult(result);
         }

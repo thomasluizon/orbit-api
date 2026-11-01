@@ -53,10 +53,7 @@ public sealed class UnitOfWork(
             return await operation(cancellationToken);
         }
 
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
-        using var operationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-        var previousCompletionToken = context.TransactionCompletionToken;
-        context.TransactionCompletionToken = timeoutCts.Token;
+        using var deadline = new TransactionDeadline(context, databaseSettings, cancellationToken);
 
         try
         {
@@ -65,16 +62,12 @@ public sealed class UnitOfWork(
                 context.ChangeTracker.Clear();
                 scheduleSnapshots?.Invalidate();
                 eventCollector?.Clear();
-            }, operationCts.Token, timeoutCts.Token, verifyCommit);
+            }, deadline.OperationToken, deadline.CompletionToken, verifyCommit);
         }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (deadline.IsExpired)
         {
             throw new TimeoutException(
                 $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
-        }
-        finally
-        {
-            context.TransactionCompletionToken = previousCompletionToken;
         }
     }
 
@@ -89,11 +82,8 @@ public sealed class UnitOfWork(
             return;
         }
 
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
-        using var operationCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-        var token = operationCts.Token;
-        var previousCompletionToken = context.TransactionCompletionToken;
-        context.TransactionCompletionToken = timeoutCts.Token;
+        using var deadline = new TransactionDeadline(context, databaseSettings, cancellationToken);
+        var token = deadline.OperationToken;
         try
         {
             var strategy = context.Database.CreateExecutionStrategy();
@@ -103,7 +93,7 @@ public sealed class UnitOfWork(
                 try
                 {
                     await operation(token);
-                    await transaction.CommitAsync(timeoutCts.Token);
+                    await transaction.CommitAsync(deadline.CompletionToken);
                 }
                 catch
                 {
@@ -114,14 +104,10 @@ public sealed class UnitOfWork(
                 }
             });
         }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (deadline.IsExpired)
         {
             throw new TimeoutException(
                 $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
-        }
-        finally
-        {
-            context.TransactionCompletionToken = previousCompletionToken;
         }
     }
 

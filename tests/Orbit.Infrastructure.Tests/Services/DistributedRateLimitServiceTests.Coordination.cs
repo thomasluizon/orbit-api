@@ -24,7 +24,8 @@ public partial class DistributedRateLimitServiceTests
         var service = new CoordinatedService(factory.Context, token =>
         {
             calls++;
-            token.Should().Be(cancellation.Token);
+            token.CanBeCanceled.Should().BeTrue();
+            token.IsCancellationRequested.Should().BeFalse();
             factory.Context.Database.CurrentTransaction.Should().NotBeNull();
             factory.Context.Database.CurrentTransaction!.GetDbTransaction().IsolationLevel.Should().Be(IsolationLevel.Serializable);
             commands.Count.Should().Be(0);
@@ -87,7 +88,8 @@ public partial class DistributedRateLimitServiceTests
         var service = new CoordinatedService(factory.Context, async token =>
         {
             calls++;
-            token.Should().Be(cancellation.Token);
+            token.CanBeCanceled.Should().BeTrue();
+            token.IsCancellationRequested.Should().BeFalse();
             transaction = factory.Context.Database.CurrentTransaction!.GetDbTransaction();
             waiting.SetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
@@ -110,7 +112,7 @@ public partial class DistributedRateLimitServiceTests
     }
 
     [Fact]
-    public async Task Coordination_Npgsql_EmitsExactLockCommandWithCallerToken()
+    public async Task Coordination_Npgsql_EmitsPartitionLockWithCallerToken()
     {
         var commands = new LockCommandCapture();
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
@@ -120,10 +122,10 @@ public partial class DistributedRateLimitServiceTests
         using var cancellation = new CancellationTokenSource();
         var service = new DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant));
 
-        await service.AcquireTransactionLockAsync(cancellation.Token);
+        await service.AcquireTransactionLockAsync("auth", "user:ordered", cancellation.Token);
 
         commands.Sql.Should().ContainSingle().Which.Should()
-            .Be("LOCK TABLE \"DistributedRateLimitBuckets\" IN SHARE ROW EXCLUSIVE MODE");
+            .Be("SELECT pg_advisory_xact_lock(hashtext(@p0), hashtext(@p1))");
         commands.Tokens.Should().ContainSingle().Which.Should().Be(cancellation.Token);
     }
 
@@ -135,7 +137,7 @@ public partial class DistributedRateLimitServiceTests
         commands.Sql.Clear();
         var service = new DistributedRateLimitService(factory.Context, new FixedTimeProvider(MidWindowInstant));
 
-        await service.AcquireTransactionLockAsync(CancellationToken.None);
+        await service.AcquireTransactionLockAsync("auth", "user:ordered", CancellationToken.None);
 
         commands.Sql.Should().BeEmpty();
     }
@@ -143,7 +145,7 @@ public partial class DistributedRateLimitServiceTests
     private sealed class CoordinatedService(OrbitDbContext context, Func<CancellationToken, Task> coordinate)
         : DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant))
     {
-        internal override Task AcquireTransactionLockAsync(CancellationToken cancellationToken) => coordinate(cancellationToken);
+        internal override Task AcquireTransactionLockAsync(string policyName, string partitionKey, CancellationToken cancellationToken) => coordinate(cancellationToken);
     }
 
     private sealed class AcquisitionCommands : DbCommandInterceptor

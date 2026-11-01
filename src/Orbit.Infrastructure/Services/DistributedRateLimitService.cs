@@ -5,11 +5,12 @@ using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider clock)
+public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider clock, DatabaseConnectionSettings? databaseSettings = null)
     : IDistributedRateLimitService, IDistributedQuotaService
 {
     private static readonly DateTime LeaseWindowStartUtc = DateTime.UnixEpoch;
@@ -187,37 +188,51 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         RateLimitPolicy policy,
         CancellationToken cancellationToken)
     {
+        var settings = databaseSettings ?? new DatabaseConnectionSettings();
+        using var deadline = new TransactionDeadline(dbContext, settings, cancellationToken);
         var strategy = CreateAcquisitionStrategy();
-
-        return await strategy.ExecuteAsync(async token =>
+        try
         {
-            strategy.CommitStarted = false;
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(
-                IsolationLevel.Serializable,
-                token);
+            return await strategy.ExecuteAsync(async token =>
+            {
+                strategy.CommitStarted = false;
+                if (dbContext.Database.IsNpgsql())
+                    await DeleteExpiredBucketsAsync(policyName, clock.GetUtcNow().UtcDateTime, token);
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                    // https://www.postgresql.org/docs/17/transaction-iso.html#XACT-READ-COMMITTED: the bucket read must see the preceding lock holder's commit.
+                    dbContext.Database.IsNpgsql() ? IsolationLevel.ReadCommitted : IsolationLevel.Serializable,
+                    token);
 
-            try
-            {
-                await AcquireTransactionLockAsync(token);
-                var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, token);
-                strategy.CommitStarted = true;
-                await transaction.CommitAsync(token);
-                return decision;
-            }
-            catch
-            {
-                foreach (var entry in dbContext.ChangeTracker.Entries<DistributedRateLimitBucket>().ToList())
-                    entry.State = EntityState.Detached;
-                throw;
-            }
-        }, cancellationToken);
+                try
+                {
+                    await AcquireTransactionLockAsync(policyName, partitionKey, token);
+                    var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, token);
+                    if (decision.Allowed)
+                    {
+                        strategy.CommitStarted = true;
+                        await transaction.CommitAsync(deadline.CompletionToken);
+                    }
+                    return decision;
+                }
+                catch
+                {
+                    foreach (var entry in dbContext.ChangeTracker.Entries<DistributedRateLimitBucket>().ToList())
+                        entry.State = EntityState.Detached;
+                    throw;
+                }
+            }, deadline.OperationToken);
+        }
+        catch (OperationCanceledException) when (deadline.IsExpired)
+        {
+            throw new TimeoutException(
+                $"Transaction exceeded the {settings.TransactionTimeoutSeconds}s timeout and was rolled back.");
+        }
     }
 
-    internal virtual Task AcquireTransactionLockAsync(CancellationToken cancellationToken)
+    internal virtual Task AcquireTransactionLockAsync(string policyName, string partitionKey, CancellationToken cancellationToken)
         => dbContext.Database.IsNpgsql()
-            // https://www.postgresql.org/docs/17/sql-lock.html: lock before the first query establishes the Serializable snapshot.
             ? dbContext.Database.ExecuteSqlRawAsync(
-                "LOCK TABLE \"DistributedRateLimitBuckets\" IN SHARE ROW EXCLUSIVE MODE", cancellationToken)
+                "SELECT pg_advisory_xact_lock(hashtext({0}), hashtext({1}))", [policyName, partitionKey], cancellationToken)
             : Task.CompletedTask;
 
     private async Task<DistributedRateLimitDecision> TryAcquireCoreAsync(
@@ -234,22 +249,8 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ? segmentStartUtc
             : now - policy.Window + segmentWindow;
 
-        var expiredBuckets = dbContext.DistributedRateLimitBuckets
-            .Where(bucket => bucket.PolicyName == policyName && bucket.WindowEndsAtUtc <= now);
-
-        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            var expiredEntities = await expiredBuckets.ToListAsync(cancellationToken);
-            if (expiredEntities.Count > 0)
-            {
-                dbContext.DistributedRateLimitBuckets.RemoveRange(expiredEntities);
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-        }
-        else
-        {
-            await expiredBuckets.ExecuteDeleteAsync(cancellationToken);
-        }
+        if (!dbContext.Database.IsNpgsql())
+            await DeleteExpiredBucketsAsync(policyName, now, cancellationToken);
 
         var recentBuckets = await dbContext.DistributedRateLimitBuckets
             .Where(bucket =>
@@ -295,6 +296,38 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
     }
 
     internal virtual AcquisitionExecutionStrategy CreateAcquisitionStrategy() => new(dbContext);
+
+    private async Task DeleteExpiredBucketsAsync(string policyName, DateTime nowAtUtc, CancellationToken cancellationToken)
+    {
+        if (dbContext.Database.IsNpgsql())
+        {
+            // https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE: skip rows owned by another acquisition during policy-wide cleanup.
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM "DistributedRateLimitBuckets" WHERE "Id" IN (
+                    SELECT "Id" FROM "DistributedRateLimitBuckets"
+                    WHERE "PolicyName" = {policyName} AND "WindowEndsAtUtc" <= {nowAtUtc}
+                    FOR UPDATE SKIP LOCKED
+                )
+                """, cancellationToken);
+            return;
+        }
+
+        var expiredBuckets = dbContext.DistributedRateLimitBuckets
+            .Where(bucket => bucket.PolicyName == policyName && bucket.WindowEndsAtUtc <= nowAtUtc);
+        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var expiredEntities = await expiredBuckets.ToListAsync(cancellationToken);
+            if (expiredEntities.Count > 0)
+            {
+                dbContext.DistributedRateLimitBuckets.RemoveRange(expiredEntities);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+        else
+        {
+            await expiredBuckets.ExecuteDeleteAsync(cancellationToken);
+        }
+    }
 
     internal class AcquisitionExecutionStrategy(OrbitDbContext context)
         : NpgsqlRetryingExecutionStrategy(context, 2, TimeSpan.FromSeconds(5), [PostgresErrorCodes.UniqueViolation])
