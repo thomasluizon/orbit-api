@@ -13,16 +13,17 @@ public sealed partial class ChatWriteHoldHandlerTests
 {
     public static IEnumerable<object[]> StartingStepCaptures() =>
         Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Fixtures", "StartingSteps"), "*.json")
-            .Order().Select(path => new object[] { Path.GetFileName(path) });
+            .Order().SelectMany(path => new[] { false, true }
+                .Select(complete => new object[] { Path.GetFileName(path), complete }));
 
     [Theory]
     [MemberData(nameof(StartingStepCaptures))]
-    public async Task OneSmallStep_CapturedCallsRecoverWithinTheTurn(string capture)
+    public async Task OneSmallStep_CapturedCallsRecoverWithinTheTurn(string capture, bool complete)
     {
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
             Path.Combine(AppContext.BaseDirectory, "Fixtures", "StartingSteps", capture)));
         var call = document.RootElement.GetProperty("toolCalls")[0];
-        var args = call.GetProperty("arguments");
+        var args = WithReadCompletion(call.GetProperty("arguments"), complete);
         var language = args.GetProperty("language").GetString()!;
         _user.SetLanguage(language);
         _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
@@ -55,10 +56,16 @@ public sealed partial class ChatWriteHoldHandlerTests
             result.Value.AiMessage.Should().BeNull();
         }
         if (call.GetProperty("resultStatus").GetString() == "Failed")
+        {
             errors.Should().ContainSingle().Which.Should().Match<AiToolCallResult>(error =>
                 !error.Success && error.Error!.Contains("exactly one", StringComparison.Ordinal));
+            await _aiIntentService.ReceivedWithAnyArgs(1).ContinueWithToolResultsAsync(default!, default!, default, default);
+        }
         else
+        {
             errors.Should().BeEmpty();
+            await _aiIntentService.DidNotReceiveWithAnyArgs().ContinueWithToolResultsAsync(default!, default!, default, default);
+        }
         result.Value.Actions.Should().BeEmpty();
         result.Value.Operations.Should().ContainSingle().Which.Status.Should().Be(AgentOperationStatus.Succeeded);
         result.Value.PendingOperations.Should().BeNullOrEmpty();
@@ -78,6 +85,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         return new("suggest_breakdown", "corrected", JsonSerializer.SerializeToElement(new
         {
             one_small_step = true,
+            orbit_read_complete = true,
             language = args.GetProperty("language").GetString(),
             title = args.GetProperty("title").GetString(),
             suggested_sub_habits = step
@@ -85,17 +93,25 @@ public sealed partial class ChatWriteHoldHandlerTests
     }
 
     [Theory]
-    [InlineData("write")]
-    [InlineData("ordinaryBreakdown")]
-    [InlineData("extraCall")]
-    [InlineData("emptyStep")]
-    [InlineData("noCall")]
-    [InlineData("providerError")]
-    public async Task OneSmallStep_CorrectionIsBoundedAndCannotBecomeAWrite(string continuation)
+    [InlineData("write", false)]
+    [InlineData("write", true)]
+    [InlineData("ordinaryBreakdown", false)]
+    [InlineData("ordinaryBreakdown", true)]
+    [InlineData("extraCall", false)]
+    [InlineData("extraCall", true)]
+    [InlineData("emptyStep", false)]
+    [InlineData("emptyStep", true)]
+    [InlineData("noCall", false)]
+    [InlineData("noCall", true)]
+    [InlineData("providerError", false)]
+    [InlineData("providerError", true)]
+    public async Task OneSmallStep_CorrectionIsBoundedAndCannotBecomeAWrite(string continuation, bool complete)
     {
         using var capture = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,
             "Fixtures", "StartingSteps", "composition-one-small-step-en-r1.json")));
-        var args = capture.RootElement.GetProperty("toolCalls")[0].GetProperty("arguments");
+        var args = WithReadCompletion(capture.RootElement.GetProperty("toolCalls")[0].GetProperty("arguments"), complete);
+        _featureFlagService.GetEnabledKeysForUserAsync(_userId, Arg.Any<CancellationToken>())
+            .Returns(new[] { FeatureFlagKeys.AstraBlockFirst });
         ScriptToolCall(args.GetRawText(), "suggest_breakdown");
         var create = new AiToolCall("create_habit", "write", JsonSerializer.SerializeToElement(new
         {
@@ -127,5 +143,12 @@ public sealed partial class ChatWriteHoldHandlerTests
         result.Value.Operations.Should().OnlyContain(operation => operation.OperationId == "suggest_breakdown");
         await _aiIntentService.ReceivedWithAnyArgs(1).ContinueWithToolResultsAsync(default!, default!, default, default);
         await _habitRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+    }
+
+    private static JsonElement WithReadCompletion(JsonElement args, bool complete)
+    {
+        var arguments = args.EnumerateObject().ToDictionary(property => property.Name, property => property.Value);
+        arguments[TerminalReadDirective.CompleteArgument] = JsonSerializer.SerializeToElement(complete);
+        return JsonSerializer.SerializeToElement(arguments);
     }
 }

@@ -41,7 +41,7 @@ public partial class ProcessUserChatCommandHandlerTests
         request.DynamicContext.Should().Contain(JsonSerializer.Serialize(new { previousStartingStep = previous }, ChatStreamEvent.SerializerOptions))
             .And.Contain(FirstMotionGuidance);
         JsonSerializer.SerializeToElement(request.ToolDeclarations.Single()).GetProperty("description").GetString()
-            .Should().Contain(FirstMotionGuidance);
+            .Should().NotContain(FirstMotionGuidance, "the typed previous-step context already supplies the complete guidance");
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("oneSmallStep");
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await AssertNoCompositionContinuation();

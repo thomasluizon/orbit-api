@@ -23,8 +23,8 @@ public partial class ProcessUserChatCommandHandlerTests
         var facts = AiSummaryService.BuildSummaryPrompt([], new(Today, Today, Today, language,
             new TimeOnly(11, 0), 0, 0, new Dictionary<Guid, DateOnly>()));
         facts.Should().Contain(language == "en" ? "English" : "Brazilian Portuguese");
-        prompt.Should().Contain("Summarize the day across the person's routines in words");
-        prompt.Should().Contain("End the sentence by naturally naming the server-selected next step");
+        prompt.Should().Contain("Name only the server-selected next step in the sentence.");
+        prompt.Should().Contain("Do not recap routine states or repeat completion facts already shown in the daySummary block.");
         prompt.Should().Contain("Digits are allowed only inside an exact supplied stored title");
         prompt.Should().Contain("The model never selects a task");
         prompt.Should().Contain("If nextStep is null, close the day");

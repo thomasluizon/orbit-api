@@ -105,7 +105,7 @@ public class ChatToolMetadataTests
             .And.Contain("pair with query_goals")
             .And.Contain("A daily summary does not replace this listing");
         AssertTool(skipHabitTool, "skip_habit", "Skip", "date");
-        AssertTool(suggestBreakdownTool, "suggest_breakdown", "Suggest", "suggested_sub_habits");
+        AssertTool(suggestBreakdownTool, "suggest_breakdown", "Suggest", "suggested_sub_habits", expectReadOnly: true);
         AssertTool(updateGoalProgressTool, "update_goal_progress", "goal", "current_value");
         AssertTool(updateGoalStatusTool, "update_goal_status", "goal", "status");
         AssertTool(updateGoalTool, "update_goal", "goal", "target_value");

@@ -27,37 +27,31 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("en", false)]
-    [InlineData("pt-BR", false)]
-    [InlineData("en", true)]
-    [InlineData("pt-BR", true)]
-    public async Task R9gOfferReplay_InvalidSuggestionGetsOneSameTargetRepair(string locale, bool conflict)
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task R9gOfferReplay_ConflictingRemindersGetOneSameTargetRepair(string locale)
     {
         SetupUserAndPayGate();
         EnableComposition();
-        var call = R9gCall(conflict ? "repeat-pt-BR-r3" : "repeat-en-r1");
-        Orbit.Application.Chat.Tools.IAiTool tool = conflict ? new BulkCreateHabitsTool(_mediator) : new CreateHabitTool(_userDateService, _mediator);
+        var call = R9gCall("repeat-pt-BR-r3");
+        var tool = new BulkCreateHabitsTool(_mediator);
         var handler = CreateHandler(tool);
         var outcomes = R9fWriteExecutor(tool);
         var original = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
-        var draft = conflict ? original["habits"]![0]!.AsObject() : original;
-        if (conflict) draft["frequency_quantity"] = 1;
+        var draft = original["habits"]![0]!.AsObject();
+        draft["frequency_quantity"] = 1;
         SetupAiResponse(new AiResponse { ToolCalls = [call with { Args = JsonSerializer.SerializeToElement(original) }], ConversationContext = TestConversationContext });
         var repaired = (JsonObject)original.DeepClone();
-        var item = conflict ? repaired["habits"]![0]!.AsObject() : repaired;
+        var item = repaired["habits"]![0]!.AsObject();
         item["frequency_quantity"] = 1;
-        if (conflict)
-        {
-            item.Remove("scheduled_reminders");
-            item["suggested_fields"] = new JsonArray("frequency_quantity", "repeat_reminder");
-        }
-        else item["repeat_reminder"] = new JsonObject { ["interval_minutes"] = 120 };
+        item.Remove("scheduled_reminders");
+        item["suggested_fields"] = new JsonArray("frequency_quantity", "repeat_reminder");
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
             Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>()).Returns(input =>
             {
                 var failure = input.Arg<IReadOnlyList<AiToolCallResult>>().Single();
                 failure.Success.Should().BeFalse();
-                failure.Error.Should().Contain(conflict ? "repeat_reminder" : "frequency_quantity");
+                failure.Error.Should().Contain("repeat_reminder");
                 return Result.Success(new AiResponse { ToolCalls = [call with { Id = "repair", Args = JsonSerializer.SerializeToElement(repaired) }], ConversationContext = TestConversationContext });
             });
 

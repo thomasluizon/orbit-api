@@ -61,21 +61,29 @@ public partial class ProcessUserChatCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("ambiguity-en-r2", "questions[0].options", "ambiguity-en-r2", 1)]
-    [InlineData("composition-choice-en-r2", "questions[0].options", "composition-choice-en-r2", 1)]
-    [InlineData("composition-compound-missing-kind-en-r3", "questions", "composition-choice-en-r1", 1)]
+    [InlineData("ambiguity-en-r2", "questions[0].options", "ambiguity-en-r2", 1, false)]
+    [InlineData("ambiguity-en-r2", "questions[0].options", "ambiguity-en-r2", 1, true)]
+    [InlineData("composition-choice-en-r2", "questions[0].options", "composition-choice-en-r2", 1, false)]
+    [InlineData("composition-choice-en-r2", "questions[0].options", "composition-choice-en-r2", 1, true)]
+    [InlineData("composition-compound-missing-kind-en-r3", "questions", "composition-choice-en-r1", 1, false)]
+    [InlineData("composition-compound-missing-kind-en-r3", "questions", "composition-choice-en-r1", 1, true)]
     public async Task GateEightAsk_InvalidCapturedCallReturnsPreciseErrorAndAcceptsRetry(
-        string capture, string errorPath, string retryCapture, int retryIndex)
+        string capture, string errorPath, string retryCapture, int retryIndex, bool complete)
     {
         SetupUserAndPayGate();
         EnableComposition();
-        SetupAiResponse(new AiResponse { ConversationContext = TestConversationContext, ToolCalls = [AskSelectionRead(), GateEightAskCalls(capture)[0]] });
+        SetupAiResponse(new AiResponse
+        {
+            ConversationContext = TestConversationContext,
+            ToolCalls = new[] { AskSelectionRead(), GateEightAskCalls(capture)[0] }
+                .Select(call => WithTerminalReadCompletion(call, complete)).ToArray()
+        });
         _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse
             {
                 ConversationContext = TestConversationContext,
-                ToolCalls = [AskWithMissingInput(GateEightAskCalls(retryCapture)[retryIndex], "record_selection")]
+                ToolCalls = [WithTerminalReadCompletion(AskWithMissingInput(GateEightAskCalls(retryCapture)[retryIndex], "record_selection"), complete)]
             }));
 
         var result = await CreateRecordAskHandler().Handle(new(UserId, "Change my habit.",
@@ -92,6 +100,13 @@ public partial class ProcessUserChatCommandHandlerTests
         await _blockStore.Received(1).AddAsync(Arg.Any<IssuedAstraBlock>(), Arg.Any<CancellationToken>());
         result.Value.PendingOperations.Should().BeNullOrEmpty();
         await AssertOnlyAskSelectionRead();
+    }
+
+    private static AiToolCall WithTerminalReadCompletion(AiToolCall call, bool complete)
+    {
+        var args = JsonNode.Parse(call.Args.GetRawText())!.AsObject();
+        args[TerminalReadDirective.CompleteArgument] = complete;
+        return call with { Args = JsonSerializer.SerializeToElement(args) };
     }
 
     [Fact]

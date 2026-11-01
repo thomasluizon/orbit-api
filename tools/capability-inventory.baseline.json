@@ -9145,6 +9145,9 @@
               "tool": "query_habits"
             },
             {
+              "tool": "suggest_breakdown"
+            },
+            {
               "tool": "suggest_habits"
             }
           ],
@@ -9177,6 +9180,10 @@
             },
             {
               "tool": "query_habits",
+              "via": "execute_agent_operation_v2"
+            },
+            {
+              "tool": "suggest_breakdown",
               "via": "execute_agent_operation_v2"
             },
             {
@@ -9222,9 +9229,6 @@
             },
             {
               "tool": "skip_habit"
-            },
-            {
-              "tool": "suggest_breakdown"
             },
             {
               "tool": "undo_skip_habit"
@@ -9323,10 +9327,6 @@
             },
             {
               "tool": "skip_habit",
-              "via": "execute_agent_operation_v2"
-            },
-            {
-              "tool": "suggest_breakdown",
               "via": "execute_agent_operation_v2"
             },
             {

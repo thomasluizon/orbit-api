@@ -227,7 +227,8 @@ public partial class ProcessUserChatCommandHandler
             return new ToolRoundResult(aiResponse with { ToolCalls = null, ReportedTokenCount = 0, RequestBudgetTokenCount = 0 });
         }
 
-        if (hadToolFailure && (ownershipReadDenied || !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration)))
+        if (hadToolFailure && (HasReadCorrectionCandidate(executionResults)
+            || !IsDeclaredTerminalReadRound(aiResponse, request, context, iteration)))
         {
             if (await TryRecoverFreshCreateAsync(aiResponse, orderedCalls, outcomesByCallId, toolResults,
                 request, context, executionResults, iteration, totalBudgetTokens, language, cancellationToken) is { } recovered)
@@ -389,7 +390,8 @@ public partial class ProcessUserChatCommandHandler
                 outcome.OperationResult,
                 outcome.PolicyDenial,
                 outcome.PendingOperation);
-            if (!isCorrection && (ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true || IsOwnershipReadDenial(outcome)))
+            if (!isCorrection && (ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true
+                || IsStartingStepCall(call) || IsOwnershipReadDenial(outcome)))
                 executionResults.CorrectionOccurrences.Add(new CorrectionOccurrence(call, outcome));
         }
 

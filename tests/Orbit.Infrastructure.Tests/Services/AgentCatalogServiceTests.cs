@@ -18,6 +18,20 @@ public class AgentCatalogServiceTests
 {
     private readonly AgentCatalogService _catalogService = new();
 
+    [Fact]
+    public void SuggestBreakdown_IsAReadOperationWithReadScope()
+    {
+        var tool = new Orbit.Application.Chat.Tools.Implementations.SuggestBreakdownTool();
+        var catalog = new AgentCatalogService([tool]);
+
+        ((IAiTool)tool).IsReadOnly.Should().BeTrue();
+        catalog.GetOperation(tool.Name)!.IsMutation.Should().BeFalse();
+        var capability = catalog.GetCapabilityByChatTool(tool.Name)!;
+        capability.IsMutation.Should().BeFalse();
+        capability.Scope.Should().Be(AgentScopes.ReadHabits);
+        capability.ConfirmationRequirement.Should().Be(AgentConfirmationRequirement.None);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

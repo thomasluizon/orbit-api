@@ -52,7 +52,7 @@ public class AstraBehaviourPromptTests
         var prompt = Build(composition);
 
         prompt.Should().Contain("For what to do next today, call get_daily_summary with relative_period today, generate_narrative true and orbit_read_complete true");
-        prompt.Should().Contain("Its narrative recommends the earliest actionable pending step from the complete ordered day schedule");
+        prompt.Should().Contain("Its narrative names only the earliest actionable pending step from the complete ordered day schedule");
         prompt.Should().Contain("The server keeps that sentence in the profile language beside one daySummary block");
         prompt.Should().Contain("Do not substitute query_habits or suggest_habits for this next-step read");
     }
