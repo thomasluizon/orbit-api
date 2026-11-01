@@ -337,13 +337,14 @@ public sealed class ProactiveProposalTests
     [Theory]
     [InlineData("[\"description\"]")]
     [InlineData("[\"tag_names\"]")]
-    public async Task UnfilledOfferNamesReturnRepairableFailureNamingTheField(string names)
+    public async Task UnfilledOfferNamesPreserveTheRequestedDraft(string names)
     {
         var result = await previewer.PreviewAsync(user, "create_habit",
             Parse("{\"title\":\"Read\",\"is_general\":true,\"tag_names\":[],\"emoji\":\"📖\",\"suggested_fields\":" + names + "}"), clientContext: client);
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("invalid_offer");
-        result.Error.Should().Contain(names.Contains("description", StringComparison.Ordinal) ? "description" : "tag_names");
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.Items![0].Fields.Should().NotContain(field => field.Provenance == "suggested");
+        result.Value.ExecutionArguments!.Value.GetProperty("title").GetString().Should().Be("Read");
+        result.Value.ExecutionArguments.Value.GetProperty("tag_names").GetArrayLength().Should().Be(0);
     }
 
     [Theory]
@@ -362,9 +363,6 @@ public sealed class ProactiveProposalTests
     }
 
     [Theory]
-    [InlineData("[\"title\"]")]
-    [InlineData("[\"unknown\"]")]
-    [InlineData("[\"emoji\",\"emoji\"]")]
     [InlineData("[123]")]
     public async Task InvalidFieldNameOffersAreRejected(string names)
     {
@@ -381,7 +379,7 @@ public sealed class ProactiveProposalTests
     [InlineData("unknown", true)]
     [InlineData("title", true)]
     [InlineData("deadline", true)]
-    public async Task UnsupportedOfferNamesReturnRepairableFieldErrorsAtEveryDepth(string field, bool nested)
+    public async Task UnsupportedOfferNamesFollowRequestedFieldRulesAtEveryDepth(string field, bool nested)
     {
         var draft = new JsonObject
         {
@@ -401,11 +399,16 @@ public sealed class ProactiveProposalTests
                 })
             }
             : draft;
-        var result = await previewer.PreviewAsync(user, nested ? "bulk_create_habits" : "create_habit",
+        var operation = nested ? "bulk_create_habits" : "create_habit";
+        var result = await previewer.PreviewAsync(user, operation,
+            JsonSerializer.SerializeToElement(args), clientContext: client);
+        draft.Remove("suggested_fields");
+        var requested = await previewer.PreviewAsync(user, operation,
             JsonSerializer.SerializeToElement(args), clientContext: client);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("invalid_offer");
-        result.Error.Should().Contain(field);
+        result.IsSuccess.Should().Be(requested.IsSuccess);
+        result.ErrorCode.Should().Be(requested.ErrorCode);
+        result.Error.Should().Be(requested.Error);
+        result.Value!.PreviewFingerprint.Should().Be(requested.Value!.PreviewFingerprint);
     }
 }

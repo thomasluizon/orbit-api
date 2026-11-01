@@ -1,0 +1,114 @@
+{
+  "caseId": "offers-preview-rejection-en",
+  "repeat": 1,
+  "toolCalls": [
+    {
+      "name": "create_habit",
+      "arguments": {
+        "orbit_write_complete": true,
+        "orbit_dismissed_offer_keys": [],
+        "suggested_fields": [
+          "emoji",
+          "frequency_unit",
+          "frequency_quantity",
+          "is_general",
+          "repeat_reminder"
+        ],
+        "title": "Drink water throughout the day",
+        "description": null,
+        "emoji": "💧",
+        "frequency_unit": null,
+        "frequency_quantity": null,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": "2026-11-01",
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_bad_habit": false,
+        "is_general": true,
+        "is_flexible": false,
+        "checklist_items": null,
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": true,
+        "reminder_times": [],
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "repeat_reminder": {
+          "interval_minutes": 60,
+          "active_start": null,
+          "active_end": null,
+          "start_at_utc": null
+        },
+        "slip_alert_enabled": null,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": null
+      },
+      "resultStatus": "Failed",
+      "result": {
+        "success": false,
+        "error": "Invalid suggested_fields entry frequency_unit: use a supported field name with a value.",
+        "payload": null
+      }
+    },
+    {
+      "name": "create_habit",
+      "arguments": {
+        "orbit_write_complete": true,
+        "orbit_dismissed_offer_keys": [],
+        "suggested_fields": [
+          "emoji",
+          "is_general",
+          "repeat_reminder",
+          "reminder_enabled",
+          "reminder_times"
+        ],
+        "title": "Drink water throughout the day",
+        "description": null,
+        "emoji": "💧",
+        "frequency_unit": null,
+        "frequency_quantity": null,
+        "interval_weeks": null,
+        "days": null,
+        "due_date": "2026-11-01",
+        "end_date": null,
+        "due_time": null,
+        "due_end_time": null,
+        "is_bad_habit": false,
+        "is_general": true,
+        "is_flexible": false,
+        "checklist_items": null,
+        "start_date": null,
+        "placement": null,
+        "reminder_enabled": true,
+        "reminder_times": [],
+        "scheduled_reminders": null,
+        "relative_reminders": null,
+        "repeat_reminder": {
+          "interval_minutes": 60,
+          "active_start": null,
+          "active_end": null,
+          "start_at_utc": null
+        },
+        "slip_alert_enabled": null,
+        "tag_names": null,
+        "habit_id": null,
+        "tag_ids": null,
+        "goal_ids": null,
+        "parent_habit_id": null,
+        "sub_habits": null
+      },
+      "resultStatus": "Failed",
+      "result": {
+        "success": false,
+        "error": "Invalid suggested_fields entry reminder_times: use a supported field name with a value.",
+        "payload": null
+      }
+    }
+  ]
+}

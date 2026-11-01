@@ -64,7 +64,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [Theory]
     [InlineData("en", "repeat-en-r1")]
     [InlineData("pt-BR", "repeat-pt-BR-r3")]
-    public async Task OfferFieldNames_RepairUnsupportedNameBeforeTheOnlyApprovalPreview(string language, string capture)
+    public async Task OfferFieldNames_DropUnsupportedNameBeforeTheOnlyApprovalPreview(string language, string capture)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -79,24 +79,11 @@ public partial class ProcessUserChatCommandHandlerTests
             ToolCalls = [accepted with { Args = JsonSerializer.SerializeToElement(invalid) }],
             ConversationContext = TestConversationContext
         });
-        _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>()).Returns(call =>
-            {
-                var failure = call.Arg<IReadOnlyList<AiToolCallResult>>().Single();
-                failure.Success.Should().BeFalse();
-                failure.Error.Should().Contain("unsupported_offer_field");
-                return Result.Success(new AiResponse
-                {
-                    ToolCalls = [accepted with { Id = "repair" }],
-                    ConversationContext = TestConversationContext
-                });
-            });
 
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(language)), default);
 
         result.IsSuccess.Should().BeTrue(result.Error);
-        outcomes.Select(value => value.Operation.Status).Should().Equal(AgentOperationStatus.Failed, AgentOperationStatus.PendingConfirmation);
-        outcomes[0].Operation.ErrorCode.Should().Be("invalid_offer");
+        outcomes.Select(value => value.Operation.Status).Should().Equal(AgentOperationStatus.PendingConfirmation);
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         var fields = preview.Items!.Single().Fields;
         fields.Should().Contain(field => field.Field == "title" && field.Provenance == "requested"
@@ -104,8 +91,7 @@ public partial class ProcessUserChatCommandHandlerTests
         fields.Should().Contain(field => field.Field == "repeat_reminder" && field.Provenance == "suggested"
             && field.IsEditable && field.Removal != null);
         fields.Should().NotContain(field => field.Field == "unsupported_offer_field");
-        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+        await AssertNoCompositionContinuation();
         await _mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.Habits.Commands.CreateHabitCommand>(), Arg.Any<CancellationToken>());
     }
 
@@ -114,7 +100,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("dated-reminder-pt-BR-r2", "emoji", "suggested")]
     [InlineData("repeat-en-r1", "repeat_reminder", "suggested")]
     [InlineData("repeat-pt-BR-r3", "repeat_reminder", "suggested")]
-    public async Task R9f_StrictPlaceholdersPreserveValidSuggestionsAfterRequiredRepair(string capture, string field, string provenance)
+    public async Task R9f_StrictPlaceholdersPreserveValidSuggestionsWithoutRepair(string capture, string field, string provenance)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -122,23 +108,11 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         var outcomes = R9fWriteExecutor(tool);
         var original = R9fCall(capture, tool.Name);
-        var missing = original.Args.GetProperty("suggested_fields").EnumerateArray().Select(name => name.GetString()!)
-            .Where(name => !original.Args.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null
-                || value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 0).ToArray();
-        if (missing.Length > 0)
-        {
-            var corrected = JsonNode.Parse(original.Args.GetRawText())!.AsObject();
-            corrected["suggested_fields"] = new JsonArray(original.Args.GetProperty("suggested_fields").EnumerateArray()
-                .Select(name => name.GetString()!).Except(missing).Select(name => (JsonNode?)JsonValue.Create(name)).ToArray());
-            _aiIntentService.ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
-                Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>()).Returns(Result.Success(new AiResponse
-                { ToolCalls = [original with { Id = "repair", Args = JsonSerializer.SerializeToElement(corrected) }], ConversationContext = TestConversationContext }));
-        }
         SetupAiResponse(new AiResponse { ToolCalls = [original], ConversationContext = TestConversationContext });
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(capture.Contains("pt-BR") ? "pt-BR" : "en")), default);
         result.IsSuccess.Should().BeTrue(result.Error);
-        outcomes.Select(outcome => outcome.Operation.Status).Should().Equal(missing.Length > 0
-            ? [AgentOperationStatus.Failed, AgentOperationStatus.PendingConfirmation] : new[] { AgentOperationStatus.PendingConfirmation });
+        outcomes.Select(outcome => outcome.Operation.Status).Should().Equal(AgentOperationStatus.PendingConfirmation);
+        await AssertNoCompositionContinuation();
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
         preview.Items!.Single().Fields.Should().Contain(value => value.Field == field && value.Provenance == provenance);
         if (R9fCall(capture, tool.Name).Args.GetProperty("due_date").ValueKind == JsonValueKind.Null)

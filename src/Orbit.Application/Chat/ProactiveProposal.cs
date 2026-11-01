@@ -83,18 +83,18 @@ public static class ProactiveProposal
         ChatToolControlOrder.Apply(schema);
     }
 
-    internal static bool NormalizeSuggestions(JsonNode? node, out string? invalidField)
+    internal static bool NormalizeSuggestions(JsonNode? node, JsonElement schema, out string? invalidField)
     {
         invalidField = null;
         if (node is JsonArray array)
         {
+            var itemSchema = schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty("items", out var items) ? items : default;
             foreach (var item in array)
-                if (!NormalizeSuggestions(item, out invalidField)) return false;
+                if (!NormalizeSuggestions(item, itemSchema, out invalidField)) return false;
             return true;
         }
         if (node is not JsonObject source) return true;
-        foreach (var property in source)
-            if (!NormalizeSuggestions(property.Value, out invalidField)) return false;
+        if (!NormalizeChildren(source, schema, out invalidField)) return false;
         if (!source.TryGetPropertyValue(Argument, out var proposed)) return true;
         if (proposed is null)
         {
@@ -103,11 +103,11 @@ public static class ProactiveProposal
         }
         if (proposed is JsonObject values)
         {
-            foreach (var field in values)
-                if (!Eligible(field.Key) || !HasValue(field.Value))
+            foreach (var field in values.ToArray())
+                if (!SupportsSuggestion(schema, field.Key) || !HasValue(field.Value))
                 {
-                    invalidField = field.Key;
-                    return false;
+                    values.Remove(field.Key);
+                    if (!source.ContainsKey(field.Key)) source[field.Key] = field.Value;
                 }
             return true;
         }
@@ -116,26 +116,51 @@ public static class ProactiveProposal
             invalidField = Argument;
             return false;
         }
+        return NormalizeNames(source, names, schema, out invalidField);
+    }
+
+    private static bool NormalizeChildren(JsonObject source, JsonElement schema, out string? invalidField)
+    {
+        invalidField = null;
+        foreach (var property in source)
+        {
+            if (property.Key == Metadata) continue;
+            if (property.Key == Argument && property.Value is JsonObject offered)
+            {
+                foreach (var field in offered)
+                    if (!NormalizeSuggestions(field.Value, FieldSchema(schema, field.Key), out invalidField)) return false;
+            }
+            else if (property.Key != Argument && !NormalizeSuggestions(property.Value, FieldSchema(schema, property.Key), out invalidField)) return false;
+        }
+        return true;
+    }
+
+    private static bool NormalizeNames(JsonObject source, JsonArray names, JsonElement schema, out string? invalidField)
+    {
+        invalidField = null;
         var suggestions = new JsonObject();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in names)
         {
-            if (name is not JsonValue value || !value.TryGetValue<string>(out var field)
-                || !Eligible(field) || !seen.Add(field))
+            if (name is not JsonValue value || !value.TryGetValue<string>(out var field))
             {
                 invalidField = name?.ToJsonString() ?? Argument;
                 return false;
             }
-            if (!source.Remove(field, out var configuration) || !HasValue(configuration))
-            {
-                invalidField = field;
-                return false;
-            }
+            if (!SupportsSuggestion(schema, field) || !seen.Add(field) || !HasValue(source[field])) continue;
+            source.Remove(field, out var configuration);
             suggestions[field] = configuration;
         }
         source[Argument] = suggestions;
         return true;
     }
+
+    private static bool SupportsSuggestion(JsonElement schema, string field) =>
+        Eligible(field) && FieldSchema(schema, field).ValueKind != JsonValueKind.Undefined;
+
+    private static JsonElement FieldSchema(JsonElement schema, string field) =>
+        schema.ValueKind == JsonValueKind.Object && schema.TryGetProperty(Properties, out var properties)
+        && properties.TryGetProperty(field, out var value) ? value : default;
 
     internal static bool HasValue(JsonNode? value) => value is not null
         && value is not JsonArray { Count: 0 };

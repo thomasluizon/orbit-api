@@ -27,9 +27,9 @@ public sealed partial class PendingOperationChangePreviewer
         if (toolRegistry.GetTool(operationId) is not { } tool)
             return Result.Failure<PendingOperationChangePreview?>("preview_unavailable");
         var root = JsonNode.Parse(OptionalToolArguments.OmitOptionalNulls(arguments, tool.GetParameterSchema()).GetRawText())!.AsObject();
-        if (!ProactiveProposal.NormalizeSuggestions(root, out var invalidField))
-            return Result.Failure<PendingOperationChangePreview?>($"Invalid suggested_fields entry {invalidField}: use a supported field name with a value.", "invalid_offer");
         var schema = JsonSerializer.SerializeToElement(tool.GetParameterSchema());
+        if (!ProactiveProposal.NormalizeSuggestions(root, schema, out var invalidField))
+            return Result.Failure<PendingOperationChangePreview?>($"Invalid suggested_fields entry {invalidField}: use a supported field name with a value.", "invalid_offer");
         var preparation = new OfferPreparation(userId, operationId, clientContext!);
         var prepared = await PrepareOfferNodesAsync(root, schema, preparation, cancellationToken);
         if (!prepared) return Result.Failure<PendingOperationChangePreview?>(
