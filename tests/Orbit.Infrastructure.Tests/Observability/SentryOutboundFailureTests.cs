@@ -41,9 +41,10 @@ public class SentryOutboundFailureTests
         using var http = new HttpClient(new SentryHttpMessageHandler(new FailedResponseHandler()));
         var logger = Substitute.For<ILogger<ContentModerationService>>();
         logger.IsEnabled(LogLevel.Warning).Returns(true);
+        using var services = new ServiceCollection().AddScoped(_ => Substitute.For<IFeatureFlagService>()).BuildServiceProvider();
         var moderation = new ContentModerationService(http,
             Options.Create(new AiSettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1" }), logger,
-            Substitute.For<IFeatureFlagService>());
+            services.GetRequiredService<IServiceScopeFactory>());
 
         var result = await moderation.CheckTextAsync("test text");
 

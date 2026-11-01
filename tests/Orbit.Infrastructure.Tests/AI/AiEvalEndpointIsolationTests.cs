@@ -4,6 +4,7 @@ using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -62,8 +63,9 @@ public class AiEvalEndpointIsolationTests
         }
         else
         {
+            using var services = new ServiceCollection().AddScoped(_ => flags).BuildServiceProvider();
             var service = new ContentModerationService(new HttpClient(handler), options,
-                NullLogger<ContentModerationService>.Instance, flags, config, http);
+                NullLogger<ContentModerationService>.Instance, services.GetRequiredService<IServiceScopeFactory>(), config, http);
             if (eval && !configured)
             {
                 var check = () => service.CheckTextAsync("hello");

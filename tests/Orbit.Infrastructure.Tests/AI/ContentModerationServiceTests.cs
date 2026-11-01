@@ -14,10 +14,14 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.AI;
 
-public class ContentModerationServiceTests
+public class ContentModerationServiceTests : IDisposable
 {
     private readonly StubHttpMessageHandler _handler = new();
     private readonly ContentModerationService _sut;
+    private readonly ServiceProvider _services = new ServiceCollection()
+        .AddScoped(_ => Substitute.For<IFeatureFlagService>()).BuildServiceProvider();
+
+    public void Dispose() => _services.Dispose();
 
     public ContentModerationServiceTests()
     {
@@ -31,7 +35,7 @@ public class ContentModerationServiceTests
             BaseUrl = "https://api.openai.com/v1"
         });
         _sut = new ContentModerationService(httpClient, aiSettings, NullLogger<ContentModerationService>.Instance,
-            Substitute.For<IFeatureFlagService>());
+            _services.GetRequiredService<IServiceScopeFactory>());
     }
 
     [Fact]

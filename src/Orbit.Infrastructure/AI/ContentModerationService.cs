@@ -8,6 +8,7 @@ using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Orbit.Infrastructure.AI;
 
@@ -15,7 +16,7 @@ public partial class ContentModerationService(
     HttpClient httpClient,
     IOptions<AiSettings> aiSettings,
     ILogger<ContentModerationService> logger,
-    IFeatureFlagService flags,
+    IServiceScopeFactory scopeFactory,
     IConfiguration? configuration = null,
     IHttpContextAccessor? http = null) : IContentModerationService
 {
@@ -33,7 +34,7 @@ public partial class ContentModerationService(
             {
                 Content = JsonContent.Create(new ModerationRequest(ModerationModel, text), options: SerializerOptions)
             };
-            var account = await AiEvalAccount.ResolveAsync(AiEvalAccount.CurrentUserId(http), flags, configuration, cancellationToken);
+            var account = await ResolveAccountAsync(cancellationToken);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AiEvalCredentials.Resolve(settings, account));
             request.Options.Set(HandlesFailedResponse, true);
 
@@ -65,6 +66,13 @@ public partial class ContentModerationService(
             LogModerationFailed(logger, exception);
             return Unavailable;
         }
+    }
+
+    private async Task<AiEvalAccount> ResolveAccountAsync(CancellationToken cancellationToken)
+    {
+        using var scope = scopeFactory.CreateScope();
+        return await AiEvalAccount.ResolveAsync(AiEvalAccount.CurrentUserId(http),
+            scope.ServiceProvider.GetRequiredService<IFeatureFlagService>(), configuration, cancellationToken);
     }
 
     private static ModerationResult Unavailable => new(false, true, []);
