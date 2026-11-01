@@ -78,10 +78,10 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 0
                 && (int)properties["tool_call_count"] == 0));
         if (recordingEnabled)
-            _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == UserId
+            _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == UserId
                 && turn.UserContent == "I want to kill myself" && turn.AssistantContent == result.Value.AiMessage
                 && !turn.UsedModel && turn.ToolCallsJson == "[]"));
         else
-            _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+            _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
     }
 }

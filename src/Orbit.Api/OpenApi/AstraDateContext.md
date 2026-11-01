@@ -10,13 +10,12 @@ proof that execution succeeded. The link is retained when a proposal is revised.
 The batch uses the turn's UTC creation timestamp in the existing `CreatedAtUtc`
 column. Queries require both the account and conversation identifiers.
 
-This change stores no message text, Astra reply or image. Client-supplied history
-continues to work; there is no server history fallback. Image continuity across
-turns and server-owned conversations belong to thomasluizon/orbit-tickets#1948.
-The existing `astra_conversation_recording` privacy gate is unchanged. Account
-reset already deletes pending operations. Account export remains as on `main`.
-Removing the separate conversation store also removes its late-save path that
-could restore reset content.
+Server-owned history and image continuity are defined in
+[ServerConversations.md](ServerConversations.md). The
+`astra_conversation_recording` privacy gate now controls synchronous encrypted
+turn storage and server history. With it off, client history remains the input.
+Account reset, erasure, conversation deletion and export cover the stored turns
+and private images according to that contract.
 
 One-time creation previews always expose an editable `due_date` with type `date`.
 A date or clock time supplied by the structured model plan is `requested`; the

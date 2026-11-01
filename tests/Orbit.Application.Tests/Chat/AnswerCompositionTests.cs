@@ -135,7 +135,7 @@ public partial class ProcessUserChatCommandHandlerTests
             result.Value.Parts.Should().BeNull();
             events.Last(item => item.Type == "delta").Text.Should().Be(result.Value.AiMessage);
         }
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
     }
 
@@ -185,7 +185,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.FollowUpContext.Should().ContainSingle().Which.Should().BeEquivalentTo(
             new { Label = "Show my habits?", Question = "Show my habits?", Context = "query_habits", Target = "today" });
         result.RelatedSurfaces.Should().BeNull();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result, ChatStreamEvent.SerializerOptions)));
         var replay = JsonSerializer.Deserialize<ChatResponse>(JsonSerializer.Serialize(result, ChatStreamEvent.SerializerOptions),
             ChatStreamEvent.SerializerOptions)!;
@@ -349,7 +349,7 @@ public partial class ProcessUserChatCommandHandlerTests
         reads.Should().HaveCount(2);
         reads.Select(read => read.Scope.GetProperty("habit_id").GetGuid()).Should().Equal(first, second);
         result.Value.AiMessage.Should().BeNullOrEmpty();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
     }
 
@@ -389,7 +389,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which.Kind.Should().Be("habitList");
         result.Value.Operations.Should().ContainSingle().Which.OperationId.Should().Be(read.Name);
         result.Value.AiMessage.Should().BeNullOrEmpty();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.ResponseJson == JsonSerializer.Serialize(result.Value, ChatStreamEvent.SerializerOptions)));
         await _operationExecutor.Received(1).ExecuteAsync(Arg.Is<AgentExecuteOperationRequest>(request =>
             request.OperationId == write.Name && request.IncludeChangePreview), Arg.Any<CancellationToken>());
@@ -575,7 +575,7 @@ public partial class ProcessUserChatCommandHandlerTests
         events.Where(item => item.Type == "delta").Should().BeEmpty();
         events.Add(ChatStreamEvent.Final(result));
         events.Last().Response!.Parts![0].Should().BeOfType<ChatBlockPart>();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.AssistantContent == result.AiMessage));
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.AssistantContent == result.AiMessage));
     }
 
     private async Task<ChatResponse> ComposeHabitAnswer(string reply, List<ChatStreamEvent>? events = null, bool context = false)

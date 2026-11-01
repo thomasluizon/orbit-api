@@ -12,7 +12,7 @@ public class HangfireRecurringJobRegistrarTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ScheduleCleanupIsRegisteredInBothSchedulerModes(bool durable)
+    public void ConversationRetentionIsNotRegisteredInEitherSchedulerMode(bool durable)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Configuration["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=orbit;Username=orbit";
@@ -23,10 +23,7 @@ public class HangfireRecurringJobRegistrarTests
             .Invoke(null, [builder]);
 
         using var provider = builder.Services.BuildServiceProvider();
-        var firstJob = builder.Services.First(descriptor => descriptor.ServiceType == typeof(IScheduledJob))
-            .ImplementationFactory!(provider);
-        firstJob.Should().BeOfType<Orbit.Infrastructure.Services.ConversationRetentionJob>()
-            .Which.Name.Should().Be("conversation-retention");
+        builder.Services.Should().NotContain(descriptor => descriptor.ServiceType.Name == "ConversationRetentionJob");
         builder.Services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(ScheduledJobRunner));
         builder.Services.Should().ContainSingle(descriptor => descriptor.ServiceType == typeof(IHostedService)
             && descriptor.ImplementationType == typeof(HangfireRecurringJobRegistrar));

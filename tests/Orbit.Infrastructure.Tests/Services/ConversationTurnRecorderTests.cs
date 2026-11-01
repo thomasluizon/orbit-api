@@ -1,18 +1,16 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Chat;
 using Orbit.Application.Common;
-using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -23,284 +21,146 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class ConversationTurnRecorderTests
 {
     [Fact]
-    public void TryRecord_FullQueue_DropsWithoutResolvingStorageOrBlocking()
-    {
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        using var recorder = new ConversationTurnRecorder(scopeFactory, Options.Create(new AiSettings()),
-            NullLogger<ConversationTurnRecorder>.Instance);
-        var turn = Capture(Guid.NewGuid());
-        for (var index = 0; index < ConversationTurnRecorder.Capacity; index++)
-            recorder.TryRecord(turn with { TurnId = Guid.NewGuid() }).Should().BeTrue();
-        var timer = Stopwatch.StartNew();
-        recorder.TryRecord(turn).Should().BeFalse();
-        timer.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(1));
-        scopeFactory.DidNotReceive().CreateScope();
-    }
-
-    [Fact]
-    public void Dispose_ThroughMultipleDiAliases_IsSafe()
-    {
-        var services = new ServiceCollection();
-        services.AddSingleton(_ => new ConversationTurnRecorder(Substitute.For<IServiceScopeFactory>(),
-            Options.Create(new AiSettings()), NullLogger<ConversationTurnRecorder>.Instance));
-        services.AddSingleton<IConversationTurnRecorder>(sp => sp.GetRequiredService<ConversationTurnRecorder>());
-        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => sp.GetRequiredService<ConversationTurnRecorder>());
-        var provider = services.BuildServiceProvider();
-        provider.GetRequiredService<IConversationTurnRecorder>();
-        provider.GetRequiredService<Microsoft.Extensions.Hosting.IHostedService>();
-        Action dispose = provider.Dispose;
-        dispose.Should().NotThrow();
-    }
-
-    [Fact]
-    public async Task Consumer_MultipleBatches_UsesFreshContextsAndDrainsAllAcceptedTurns()
-    {
-        var contexts = new ContextTrackingInterceptor();
-        using var fixture = new Fixture(interceptor: contexts);
-        for (var index = 0; index < 33; index++)
-            fixture.Recorder.TryRecord(Capture(fixture.User.Id)).Should().BeTrue();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        await fixture.Recorder.StopAsync(CancellationToken.None);
-        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(66);
-        contexts.ContextIds.Should().HaveCount(3).And.NotContain(fixture.Database.Context.ContextId.InstanceId);
-    }
-
-    [Fact]
-    public async Task Consumer_DrainsOnShutdown_EncryptsContentAndArguments_AndReadsThemBack()
+    public async Task Record_WritesBothRowsBeforeReturning_EncryptsContentAndSummaries()
     {
         using var fixture = new Fixture();
-        var capture = Capture(fixture.User.Id) with { ResponseJson = "{\"parts\":[{\"type\":\"text\",\"text\":\"Private composition\"}]}" };
-        fixture.Recorder.TryRecord(capture).Should().BeTrue();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        await fixture.Recorder.StopAsync(CancellationToken.None);
-        fixture.Recorder.TryRecord(capture).Should().BeFalse();
-        await using var read = fixture.Database.CreateContext();
-        var rows = await read.ConversationTurns.Where(turn => turn.UserId == fixture.User.Id).ToListAsync();
-        rows.Should().HaveCount(2);
-        rows.Single(turn => turn.Role == "assistant").Content.Should().Be(capture.AssistantContent);
-        rows.Single(turn => turn.Role == "assistant").ToolCallsJson.Should().Be(capture.ToolCallsJson);
-        rows.Single(turn => turn.Role == "assistant").ResponseJson.Should().Be(capture.ResponseJson);
-        rows.Single(turn => turn.Role == "assistant").Model.Should().Be("recording-model");
-        await using var command = read.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "SELECT \"Content\", \"ToolCallsJson\", \"ResponseJson\" FROM \"ConversationTurns\" WHERE \"Role\" = 'assistant'";
+        var capture = fixture.Capture() with
+        {
+            ToolResults = [new("get_habits", "one", true, null, null, null, new { title = "Private habit", due_date = "2026-12-31" })],
+            ResponseJson = "{\"parts\":[{\"type\":\"text\",\"text\":\"Private composition\"}]}"
+        };
+        (await fixture.Store.RecordAsync(capture)).Should().BeTrue();
+        var rows = await fixture.Db.ConversationTurns.OrderBy(turn => turn.TurnOrder).ToListAsync();
+        rows.Select(turn => turn.Role).Should().Equal("user", "assistant");
+        rows.Select(turn => turn.TurnOrder).Should().Equal(1, 2);
+        rows[1].ToolResultsJson.Should().Contain("Private habit").And.Contain("2026-12-31");
+        await using var command = fixture.Db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT Content, ToolResultsJson, ResponseJson FROM ConversationTurns WHERE Role = 'assistant'";
         await using var reader = await command.ExecuteReaderAsync();
         (await reader.ReadAsync()).Should().BeTrue();
-        var content = reader.GetString(0);
-        var tools = reader.GetString(1);
-        content.Should().StartWith("enc:").And.NotContain("Assistant private reply");
-        tools.Should().StartWith("enc:").And.NotContain("Days can only be set");
-        reader.GetString(2).Should().StartWith("enc:").And.NotContain("Private composition");
-        var wrongKey = new EncryptionService(Options.Create(new EncryptionSettings { Key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) }),
-            NullLogger<EncryptionService>.Instance);
-        Action decrypt = () => wrongKey.Decrypt(content);
-        decrypt.Should().Throw<CryptographicException>();
-    }
-
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task Consumer_DisabledFlagOrEncryption_DropsWithoutWriting(bool flagEnabled, bool encryptionConfigured)
-    {
-        using var fixture = new Fixture(flagEnabled: flagEnabled, encryptionConfigured: encryptionConfigured);
-        fixture.Recorder.TryRecord(Capture(fixture.User.Id)).Should().BeTrue();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        await fixture.Recorder.StopAsync(CancellationToken.None);
-        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
+        for (var index = 0; index < 3; index++) reader.GetString(index).Should().StartWith("enc:");
     }
 
     [Fact]
-    public async Task Consumer_ResetDeletesRowsAndRejectsPreviouslyQueuedTurns()
+    public async Task Record_FlagOff_WritesNothing()
     {
-        using var fixture = new Fixture();
-        var capture = Capture(fixture.User.Id);
-        fixture.Database.Context.ConversationTurns.Add(ConversationTurn.Create(fixture.User.Id, Guid.NewGuid(),
-            "user", capture.CreatedAtUtc, null, "Persisted", "[]").Value);
-        await fixture.Database.Context.SaveChangesAsync();
-        fixture.Recorder.TryRecord(capture).Should().BeTrue();
-        var reset = new AccountResetRepository(fixture.Database.Context, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>());
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var dates = Substitute.For<IUserDateService>();
-        dates.GetUserTodayAsync(fixture.User.Id, Arg.Any<CancellationToken>()).Returns(new DateOnly(2026, 6, 15));
-        var handler = new ResetAccountCommandHandler(new GenericRepository<User>(fixture.Database.Context), reset,
-            new UnitOfWork(fixture.Database.Context, new DatabaseConnectionSettings()), dates, cache);
-        var result = await handler.Handle(new ResetAccountCommand(fixture.User.Id), CancellationToken.None);
-        result.IsSuccess.Should().BeTrue();
-        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
-        var afterReset = Capture(fixture.User.Id) with
-        {
-            CreatedAtUtc = fixture.User.ConversationHistoryClearedAtUtc!.Value.AddTicks(1)
-        };
-        fixture.Recorder.TryRecord(afterReset).Should().BeTrue();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        await fixture.Recorder.StopAsync(CancellationToken.None);
-        var rows = await fixture.Database.Context.ConversationTurns.AsNoTracking().ToListAsync();
-        rows.Should().HaveCount(2).And.OnlyContain(turn => turn.TurnId == afterReset.TurnId);
+        using var fixture = new Fixture(enabled: false);
+        (await fixture.Store.RecordAsync(fixture.Capture())).Should().BeFalse();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
     }
 
     [Fact]
-    public async Task Consumer_DeletedAccount_DoesNotRecreateQueuedContent()
+    public async Task Record_SaveFailure_FailsRequestAndRemovesUploadedImage()
     {
-        using var fixture = new Fixture();
-        fixture.Recorder.TryRecord(Capture(fixture.User.Id)).Should().BeTrue();
-        await fixture.Database.Context.Users.Where(user => user.Id == fixture.User.Id).ExecuteDeleteAsync();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        await fixture.Recorder.StopAsync(CancellationToken.None);
-        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Consumer_PersistenceException_DropsFailedBatchAndContinues()
-    {
-        var failure = new FailingSaveInterceptor();
+        var failure = new FailingSave();
         using var fixture = new Fixture(interceptor: failure);
-        failure.FailNext = true;
-        fixture.Recorder.TryRecord(Capture(fixture.User.Id)).Should().BeTrue();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        await failure.Attempted.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        var next = Capture(fixture.User.Id);
-        fixture.Recorder.TryRecord(next).Should().BeTrue();
-        await fixture.Recorder.StopAsync(CancellationToken.None);
-        var rows = await fixture.Database.Context.ConversationTurns.AsNoTracking().ToListAsync();
-        rows.Should().HaveCount(2).And.OnlyContain(turn => turn.TurnId == next.TurnId);
+        failure.Enabled = true;
+        Func<Task> action = () => fixture.Store.RecordAsync(fixture.Capture(image: true));
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("Storage unavailable");
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+        await fixture.Storage.Received(1).DeletePrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Consumer_BlockedWrite_ShutdownHonorsDeadline(bool deadlineAlreadyExpired)
+    [Fact]
+    public async Task History_ImageOnlyWithinLastThreeExchanges_AndLatestPageUsesDisplayOrder()
     {
-        var blocker = new BlockingWrite();
-        using var fixture = new Fixture(unitOfWork: blocker.Work);
-        fixture.Recorder.TryRecord(Capture(fixture.User.Id)).Should().BeTrue();
-        await fixture.Recorder.StartAsync(CancellationToken.None);
-        var consumer = fixture.Recorder.ExecuteTask ?? throw new InvalidOperationException("Recorder did not start");
-        var writeToken = await blocker.Entered.Task;
-        using var deadline = new CancellationTokenSource();
-        if (deadlineAlreadyExpired)
-            deadline.Cancel();
-        var stopping = fixture.Recorder.StopAsync(deadline.Token);
-        try
-        {
-            if (deadlineAlreadyExpired)
-                writeToken.IsCancellationRequested.Should().BeTrue("an expired deadline must cancel the write before waiting for it");
-            else
-                deadline.Cancel();
-            await stopping;
-            writeToken.IsCancellationRequested.Should().BeTrue();
-            consumer.IsCompleted.Should().BeFalse("shutdown must return while the write is still held at the gate");
-        }
-        finally
-        {
-            fixture.Recorder.Dispose();
-            blocker.Release.TrySetResult();
-            await consumer;
-            await stopping;
-        }
-        blocker.CancellationObserved.Task.IsCompletedSuccessfully.Should().BeTrue();
-        (await fixture.Database.Context.ConversationTurns.CountAsync()).Should().Be(0);
+        using var fixture = new Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture(image: true));
+        var history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
+        history.Value.Messages[0].ImageData.Should().Equal(Fixture.Image);
+        for (var index = 0; index < 3; index++) await fixture.Store.RecordAsync(fixture.Capture());
+        history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
+        history.Value.Messages.Should().OnlyContain(message => message.ImageData == null);
+        var latest = await fixture.Store.GetLatestAsync(fixture.User.Id, null, null, 3);
+        latest!.Turns.Select(turn => turn.Order).Should().Equal(6, 7, 8);
+        latest.BeforeOrder.Should().Be(6);
+        var previous = await fixture.Store.GetLatestAsync(fixture.User.Id, latest.ConversationId, latest.BeforeOrder, 3);
+        previous!.Turns.Select(turn => turn.Order).Should().Equal(3, 4, 5);
     }
 
-    private static ConversationTurnCapture Capture(Guid userId) => new(userId, Guid.NewGuid(), DateTime.UtcNow,
-        "User private message", "Assistant private reply",
-        """[{"CallId":"one","Name":"create_habit","Arguments":{"days":["Monday"]},"Success":false,"Error":"Days can only be set when frequency quantity is 1"}]""", true);
-
-    private sealed class Fixture : IDisposable
+    [Fact]
+    public async Task Delete_IsAccountScoped_RemovesRowsImagesAndPreventsLateSave()
     {
-        public SqliteOrbitDbContextFactory Database { get; }
-        public User User { get; }
-        public ConversationTurnRecorder Recorder { get; }
-        private readonly ServiceProvider _provider;
+        using var fixture = new Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture(image: true));
+        var other = Guid.NewGuid();
+        (await fixture.Store.DeleteAsync(other, fixture.ConversationId)).Should().BeFalse();
+        (await fixture.Store.LoadHistoryAsync(other, fixture.ConversationId)).IsFailure.Should().BeTrue();
+        (await fixture.Store.GetLatestAsync(other, fixture.ConversationId, null, 10)).Should().BeNull();
+        await fixture.Storage.DidNotReceiveWithAnyArgs().DeletePrivateAsync(default!);
+        (await fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId)).Should().BeTrue();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+        await fixture.Storage.Received(1).DeletePrivateAsync(Arg.Is<string>(key => key.StartsWith($"{fixture.User.Id}/conversations/")), Arg.Any<CancellationToken>());
+        Func<Task> lateSave = () => fixture.Store.RecordAsync(fixture.Capture() with { ExistingConversation = true });
+        await lateSave.Should().ThrowAsync<InvalidOperationException>();
+    }
 
-        public Fixture(bool flagEnabled = true, bool encryptionConfigured = true, IInterceptor? interceptor = null,
-            IUnitOfWork? unitOfWork = null)
+    [Fact]
+    public async Task Reset_RemovesImagesAndRows_RejectsInFlightContent()
+    {
+        using var fixture = new Fixture();
+        var capture = fixture.Capture(image: true);
+        await fixture.Store.RecordAsync(capture);
+        var reset = new AccountResetRepository(fixture.Db, Substitute.For<Orbit.Domain.Events.IAccountEventCollector>(), fixture.Storage);
+        await reset.DeleteAllUserDataAsync(fixture.User.Id);
+        fixture.User.ResetAccount();
+        await fixture.Db.SaveChangesAsync();
+        (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
+        await fixture.Storage.Received(1).DeletePrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Func<Task> lateSave = () => fixture.Store.RecordAsync(capture with { TurnId = Guid.NewGuid() });
+        await lateSave.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task History_KeepsOldConversationsWithoutExpiry_CompactsLargeResultsWithRetainedData()
+    {
+        using var fixture = new Fixture();
+        await fixture.Store.RecordAsync(fixture.Capture() with
         {
-            var encryption = new EncryptionService(Options.Create(new EncryptionSettings
-            {
-                Key = encryptionConfigured ? Convert.ToBase64String(new byte[32]) : string.Empty
-            }), NullLogger<EncryptionService>.Instance);
+            CreatedAtUtc = DateTime.UtcNow.AddDays(-90),
+            ToolResults = [new("get_habits", "one", true, null, null, null,
+                Enumerable.Range(0, 1000).Select(index => new { title = $"habit {index}", due_date = "2026-12-31" }).ToArray())]
+        });
+        var history = await fixture.Store.LoadHistoryAsync(fixture.User.Id, fixture.ConversationId);
+        var assistant = history.Value.Messages.Single(message => message.Role == "assistant").Content;
+        assistant.Should().Contain("truncated").And.Contain("2026-12-31").And.Contain("has_more");
+        (await fixture.Db.ConversationTurns.SingleAsync(turn => turn.Role == "assistant")).ToolResultsJson.Length.Should().BeLessThanOrEqualTo(12_002);
+    }
+
+    internal sealed class Fixture : IDisposable
+    {
+        internal static readonly byte[] Image = [1, 2, 3, 4];
+        internal SqliteOrbitDbContextFactory Database { get; }
+        internal OrbitDbContext Db => Database.Context;
+        internal User User { get; }
+        internal Guid ConversationId { get; } = Guid.NewGuid();
+        internal IObjectStorageService Storage { get; } = Substitute.For<IObjectStorageService>();
+        internal ConversationTurnRecorder Store { get; }
+        internal Fixture(bool enabled = true, IInterceptor? interceptor = null)
+        {
+            var encryption = new EncryptionService(Options.Create(new EncryptionSettings { Key = Convert.ToBase64String(new byte[32]) }), NullLogger<EncryptionService>.Instance);
             Database = new SqliteOrbitDbContextFactory(encryption, interceptor is null ? [] : [interceptor]);
             User = User.Create("Person", "recording@example.com").Value;
-            Database.Context.Users.Add(User);
-            Database.Context.AppFeatureFlags.Single(flag => flag.Key == FeatureFlagKeys.AstraConversationRecording).SetEnabled(flagEnabled);
-            Database.Context.SaveChanges();
-            var services = new ServiceCollection();
-            services.AddScoped(_ => Database.CreateContext());
-            services.AddSingleton<IEncryptionService>(encryption);
-            services.AddScoped<IUnitOfWork>(sp => unitOfWork ?? new UnitOfWork(sp.GetRequiredService<OrbitDbContext>(), new DatabaseConnectionSettings()));
-            services.AddMemoryCache();
-            services.AddSingleton(NSubstitute.Substitute.For<Microsoft.Extensions.Hosting.IHostEnvironment>());
-            services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
-            services.AddScoped<IFeatureFlagService, FeatureFlagService>();
-            _provider = services.BuildServiceProvider();
-            Recorder = new ConversationTurnRecorder(_provider.GetRequiredService<IServiceScopeFactory>(),
-                Options.Create(new AiSettings { Model = "recording-model" }), NullLogger<ConversationTurnRecorder>.Instance);
+            Db.Users.Add(User);
+            Db.SaveChanges();
+            var flags = Substitute.For<IFeatureFlagService>();
+            flags.GetEnabledKeysForUserAsync(User.Id, Arg.Any<CancellationToken>()).Returns(enabled ? new[] { FeatureFlagKeys.AstraConversationRecording } : []);
+            Storage.ReadPrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Image);
+            Store = new(Db, new UnitOfWork(Db, new DatabaseConnectionSettings()), flags, encryption, Storage, Options.Create(new AiSettings { Model = "recording-model" }));
         }
-
-        public void Dispose()
-        {
-            Recorder.Dispose();
-            _provider.Dispose();
-            Database.Dispose();
-        }
+        internal ConversationTurnCapture Capture(bool image = false) => new(User.Id, Guid.NewGuid(), DateTime.UtcNow,
+            "User private message", "Assistant private reply", "[]", true, ConversationId: ConversationId,
+            ImageData: image ? Image : null, ImageMimeType: image ? "image/png" : null);
+        public void Dispose() => Database.Dispose();
     }
 
-    private sealed class ContextTrackingInterceptor : SaveChangesInterceptor
+    private sealed class FailingSave : SaveChangesInterceptor
     {
-        public HashSet<Guid> ContextIds { get; } = [];
-        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        internal bool Enabled { get; set; }
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            ContextIds.Add(eventData.Context!.ContextId.InstanceId);
+            if (Enabled) throw new InvalidOperationException("Storage unavailable");
             return ValueTask.FromResult(result);
-        }
-    }
-
-    private sealed class FailingSaveInterceptor : SaveChangesInterceptor
-    {
-        public bool FailNext { get; set; }
-        public TaskCompletionSource Attempted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            if (FailNext)
-            {
-                FailNext = false;
-                Attempted.TrySetResult();
-                throw new InvalidOperationException("Forced persistence failure");
-            }
-            return ValueTask.FromResult(result);
-        }
-    }
-
-    private sealed class BlockingWrite
-    {
-        public IUnitOfWork Work { get; } = Substitute.For<IUnitOfWork>();
-        public TaskCompletionSource CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource<CancellationToken> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public BlockingWrite()
-        {
-            Work.ExecuteInTransactionAsync(Arg.Any<Func<CancellationToken, Task>>(), Arg.Any<CancellationToken>())
-                .Returns(call => call.Arg<Func<CancellationToken, Task>>()(call.Arg<CancellationToken>()));
-            Work.SaveChangesAsync(Arg.Any<CancellationToken>())
-                .Returns(call => WaitAsync(call.Arg<CancellationToken>()));
-        }
-
-        private async Task<int> WaitAsync(CancellationToken cancellationToken)
-        {
-            Entered.TrySetResult(cancellationToken);
-            try
-            {
-                await Release.Task;
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-            catch (OperationCanceledException)
-            {
-                CancellationObserved.TrySetResult();
-                throw;
-            }
-            return 0;
         }
     }
 }

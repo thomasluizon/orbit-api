@@ -16,12 +16,12 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     [Fact]
-    public async Task ConversationRecorder_Throwing_DoesNotChangeReplyOrStream()
+    public async Task ConversationRecorder_Throwing_FailsTheTurn()
     {
         SetupUserAndPayGate();
         EnableRecording();
-        _conversationRecorder.TryRecord(Arg.Any<ConversationTurnCapture>())
-            .Returns(_ => throw new InvalidOperationException("Storage unavailable"));
+        _conversationRecorder.RecordAsync(Arg.Any<ConversationTurnCapture>())
+            .Returns(Task.FromException<bool>(new InvalidOperationException("Storage unavailable")));
         SetupAiResponse(new AiResponse { TextMessage = "Your reply" });
         var streamed = new List<Orbit.Application.Chat.Models.ChatStreamEvent>();
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
@@ -30,15 +30,13 @@ public partial class ProcessUserChatCommandHandlerTests
                 await call.Arg<Func<AiStreamEvent, Task>>()(AiStreamEvent.Delta("Your reply"));
                 return Result.Success(new AiResponse { TextMessage = "Your reply" });
             });
-        var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello", StreamSink: item =>
+        var action = () => CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello", StreamSink: item =>
         {
             streamed.Add(item);
             return Task.CompletedTask;
         }), CancellationToken.None);
-        result.IsSuccess.Should().BeTrue();
-        result.Value.AiMessage.Should().Be("Your reply");
-        streamed.Should().Contain(item => item.Type == "delta");
-        _conversationRecorder.Received(1).TryRecord(Arg.Any<ConversationTurnCapture>());
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("Storage unavailable");
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Any<ConversationTurnCapture>());
     }
 
     [Fact]
@@ -52,7 +50,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello", TurnId: turnId), default);
 
         result.IsSuccess.Should().BeTrue();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.TurnId == turnId));
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.TurnId == turnId));
     }
 
     [Fact]
@@ -62,7 +60,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "Hello" });
         var result = await CreateHandler().Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
     }
 
     [Fact]
@@ -74,7 +72,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Contain(CrisisSupportGuard.EnglishResource);
-        _conversationRecorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+        _ = _conversationRecorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
         await _moderation.DidNotReceiveWithAnyArgs().CheckTextAsync(default!, default);
     }
 
@@ -94,7 +92,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await CreateHandler().Handle(new(UserId, "My answer", BlockAnswer: new(block.Id, ["b"])), default);
 
         result.IsFailure.Should().BeTrue();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserId == UserId && turn.UserContent == "My answer" && turn.AssistantContent == null
             && !turn.UsedModel && turn.ToolCallsJson == "[]"));
         await _moderation.Received(1).CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -120,7 +118,7 @@ public partial class ProcessUserChatCommandHandlerTests
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done" }));
         ConversationTurnCapture? recorded = null;
-        _conversationRecorder.TryRecord(Arg.Do<ConversationTurnCapture>(turn => recorded = turn)).Returns(true);
+        _conversationRecorder.RecordAsync(Arg.Do<ConversationTurnCapture>(turn => recorded = turn)).Returns(true);
         var result = await CreateHandler(first, second).Handle(new ProcessUserChatCommand(UserId, "Read both"), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
         recorded.Should().NotBeNull();

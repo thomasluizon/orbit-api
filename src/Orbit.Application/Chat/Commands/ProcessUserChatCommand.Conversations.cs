@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
@@ -37,23 +37,39 @@ public partial class ProcessUserChatCommandHandler
         public bool UsedModel { get; set; }
         public bool MessageAllowanceConsumed { get; set; }
         public List<ConversationToolCall> ToolCalls { get; } = [];
+        public List<AiToolCallResult> ToolResults { get; } = [];
+        public bool ExistingConversation { get; set; }
+        public bool ServerEnabled { get; set; }
     }
 
-    private void RecordConversationSafely(ProcessUserChatCommand request,
-        ChatTurnState recording, Result<ChatResponse>? response)
+    private async Task<Result<ProcessUserChatCommand>> PrepareConversationAsync(ProcessUserChatCommand request,
+        ChatTurnState recording, CancellationToken ct)
     {
-        if (!recording.Enabled || conversationRecorder is null)
-            return;
-        try
+        var enabled = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
+        if (!enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording) || conversationRecorder is null)
+            return Result.Success(request);
+        recording.ServerEnabled = true;
+        var id = request.ClientContext?.ConversationId ?? Guid.NewGuid();
+        var history = await conversationRecorder.LoadHistoryAsync(request.UserId, id, ct);
+        if (history is { IsFailure: true }) return history.PropagateError<ProcessUserChatCommand>();
+        recording.ExistingConversation = history is { IsSuccess: true, Value.Exists: true };
+        return Result.Success(request with
         {
-            conversationRecorder.TryRecord(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
-                recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
-                JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
-                response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null));
-        }
-        catch (Exception)
-        {
-            logger.LogWarning("Conversation recording failed; the chat response is unaffected");
-        }
+            ClientContext = (request.ClientContext ?? new AgentClientContext()) with { ConversationId = id },
+            History = recording.ExistingConversation ? history.Value.Messages.ToList() : request.History
+        });
+    }
+
+    private async Task RecordConversationAsync(ProcessUserChatCommand request,
+        ChatTurnState recording, Result<ChatResponse>? response, CancellationToken ct)
+    {
+        if (!recording.Enabled || conversationRecorder is null) return;
+        var enabled = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
+        if (!enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording)) return;
+        await conversationRecorder.RecordAsync(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
+            recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
+            JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,
+            response is { IsSuccess: true } ? JsonSerializer.Serialize(response.Value, ChatStreamEvent.SerializerOptions) : null,
+            request.ClientContext?.ConversationId, recording.ExistingConversation, recording.ToolResults, request.ImageData, request.ImageMimeType), ct);
     }
 }

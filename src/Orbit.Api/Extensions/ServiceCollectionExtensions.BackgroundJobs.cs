@@ -21,9 +21,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IProactiveCheckinMessageService, AiProactiveCheckinMessageService>();
         builder.Services.AddScoped<Orbit.Application.Proactive.Services.IProactiveEngine, ProactiveEngineService>();
 
-        builder.Services.AddSingleton<ConversationTurnRecorder>();
-        builder.Services.AddSingleton<Orbit.Application.Chat.IConversationTurnRecorder>(
-            sp => sp.GetRequiredService<ConversationTurnRecorder>());
+        builder.Services.AddScoped<Orbit.Application.Chat.IConversationTurnRecorder, ConversationTurnRecorder>();
 
         if (!BuildTimeDocumentGeneration.IsActive)
         {
@@ -33,10 +31,8 @@ public static partial class ServiceCollectionExtensions
             builder.Services.AddHostedService<DataEncryptionMigrationService>();
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
-            builder.Services.AddHostedService(sp => sp.GetRequiredService<ConversationTurnRecorder>());
             AddDurableJobQueue(builder);
             builder.Services.TryAddSingleton<ScheduledJobRunner>();
-            AddScheduledJob<ConversationRetentionJob>(builder);
             builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
 
             if (useDurableQueue)

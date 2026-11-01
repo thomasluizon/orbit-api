@@ -139,7 +139,7 @@ public partial class ProcessUserChatCommandHandlerTests
     private void AssertStoredComposition(ChatResponse response, AgentClientContext? client = null, string? language = null)
     {
         var json = JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions);
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == json));
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == json));
         var stored = JsonSerializer.Deserialize<ChatResponse>(json, ChatStreamEvent.SerializerOptions)!;
         client ??= new AgentClientContext(SupportsParts: true, PartKinds: ["habitList", "recordList"],
             SupportsHabitListCard: true, SupportsRecordListCard: true, SupportsHabitListDoneStatus: true);

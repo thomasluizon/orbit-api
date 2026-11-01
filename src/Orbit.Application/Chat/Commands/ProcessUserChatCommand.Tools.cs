@@ -378,8 +378,11 @@ public partial class ProcessUserChatCommandHandler
             if (!outcomesByCallId.TryGetValue(call.Id, out var outcome))
                 continue;
             if (executionResults.Recording is { Enabled: true } recording)
+            {
+                recording.ToolResults.Add(outcome.ToolResult);
                 recording.ToolCalls.Add(new ConversationToolCall(call.Id, call.Name, call.Args.Clone(),
                     outcome.ToolResult.Success, outcome.ToolResult.Error));
+            }
             if (outcome.OperationResult?.ReadBlock is { } queryRead)
                 executionResults.QueryReads[call.Id] = queryRead;
             toolResults.Add(outcome.ToolResult);

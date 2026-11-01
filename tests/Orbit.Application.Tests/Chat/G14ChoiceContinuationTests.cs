@@ -88,7 +88,7 @@ public partial class ProcessUserChatCommandHandlerTests
         answer.IsSuccess.Should().BeTrue(answer.Error);
         next.Should().NotBeNull();
         next!.UserMessage.Should().Be(question + "\nCaminhada");
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserContent == question + "\nCaminhada"));
         var option = choice.Options.Single(option => option.Id == habits[selected].Id.ToString());
         option.Description.Should().Be(differentDetails ? parents[selected].Title : language == "en" ? "Looks the same" : "Parece igual");

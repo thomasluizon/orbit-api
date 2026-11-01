@@ -8,6 +8,10 @@ public sealed class ConversationTurnCaptureValidator : AbstractValidator<Convers
 {
     public ConversationTurnCaptureValidator()
     {
+        RuleFor(turn => turn.ConversationId).Must(id => id is null || id != Guid.Empty);
+        RuleFor(turn => turn.ImageMimeType).Must(mime => mime is null or "image/png" or "image/jpeg" or "image/webp");
+        RuleFor(turn => turn).Must(turn => turn.ImageData is null && turn.ImageMimeType is null
+            || turn.ImageData is { Length: > 0 and <= 10_485_760 } && turn.ImageMimeType is not null);
         RuleFor(turn => turn.UserId).NotEmpty();
         RuleFor(turn => turn.TurnId).NotEmpty();
         RuleFor(turn => turn.CreatedAtUtc).Must(value => value != default && value.Kind == DateTimeKind.Utc);

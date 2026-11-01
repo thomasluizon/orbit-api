@@ -4,10 +4,16 @@ using Orbit.Domain.Events;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public class AccountResetRepository(OrbitDbContext context, IAccountEventCollector eventCollector) : IAccountResetRepository
+public class AccountResetRepository(OrbitDbContext context, IAccountEventCollector eventCollector, IObjectStorageService? storage = null) : IAccountResetRepository
 {
     public async Task DeleteAllUserDataAsync(Guid userId, CancellationToken cancellationToken = default)
     {
+        var imageKeys = await context.ConversationTurns.Where(turn => turn.UserId == userId && turn.ImageObjectKey != null)
+            .Select(turn => turn.ImageObjectKey!).ToListAsync(cancellationToken);
+        if (imageKeys.Count > 0 && storage is null)
+            throw new InvalidOperationException("Conversation image storage is unavailable.");
+        foreach (var key in imageKeys)
+            await storage!.DeletePrivateAsync(key, cancellationToken);
         await context.ChatTurns.Where(turn => turn.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await context.ConversationTurns.Where(turn => turn.UserId == userId).ExecuteDeleteAsync(cancellationToken);
         await context.ConversationOffers.Where(offer => offer.UserId == userId).ExecuteDeleteAsync(cancellationToken);

@@ -2,6 +2,13 @@ namespace Orbit.Domain.Models;
 
 public record ChatHistoryMessage(string Role, string Content)
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ServerOwned { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public byte[]? ImageData { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ImageMimeType { get; init; }
+
     public const string UserRole = "user";
     public const string AssistantRole = "assistant";
     public const string LegacyAssistantRole = "ai";

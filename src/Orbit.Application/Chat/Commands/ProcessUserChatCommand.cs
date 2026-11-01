@@ -77,7 +77,8 @@ public record ChatResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatResponsePart>? Parts = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatEvalTrace? EvalTrace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ChatFollowUp>? FollowUpContext = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? MessageAllowanceConsumed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ConversationId = null)
 {
     [JsonIgnore]
     public TurnFactSet GroundingFacts { get; init; } = TurnFactSet.Empty;
@@ -205,6 +206,9 @@ public partial class ProcessUserChatCommandHandler(
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
         ChatEvalTraceCollector? evalTrace = null;
         var recording = new ChatTurnState();
+        var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken);
+        if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+        request = preparedConversation.Value;
         request = request with
         {
             PendingOperationConversation = request.ClientContext?.ConversationId is { } id && id != Guid.Empty
@@ -227,12 +231,15 @@ public partial class ProcessUserChatCommandHandler(
             {
                 var negotiated = ChatResponseNegotiation.ForAllowance(response.Value, request.ClientContext,
                     recording.MessageAllowanceConsumed);
-                response = Result.Success(negotiated);
+                response = Result.Success(negotiated with
+                {
+                    ConversationId = recording.ServerEnabled && recording.Enabled ? request.ClientContext?.ConversationId : null
+                });
             }
         }
         finally
         {
-            RecordConversationSafely(request, recording, response);
+            await RecordConversationAsync(request, recording, response, cancellationToken);
             var timing = timer.Complete();
             logger.LogInformation("Astra turn timing {Phases} total {TotalMilliseconds} ms",
                 JsonSerializer.Serialize(timing.Phases, ChatStreamEvent.SerializerOptions), timing.TotalMilliseconds);

@@ -139,11 +139,11 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
         analytics.Received(1).CaptureUserEvent(user.Id, "astra_message_sent", user.Plan.ToString(),
             Arg.Is<IReadOnlyDictionary<string, object>>(properties => (int)properties["round_count"] == 1));
         if (recordingEnabled)
-            recorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == user.Id
+            _ = recorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.UserId == user.Id
                 && turn.UserContent == "Hello AI" && turn.AssistantContent == "Your reply"
                 && turn.UsedModel && turn.ToolCallsJson == "[]"));
         else
-            recorder.DidNotReceiveWithAnyArgs().TryRecord(default!);
+            _ = recorder.DidNotReceiveWithAnyArgs().RecordAsync(default!);
     }
 
     [Fact]

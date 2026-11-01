@@ -147,7 +147,7 @@ public partial class ProcessUserChatCommandHandlerTests
             ClientContext: new(SupportsMessageAllowance: true)), default);
         result.IsSuccess.Should().BeTrue();
         result.Value.MessageAllowanceConsumed.Should().BeTrue();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserContent == "When?\nEvening" && turn.AssistantContent == result.Value.AiMessage && turn.UsedModel));
         await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Is<AiToolRequest>(request => request.UserMessage == "When?\nEvening"),
             Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
@@ -202,7 +202,7 @@ public partial class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Contain(resource);
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             turn.UserContent == "When?\n" + message && turn.AssistantContent == result.Value.AiMessage
             && !turn.UsedModel && turn.ToolCallsJson == "[]"));
         _productAnalytics.Received(1).CaptureUserEvent(UserId, "astra_message_sent", null,
@@ -412,7 +412,7 @@ public partial class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.MessageAllowanceConsumed.Should().BeFalse();
         result.Value.PendingOperations.Should().ContainSingle();
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn =>
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn =>
             !turn.UsedModel && turn.UserContent == "Walk" && turn.ToolCallsJson.Contains("bulk_create_habits")
             && turn.ToolCallsJson.Contains("PendingConfirmation")));
         await _aiIntentService.DidNotReceiveWithAnyArgs().SendWithToolsAsync(default!, default, default);

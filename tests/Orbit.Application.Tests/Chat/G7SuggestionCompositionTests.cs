@@ -87,7 +87,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 response.Parts.Should().BeNull();
         }
         var wire = JsonSerializer.Serialize(response, ChatStreamEvent.SerializerOptions);
-        _conversationRecorder.Received(1).TryRecord(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == wire));
+        _ = _conversationRecorder.Received(1).RecordAsync(Arg.Is<ConversationTurnCapture>(turn => turn.ResponseJson == wire));
         var replay = JsonSerializer.Deserialize<ChatResponse>(wire, ChatStreamEvent.SerializerOptions)!;
         ChatStreamEvent.Final(ChatResponseNegotiation.ForClient(replay, client, flags)).ToJson()
             .Should().Be(ChatStreamEvent.Final(response).ToJson());

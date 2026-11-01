@@ -53,4 +53,31 @@ public class ConversationTurnTests
         ConversationTurn.Create(user, turn, "user", DateTime.UtcNow, new string('m', 201), "hello", "[]").IsFailure.Should().BeTrue();
         ConversationTurn.Create(user, turn, "user", DateTime.UtcNow, null, new string('c', ConversationTurn.MaxTextLength + 1), "[]").IsFailure.Should().BeTrue();
     }
+    [Theory]
+    [InlineData(null, 1, false)]
+    [InlineData("11111111-1111-4111-8111-111111111111", 0, false)]
+    [InlineData("11111111-1111-4111-8111-111111111111", 1, true)]
+    public void Create_ConversationRequiresOrderedRows(string? id, long order, bool accepted)
+    {
+        var result = ConversationTurn.Create(Guid.NewGuid(), Guid.NewGuid(), "user", DateTime.UtcNow, null,
+            "Hello", "[]", conversationId: id is null ? null : Guid.Parse(id), turnOrder: order);
+        result.IsSuccess.Should().Be(accepted);
+    }
+
+    [Fact]
+    public void Create_ImageMetadataMustBelongToAccountAndConversation()
+    {
+        var user = Guid.NewGuid();
+        var conversation = Guid.NewGuid();
+        var sha = new string('a', 64);
+        var accepted = ConversationTurn.Create(user, Guid.NewGuid(), "user", DateTime.UtcNow, null, "Hello", "[]",
+            conversationId: conversation, turnOrder: 1, imageObjectKey: $"{user}/conversations/{conversation}/image.png",
+            imageContentType: "image/png", imageSha256: sha);
+        accepted.IsSuccess.Should().BeTrue();
+        var rejected = ConversationTurn.Create(user, Guid.NewGuid(), "user", DateTime.UtcNow, null, "Hello", "[]",
+            conversationId: conversation, turnOrder: 1, imageObjectKey: $"{Guid.NewGuid()}/conversations/{conversation}/image.png",
+            imageContentType: "image/png", imageSha256: sha);
+        rejected.IsFailure.Should().BeTrue();
+    }
+
 }

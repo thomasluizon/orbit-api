@@ -17,6 +17,7 @@ public sealed partial class HangfireRecurringJobRegistrar(
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        recurringJobManager.RemoveIfExists("conversation-retention");
         foreach (var job in jobs)
         {
             recurringJobManager.AddOrUpdate<ScheduledJobRunner>(

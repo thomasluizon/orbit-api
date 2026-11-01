@@ -13,6 +13,31 @@ public sealed class S3ObjectStorageService(IAmazonS3 client, IOptions<S3StorageS
     private static readonly TimeSpan ReadLifetime = TimeSpan.FromMinutes(10);
     private readonly S3StorageSettings _settings = options.Value;
 
+    public async Task PutPrivateAsync(string objectKey, string contentType, byte[] data, CancellationToken cancellationToken = default)
+    {
+        using var stream = new MemoryStream(data, writable: false);
+        await client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = _settings.Bucket,
+            Key = objectKey,
+            ContentType = contentType,
+            InputStream = stream
+        }, cancellationToken);
+    }
+
+    public async Task<byte[]> ReadPrivateAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        using var response = await client.GetObjectAsync(_settings.Bucket, objectKey, cancellationToken);
+        using var stream = new MemoryStream();
+        await response.ResponseStream.CopyToAsync(stream, cancellationToken);
+        return stream.ToArray();
+    }
+
+    public async Task DeletePrivateAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        await client.DeleteObjectAsync(_settings.Bucket, objectKey, cancellationToken);
+    }
+
     public async Task<SignedUpload> CreateSignedUploadAsync(
         string objectKey, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
     {

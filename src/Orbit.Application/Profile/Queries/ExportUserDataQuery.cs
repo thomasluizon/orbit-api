@@ -75,9 +75,8 @@ public class ExportUserDataQueryHandler(
         var notion = notionConnections.SingleOrDefault();
 
         var exportedAtUtc = DateTime.UtcNow;
-        var retentionCutoffAtUtc = exportedAtUtc.AddDays(-ConversationTurn.RetentionDays);
         var conversations = await repos.ConversationTurns.FindAsync(
-            turn => turn.UserId == request.UserId && turn.CreatedAtUtc >= retentionCutoffAtUtc, cancellationToken);
+            turn => turn.UserId == request.UserId, cancellationToken);
         var offers = repos.ConversationOffers is null ? [] : await repos.ConversationOffers.FindAsync(offer => offer.UserId == request.UserId, cancellationToken);
 
         var export = new UserDataExport(
@@ -137,7 +136,8 @@ public class ExportUserDataQueryHandler(
             conversations.OrderBy(turn => turn.CreatedAtUtc).ThenBy(turn => turn.Role == "user" ? 0 : 1)
                 .Select(turn => new ExportedConversationTurn(turn.TurnId, turn.Role, turn.CreatedAtUtc,
                     turn.Model, turn.Content, System.Text.Json.JsonSerializer.Deserialize<
-                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [], turn.ResponseJson)).ToArray(),
+                        Orbit.Application.Chat.ConversationToolCall[]>(turn.ToolCallsJson) ?? [], turn.ResponseJson, turn.ConversationId, turn.TurnOrder, turn.ToolResultsJson,
+                    turn.PreviewOutcomesJson, turn.ImageObjectKey is null ? null : Path.GetFileName(turn.ImageObjectKey))).ToArray(),
             offers.Select(offer => new ExportedConversationOffer(offer.ConversationId, offer.OfferKey, offer.Dismissed, offer.DefinitionJson)).ToArray());
 
         return Result.Success(export);

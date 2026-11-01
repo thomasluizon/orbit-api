@@ -63,7 +63,7 @@ public class PendingAgentOperationStore(
         });
 
         dbContext.PendingAgentOperations.Add(entity);
-        dbContext.SaveChanges();
+        SaveChangesWithConversationOutcomes();
 
         return Map(entity);
     }
@@ -110,7 +110,7 @@ public class PendingAgentOperationStore(
         entity.SetConfirmationTokenHash(HashToken(confirmationToken));
         try
         {
-            dbContext.SaveChanges();
+            SaveChangesWithConversationOutcomes();
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -244,7 +244,7 @@ public class PendingAgentOperationStore(
 
         try
         {
-            dbContext.SaveChanges();
+            SaveChangesWithConversationOutcomes();
             return true;
         }
         catch (DbUpdateConcurrencyException)
@@ -267,7 +267,7 @@ public class PendingAgentOperationStore(
             CancelChangeSetMembers(entity, cancelledAtUtc);
         try
         {
-            dbContext.SaveChanges();
+            SaveChangesWithConversationOutcomes();
             return true;
         }
         catch (DbUpdateConcurrencyException)
@@ -334,7 +334,7 @@ public class PendingAgentOperationStore(
         entity.MarkConsumed();
         try
         {
-            dbContext.SaveChanges();
+            SaveChangesWithConversationOutcomes();
             return true;
         }
         catch (DbUpdateConcurrencyException exception) when (
@@ -343,6 +343,27 @@ public class PendingAgentOperationStore(
             dbContext.Entry(entity).State = EntityState.Detached;
             return false;
         }
+    }
+
+    private void SaveChangesWithConversationOutcomes()
+    {
+        var changed = dbContext.ChangeTracker.Entries<PendingAgentOperationState>()
+            .Where(entry => entry.State == EntityState.Modified && entry.Entity.ConversationId != null)
+            .Select(entry => entry.Entity).ToArray();
+        foreach (var group in changed.GroupBy(state => new { state.UserId, state.ConversationId }))
+        {
+            var earliestAtUtc = group.Min(state => state.CreatedAtUtc);
+            var turns = dbContext.ConversationTurns.Where(turn => turn.UserId == group.Key.UserId
+                && turn.ConversationId == group.Key.ConversationId && turn.Role == "assistant"
+                && turn.CreatedAtUtc >= earliestAtUtc).ToArray();
+            foreach (var state in group)
+            {
+                var preview = ConversationTurnRecorder.Preview(state);
+                foreach (var turn in turns)
+                    turn.UpdatePreviewOutcome(preview.PendingOperationId, preview.Outcome, preview.Arguments, preview.Revision);
+            }
+        }
+        dbContext.SaveChanges();
     }
 
     private static PendingAgentOperation Map(PendingAgentOperationState entity)

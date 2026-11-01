@@ -7,6 +7,7 @@ public static partial class ErrorCopy
     /// <summary>Accounts, sessions, sign-in and the emailed confirmation codes.</summary>
     private static readonly (string Code, string En, string PtBr)[] AccountAndAccess =
     [
+        (Orbit.Application.Chat.ConversationErrors.NotFoundCode, "This conversation is no longer available.", "Esta conversa não está mais disponível."),
         (ErrorCodes.UserNotFound, "That account no longer exists. Sign in again to continue.", "Essa conta não existe mais. Entre de novo para continuar."),
         (ErrorCodes.InvalidSession, "This session ended. Sign in again to continue.", "Esta sessão terminou. Entre de novo para continuar."),
         (ErrorCodes.SessionCreationFailed, "We could not start a session. Try signing in again.", "Não conseguimos iniciar a sessão. Tente entrar de novo."),

@@ -24,6 +24,10 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | Testing | [xUnit](https://xunit.net) + FluentAssertions |
 | Containerization | Docker (multi-stage build) |
 
+Astra's gated server conversation storage, private image continuity and account
+retention contract are documented in
+[ServerConversations.md](src/Orbit.Api/OpenApi/ServerConversations.md).
+
 ## Features
 
 - **Habit CRUD** -- Create, update, delete, duplicate, reorder habits with sub-habit support
