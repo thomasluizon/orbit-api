@@ -87,10 +87,10 @@ public class ConversationTurnRecorderTests
         (await fixture.Store.DeleteAsync(other, fixture.ConversationId)).Should().BeFalse();
         (await fixture.Store.LoadHistoryAsync(other, fixture.ConversationId)).IsFailure.Should().BeTrue();
         (await fixture.Store.GetLatestAsync(other, fixture.ConversationId, null, 10)).Should().BeNull();
-        await fixture.Storage.DidNotReceiveWithAnyArgs().DeletePrivateAsync(default!);
+        await fixture.Storage.DidNotReceiveWithAnyArgs().DeleteConversationObjectsAsync(default);
         (await fixture.Store.DeleteAsync(fixture.User.Id, fixture.ConversationId)).Should().BeTrue();
         (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
-        await fixture.Storage.Received(1).DeletePrivateAsync(Arg.Is<string>(key => key.StartsWith($"{fixture.User.Id}/conversations/")), Arg.Any<CancellationToken>());
+        await fixture.Storage.Received(1).DeleteConversationObjectsAsync(fixture.User.Id, fixture.ConversationId, Arg.Any<CancellationToken>());
         Func<Task> lateSave = () => fixture.Store.RecordAsync(fixture.Capture() with { ExistingConversation = true });
         await lateSave.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -106,7 +106,7 @@ public class ConversationTurnRecorderTests
         fixture.User.ResetAccount();
         await fixture.Db.SaveChangesAsync();
         (await fixture.Db.ConversationTurns.CountAsync()).Should().Be(0);
-        await fixture.Storage.Received(1).DeletePrivateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await fixture.Storage.Received(1).DeleteConversationObjectsAsync(fixture.User.Id, null, Arg.Any<CancellationToken>());
         Func<Task> lateSave = () => fixture.Store.RecordAsync(capture with { TurnId = Guid.NewGuid() });
         await lateSave.Should().ThrowAsync<InvalidOperationException>();
     }
@@ -125,6 +125,39 @@ public class ConversationTurnRecorderTests
         var assistant = history.Value.Messages.Single(message => message.Role == "assistant").Content;
         assistant.Should().Contain("truncated").And.Contain("2026-12-31").And.Contain("has_more");
         (await fixture.Db.ConversationTurns.SingleAsync(turn => turn.Role == "assistant")).ToolResultsJson.Length.Should().BeLessThanOrEqualTo(12_002);
+    }
+
+    [Fact]
+    public async Task FailedConfirmation_DoesNotPersistAnApprovedOutcomeOnALaterSave()
+    {
+        var conflict = new ConfirmationConflict();
+        using var fixture = new Fixture(interceptor: conflict);
+        var capture = fixture.Capture();
+        var pending = new PendingAgentOperationStore(fixture.Db, Options.Create(new AgentPlatformSettings()));
+        var catalog = new AgentCatalogService();
+        const string arguments = "{\"title\":\"Reservation\",\"due_date\":\"2026-12-31\"}";
+        var fingerprint = Orbit.Domain.Common.AgentOperationFingerprint.Compute("create_habit", arguments);
+        var proposal = pending.Create(fixture.User.Id, catalog.GetCapabilityByChatTool("create_habit")!, "create_habit",
+            arguments, "Reservation", fingerprint, AgentExecutionSurface.Chat, new(fixture.ConversationId, capture.CreatedAtUtc));
+        pending.Revise(fixture.User.Id, proposal.Id, fingerprint, arguments, fingerprint, "preview").Should().BeTrue();
+        await fixture.Store.RecordAsync(capture);
+        conflict.FailNext = true;
+        pending.Confirm(fixture.User.Id, proposal.Id).Should().BeNull();
+        await fixture.Db.SaveChangesAsync();
+        var stored = await fixture.Db.ConversationTurns.AsNoTracking().SingleAsync(turn => turn.Role == "assistant");
+        var outcome = JsonSerializer.Deserialize<ConversationPreviewOutcome[]>(stored.PreviewOutcomesJson)!.Single();
+        outcome.Outcome.Should().Be("pending");
+    }
+
+    private sealed class ConfirmationConflict : SaveChangesInterceptor
+    {
+        internal bool FailNext { get; set; }
+        public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+        {
+            if (!FailNext) return result;
+            FailNext = false;
+            throw new DbUpdateConcurrencyException("Confirmation conflict");
+        }
     }
 
     internal sealed class Fixture : IDisposable

@@ -6,6 +6,7 @@ public interface IObjectStorageService
 {
     Task PutPrivateAsync(string objectKey, string contentType, byte[] data, CancellationToken cancellationToken = default);
     Task<byte[]> ReadPrivateAsync(string objectKey, CancellationToken cancellationToken = default);
+    Task DeleteConversationObjectsAsync(Guid userId, Guid? conversationId = null, CancellationToken cancellationToken = default);
     Task DeletePrivateAsync(string objectKey, CancellationToken cancellationToken = default);
     Task<SignedUpload> CreateSignedUploadAsync(string objectKey, string contentType, long sizeBytes, CancellationToken cancellationToken = default);
 }

@@ -46,8 +46,10 @@ public partial class ProcessUserChatCommandHandler
         ChatTurnState recording, CancellationToken ct)
     {
         var enabled = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
-        if (!enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording) || conversationRecorder is null)
+        if (!enabled.Contains(FeatureFlagKeys.AstraConversationRecording))
             return Result.Success(request);
+        if (conversationRecorder is null)
+            throw new InvalidOperationException("Conversation storage is unavailable.");
         recording.ServerEnabled = true;
         var id = request.ClientContext?.ConversationId ?? Guid.NewGuid();
         var history = await conversationRecorder.LoadHistoryAsync(request.UserId, id, ct);
@@ -65,7 +67,7 @@ public partial class ProcessUserChatCommandHandler
     {
         if (!recording.Enabled || conversationRecorder is null) return;
         var enabled = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, ct);
-        if (!enabled.Contains(Orbit.Application.Common.FeatureFlagKeys.AstraConversationRecording)) return;
+        if (!enabled.Contains(FeatureFlagKeys.AstraConversationRecording)) return;
         await conversationRecorder.RecordAsync(new ConversationTurnCapture(request.UserId, request.TurnId ?? Guid.NewGuid(),
             recording.CreatedAtUtc, recording.UserContent ?? request.Message, response is { IsSuccess: true } ? response.Value.AiMessage : null,
             JsonSerializer.Serialize(recording.ToolCalls), recording.UsedModel,

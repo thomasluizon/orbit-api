@@ -126,11 +126,12 @@ public sealed class ConversationTurnRecorder(
             {
                 var context = JsonSerializer.Serialize(new
                 {
+                    assistant_text = row.Content,
                     assistant_parts = row.ResponseJson is null ? null : ModelToolPayload.Fit(row.ResponseJson, 4_000),
                     tool_results = JsonSerializer.Deserialize<JsonElement>(row.ToolResultsJson),
                     preview_outcomes = JsonSerializer.Deserialize<JsonElement>(row.PreviewOutcomesJson)
                 }, JsonOptions);
-                content += "\n" + ModelToolPayload.Fit(context, 12_000).ToJsonString();
+                content = ModelToolPayload.Fit(context, 12_000).ToJsonString();
             }
             byte[]? bytes = null;
             if (ReferenceEquals(image, row))
@@ -180,8 +181,7 @@ public sealed class ConversationTurnRecorder(
             await work.AcquireUserRowLockAsync(userId, token);
             var query = db.ConversationTurns.Where(row => row.UserId == userId && row.ConversationId == conversationId);
             if (!await query.AnyAsync(token)) return false;
-            foreach (var key in await query.Where(row => row.ImageObjectKey != null).Select(row => row.ImageObjectKey!).ToListAsync(token))
-                await storage.DeletePrivateAsync(key, token);
+            await storage.DeleteConversationObjectsAsync(userId, conversationId, token);
             var turnIds = query.Select(row => row.TurnId);
             await db.ChatTurns.Where(row => row.UserId == userId && turnIds.Contains(row.Id)).ExecuteDeleteAsync(token);
             await query.ExecuteDeleteAsync(token);

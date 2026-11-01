@@ -40,7 +40,7 @@ public class AccountDeletionServiceDbTests : IDisposable
             .AddSingleton<IObjectStorageDeletionService>(_legacyObjects)
             .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext, new DatabaseConnectionSettings()))
             .AddSingleton<IGenericRepository<MarketingContact>>(new GenericRepository<MarketingContact>(_dbContext))
-            .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>()))
+            .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext, NSubstitute.Substitute.For<Orbit.Domain.Events.IAccountEventCollector>(), NSubstitute.Substitute.For<IObjectStorageService>()))
             .BuildServiceProvider();
 
         _service = new AccountDeletionService(
@@ -261,6 +261,30 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         _legacyObjects.Keys.Should().BeEmpty();
         (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == userId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_DeletesConversationRowsAndPrivateImagesOnlyForErasedAccount()
+    {
+        var erased = Guid.NewGuid();
+        var retained = Guid.NewGuid();
+        SeedDeactivatedUser(erased, "conversation-erasure@example.com", DateTime.UtcNow.AddDays(-1));
+        SeedUser(retained, "conversation-retained@example.com");
+        foreach (var user in new[] { erased, retained })
+        {
+            var conversation = Guid.NewGuid();
+            var imageKey = $"{user}/conversations/{conversation}/image.png";
+            _dbContext.ConversationTurns.Add(ConversationTurn.Create(user, Guid.NewGuid(), "user", DateTime.UtcNow,
+                null, "Private message", "[]", conversationId: conversation, turnOrder: 1,
+                imageObjectKey: imageKey, imageContentType: "image/png", imageSha256: new string('a', 64)).Value);
+            _objects.Keys.Add(imageKey);
+        }
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+        await _service.RunAsync(default);
+        (await _dbContext.Users.IgnoreQueryFilters().AnyAsync(user => user.Id == erased)).Should().BeFalse();
+        (await _dbContext.ConversationTurns.ToListAsync()).Should().ContainSingle().Which.UserId.Should().Be(retained);
+        _objects.Keys.Should().ContainSingle().Which.Should().StartWith($"{retained}/");
     }
 
     private async Task AssertRetiredLedgerAbsent()

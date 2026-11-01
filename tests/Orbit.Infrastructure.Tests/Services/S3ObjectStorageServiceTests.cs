@@ -158,6 +158,68 @@ public class S3ObjectStorageServiceTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task PrivateConversationObjects_ReuseBucketAndNeverCreatePublicAclOrUrl()
+    {
+        var client = Substitute.For<IAmazonS3>();
+        var key = $"{Guid.NewGuid()}/conversations/{Guid.NewGuid()}/{Guid.NewGuid()}.png";
+        byte[] bytes = [1, 2, 3, 4];
+        byte[]? uploaded = null;
+        client.PutObjectAsync(Arg.Any<PutObjectRequest>(), Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var request = call.Arg<PutObjectRequest>();
+            request.BucketName.Should().Be(Bucket);
+            request.Key.Should().Be(key);
+            request.ContentType.Should().Be("image/png");
+            request.CannedACL.Should().BeNull();
+            using var copy = new MemoryStream();
+            await request.InputStream.CopyToAsync(copy);
+            uploaded = copy.ToArray();
+            return new PutObjectResponse();
+        });
+        client.GetObjectAsync(Bucket, key, Arg.Any<CancellationToken>()).Returns(new GetObjectResponse { ResponseStream = new MemoryStream(bytes) });
+        client.DeleteObjectAsync(Bucket, key, Arg.Any<CancellationToken>()).Returns(new DeleteObjectResponse());
+        var service = CreateService(client);
+        await service.PutPrivateAsync(key, "image/png", bytes);
+        uploaded.Should().Equal(bytes);
+        (await service.ReadPrivateAsync(key)).Should().Equal(bytes);
+        await service.DeletePrivateAsync(key);
+        await client.Received(1).DeleteObjectAsync(Bucket, key, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeleteConversationObjects_RemovesOrphansWithinOnlyTheRequestedPrefix(bool oneConversation)
+    {
+        var user = Guid.NewGuid();
+        var conversation = Guid.NewGuid();
+        var prefix = $"{user}/conversations/";
+        var keys = new HashSet<string>
+        {
+            $"{prefix}{conversation}/orphan.png", $"{prefix}{Guid.NewGuid()}/another.png",
+            $"{user}/ordinary-upload.png", $"{Guid.NewGuid()}/conversations/{conversation}/keep.png"
+        };
+        var expected = oneConversation ? $"{prefix}{conversation}/" : prefix;
+        var client = Substitute.For<IAmazonS3>();
+        client.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            call.Arg<ListObjectsV2Request>().Prefix.Should().Be(expected);
+            return new ListObjectsV2Response
+            {
+                S3Objects = keys.Where(key => key.StartsWith(expected, StringComparison.Ordinal))
+                .Select(key => new S3Object { Key = key }).ToList()
+            };
+        });
+        client.DeleteObjectsAsync(Arg.Any<DeleteObjectsRequest>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            foreach (var item in call.Arg<DeleteObjectsRequest>().Objects) keys.Remove(item.Key);
+            return new DeleteObjectsResponse();
+        });
+        await CreateService(client).DeleteConversationObjectsAsync(user, oneConversation ? conversation : null);
+        keys.Should().HaveCount(oneConversation ? 3 : 2).And.NotContain(key => key.StartsWith(expected, StringComparison.Ordinal));
+    }
+
     private static AmazonS3Client CreateClient() => new(
         new BasicAWSCredentials("AKIAEXAMPLE123456789", "example-secret-key"),
         RegionEndpoint.USEast2);

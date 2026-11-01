@@ -114,7 +114,7 @@ public class PendingAgentOperationStore(
         }
         catch (DbUpdateConcurrencyException)
         {
-            dbContext.Entry(entity).State = EntityState.Detached;
+            ResetFailedOutcomeChanges(entity);
             return null;
         }
 
@@ -249,7 +249,7 @@ public class PendingAgentOperationStore(
         }
         catch (DbUpdateConcurrencyException)
         {
-            dbContext.Entry(entity).State = EntityState.Detached;
+            ResetFailedOutcomeChanges(entity);
             return false;
         }
     }
@@ -272,7 +272,7 @@ public class PendingAgentOperationStore(
         }
         catch (DbUpdateConcurrencyException)
         {
-            dbContext.Entry(entity).State = EntityState.Detached;
+            ResetFailedOutcomeChanges(entity);
             return false;
         }
     }
@@ -340,9 +340,17 @@ public class PendingAgentOperationStore(
         catch (DbUpdateConcurrencyException exception) when (
             exception.Entries.Any(entry => ReferenceEquals(entry.Entity, entity)))
         {
-            dbContext.Entry(entity).State = EntityState.Detached;
+            ResetFailedOutcomeChanges(entity);
             return false;
         }
+    }
+
+    private void ResetFailedOutcomeChanges(PendingAgentOperationState entity)
+    {
+        dbContext.Entry(entity).State = EntityState.Detached;
+        foreach (var entry in dbContext.ChangeTracker.Entries<ConversationTurn>().Where(entry => entry.State == EntityState.Modified
+            && entry.Entity.UserId == entity.UserId && entry.Entity.ConversationId == entity.ConversationId).ToArray())
+            entry.State = EntityState.Detached;
     }
 
     private void SaveChangesWithConversationOutcomes()

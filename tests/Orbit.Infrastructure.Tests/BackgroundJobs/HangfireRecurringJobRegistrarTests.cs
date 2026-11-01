@@ -29,4 +29,14 @@ public class HangfireRecurringJobRegistrarTests
             && descriptor.ImplementationType == typeof(HangfireRecurringJobRegistrar));
     }
 
+    [Fact]
+    public async Task Startup_RemovesObsoleteConversationRetentionSchedule()
+    {
+        var manager = NSubstitute.Substitute.For<Hangfire.IRecurringJobManager>();
+        var registrar = new HangfireRecurringJobRegistrar(manager, [],
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HangfireRecurringJobRegistrar>.Instance);
+        await registrar.StartAsync(default);
+        NSubstitute.SubstituteExtensions.Received(manager, 1).RemoveIfExists("conversation-retention");
+    }
+
 }
