@@ -21,9 +21,9 @@ public record PromptBuildRequest(
 public interface ISystemPromptBuilder
 {
     /// <summary>
-    /// Builds the request-invariant prefix of the system prompt (identity, global rules,
-    /// structuring strategy, clarification guidance). Identical for every user and request, so it
-    /// forms the cacheable span of the OpenAI prompt and must be emitted before any dynamic content.
+    /// Builds the shared prefix of the system prompt (identity, global rules, structuring strategy,
+    /// clarification guidance and composition format). Identical for users and requests with the
+    /// same composition mode; emitted before dynamic content to preserve prompt-cache reuse.
     /// </summary>
     string BuildStatic(PromptBuildRequest request);
 

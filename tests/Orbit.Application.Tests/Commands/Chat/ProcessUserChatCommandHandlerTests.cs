@@ -3323,7 +3323,7 @@ public partial class ProcessUserChatCommandHandlerTests
             _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
                 .Returns([FeatureFlagKeys.AstraPartsDisabled]);
         string? prompt = null;
-        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.DynamicContext),
+        _aiIntentService.SendWithToolsAsync(Arg.Do<AiToolRequest>(request => prompt = request.SystemPrompt + Environment.NewLine + request.DynamicContext),
                 Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Ready." }));
         var instructions = new[]
@@ -3373,7 +3373,8 @@ public partial class ProcessUserChatCommandHandlerTests
             expected.AddRange(instructions.Select(item => item.Legacy));
             expected.Add("Follow-ups are optional: emit zero, one or two grounded contextual questions. If useful, end with [[orbit:followups]] and one question per line, at most 60 characters each. Never suggest unavailable capabilities, invent facts or execute a write from a suggestion. Do not add other text after them.");
         }
-        prompt.Should().Be(string.Join(Environment.NewLine, expected));
+        foreach (var instruction in expected)
+            prompt.Should().Contain(instruction);
     }
 
     [Theory]
@@ -3384,7 +3385,7 @@ public partial class ProcessUserChatCommandHandlerTests
         SetupUserAndPayGate();
         string? capturedPrompt = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Do<AiToolRequest>(request => capturedPrompt = request.DynamicContext),
+            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt + Environment.NewLine + request.DynamicContext),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));

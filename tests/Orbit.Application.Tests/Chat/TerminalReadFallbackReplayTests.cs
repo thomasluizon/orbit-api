@@ -84,7 +84,7 @@ public partial class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(complete ? 0 : 1).ContinueWithToolResultsAsync(Arg.Any<AiConversationContext>(),
             Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
         modelRequest.Should().NotBeNull();
-        modelRequest!.DynamicContext.Should()
+        modelRequest!.SystemPrompt.Should()
             .NotContain("For unsupported clients, use only its returned habit facts in text.")
             .And.NotContain("For an unsupported metric, answer from the queried facts in text.")
             .And.NotContain("For an unsupported subtype, answer from the queried facts in text.")

@@ -68,7 +68,7 @@ public sealed partial class ChatWriteHoldHandlerTests
         sent.SystemPrompt.Should().Contain("Bind each preparation offset to its own activity and referenced event")
             .And.Contain("A fasting deadline stays on the collection date");
         AssertPreparationGuidance(sent);
-        sent.DynamicContext.Should().Contain("For medical instruction titles, keep the person's own action wording");
+        sent.SystemPrompt.Should().Contain("For medical instruction titles, keep the person's own action wording");
         foreach (var declaration in sent.ToolDeclarations.Select(value => JsonSerializer.SerializeToElement(value))
             .Where(value => value.GetProperty("name").GetString() is "create_habit" or "bulk_create_habits" or "create_sub_habit"))
         {
@@ -98,11 +98,6 @@ public sealed partial class ChatWriteHoldHandlerTests
         declarations.Should().HaveCount(2);
         foreach (var declaration in declarations)
         {
-            declaration.GetProperty("description").GetString().Should()
-                .Contain("A 24-hour restriction is a bounded daily commitment")
-                .And.Contain("frequency_unit=OneTime, due_date=D, due_end_time=T")
-                .And.Contain("each offset governs the action written immediately after it")
-                .And.Contain("Never make an offset its own item or move it to another action");
             var schema = declaration.GetProperty("parameters");
             if (schema.GetProperty("properties").TryGetProperty("habits", out var habits))
                 schema = habits.GetProperty("items");

@@ -44,7 +44,7 @@ public partial class ProcessUserChatCommandHandlerTests
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>()).Returns(call =>
         {
-            call.Arg<AiToolRequest>().DynamicContext.Should().Contain(TerminalReadDirective.Instruction);
+            call.Arg<AiToolRequest>().SystemPrompt.Should().Contain(TerminalReadDirective.Instruction);
             return completion.RunAsync(UserId, _ => Task.FromResult(Result.Success(
                 ToolResponse(tool.Name, "ranking", "{\"orbit_read_complete\":true}") with
                 { TextMessage = text })), default, "{}");

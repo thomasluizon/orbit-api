@@ -53,6 +53,7 @@ public partial class AiInputBudgetTests
         var loop = captures.Where(capture => capture.Turn == "loop").ToArray();
         for (var index = 1; index < loop.Length; index++)
         {
+            ModelInput(loop[index].Body).Should().StartWith(ModelInput(loop[index - 1].Body));
             var previous = InputItems(loop[index - 1].Body);
             var current = InputItems(loop[index].Body);
             current.Length.Should().BeGreaterThan(previous.Length);
@@ -93,7 +94,7 @@ public partial class AiInputBudgetTests
         var coldSeen = new List<string>();
         var coldCosts = new List<decimal>();
         var costs = new List<decimal>();
-        var table = new StringBuilder("| Call | System | Tools | Context | History | User | Calls | Results | Offers | Other | Prefix in turn | Prefix previous turn | Prefix other user | Cached | Warm cost USD | Cold cost USD |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+        var table = new StringBuilder("| Call | System | Tools | Context | History | User | Calls | Results | Offers | Other | Prefix in turn B/T | Prefix previous turn B/T | Prefix other user B/T | Cached | Warm cost USD | Cold cost USD |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
         string? previous = null;
         string? previousTurn = null;
         string? turn = null;
@@ -118,7 +119,7 @@ public partial class AiInputBudgetTests
             coldSeen.Add(prefix);
             var cost = ((total - cached) * price.CacheWritePerMillionUsd!.Value + cached * price.CachedInputPerMillionUsd + capture.OutputTokens * price.OutputPerMillionUsd) / 1_000_000;
             costs.Add(cost);
-            table.AppendLine(FormattableString.Invariant($"| {client}/{capture.Name} | {string.Join(" | ", counts)} | {CommonTokens(previous is null ? null : ModelInput(previous), prefix)} | {CommonTokens(previousTurn is null ? null : ModelInput(previousTurn), prefix)} | {CommonTokens(ModelInput(otherUser), prefix)} | {cached} | {cost:F7} | {coldCost:F7} |"));
+            table.AppendLine(FormattableString.Invariant($"| {client}/{capture.Name} | {string.Join(" | ", counts)} | {SharedPrefix(previous is null ? null : ModelInput(previous), prefix)} | {SharedPrefix(previousTurn is null ? null : ModelInput(previousTurn), prefix)} | {SharedPrefix(ModelInput(capture.Turn == "other-user" ? captures[0].Body : otherUser), prefix)} | {cached} | {cost:F7} | {coldCost:F7} |"));
             seen.Add(prefix);
             previous = capture.Body;
         }
@@ -137,9 +138,16 @@ public partial class AiInputBudgetTests
         var other = User.Create("Outra pessoa", "cache-other@example.com").Value;
         other.SetLanguage("pt-BR");
         var habits = new Dictionary<Guid, IReadOnlyList<Habit>>();
+        var fixtureIds = new[] { "e2f7193a-57a4-4ae8-bb19-9bc12d3a408f", "6011da4b-a92e-4428-a91a-c728bf0a720c",
+            "c2404d6f-cb03-49c2-8840-57206a0b70d9", "3c22af14-4a13-4e57-9ce1-08be553547e4" };
+        var identity = 0;
         foreach (var person in new[] { user, other })
-            habits[person.Id] = new[] { "Stretch", "Read" }.Select(title => Habit.Create(new(
-                HabitSchedule.Recurring, person.Id, title, FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value).ToArray();
+            habits[person.Id] = new[] { "Stretch", "Read" }.Select(title =>
+            {
+                var habit = Habit.Create(new(HabitSchedule.Recurring, person.Id, title, FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value;
+                typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(habit, Guid.Parse(fixtureIds[identity++]));
+                return habit;
+            }).ToArray();
         var history = new[] { new ChatHistoryMessage("user", "Show my progress"), new ChatHistoryMessage("assistant", "Here is your progress.") };
         foreach (var (turn, person, prior) in new[] { ("read", user, (ChatHistoryMessage[]?)null), ("write", user, null),
             ("loop", user, null), ("followup", user, history), ("other-user", other, null) })
@@ -287,9 +295,21 @@ public partial class AiInputBudgetTests
     private static int CommonTokens(string? left, string right)
     {
         if (left is null) return 0;
+        var leftIds = CacheTokenizer.EncodeToIds(left);
+        var rightIds = CacheTokenizer.EncodeToIds(right);
         var length = 0;
-        while (length < Math.Min(left.Length, right.Length) && left[length] == right[length]) length++;
-        return Count(right[..length]);
+        while (length < Math.Min(leftIds.Count, rightIds.Count) && leftIds[length] == rightIds[length]) length++;
+        return length;
+    }
+
+    private static string SharedPrefix(string? left, string right)
+    {
+        if (left is null) return "0/0";
+        var leftBytes = Encoding.UTF8.GetBytes(left);
+        var rightBytes = Encoding.UTF8.GetBytes(right);
+        var length = 0;
+        while (length < Math.Min(leftBytes.Length, rightBytes.Length) && leftBytes[length] == rightBytes[length]) length++;
+        return $"{length}/{CommonTokens(left, right)}";
     }
 
     private sealed record CacheCapture(string Turn, string Name, string Body, int OutputTokens);

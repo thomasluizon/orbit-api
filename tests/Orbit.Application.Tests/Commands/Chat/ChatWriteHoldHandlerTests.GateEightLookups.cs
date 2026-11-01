@@ -99,7 +99,7 @@ public sealed partial class ChatWriteHoldHandlerTests
             .Should().Contain(item => item.Id == skippedId && item.IsSkippedOnDate == true);
         await _mediator.DidNotReceive().Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>());
         var sent = _aiIntentService.ReceivedCalls().SelectMany(call => call.GetArguments()).OfType<AiToolRequest>().Single();
-        sent.DynamicContext.Should().Contain("A read showing an occurrence as skipped does not fulfill a requested skip");
+        sent.SystemPrompt.Should().Contain("A read showing an occurrence as skipped does not fulfill a requested skip");
         var query = sent.ToolDeclarations.Select(declaration => JsonSerializer.SerializeToElement(declaration))
             .Single(declaration => declaration.GetProperty("name").GetString() == "query_habits");
         query.GetProperty("description").GetString().Should().Contain("even when isSkippedOnDate is true");

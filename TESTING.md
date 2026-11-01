@@ -76,6 +76,8 @@ After release, use real turns and inspect the current UTC day's `AI cost ... (pa
 line emitted at startup, or the next full daily line. Record calls, dollar cost per call,
 uncached and cached input per call, output and reasoning on the ticket. Cache hit fraction
 is `cached_input / (cached_input + uncached_input)`; reasoning is already part of output.
+The partial snapshot includes earlier calls from the same UTC day. Use counter deltas
+or a full day entirely on the released version when attributing cost to a change.
 The coordinator records the gate's actual total cost and failures on the ticket. Starting
 or restarting a production process for a cost snapshot requires coordination with any
 active gate or other release work.
