@@ -179,14 +179,9 @@ public sealed partial class AiIntentService(
         var serializedPayload = JsonSerializer.Serialize(result.Payload, SerializeOptions);
         if (serializedPayload.Length > AppConstants.MaxAiToolPayloadJsonLength)
         {
-            payload["payload"] = new Dictionary<string, object>
-            {
-                ["dropped"] = true,
-                ["original_length"] = serializedPayload.Length,
-                ["instruction"] = "Re-query with a narrower filter."
-            };
+            payload["payload"] = ModelToolPayload.Fit(serializedPayload);
             if (logger.IsEnabled(LogLevel.Warning))
-                LogToolPayloadDropped(logger, result.Name, serializedPayload.Length, AppConstants.MaxAiToolPayloadJsonLength);
+                LogToolPayloadShortened(logger, result.Name, serializedPayload.Length, AppConstants.MaxAiToolPayloadJsonLength);
         }
         else
         {
@@ -723,8 +718,8 @@ public sealed partial class AiIntentService(
     [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Failed to record chat usage for {Model} ({Phase})")]
     private static partial void LogChatUsageRecordFailed(ILogger logger, string model, string phase, Exception ex);
 
-    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "AI tool payload dropped. ToolName={ToolName} OriginalLength={OriginalLength} MaxLength={MaxLength}")]
-    private static partial void LogToolPayloadDropped(
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "AI tool payload shortened. ToolName={ToolName} OriginalLength={OriginalLength} MaxLength={MaxLength}")]
+    private static partial void LogToolPayloadShortened(
         ILogger logger,
         string toolName,
         int originalLength,

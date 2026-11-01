@@ -35,6 +35,22 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public partial class ProcessUserChatCommandHandlerTests
 {
+    [Fact]
+    public async Task LargeAccountPayload_ProductionHabitReadKeepsMatchingItemsAtProvider()
+    {
+        SetupUserAndPayGate();
+        var habits = Enumerable.Range(0, 120).Select(index => Habit.Create(new(HabitSchedule.OneTime,
+            UserId, $"Reservation {index:D3} " + new string('x', 80), null, null, Today)).Value).ToList();
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+            Arg.Any<CancellationToken>()).Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        var tool = new QueryHabitsTool(_habitRepo, _userRepo, _userDateService, _scheduleLogReader);
+        var read = await tool.ExecuteAsync(ParseArguments("{\"limit\":120}"), UserId, default);
+        var full = read.Payload.Should().BeOfType<HabitListCard>().Subject;
+        full.Items.Should().HaveCount(120);
+        JsonSerializer.Serialize(full, PayloadBudgetSerializerOptions).Length.Should().BeGreaterThan(AppConstants.MaxAiToolPayloadJsonLength);
+        await AssertActualModelHandoffAsync(new(tool.Name, "large", true, null, read.EntityName, null, full), truncated: true);
+    }
+
     private static readonly JsonSerializerOptions PayloadBudgetSerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -290,7 +306,7 @@ public partial class ProcessUserChatCommandHandlerTests
         .Single(call => call.GetMethodInfo().Name == nameof(IAiIntentService.ContinueWithToolResultsAsync))
         .GetArguments()[1].Should().BeAssignableTo<IReadOnlyList<AiToolCallResult>>().Subject.Single();
 
-    private static async Task AssertActualModelHandoffAsync(AiToolCallResult sent)
+    private static async Task AssertActualModelHandoffAsync(AiToolCallResult sent, bool truncated = false)
     {
         using var transport = new PayloadBudgetTransport();
         var usage = Substitute.For<IAiUsageRecorder>();
@@ -319,7 +335,18 @@ public partial class ProcessUserChatCommandHandlerTests
         using var body = JsonDocument.Parse(output.GetProperty("output").GetString()!);
         var payload = body.RootElement.GetProperty("payload");
         (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("dropped", out _)).Should().BeFalse("the production handoff must retain typed-read facts");
-        payload.GetRawText().Should().Be(JsonSerializer.Serialize(sent.Payload, PayloadBudgetSerializerOptions));
+        if (truncated)
+        {
+            payload.GetRawText().Length.Should().BeLessThanOrEqualTo(AppConstants.MaxAiToolPayloadJsonLength);
+            payload.GetProperty("truncated").GetBoolean().Should().BeTrue();
+            var data = payload.GetProperty("data");
+            data.GetProperty("totalCount").GetInt32().Should().Be(120);
+            var items = data.GetProperty("items");
+            items.GetArrayLength().Should().BeInRange(1, 119);
+            items[0].GetProperty("title").GetString().Should().StartWith("Reservation");
+            payload.GetProperty("collections")[0].GetProperty("has_more").GetBoolean().Should().BeTrue();
+        }
+        else payload.GetRawText().Should().Be(JsonSerializer.Serialize(sent.Payload, PayloadBudgetSerializerOptions));
         if (sent.ReadDirective is not null)
             body.RootElement.GetProperty("readDirective").GetString().Should().Be(sent.ReadDirective);
     }

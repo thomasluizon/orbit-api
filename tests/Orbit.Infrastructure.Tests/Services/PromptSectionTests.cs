@@ -339,15 +339,15 @@ public class ToolFailureSectionTests
     }
 
     [Fact]
-    public void Build_RetriesDroppedPayloadWithoutExposingInternalLimits()
+    public void Build_UsesRetainedPayloadWithoutExposingInternalLimits()
     {
         var ctx = new PromptContext(new List<Habit>(), false, null, null, null, null);
 
         var result = new ToolFailureSection().Build(ctx);
 
-        result.Should().ContainAll("payload.dropped=true", "even when success=true",
-            "call the tool again with narrower arguments", "Do not repeat the same arguments",
-            "include_profile=true", "include_achievements=false", "include_streak=true",
+        result.Should().ContainAll("payload.truncated=true", "payload.data", "has_more", "totalCount",
+            "Retained items remain valid results", "narrower filters", "offset/cursor",
+            "Never infer absence from a partial result",
             "Never mention payload size, limits, or processing", "in any language",
             "If the data still cannot be read", "what you could not read");
     }
