@@ -14,6 +14,11 @@ completion properties and required entries changed. The source parameters and ev
 other pinned schema remain intact; this amendment does not regenerate the baseline
 from the compactor under test.
 
+The General task correction in thomasluizon/orbit-tickets#1940 updates only the
+reviewed General and repeat-reminder description values within that inlined
+baseline. Its constraints and original structure remain intact; it is not
+replaced with the current compactor's output.
+
 The bounded schema builders remain the execution contract. Export compaction recognizes
 the repeated habit structure, keeps a single recursive habit definition, and shares
 identical schema blocks within a tool when a reference saves space. The strict normalizer

@@ -200,7 +200,7 @@ public class GetHabitScheduleQueryHandler(
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc);
 
-        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, completionDate, weekStartDay);
+        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, weekStartDay);
 
         var filtered = topLevel.ToList();
 

@@ -30,7 +30,7 @@ public class HabitScheduleEnumWriterTests
     [InlineData(HabitSchedule.OneTime, 0, true, true)]
     [InlineData(HabitSchedule.Recurring, 1, false, false)]
     [InlineData(HabitSchedule.Flexible, 0, false, false)]
-    [InlineData(HabitSchedule.General, 0, false, true)]
+    [InlineData(HabitSchedule.General, 0, true, true)]
     public void LogAndUnlog_UseScheduleForEachSchedule(
         HabitSchedule schedule, int cursorOffset, bool completed, bool checklistChecked)
     {

@@ -124,7 +124,6 @@ internal static class HabitScheduleFilters
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
-        DateOnly? userToday = null,
         int weekStartDay = 1,
         IReadOnlySet<Guid>? dueDateResolution = null,
         HabitScheduleLogFacts? logFacts = null)
@@ -143,7 +142,7 @@ internal static class HabitScheduleFilters
 
         if (request.IsCompleted.HasValue)
             topLevel = topLevel.Where(h =>
-                GetResponseCompletion(h, userToday) == request.IsCompleted.Value);
+                h.IsCompleted == request.IsCompleted.Value);
 
         if (request.TagIds is { Count: > 0 })
             topLevel = ApplyTagFilter(topLevel, request.TagIds, lookup);
@@ -308,7 +307,7 @@ internal static class HabitScheduleFilters
 
         return new HabitScheduleItem(
             h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
-            h.IsBadHabit, GetResponseCompletion(h, ctx.UserToday), h.Schedule == HabitSchedule.General, h.Schedule == HabitSchedule.Flexible,
+            h.IsBadHabit, h.IsCompleted, h.Schedule == HabitSchedule.General, h.Schedule == HabitSchedule.Flexible,
             h.Days.ToList(), h.Position, h.CreatedAtUtc,
             h.NextDueDate, h.DueTime, h.DueEndTime, h.EndDate,
             scheduledDates, isOverdue,
@@ -510,7 +509,7 @@ internal static class HabitScheduleFilters
         return new HabitScheduleChildItem(
             c.Id, c.Title, c.Description,
             c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit,
-            GetResponseCompletion(c, ctx.UserToday), c.Schedule == HabitSchedule.General, c.Schedule == HabitSchedule.Flexible,
+            c.IsCompleted, c.Schedule == HabitSchedule.General, c.Schedule == HabitSchedule.Flexible,
             c.Days.ToList(), c.NextDueDate, c.DueTime, c.DueEndTime, c.EndDate,
             scheduledDates, isOverdue,
             c.Position, c.ChecklistItems, MapTags(c),
@@ -550,17 +549,6 @@ internal static class HabitScheduleFilters
                 && !ctx.LogFacts.HasCompleted(habit.Id, date.Value, date.Value)
             : habit.Logs.Any(log => !log.IsDeleted && log.Date == date.Value && log.Value == 0)
                 && !habit.Logs.Any(log => !log.IsDeleted && log.Date == date.Value && log.Value > 0);
-    }
-
-    private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)
-    {
-        if (habit.Schedule != HabitSchedule.General || !userToday.HasValue)
-            return habit.IsCompleted;
-
-        return HabitScheduleService.HasCompletedLogInRange(
-            habit,
-            userToday.Value,
-            userToday.Value);
     }
 
     /// <summary>

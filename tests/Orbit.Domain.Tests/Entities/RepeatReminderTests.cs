@@ -91,14 +91,10 @@ public class RepeatReminderTests
         Habit.Create(Parameters(new(480, new(22, 0)))).IsFailure.Should().BeTrue();
     }
 
-    [Theory]
-    [InlineData(HabitSchedule.Flexible)]
-    [InlineData(HabitSchedule.General)]
-    public void Repeat_AllowsAnotherDoseAfterDailyTarget(HabitSchedule schedule)
+    [Fact]
+    public void FlexibleRepeat_AllowsAnotherDoseAfterDailyTarget()
     {
-        var parameters = Parameters(new(480)) with { Schedule = schedule };
-        if (schedule == HabitSchedule.General)
-            parameters = parameters with { FrequencyUnit = null, FrequencyQuantity = null };
+        var parameters = Parameters(new(480)) with { Schedule = HabitSchedule.Flexible };
         var habit = Habit.Create(parameters).Value;
         habit.Log(parameters.DueDate).IsSuccess.Should().BeTrue();
         habit.Log(parameters.DueDate).IsSuccess.Should().BeTrue();

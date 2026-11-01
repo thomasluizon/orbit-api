@@ -7,6 +7,7 @@ using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
@@ -22,11 +23,11 @@ public sealed class UnlogHabitTool(
     private static readonly UnlogHabitArgumentsValidator Validator = new();
 
     public string Name => "unlog_habit";
-    public string Description => "Undo a habit completion for a specific date (defaults to today). Removes one completion without creating a log. Fails if no completion exists for that date. Use log_habit to mark it again.";
+    public string Description => "Undo one habit completion. Completed General tasks use their latest completion; other schedules use the specified date or today. Fails if no completion exists. Use log_habit to mark it again.";
 
     public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
         "ID of the habit whose completion to undo",
-        "ISO date (YYYY-MM-DD) of the completion to undo. Defaults to today.");
+        "ISO date (YYYY-MM-DD). Defaults to today for dated schedules; ignored for completed General tasks.");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         ExecuteCoreAsync(args, userId, checkOnly: false, ct);
@@ -65,11 +66,14 @@ public sealed class UnlogHabitTool(
             HabitLiveRootEntry.FromUnlog,
             async (habit, token) =>
             {
-                var unlogged = habit.Unlog(targetDate);
+                var completion = HabitCompletionLogResolver.Resolve(habit, targetDate);
+                if (completion is null)
+                    return Result.Failure<ToolResult>(DomainErrors.LogNotFoundForDate);
+                var unlogged = habit.Unlog(completion.Date, completion.Id);
                 if (unlogged.IsFailure)
                     return unlogged.PropagateError<ToolResult>();
 
-                var parentUnlog = await BadHabitParentSlipService.RemoveIfIncompleteAsync(habit, targetDate, habitRepository, token);
+                var parentUnlog = await BadHabitParentSlipService.RemoveIfIncompleteAsync(habit, completion.Date, habitRepository, token);
                 if (parentUnlog.IsFailure)
                     return parentUnlog.PropagateError<ToolResult>();
                 await unitOfWork.SaveChangesAsync(token);
@@ -92,7 +96,14 @@ public sealed class UnlogHabitTool(
             return Result.Failure<Habit>($"Habit {habitId} not found.");
         if (habit.UserId != userId)
             return Result.Failure<Habit>(ErrorMessages.HabitNotOwned);
-        if (!habit.Logs.Any(log => log.Date == date && log.Value > 0 && !log.IsDeleted))
+        if (habit is { Schedule: HabitSchedule.General, IsCompleted: true })
+        {
+            habit = await habitRepository.FindOneTrackedAsync(habit => habit.Id == habitId,
+                query => query.Include(habit => habit.Logs).Include(habit => habit.Goals).AsSplitQuery(), ct);
+            if (habit is null)
+                return Result.Failure<Habit>($"Habit {habitId} not found.");
+        }
+        if (HabitCompletionLogResolver.Resolve(habit, date) is null)
             return Result.Failure<Habit>(DomainErrors.LogNotFoundForDate);
         return Result.Success(habit);
     }

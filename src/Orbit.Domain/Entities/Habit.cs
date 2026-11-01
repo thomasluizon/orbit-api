@@ -334,7 +334,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return new Result<HabitLog>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
-        var completionOrdinal = Schedule == HabitSchedule.Flexible || Schedule == HabitSchedule.General && RepeatIntervalMinutes.HasValue
+        var completionOrdinal = Schedule is HabitSchedule.Flexible or HabitSchedule.General
             ? _logs.Where(l => l.Date == date && l.Value > 0)
                 .Select(l => l.CompletionOrdinal)
                 .DefaultIfEmpty(-1)
@@ -344,7 +344,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             completionOrdinal: completionOrdinal, loggedOnLocalDate: loggedOnLocalDate);
         _logs.Add(log);
 
-        if (Schedule == HabitSchedule.OneTime)
+        if (Schedule is HabitSchedule.OneTime or HabitSchedule.General)
         {
             IsCompleted = true;
         }
@@ -369,9 +369,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public Result CheckLog(DateOnly date, int weekStartDay)
     {
-        if (IsCompleted && Schedule != HabitSchedule.General)
+        if (IsCompleted)
             return Result.Failure(DomainErrors.CannotLogCompletedHabit);
-        if (!IsBadHabit && Schedule != HabitSchedule.Flexible && !(Schedule == HabitSchedule.General && RepeatIntervalMinutes.HasValue) && _logs.Exists(l => l.Date == date && !l.IsDeleted))
+        if (!IsBadHabit && Schedule is not (HabitSchedule.Flexible or HabitSchedule.General) && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure(DomainErrors.AlreadyLoggedForDate);
         if (Schedule == HabitSchedule.Flexible && !RepeatIntervalMinutes.HasValue && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
             return Result.Failure(DomainErrors.AllInstancesDone);
@@ -902,7 +902,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private Result ApplyRequiredUpdates(HabitUpdateParams p)
     {
         var schedule = p.Schedule;
-        var enteringGeneral = schedule == HabitSchedule.General && Schedule != schedule;
         var effectiveIsFlexible = schedule == HabitSchedule.Flexible;
         var effectiveDays = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
         var effectiveDueDate = p.StartDate.HasValue ? NextDueDate : p.DueDate ?? NextDueDate;
@@ -914,8 +913,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         Description = p.Description?.Trim();
         Emoji = HabitInvariants.NormalizeEmoji(p.Emoji);
         Schedule = schedule;
-        if (enteringGeneral)
-            IsCompleted = false;
         FrequencyUnit = p.FrequencyUnit;
         FrequencyQuantity = p.FrequencyQuantity;
         IntervalWeeks = p.IntervalWeeks;

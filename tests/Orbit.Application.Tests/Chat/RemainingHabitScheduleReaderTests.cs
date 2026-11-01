@@ -59,7 +59,7 @@ public class RemainingHabitScheduleReaderTests
         HabitListCardBuilder.Build([habit], Today, "all", supportsDoneStatus: true)
             .Items.Should().ContainSingle().Which.Status.Should().Be("done");
         HabitListCardBuilder.Build([habit], Today, "all").Items.Should().ContainSingle().Which.Status
-            .Should().Be(schedule == HabitSchedule.OneTime ? "none" : schedule == HabitSchedule.General ? "general"
+            .Should().Be(schedule is HabitSchedule.OneTime or HabitSchedule.General ? "none"
                 : schedule == HabitSchedule.Recurring ? "none" : "today");
         habit.StartDate.Should().Be(Today);
         habit.NextDueDate.Should().Be(schedule == HabitSchedule.Recurring ? Today.AddDays(1) : Today);

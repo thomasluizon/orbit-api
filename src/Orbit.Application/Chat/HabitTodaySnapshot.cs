@@ -23,7 +23,7 @@ internal sealed record HabitTodaySnapshot(
     {
         var logFrom = date.AddDays(-AppConstants.MaxRangeDays);
         var candidateIds = habits.Where(habit => !habit.IsCompleted
-            || habit.Schedule == HabitSchedule.OneTime).Select(habit => habit.Id).ToArray();
+            || habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General).Select(habit => habit.Id).ToArray();
         var logDays = await reader.ReadDaysAsync(candidateIds, logFrom, date, cancellationToken);
         var logFacts = new HabitScheduleLogFacts(logDays);
         var active = habits.Where(habit => !habit.IsCompleted).ToList();
@@ -58,7 +58,7 @@ internal sealed record HabitTodaySnapshot(
         var logFacts = new HabitScheduleLogFacts(logDays);
         var active = habits.Where(habit => !habit.IsCompleted).ToList();
         var completedToday = habits.Where(habit =>
-            habit.IsCompleted && habit.Schedule == HabitSchedule.OneTime
+            habit.IsCompleted && habit.Schedule is HabitSchedule.OneTime or HabitSchedule.General
             && logFacts.HasCompleted(habit.Id, today, today)).ToList();
         var candidates = active.Where(habit => habit.Schedule != HabitSchedule.General);
         var emptyLookup = Array.Empty<Habit>().ToLookup(habit => habit.ParentHabitId);
@@ -76,7 +76,7 @@ internal sealed record HabitTodaySnapshot(
             scheduled.Where(item => !item.isOverdue
                 && HabitScheduleService.WasScheduledOnDate(item.habit, today, weekStartDay))
                 .Select(item => item.habit.Id)
-                .Concat(completedToday.Select(habit => habit.Id)).ToHashSet(),
+                .Concat(completedToday.Where(habit => habit.Schedule != HabitSchedule.General).Select(habit => habit.Id)).ToHashSet(),
             scheduled.Where(item => item.isOverdue).Select(item => item.habit.Id).ToHashSet(),
             active.Concat(completedToday)
                 .Where(habit => !habit.IsBadHabit && logFacts.HasCompleted(habit.Id, today, today))

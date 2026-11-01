@@ -147,7 +147,7 @@ public class UserStreakServiceTests
             type is 1 or 2 ? 1 : null, today.AddDays(-1),
             CreatedAtUtc: today.ToDateTime(new TimeOnly(1, 0), DateTimeKind.Utc))).Value;
         habit.Log(today.AddDays(-1), advanceDueDate: false).IsSuccess.Should().BeTrue();
-        if (type != 0)
+        if (type is 1 or 2)
             habit.Log(today, advanceDueDate: false).IsSuccess.Should().BeTrue();
         SetupUser(user, today);
         SetupHabits([habit]);
@@ -156,9 +156,9 @@ public class UserStreakServiceTests
         var state = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         state.Should().NotBeNull();
-        state!.CurrentStreak.Should().Be(type == 0 ? 1 : 2);
-        state.LongestStreak.Should().Be(type == 0 ? 1 : 2);
-        state.LastActiveDate.Should().Be(type == 0 ? today.AddDays(-1) : today);
+        state!.CurrentStreak.Should().Be(type is 0 or 3 ? 1 : 2);
+        state.LongestStreak.Should().Be(type is 0 or 3 ? 1 : 2);
+        state.LastActiveDate.Should().Be(type is 0 or 3 ? today.AddDays(-1) : today);
     }
 
     [Fact]

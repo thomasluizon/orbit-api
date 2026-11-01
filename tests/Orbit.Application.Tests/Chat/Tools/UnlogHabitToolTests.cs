@@ -85,6 +85,39 @@ public sealed class UnlogHabitToolTests
             .Which.IsDeleted.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 45)]
+    [InlineData(true, 400)]
+    public async Task CompletedGeneralTask_NoDate_UndoesLatestCompletionAndPreservesHistory(bool repeat, int daysEarlier)
+    {
+        var date = Today.AddDays(-daysEarlier);
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null, date,
+            RepeatReminder: repeat ? new Orbit.Domain.ValueObjects.RepeatReminderOptions(480) : null)).Value;
+        var older = habit.Log(date).Value;
+        var latest = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, date, 1, 1, older.CreatedAtUtc.AddTicks(1));
+        habit.LoadScheduleLogsForRead([older, latest]);
+        var options = await SeedAsync(habit);
+        await using var context = new OrbitDbContext(options);
+        var tool = CreateTool(context);
+
+        var check = await tool.CheckArgumentsAsync(Args(habit.Id), UserId, default);
+
+        check.IsSuccess.Should().BeTrue(check.Error);
+        context.ChangeTracker.HasChanges().Should().BeFalse();
+        await _work.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        var result = await tool.ExecuteAsync(Args(habit.Id), UserId, default);
+
+        result.Success.Should().BeTrue(result.Error);
+        await using var verify = new OrbitDbContext(options);
+        (await verify.Habits.SingleAsync()).IsCompleted.Should().BeFalse();
+        var logs = await verify.HabitLogs.IgnoreQueryFilters().ToListAsync();
+        logs.Should().HaveCount(2);
+        logs.Single(log => log.Id == older.Id).IsDeleted.Should().BeFalse();
+        logs.Single(log => log.Id == latest.Id).IsDeleted.Should().BeTrue();
+    }
+
     [Fact]
     public async Task ForeignHabit_FailsWithoutWritesOrExposingName()
     {
