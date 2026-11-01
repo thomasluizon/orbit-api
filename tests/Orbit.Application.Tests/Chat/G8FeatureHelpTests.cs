@@ -51,7 +51,8 @@ public partial class ProcessUserChatCommandHandlerTests
         payload.GetProperty("app_surfaces").GetRawText().Should().Be(JsonSerializer.Serialize(catalog.GetSurfaces().Where(surface => surface.Id == "today")));
         payload.TryGetProperty("answer_scope", out var scope).Should().BeTrue("feature help must distinguish documented rules from unsupported editing instructions");
         scope.GetString().Should().Contain("explicitly documented in markdown").And.Contain("not editing instructions")
-            .And.Contain("does not cover it").And.Contain("person's language");
+            .And.Contain("does not cover the requested detail only when no step in markdown or app_surfaces answers the question")
+            .And.Contain("person's language");
         scope.GetString().Should().Contain("app_surfaces comes from the same catalog as list_app_surfaces_v2")
             .And.Contain("Never infer a habit edit screen or creation workflow from a related destination.")
             .And.Contain("Use at most three short steps, one complete sentence per line, at most 180 characters per line. Do not join steps into a paragraph.");

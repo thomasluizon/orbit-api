@@ -237,8 +237,8 @@ public sealed class ProactiveProposalTests
             .And.Contain("Explicitly requested or prescribed clock times stay requested in scheduled_reminders, never in suggested_fields.")
             .And.Contain("Every unrequested emoji, schedule default or other added configuration belongs in suggested_fields; never present it as requested.")
             .And.Contain("To find a fitting parent, use its routine index as well as checking for duplicates of the new item; query only missing facts when that index is partial.")
-            .And.Contain("Use the supplied active goals before proposing a useful owned goal link; do not read those goals again.")
-            .And.Contain("For a dated task, consider a concrete reminder configuration, not just an emoji.")
+            .And.Contain("When a supplied active goal matches the requested activity, include its owned ID in goal_ids and list goal_ids in suggested_fields when unrequested; do not read those goals again.")
+            .And.Contain("For a dated task with due_time, set reminder_enabled=true and non-empty reminder_times, listing both in suggested_fields when unrequested. Preserve requested or stored reminder configuration.")
             .And.Contain("Keep doctor-prescribed fixed times in scheduled_reminders;")
             .And.Contain("neither fixed medication times nor ordinary daily reading calls for a repeat reminder.")
             .And.Contain("never regenerate rejected suggestions.");
@@ -337,13 +337,14 @@ public sealed class ProactiveProposalTests
     [Theory]
     [InlineData("[\"description\"]")]
     [InlineData("[\"tag_names\"]")]
-    public async Task UnfilledOfferNamesReturnRepairableFailureNamingTheField(string names)
+    public async Task UnfilledOfferNamesPreserveTheRequestedDraft(string names)
     {
         var result = await previewer.PreviewAsync(user, "create_habit",
             Parse("{\"title\":\"Read\",\"is_general\":true,\"tag_names\":[],\"emoji\":\"📖\",\"suggested_fields\":" + names + "}"), clientContext: client);
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("invalid_offer");
-        result.Error.Should().Contain(names.Contains("description", StringComparison.Ordinal) ? "description" : "tag_names");
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.Items![0].Fields.Should().NotContain(field => field.Provenance == "suggested");
+        result.Value.ExecutionArguments!.Value.GetProperty("title").GetString().Should().Be("Read");
+        result.Value.ExecutionArguments.Value.GetProperty("tag_names").GetArrayLength().Should().Be(0);
     }
 
     [Theory]
@@ -362,9 +363,6 @@ public sealed class ProactiveProposalTests
     }
 
     [Theory]
-    [InlineData("[\"title\"]")]
-    [InlineData("[\"unknown\"]")]
-    [InlineData("[\"emoji\",\"emoji\"]")]
     [InlineData("[123]")]
     public async Task InvalidFieldNameOffersAreRejected(string names)
     {
@@ -381,7 +379,7 @@ public sealed class ProactiveProposalTests
     [InlineData("unknown", true)]
     [InlineData("title", true)]
     [InlineData("deadline", true)]
-    public async Task UnsupportedOfferNamesReturnRepairableFieldErrorsAtEveryDepth(string field, bool nested)
+    public async Task UnsupportedOfferNamesFollowRequestedFieldRulesAtEveryDepth(string field, bool nested)
     {
         var draft = new JsonObject
         {
@@ -401,11 +399,16 @@ public sealed class ProactiveProposalTests
                 })
             }
             : draft;
-        var result = await previewer.PreviewAsync(user, nested ? "bulk_create_habits" : "create_habit",
+        var operation = nested ? "bulk_create_habits" : "create_habit";
+        var result = await previewer.PreviewAsync(user, operation,
+            JsonSerializer.SerializeToElement(args), clientContext: client);
+        draft.Remove("suggested_fields");
+        var requested = await previewer.PreviewAsync(user, operation,
             JsonSerializer.SerializeToElement(args), clientContext: client);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("invalid_offer");
-        result.Error.Should().Contain(field);
+        result.IsSuccess.Should().Be(requested.IsSuccess);
+        result.ErrorCode.Should().Be(requested.ErrorCode);
+        result.Error.Should().Be(requested.Error);
+        result.Value!.PreviewFingerprint.Should().Be(requested.Value!.PreviewFingerprint);
     }
 }

@@ -6,6 +6,14 @@ schema for every registered chat tool and the normalized provider schemas for le
 composition and offer clients. No request reaches OpenAI. The snapshot contains schemas
 only, without account data, API credentials or provider response text.
 
+The `suggest_breakdown` completion controls reflect its non-saving read classification
+for thomasluizon/orbit-tickets#1674. Its legacy schema omits `orbit_write_complete`;
+composition and offer schemas replace it with `orbit_read_complete`, using the read
+control already present in the reviewed `query_goals` schema. Only those three
+completion properties and required entries changed. The source parameters and every
+other pinned schema remain intact; this amendment does not regenerate the baseline
+from the compactor under test.
+
 The General task correction in thomasluizon/orbit-tickets#1940 updates only the
 reviewed General and repeat-reminder description values within that inlined
 baseline. Its constraints and original structure remain intact; it is not

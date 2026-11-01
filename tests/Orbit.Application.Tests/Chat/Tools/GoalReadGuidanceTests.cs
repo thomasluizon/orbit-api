@@ -16,8 +16,8 @@ public class GoalReadGuidanceTests
         var tool = new QueryGoalsTool(Substitute.For<IGenericRepository<Goal>>(),
             Substitute.For<IUserDateService>(), Substitute.For<IGoalProgressReadSyncer>());
 
-        tool.Description.Should().Contain("This result completely answers a goal-progress request; no habit analytics or habit calendar read is needed.");
-        tool.Description.Should().Contain("Goal progress is the goal's current value against its target in this result. For a goal-progress request, call query_goals alone with orbit_read_complete=true.");
+        tool.Description.Should().Contain("For goals or progress, set include_completed=true unless only active goals or a specific status is requested.");
+        tool.Description.Should().Contain("Progress is current value against target. For goal progress, call only query_goals with orbit_read_complete=true; no habit analytics or calendar read is needed.");
     }
 
     [Fact]

@@ -16,11 +16,11 @@ public partial class ProcessUserChatCommandHandler
 {
     /// <summary>
     /// Builds the frontend-facing ActionResult from a tool execution result.
-    /// Returns null for read-only tools (they don't produce action chips).
+    /// Read-only tools omit action chips except for legacy breakdown suggestions.
     /// </summary>
     private static ActionResult? BuildActionResult(AiToolCall call, IAiTool tool, ToolResult result)
     {
-        if (tool.IsReadOnly || result.ErrorCode == ErrorCodes.HabitLimitReached
+        if ((tool.IsReadOnly && call.Name != "suggest_breakdown") || result.ErrorCode == ErrorCodes.HabitLimitReached
             || result is { Success: true, Payload: BulkNoChangesOutcome })
             return null;
 
