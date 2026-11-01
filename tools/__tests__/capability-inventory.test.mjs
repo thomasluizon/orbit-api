@@ -55,6 +55,12 @@ test("a blank line in Habit leaves the CLI drift check green", () => {
   }, true)
 })
 
+test("a primary-constructor class with no body leaves the inventory unchanged", () => {
+  mutate("src/Orbit.Domain/Entities/Habit.cs", text => text + '\npublic sealed class InventoryProbeException() : Exception("probe; {not a body}");\n', build => {
+    assert.deepEqual(build(), inventory)
+  })
+})
+
 test("a registered chat parameter makes the CLI drift check name the changed tool", () => {
   const tool = inventory.registries.chat.find(row => row.name === "create_tag")
   mutate(tool.declaration.source.split(/[#:]/)[0], text => text.replace('name = new { type =', 'inventory_probe = new { type = JsonSchemaTypes.String },\n            name = new { type ='), (_build, copy) => {
