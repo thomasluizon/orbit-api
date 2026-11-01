@@ -73,6 +73,9 @@ General rows with `RepeatIntervalMinutes` retain their interval and active windo
 Their reminders run while the task is open. Completion stops reminders permanently;
 unlogging reopens the task and makes its stored reminder settings eligible again.
 The migration does not turn these tasks into recurring habits.
+Older positive logs remain as history when an unlog reopens a task. A new
+completion uses a fresh completion ordinal and does not toggle or discard that
+history. The permanent completion guard still prevents a second completion.
 
 After the production API release, confirm the migration ID in
 `__EFMigrationsHistory` and compare this count with the recorded preflight:

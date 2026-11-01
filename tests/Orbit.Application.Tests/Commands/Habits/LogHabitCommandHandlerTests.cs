@@ -43,6 +43,38 @@ public class LogHabitCommandHandlerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Handle_ReopenedLegacyGeneralTask_CompletesWithoutTogglingOlderLog(bool throughTool)
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: new Orbit.Domain.ValueObjects.RepeatReminderOptions(480))).Value;
+        var older = habit.Log(Today).Value;
+        var latest = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, Today, 1, 1, older.CreatedAtUtc.AddTicks(1));
+        habit.LoadScheduleLogsForRead([older, latest]);
+        habit.Unlog(Today, latest.Id).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>()).Returns(habit);
+        if (throughTool)
+        {
+            _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
+                .Returns(call => _handler.Handle(call.Arg<LogHabitCommand>(), call.Arg<CancellationToken>()));
+            var tool = new Orbit.Application.Chat.Tools.Implementations.LogHabitTool(_mediator, _habitRepo, _userDateService);
+            var result = await tool.ExecuteAsync(JsonSerializer.SerializeToElement(new { habit_id = habit.Id }), UserId, default);
+            result.Success.Should().BeTrue();
+        }
+        else
+        {
+            var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), default);
+            result.IsSuccess.Should().BeTrue();
+        }
+
+        habit.IsCompleted.Should().BeTrue();
+        older.IsDeleted.Should().BeFalse();
+        habit.Logs.Should().ContainSingle(log => log.CompletionOrdinal == 2 && !log.IsDeleted);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Handle_GeneralTask_CompletesAndToggleReopens(bool repeat)
     {
         _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());

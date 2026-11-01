@@ -58,6 +58,7 @@ public class LogHabitTool(
         if (habit.UserId != userId)
             return new ToolResult(false, Error: ErrorMessages.HabitNotOwned.Message);
         if (habit.Schedule != HabitSchedule.Flexible && !habit.IsBadHabit
+            && (habit.Schedule != HabitSchedule.General || habit.IsCompleted)
             && habit.Logs.Any(log => log.Date == targetDate && !log.IsDeleted))
             return ToolResult.FromFailure(Result.Failure(DomainErrors.AlreadyLoggedForDate));
 

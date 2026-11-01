@@ -13,6 +13,27 @@ public class UndatedTaskTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void ReopenedLegacyTask_CanCompleteWithoutDeletingOlderLogs(bool repeat)
+    {
+        var task = Create(repeat);
+        var older = task.Log(LoggedDate).Value;
+        var latest = HabitLog.FromScheduleRead(Guid.NewGuid(), task.Id, LoggedDate, 1, 1,
+            older.CreatedAtUtc.AddTicks(1));
+        task.LoadScheduleLogsForRead([older, latest]);
+        task.Unlog(LoggedDate, latest.Id).IsSuccess.Should().BeTrue();
+
+        var result = task.Log(LoggedDate);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CompletionOrdinal.Should().Be(2);
+        task.IsCompleted.Should().BeTrue();
+        older.IsDeleted.Should().BeFalse();
+        task.Log(LoggedDate).IsFailure.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Log_CompletesPermanently(bool repeat)
     {
         var task = Create(repeat);

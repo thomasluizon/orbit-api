@@ -334,7 +334,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return new Result<HabitLog>(default, false, validation.Error, validation.ErrorCode, validation.ErrorArgs);
 
         var restoresDeletedDueDate = RestoresDeletedDueDate(date, advanceDueDate);
-        var completionOrdinal = Schedule == HabitSchedule.Flexible
+        var completionOrdinal = Schedule is HabitSchedule.Flexible or HabitSchedule.General
             ? _logs.Where(l => l.Date == date && l.Value > 0)
                 .Select(l => l.CompletionOrdinal)
                 .DefaultIfEmpty(-1)
@@ -371,7 +371,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         if (IsCompleted)
             return Result.Failure(DomainErrors.CannotLogCompletedHabit);
-        if (!IsBadHabit && Schedule != HabitSchedule.Flexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
+        if (!IsBadHabit && Schedule is not (HabitSchedule.Flexible or HabitSchedule.General) && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure(DomainErrors.AlreadyLoggedForDate);
         if (Schedule == HabitSchedule.Flexible && !RepeatIntervalMinutes.HasValue && GetRemainingCompletions(date, _logs, weekStartDay) <= 0)
             return Result.Failure(DomainErrors.AllInstancesDone);

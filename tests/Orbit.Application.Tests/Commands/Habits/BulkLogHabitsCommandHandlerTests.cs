@@ -35,6 +35,25 @@ public class BulkLogHabitsCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
+    [Fact]
+    public async Task Handle_ReopenedLegacyGeneralTask_CompletesWithoutIgnoringOlderLog()
+    {
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.General, UserId, "Task", null, null,
+            DueDate: Today, RepeatReminder: new Orbit.Domain.ValueObjects.RepeatReminderOptions(480))).Value;
+        var older = habit.Log(Today).Value;
+        var latest = HabitLog.FromScheduleRead(Guid.NewGuid(), habit.Id, Today, 1, 1, older.CreatedAtUtc.AddTicks(1));
+        habit.LoadScheduleLogsForRead([older, latest]);
+        habit.Unlog(Today, latest.Id).IsSuccess.Should().BeTrue();
+        SetupHabitsForUser([habit]);
+
+        var result = await _handler.Handle(new BulkLogHabitsCommand(UserId, [new(habit.Id)]), default);
+
+        result.Value.Results.Should().ContainSingle().Which.Status.Should().Be(BulkItemStatus.Success);
+        habit.IsCompleted.Should().BeTrue();
+        older.IsDeleted.Should().BeFalse();
+        habit.Logs.Should().ContainSingle(log => log.CompletionOrdinal == 2 && !log.IsDeleted);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
