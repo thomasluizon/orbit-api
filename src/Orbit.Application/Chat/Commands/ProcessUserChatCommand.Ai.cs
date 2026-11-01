@@ -210,7 +210,7 @@ public partial class ProcessUserChatCommandHandler
                 "When a tool result carries readDirective, use that exact directive for its block. Different calls retain distinct scopes. "
                 + "get_period_analytics returns periodTotal or periodComparison; emit it only when that kind is explicitly advertised. "
                 + "get_habit_history uses recordList. New period kinds supported: "
-                + string.Join(", ", client.PartKinds?.Where(k => k is "periodTotal" or "periodComparison") ?? []));
+                + string.Join(", ", client.PartKinds?.Where(k => k is "periodTotal" or "periodComparison").Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray() ?? []));
         prompt = string.Join(Environment.NewLine, prompt,
             "Dated habitList blocks require supportsDatedHabitListCard, including date-correct actions. "
             + "Habit lists with skipped rows require supportsSkippedHabitRows. "

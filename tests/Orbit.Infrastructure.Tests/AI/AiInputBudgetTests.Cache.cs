@@ -153,7 +153,8 @@ public partial class AiInputBudgetTests
             ("loop", user, null), ("followup", user, history), ("other-user", other, null) })
         {
             var request = await BuildCacheRequestAsync(client, person, prior, habits[person.Id],
-                turn is "write" or "loop" ? CapturedWriteMessage() : "Show my habit ranking over the last six months.");
+                turn is "write" or "loop" ? CapturedWriteMessage() : "Show my habit ranking over the last six months.",
+                reverseKinds: person == other);
             var responses = turn switch
             {
                 "write" => new[] { ModelReaderWriter.Write(write).ToString() },
@@ -189,7 +190,7 @@ public partial class AiInputBudgetTests
     }
 
     private static async Task<AiToolRequest> BuildCacheRequestAsync(string client, User user, IReadOnlyList<ChatHistoryMessage>? history,
-        IReadOnlyList<Habit>? habits = null, string message = "Show my progress")
+        IReadOnlyList<Habit>? habits = null, string message = "Show my progress", bool reverseKinds = false)
     {
         var service = Substitute.For<Orbit.Domain.Interfaces.IAiIntentService>();
         AiToolRequest? captured = null;
@@ -198,7 +199,8 @@ public partial class AiInputBudgetTests
         var handler = BuildHandler(service, RegisteredTools(), user, habits ?? [], new DateOnly(2026, 1, 1),
             enabledFlags: client == "legacy" ? [] : [FeatureFlagKeys.AstraBlockFirst]);
         var context = client == "legacy" ? null : new AgentClientContext(SupportsParts: true,
-            PartKinds: ["choice", "pickList", "question", "habitList"], SupportsHabitListCard: true,
+            PartKinds: reverseKinds ? ["periodTotal", "periodComparison", "habitList", "question", "pickList", "choice"]
+                : ["choice", "pickList", "question", "habitList", "periodComparison", "periodTotal"], SupportsHabitListCard: true,
             SupportsPendingOperationChanges: client == "offers", SupportsProactiveOffers: client == "offers",
             ConversationId: Guid.Parse("11111111-1111-4111-8111-111111111111"));
         var result = await handler.Handle(new(user.Id, message, History: history?.ToList(), ClientContext: context), default);
