@@ -404,8 +404,9 @@ public class PendingAgentOperationStore(
                         turn.UpdatePreviewOutcome(preview.PendingOperationId, preview.Outcome, preview.Arguments, preview.Revision);
                 }
             }
-            return dbContext.SaveChanges();
+            return dbContext.SaveChanges(acceptAllChangesOnSuccess: false);
         });
+        dbContext.ChangeTracker.AcceptAllChanges();
     }
 
     private static PendingAgentOperation Map(PendingAgentOperationState entity)
