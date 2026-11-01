@@ -98,8 +98,8 @@ public partial class AiInputBudgetTests(ITestOutputHelper output)
             input.GetArrayLength().Should().Be(5);
             input[0].GetProperty("role").GetString().Should().Be("system");
             input[1].GetRawText().Should().Contain($"private-habit-{index}").And.Contain($"Language: {user.Language}");
-            input[2].GetRawText().Should().Contain(date.ToString("yyyy-MM-dd"));
-            input[3].GetRawText().Should().Contain($"private-history-{index}");
+            input[2].GetRawText().Should().Contain($"private-history-{index}");
+            input[3].GetRawText().Should().Contain(date.ToString("yyyy-MM-dd"));
             input[4].GetProperty("role").GetString().Should().Be("user");
             currentPrefix.Should().NotContain("private-").And.NotContain(user.Id.ToString())
                 .And.NotContain(date.ToString("yyyy-MM-dd")).And.NotContain($"Language: {user.Language}");

@@ -35,7 +35,9 @@ succeeded. Conversation deletion also erases linked pending operations and
 idempotency response copies, so they cannot restore the deleted conversation.
 
 Model messages are ordered static prompt, account context, stored or client
-history, dynamic context, then the new user message. Server history selects the
+history, dynamic context, then the new user message. Normal turns reuse the
+recording flag from the existing concurrent moderation/context pipeline;
+conversation preparation does not serialize those reads. Server history selects the
 last ten rows, retaining the newest whole entries within the existing 24,000
 character budget. History is quoted untrusted data. The most recent image is
 included only if its user row is among the last six rows, including assistant

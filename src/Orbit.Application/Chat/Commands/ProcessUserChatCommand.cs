@@ -206,9 +206,6 @@ public partial class ProcessUserChatCommandHandler(
         using var timer = ChatTurnTimer.Begin(timeProvider ?? TimeProvider.System);
         ChatEvalTraceCollector? evalTrace = null;
         var recording = new ChatTurnState();
-        var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken);
-        if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
-        request = preparedConversation.Value;
         request = request with
         {
             PendingOperationConversation = request.ClientContext?.ConversationId is { } id && id != Guid.Empty
@@ -233,7 +230,7 @@ public partial class ProcessUserChatCommandHandler(
                     recording.MessageAllowanceConsumed);
                 response = Result.Success(negotiated with
                 {
-                    ConversationId = recording.ServerEnabled && recording.Enabled ? request.ClientContext?.ConversationId : null
+                    ConversationId = recording.ServerEnabled && recording.Enabled ? recording.ConversationId : null
                 });
             }
         }
@@ -254,6 +251,9 @@ public partial class ProcessUserChatCommandHandler(
     {
         if (request.BlockAnswer is not null)
         {
+            var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken);
+            if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+            request = preparedConversation.Value;
             recording.Enabled = true;
             ChatContext? choiceContext = null;
             var answerService = new AstraBlockAnswerService(execution.BlockStore, execution.UnitOfWork,
@@ -291,6 +291,9 @@ public partial class ProcessUserChatCommandHandler(
             var enabledFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
             if (CrisisSupportGuard.IsEnabled(crisis, enabledFlags))
             {
+                var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, enabledFlags);
+                if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+                request = preparedConversation.Value;
                 recording.Enabled = enabledFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
                 return await HandleCrisisTurnAsync(request, crisis, captureMessage: true);
             }
@@ -421,6 +424,9 @@ public partial class ProcessUserChatCommandHandler(
 
         var context = contextResult.Value;
         recording.Enabled = context.EnabledFeatureFlags.Contains(FeatureFlagKeys.AstraConversationRecording);
+        var preparedConversation = await PrepareConversationAsync(request, recording, cancellationToken, context.EnabledFeatureFlags);
+        if (preparedConversation.IsFailure) return preparedConversation.PropagateError<ChatResponse>();
+        request = preparedConversation.Value;
         var plan = GetAnalyticsPlan(context.User);
         var telemetry = new AiTurnTelemetry(request.CorrelationId, plan);
         try
