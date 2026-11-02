@@ -6,6 +6,7 @@ using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
@@ -64,9 +65,12 @@ public partial class SlipAlertSchedulerService(
         if (habits.Count == 0) return;
 
         var userIds = habits.Select(h => h.UserId).Distinct().ToList();
+        var nowUtc = TimeProvider.System.GetUtcNow().UtcDateTime;
         var users = await dbContext.Users
             .AsNoTracking()
-            .Where(u => userIds.Contains(u.Id))
+            .Where(u => userIds.Contains(u.Id) && (u.IsLifetimePro
+                || u.SubscriptionPlan == UserPlan.Pro && u.SubscriptionExpiresAtUtc > nowUtc
+                || u.BonusProExpiresAtUtc > nowUtc || u.TrialEndsAt > nowUtc))
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();

@@ -45,7 +45,7 @@ public class GetAchievementsQueryHandler(
             var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(
                 request.UserId,
                 cancellationToken);
-            if (!enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier))
+            if (!GamificationAccess.IsUnlocked(user, enabledFlags))
                 return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
         }
 

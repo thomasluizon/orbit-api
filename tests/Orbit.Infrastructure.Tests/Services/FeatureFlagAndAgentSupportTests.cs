@@ -48,6 +48,40 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     }
 
     [Theory]
+    [InlineData("parent_id", "habit")]
+    [InlineData("notification_ids", "notification")]
+    [InlineData("positions.habit_id", "habit")]
+    [InlineData("positions.goal_id", "goal")]
+    [InlineData("habits.sub_habits.parent_habit_id", "habit")]
+    [InlineData("filter.habit_ids", "habit")]
+    public async Task Ownership_ValidatesNestedTargetsAndMalformedValues(string path, string resource)
+    {
+        var owner = Guid.NewGuid();
+        var habit = Habit.Create(new HabitCreateParams(HabitSchedule.Flexible, owner, "Private", FrequencyUnit.Day, 1, new DateOnly(2026, 4, 3))).Value;
+        var goal = Goal.Create(new Goal.CreateGoalParams(owner, "Private goal", 10, "times")).Value;
+        var notification = Notification.Create(owner, "Private", "Body", "/");
+        _dbContext.AddRange(habit, goal, notification);
+        await _dbContext.SaveChangesAsync();
+        var id = resource == "goal" ? goal.Id : resource == "notification" ? notification.Id : habit.Id;
+        JsonElement Args(object target) => path switch
+        {
+            "parent_id" => JsonSerializer.SerializeToElement(new { parent_id = target }),
+            "notification_ids" => JsonSerializer.SerializeToElement(new { notification_ids = new[] { target } }),
+            "positions.habit_id" => JsonSerializer.SerializeToElement(new { positions = new[] { new { habit_id = target } } }),
+            "positions.goal_id" => JsonSerializer.SerializeToElement(new { positions = new[] { new { goal_id = target } } }),
+            "filter.habit_ids" => JsonSerializer.SerializeToElement(new { filter = new { habit_ids = new[] { target } } }),
+            _ => JsonSerializer.SerializeToElement(new { habits = new[] { new { sub_habits = new[] { new { parent_habit_id = target } } } } })
+        };
+        var service = new AgentTargetOwnershipService(_dbContext);
+        (await service.GetDenialReasonAsync("operation", Guid.NewGuid(), Args(id)))
+            .Should().Be($"target_not_owned:operation:{resource}");
+        (await service.GetDenialReasonAsync("operation", owner, Args(id))).Should().BeNull();
+        (await service.GetDenialReasonAsync("operation", owner, Args("not-a-guid")))
+            .Should().Be($"target_not_owned:operation:{resource}");
+        _dbContext.ChangeTracker.HasChanges().Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData("tag_id", false)]
     [InlineData("tag_ids", true)]
     public async Task Ownership_RefusesForeignTags(string argument, bool array)

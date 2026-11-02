@@ -94,7 +94,7 @@ public class GetProfileQueryHandler(
         var levelTitle = currentLevel.Title;
 
         var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
-        var canViewGamification = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
+        var canViewGamification = GamificationAccess.IsUnlocked(user, enabledFlags);
 
         var today = await streakServices.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var currentStreak = user.LastActiveDate < today.AddDays(-1)

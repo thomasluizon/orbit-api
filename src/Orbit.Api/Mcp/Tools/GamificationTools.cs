@@ -9,7 +9,7 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class GamificationTools(IMediator mediator)
 {
-    [McpServerTool(Name = "get_gamification_profile"), Description("Get the user's gamification profile: XP, level, achievements, and streak info. Requires Pro subscription.")]
+    [McpServerTool(Name = "get_gamification_profile"), Description("Get the user's gamification profile: XP, level, achievements, and streak info. Requires Pro access or the gamification_free_tier flag.")]
     public async Task<string> GetGamificationProfile(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
@@ -32,7 +32,7 @@ public class GamificationTools(IMediator mediator)
                (p.LastActiveDate is not null ? $"Last Active: {p.LastActiveDate}" : "");
     }
 
-    [McpServerTool(Name = "get_achievements"), Description("Get all achievements with their earned status. Requires Pro subscription.")]
+    [McpServerTool(Name = "get_achievements"), Description("Get all achievements with their earned status. Requires Pro access or the gamification_free_tier flag.")]
     public async Task<string> GetAchievements(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
@@ -68,7 +68,7 @@ public class GamificationTools(IMediator mediator)
         return string.Join("\n", lines);
     }
 
-    [McpServerTool(Name = "get_streak_info"), Description("Get detailed streak information including freeze availability.")]
+    [McpServerTool(Name = "get_streak_info"), Description("Get detailed streak information including freeze availability. Requires Pro access or the gamification_free_tier flag.")]
     public async Task<string> GetStreakInfo(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)

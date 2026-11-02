@@ -1,88 +1,41 @@
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
+using MediatR;
 using NSubstitute;
-using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
-using Orbit.Domain.Entities;
-using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Persistence;
+using Orbit.Application.Common;
+using Orbit.Application.Goals.Commands;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
 public class DeleteGoalToolTests
 {
-    private readonly IGenericRepository<Goal> _goalRepository = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly DeleteGoalTool _tool;
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private static readonly Guid UserId = Guid.NewGuid();
 
-    public DeleteGoalToolTests()
-    {
-        _tool = new DeleteGoalTool(_goalRepository, _unitOfWork);
-    }
-
     [Fact]
-    public async Task ExecuteAsync_SoftDeletesGoal()
+    public async Task ExecuteAsync_SoftDeletesGoalThroughDeleteGoalCommand()
     {
-        var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "Run a marathon", 42, "km")).Value;
-        _goalRepository.FindOneTrackedAsync(
-            Arg.Any<System.Linq.Expressions.Expression<Func<Goal, bool>>>(),
-            cancellationToken: Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<Goal?>(goal));
-
-        var result = await Execute($$"""{"goal_id":"{{goal.Id}}"}""");
-
+        var goalId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<DeleteGoalCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var result = await new DeleteGoalTool(_mediator).ExecuteAsync(Args(goalId), UserId, default);
         result.Success.Should().BeTrue();
-        goal.IsDeleted.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        result.EntityId.Should().Be(goalId.ToString());
+        await _mediator.Received(1).Send(Arg.Is<DeleteGoalCommand>(c => c.UserId == UserId && c.GoalId == goalId), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task WrongUser_CannotDeleteAnothersGoal_OwnerCan_RealContext()
+    public async Task ExecuteAsync_CommandReturnsGoalNotFound_ReturnsNotFoundResult()
     {
-        var databaseName = $"DeleteGoalIsolation_{Guid.NewGuid()}";
-        Guid goalId;
-        await using (var seed = CreateContext(databaseName))
-        {
-            var ownerGoal = Goal.Create(new Goal.CreateGoalParams(UserId, "Owner-only goal", 42, "km")).Value;
-            seed.Goals.Add(ownerGoal);
-            await seed.SaveChangesAsync();
-            goalId = ownerGoal.Id;
-        }
-
-        await using var context = CreateContext(databaseName);
-        var unitOfWork = Substitute.For<IUnitOfWork>();
-        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
-            .Returns(callInfo => context.SaveChangesAsync(callInfo.Arg<CancellationToken>()));
-        var tool = new DeleteGoalTool(new GenericRepository<Goal>(context), unitOfWork);
-
-        var attackerId = Guid.NewGuid();
-        var attackerResult = await tool.ExecuteAsync(GoalArgs(goalId), attackerId, CancellationToken.None);
-
-        attackerResult.Success.Should().BeFalse();
-        attackerResult.Error.Should().Contain("not found");
-        await using (var afterAttack = CreateContext(databaseName))
-            (await afterAttack.Goals.AnyAsync(g => g.Id == goalId))
-                .Should().BeTrue("a foreign user must not delete another user's goal");
-
-        var ownerResult = await tool.ExecuteAsync(GoalArgs(goalId), UserId, CancellationToken.None);
-
-        ownerResult.Success.Should().BeTrue("the owner can delete their own goal");
-        await using (var afterOwner = CreateContext(databaseName))
-            (await afterOwner.Goals.AnyAsync(g => g.Id == goalId))
-                .Should().BeFalse("the owner's delete soft-deletes the goal so it no longer resolves");
+        var caller = Guid.NewGuid();
+        var goalId = Guid.NewGuid();
+        _mediator.Send(Arg.Is<DeleteGoalCommand>(c => c.UserId == caller && c.GoalId == goalId), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.GoalNotFound));
+        var result = await new DeleteGoalTool(_mediator).ExecuteAsync(Args(goalId), caller, default);
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be($"Goal {goalId} not found.");
     }
 
-    private static JsonElement GoalArgs(Guid goalId) =>
-        JsonDocument.Parse($$"""{"goal_id":"{{goalId}}"}""").RootElement;
-
-    private static OrbitDbContext CreateContext(string databaseName) =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
-
-    private async Task<ToolResult> Execute(string json)
-    {
-        var args = JsonDocument.Parse(json).RootElement;
-        return await _tool.ExecuteAsync(args, UserId, CancellationToken.None);
-    }
+    private static JsonElement Args(Guid goalId) => JsonSerializer.SerializeToElement(new { goal_id = goalId });
 }

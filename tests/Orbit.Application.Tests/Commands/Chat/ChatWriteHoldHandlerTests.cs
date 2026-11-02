@@ -119,7 +119,7 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             Arg.Any<CancellationToken>()).Returns((string?)null);
         _executor = new AgentOperationExecutor(
             _catalogService,
-            new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge, settings,
+            new AgentPolicyEvaluator(_dbContext, _catalogService, _pendingOperationStore, stepUpBridge,
                 new FeatureFlagService(_dbContext, _flagCache, Substitute.For<IHostEnvironment>(), new ConfigurationBuilder().Build())),
             Substitute.For<IAgentAuditService>(),
             ownership,

@@ -568,6 +568,7 @@ public class ChecklistPlatformToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Created checkout session");
+        await mediator.Received(1).Send(Arg.Is<CreateCheckoutCommand>(c => c.UserId == UserId && c.Interval == "monthly"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -610,6 +611,7 @@ public class ChecklistPlatformToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Created billing portal session");
+        await mediator.Received(1).Send(Arg.Is<CreatePortalSessionCommand>(c => c.UserId == UserId), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -713,6 +715,7 @@ public class ChecklistPlatformToolTests
         result.Success.Should().BeTrue();
         result.EntityId.Should().Be(keyId.ToString());
         result.EntityName.Should().Be("Claude");
+        await mediator.Received(1).Send(Arg.Is<CreateApiKeyCommand>(c => c.UserId == UserId && c.IsReadOnly && c.Scopes != null && c.Scopes.SequenceEqual(new[] { "read_habits" })), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -754,6 +757,7 @@ public class ChecklistPlatformToolTests
         result.Success.Should().BeTrue();
         result.EntityId.Should().Be(keyId.ToString());
         result.EntityName.Should().Be("Revoked API key");
+        await mediator.Received(1).Send(Arg.Is<RevokeApiKeyCommand>(c => c.UserId == UserId && c.KeyId == keyId), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -850,6 +854,7 @@ public class ChecklistPlatformToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Account reset completed");
+        await mediator.Received(1).Send(Arg.Is<ResetAccountCommand>(c => c.UserId == UserId), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -864,6 +869,7 @@ public class ChecklistPlatformToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Deletion code requested");
+        await mediator.Received(1).Send(Arg.Is<RequestAccountDeletionCommand>(c => c.UserId == UserId), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -906,6 +912,7 @@ public class ChecklistPlatformToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Account deletion confirmed");
+        await mediator.Received(1).Send(Arg.Is<ConfirmAccountDeletionCommand>(c => c.UserId == UserId && c.Code == "123456"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
