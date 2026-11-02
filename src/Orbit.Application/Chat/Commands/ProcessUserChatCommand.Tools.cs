@@ -674,10 +674,7 @@ public partial class ProcessUserChatCommandHandler
         using var phase = ChatTurnTimer.Measure(ChatPhase.ToolCall);
         var tool = ai.ToolRegistry.GetTool(call.Name);
         if (tool is null)
-        {
-            LogUnknownToolRequested(logger, call.Name);
             return UnknownToolOutcome(call);
-        }
 
         var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
         if (capability is null)

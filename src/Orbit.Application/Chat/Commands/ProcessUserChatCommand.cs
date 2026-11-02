@@ -782,68 +782,6 @@ public partial class ProcessUserChatCommandHandler(
         return (match.Value.Key, match.Value.Locale, aiMessage);
     }
 
-    private void CaptureCardEvent(
-        ProcessUserChatCommand request, ChatContext context, string eventName, string kind,
-        IReadOnlyList<ChatResponsePart>? parts)
-    {
-        if (context.User is null)
-            return;
-
-        AnalyticsCapture.SafeCaptureUserEvent(
-            execution.ProductAnalytics, logger, request.UserId, context.User.Plan.ToString(),
-            eventName, new Dictionary<string, object>
-            {
-                ["platform"] = request.ClientContext?.Platform ?? "unknown",
-                ["kind"] = kind,
-                ["part_count"] = parts?.Count ?? 0,
-                ["block_kinds"] = parts?.OfType<ChatBlockPart>().Select(part => part.Kind).ToArray() ?? []
-            });
-    }
-
-    private void CaptureResponseCardEvents(
-        ProcessUserChatCommand request, ChatContext context, ResponseCards cards)
-    {
-        CaptureReadMetadata(request.UserId, cards);
-        void Capture(string eventName, string kind) =>
-            CaptureCardEvent(request, context, eventName, kind, cards.Parts);
-
-        if (cards.Parts is not null)
-        {
-            var events = cards.Parts.OfType<ChatBlockPart>().Select(part => part.Block switch
-            {
-                MetricsCard => ("chat_metrics_card_emitted", PartKinds.Metrics),
-                PeriodInsightCard => ("chat_period_insight_card_emitted", "period"),
-                DaySummaryCard => ("chat_day_summary_card_emitted", "day"),
-                StreakCard => ("chat_streak_card_emitted", PartKinds.Streak),
-                CalendarCard => ("chat_calendar_card_emitted", PartKinds.Calendar),
-                RecordListCard recordList => ("chat_record_list_card_emitted", recordList.Kind),
-                AccountRowsCard accountRows => ("chat_account_rows_card_emitted", accountRows.Kind),
-                _ => (string.Empty, string.Empty)
-            }).Distinct();
-            foreach (var (eventName, kind) in events)
-            {
-                if (eventName.Length > 0)
-                    Capture(eventName, kind);
-            }
-            return;
-        }
-
-        if (cards.MetricsCard is not null)
-            Capture("chat_metrics_card_emitted", PartKinds.Metrics);
-        if (cards.PeriodInsight is not null)
-            Capture("chat_period_insight_card_emitted", "period");
-        if (cards.DaySummary is not null)
-            Capture("chat_day_summary_card_emitted", "day");
-        if (cards.Streak is not null)
-            Capture("chat_streak_card_emitted", PartKinds.Streak);
-        if (cards.Calendar is not null)
-            Capture("chat_calendar_card_emitted", PartKinds.Calendar);
-        foreach (var recordList in cards.RecordLists ?? [])
-            Capture("chat_record_list_card_emitted", recordList.Kind);
-        if (cards.AccountRows is not null)
-            Capture("chat_account_rows_card_emitted", cards.AccountRows.Kind);
-    }
-
     private async Task<Result<ChatResponse>> HandleCrisisTurnAsync(
         ProcessUserChatCommand request,
         CrisisLocales locales,
@@ -1210,9 +1148,6 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Tool-calling iteration {Iteration}, {CallCount} calls")]
     private static partial void LogToolCallingIteration(ILogger logger, int iteration, int callCount);
-
-    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Unknown tool requested: {Name}")]
-    private static partial void LogUnknownToolRequested(ILogger logger, string name);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "ContinueWithToolResultsAsync failed: {Error}")]
     private static partial void LogContinueWithToolResultsFailed(ILogger logger, string? error);
