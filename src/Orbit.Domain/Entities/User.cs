@@ -32,6 +32,8 @@ public partial class User : Entity
     public UserPlan SubscriptionPlan { get; private set; } = UserPlan.Free;
 
     public string? StripeCustomerId { get; private set; }
+    public string? StripeCustomerPendingDeletionId { get; private set; }
+    public int StripeCustomerGeneration { get; private set; }
     public string? StripeSubscriptionId { get; private set; }
     public DateTime? SubscriptionExpiresAtUtc { get; private set; }
 
@@ -275,6 +277,29 @@ public partial class User : Entity
     public void ResetTour() => HasCompletedTour = false;
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
+
+    /// <summary>
+    /// Detaches billing before irreversible deletion and retains its retry target across rollback and reactivation.
+    /// https://docs.stripe.com/api/customers/delete
+    /// </summary>
+    public void PrepareStripeCustomerDeletion()
+    {
+        if (!IsDeactivated || string.IsNullOrWhiteSpace(StripeCustomerId) || StripeCustomerPendingDeletionId is not null)
+            throw new InvalidOperationException("Customer deletion requires a deactivated account with no pending customer deletion.");
+        var generation = checked(StripeCustomerGeneration + 1);
+        StripeCustomerPendingDeletionId = StripeCustomerId;
+        StripeCustomerId = null;
+        StripeCustomerGeneration = generation;
+        CancelStripeSubscription(Enums.SubscriptionLapseReason.Canceled);
+    }
+
+    public void CompleteStripeCustomerDeletion(string customerId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(customerId);
+        if (StripeCustomerPendingDeletionId != customerId)
+            throw new InvalidOperationException("Only the pending customer deletion can be completed.");
+        StripeCustomerPendingDeletionId = null;
+    }
 
     public void GrantBonusProDays(int days)
     {

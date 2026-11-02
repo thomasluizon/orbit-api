@@ -437,9 +437,6 @@ public static partial class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitObservability(this WebApplicationBuilder builder)
     {
-        builder.Services.Configure<SentrySettings>(
-            builder.Configuration.GetSection(SentrySettings.SectionName));
-
         var sentrySettings = builder.Configuration.GetSection(SentrySettings.SectionName).Get<SentrySettings>()
             ?? new SentrySettings();
 

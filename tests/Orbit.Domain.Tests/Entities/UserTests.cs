@@ -12,6 +12,62 @@ public class UserTests
         return result.Value;
     }
 
+    [Fact]
+    public void PrepareStripeCustomerDeletion_DetachesBillingAndPreservesRecoveryAcrossReactivation()
+    {
+        var user = CreateValidUser();
+        user.SetStripeCustomerId("cus_retired");
+        user.SetStripeSubscription("sub_retired", DateTime.UtcNow.AddDays(20));
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+
+        user.PrepareStripeCustomerDeletion();
+        user.CancelDeactivation();
+
+        user.StripeCustomerId.Should().BeNull();
+        user.StripeSubscriptionId.Should().BeNull();
+        user.StripeRenewalStoppedByDeletion.Should().BeFalse();
+        user.StripeCustomerPendingDeletionId.Should().Be("cus_retired");
+        user.StripeCustomerGeneration.Should().Be(1);
+        user.IsPro.Should().BeFalse();
+        user.CompleteStripeCustomerDeletion("cus_retired");
+        user.StripeCustomerPendingDeletionId.Should().BeNull();
+        user.StripeCustomerGeneration.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void PrepareStripeCustomerDeletion_RequiresDeactivatedAccountAndCustomer(bool deactivated, bool hasCustomer)
+    {
+        var user = CreateValidUser();
+        if (deactivated) user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        if (hasCustomer) user.SetStripeCustomerId("cus_existing");
+
+        user.Invoking(value => value.PrepareStripeCustomerDeletion()).Should().Throw<InvalidOperationException>();
+        user.StripeCustomerGeneration.Should().Be(0);
+        user.StripeCustomerPendingDeletionId.Should().BeNull();
+    }
+
+    [Fact]
+    public void PrepareStripeCustomerDeletion_CannotOverwritePendingRecovery()
+    {
+        var user = CreateValidUser();
+        user.SetStripeCustomerId("cus_first");
+        user.Deactivate(DateTime.UtcNow.AddDays(-1));
+        user.PrepareStripeCustomerDeletion();
+        user.SetStripeCustomerId("cus_second");
+
+        user.Invoking(value => value.PrepareStripeCustomerDeletion()).Should().Throw<InvalidOperationException>();
+        user.Invoking(value => value.CompleteStripeCustomerDeletion("cus_second")).Should().Throw<InvalidOperationException>();
+        user.StripeCustomerPendingDeletionId.Should().Be("cus_first");
+        user.StripeCustomerId.Should().Be("cus_second");
+        user.StripeCustomerGeneration.Should().Be(1);
+        user.CompleteStripeCustomerDeletion("cus_first");
+        user.PrepareStripeCustomerDeletion();
+        user.StripeCustomerPendingDeletionId.Should().Be("cus_second");
+        user.StripeCustomerGeneration.Should().Be(2);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

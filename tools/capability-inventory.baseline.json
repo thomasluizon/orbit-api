@@ -33630,6 +33630,91 @@
           }
         },
         {
+          "name": "StripeCustomerGeneration",
+          "type": "int",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not profile preferences."
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "StripeCustomerId",
           "type": "string?",
           "surfaces": {
@@ -33697,6 +33782,91 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "StripeCustomerPendingDeletionId",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "delete": {
+                  "status": "covered",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets.",
+                  "direct": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation"
+                    }
+                  ],
+                  "viaOperations": [
+                    {
+                      "tool": "manage_account",
+                      "status": "entity-operation",
+                      "via": "execute_agent_operation_v2"
+                    }
+                  ]
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
                 }
               }
             }
@@ -45431,6 +45601,72 @@
           }
         },
         {
+          "name": "StripeCustomerGeneration",
+          "type": "int",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing customer creation generations are internal idempotency state, not subscription settings."
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "StripeCustomerId",
           "type": "string?",
           "surfaces": {
@@ -45479,6 +45715,72 @@
                 },
                 "filterKeyedBulk": {
                   "status": "absent"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "StripeCustomerPendingDeletionId",
+          "type": "string?",
+          "surfaces": {
+            "chat": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                }
+              }
+            },
+            "mcp": {
+              "verdict": "deliberate",
+              "problems": [],
+              "operations": {
+                "create": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "read": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "update": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "delete": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "bulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
+                },
+                "filterKeyedBulk": {
+                  "status": "deliberate",
+                  "reason": "Billing erasure recovery is internal state; AI tools cannot read or modify pending provider deletion targets."
                 }
               }
             }

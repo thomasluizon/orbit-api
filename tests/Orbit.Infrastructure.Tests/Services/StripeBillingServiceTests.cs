@@ -56,6 +56,27 @@ public class StripeBillingServiceTests
     }
 
     [Fact]
+    public async Task CreateCustomerAsync_ReplacementUsesNewStableIdempotencyKey()
+    {
+        var keys = new List<string>();
+        _customers.CreateAsync(Arg.Any<CustomerCreateOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                keys.Add(call.Arg<RequestOptions>().IdempotencyKey);
+                return new Customer { Id = "cus_created" };
+            });
+
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default);
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default, 1);
+        await _service.CreateCustomerAsync("returning@example.com", "Returning", UserId, default, 1);
+
+        keys.Should().HaveCount(3);
+        keys[0].Should().Be($"orbit-customer-create-{UserId}");
+        keys[1].Should().NotBe(keys[0]);
+        keys[2].Should().Be(keys[1]);
+    }
+
+    [Fact]
     public async Task DeleteCustomerAsync_AlreadyGone_Completes()
     {
         _customers.DeleteAsync("cus_erased", Arg.Any<CustomerDeleteOptions>(), Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())

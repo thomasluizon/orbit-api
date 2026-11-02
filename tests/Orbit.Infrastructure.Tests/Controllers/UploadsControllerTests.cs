@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using Amazon;
+using Amazon.Runtime;
+using Amazon.S3;
 using System.Reflection;
 using FluentAssertions;
 using MediatR;
@@ -7,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Uploads.Commands;
@@ -14,6 +18,8 @@ using Orbit.Application.Uploads.Queries;
 using Orbit.Api.RateLimiting;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
@@ -48,6 +54,36 @@ public class UploadsControllerTests
         var result = await _controller.SignUpload(request, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task SignUpload_ReturnedObjectUrl_IsReadableByOwnerAndPrivateToThatAccount()
+    {
+        using var client = new AmazonS3Client(new BasicAWSCredentials("example-access", "example-secret"), RegionEndpoint.USEast2);
+        var storage = new S3ObjectStorageService(client, Options.Create(new S3StorageSettings
+        {
+            Bucket = "orbit-test-uploads",
+            PublicBaseUrl = "https://api.example.com"
+        }));
+        _mediator.Send(Arg.Any<SignUploadCommand>(), Arg.Any<CancellationToken>()).Returns(call =>
+            new SignUploadCommandHandler(storage).Handle(call.Arg<SignUploadCommand>(), default));
+        var controller = new UploadsController(_mediator, storage, _logger) { ControllerContext = _controller.ControllerContext };
+
+        var signed = (await controller.SignUpload(new("image/png", 1024), default)).Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeOfType<SignUploadResponse>().Subject;
+        var url = new Uri(signed.PublicUrl);
+        var parts = url.AbsolutePath.Split('/');
+        url.AbsolutePath.Should().Be($"/api/uploads/object/{signed.Key}");
+        var read = (await controller.ReadObject(parts[^2], parts[^1], default)).Should().BeOfType<RedirectResult>().Subject;
+        new Uri(read.Url!).AbsolutePath.Should().EndWith(signed.Key);
+        read.Url.Should().Contain("X-Amz-Signature=");
+        controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
+
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Bearer"));
+        (await controller.ReadObject(parts[^2], parts[^1], default)).Should().BeOfType<NotFoundResult>();
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        (await controller.ReadObject(parts[^2], parts[^1], default)).Should().BeOfType<UnauthorizedResult>();
+        await _mediator.Received(1).Send(Arg.Is<UploadOwnerExistsQuery>(query => query.UserId == UserId), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -110,9 +146,10 @@ public class UploadsControllerTests
     {
         _mediator.Send(Arg.Any<UploadOwnerExistsQuery>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        var result = await _controller.ReadObject(Guid.NewGuid().ToString(), $"{Guid.NewGuid()}.png", CancellationToken.None);
+        var result = await _controller.ReadObject(UserId.ToString(), $"{Guid.NewGuid()}.png", CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
+        await _mediator.Received(1).Send(Arg.Is<UploadOwnerExistsQuery>(query => query.UserId == UserId), Arg.Any<CancellationToken>());
         await _objectStorage.DidNotReceive().CreateReadUrlAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

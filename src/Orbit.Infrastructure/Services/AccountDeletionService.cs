@@ -84,7 +84,8 @@ public partial class AccountDeletionService(
         return await dbContext.Users
             .IgnoreQueryFilters()
 #pragma warning disable ORBIT0004 // GetUsersScheduledForDeletionAsync compares ScheduledDeletionAt with the current instant to find expired deletion grace periods. https://github.com/thomasluizon/orbit-tickets/issues/230
-            .Where(u => u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
+            .Where(u => u.StripeCustomerPendingDeletionId != null
+                || u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
 #pragma warning restore ORBIT0004
             .Select(u => u.Id)
             .ToListAsync(ct);
@@ -100,7 +101,10 @@ public partial class AccountDeletionService(
             var user = await dbContext.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
             var nowAtUtc = DateTime.UtcNow;
             if (user is not { IsDeactivated: true, ScheduledDeletionAt: not null } || user.ScheduledDeletionAt > nowAtUtc)
+            {
+                await CompletePendingCustomerDeletionAsync(scope.ServiceProvider, userId, ct);
                 return;
+            }
 
             await StopRenewalsBeforeErasureAsync(scope.ServiceProvider, user, nowAtUtc, ct);
             if (await dbContext.NotionConnections.AnyAsync(connection => connection.UserId == userId, ct))
@@ -119,6 +123,32 @@ public partial class AccountDeletionService(
                     LogAppleRevocationAbandoned(logger, userId);
                 }
             }
+            await CompletePendingCustomerDeletionAsync(scope.ServiceProvider, userId, ct);
+            if (!string.IsNullOrWhiteSpace(user.StripeCustomerId))
+            {
+                var prepared = await unitOfWork.ExecuteInTransactionAsync(async token =>
+                {
+                    await unitOfWork.AcquireUserRowLockAsync(userId, token);
+                    var locked = await dbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId, token);
+                    var prepareAtUtc = DateTime.UtcNow;
+                    if (locked is not { IsDeactivated: true, ScheduledDeletionAt: not null }
+                        || locked.ScheduledDeletionAt > prepareAtUtc
+                        || locked.StripeCustomerId != user.StripeCustomerId
+                        || locked.StripeSubscriptionId != user.StripeSubscriptionId
+                        || locked.PlayPurchaseToken != user.PlayPurchaseToken)
+                        return false;
+                    locked.PrepareStripeCustomerDeletion();
+                    await unitOfWork.SaveChangesAsync(token);
+                    return true;
+                }, ct);
+                if (!prepared)
+                    return;
+                await CompletePendingCustomerDeletionAsync(scope.ServiceProvider, userId, ct);
+                var refreshed = await dbContext.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+                if (refreshed is null)
+                    return;
+                user = refreshed;
+            }
             unitOfWork.ResetTracking();
             var owedRecords = new List<(Guid Id, SubscriptionSource Provider)>();
             var deleted = await unitOfWork.ExecuteInTransactionAsync(
@@ -136,6 +166,29 @@ public partial class AccountDeletionService(
             if (logger.IsEnabled(LogLevel.Error))
                 LogAccountDeletionFailed(logger, ex, userId);
         }
+    }
+
+    private static async Task CompletePendingCustomerDeletionAsync(IServiceProvider services, Guid userId, CancellationToken ct)
+    {
+        var dbContext = services.GetRequiredService<OrbitDbContext>();
+        var unitOfWork = services.GetRequiredService<IUnitOfWork>();
+        unitOfWork.ResetTracking();
+        var customerId = await dbContext.Users.IgnoreQueryFilters().Where(user => user.Id == userId)
+            .Select(user => user.StripeCustomerPendingDeletionId).FirstOrDefaultAsync(ct);
+        if (customerId is null)
+            return;
+
+        await services.GetRequiredService<IBillingService>().DeleteCustomerAsync(customerId, ct);
+        await unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            await unitOfWork.AcquireUserRowLockAsync(userId, token);
+            var user = await dbContext.Users.IgnoreQueryFilters().FirstOrDefaultAsync(user => user.Id == userId, token);
+            if (user?.StripeCustomerPendingDeletionId != customerId)
+                return;
+            user.CompleteStripeCustomerDeletion(customerId);
+            await unitOfWork.SaveChangesAsync(token);
+        }, ct);
+        unitOfWork.ResetTracking();
     }
 
     private async Task<bool> DeleteLockedAccountAsync(IServiceProvider services, Guid userId,
@@ -159,6 +212,12 @@ public partial class AccountDeletionService(
             return false;
         }
 
+        if (user.StripeCustomerId is not null || user.StripeCustomerPendingDeletionId is not null)
+        {
+            LogErasureRecheckSkipped(logger, userId, "customer deletion is incomplete or billing identifiers changed");
+            return false;
+        }
+
         if (nowAtUtc - user.ScheduledDeletionAt.Value >= MaxBillingDeferral
             && (!string.IsNullOrWhiteSpace(user.StripeSubscriptionId) || !string.IsNullOrWhiteSpace(user.PlayPurchaseToken)))
         {
@@ -168,9 +227,6 @@ public partial class AccountDeletionService(
             if (!string.IsNullOrWhiteSpace(user.PlayPurchaseToken))
                 owedRecords.Add((await cancellations.RecordAsync(SubscriptionSource.GooglePlay, user.PlayPurchaseToken, ct), SubscriptionSource.GooglePlay));
         }
-
-        if (!string.IsNullOrWhiteSpace(user.StripeCustomerId))
-            await services.GetRequiredService<IBillingService>().DeleteCustomerAsync(user.StripeCustomerId, ct);
 
         var contacts = services.GetRequiredService<IGenericRepository<MarketingContact>>();
         await MarketingContactOptOut.RecordAsync(user.Email, contacts, unitOfWork, ct);
