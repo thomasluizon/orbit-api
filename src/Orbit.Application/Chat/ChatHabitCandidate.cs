@@ -11,7 +11,9 @@ public sealed record ChatHabitCandidate(
     int? Position,
     DateTime UpdatedAtUtc,
     IReadOnlyList<ChecklistItem>? ChecklistItems,
-    bool CompletedToday)
+    bool CompletedToday,
+    string? Emoji,
+    IReadOnlyList<Tag> Tags)
 {
     public const string QueryTag = "astra-habit-candidates";
 
@@ -23,12 +25,13 @@ public sealed record ChatHabitCandidate(
                 habit.IsCompleted, habit.Days.ToList(), habit.Schedule, habit.StartDate),
             habit.Title, habit.Position, habit.UpdatedAtUtc,
             includeChecklists && !habit.IsCompleted ? habit.ChecklistItems : null,
-            habit.Logs.Any(log => !log.IsDeleted && log.Date == today && log.Value > 0 && !log.IsSlip)));
+            habit.Logs.Any(log => !log.IsDeleted && log.Date == today && log.Value > 0 && !log.IsSlip),
+            habit.Emoji, habit.Tags.ToList()));
 
     internal Habit ToHabit(Guid userId)
     {
         var habit = Habit.FromScheduleSnapshot(Schedule, userId);
-        habit.LoadScheduleCandidateFieldsForRead(Title, null, Position, []);
+        habit.LoadScheduleCandidateFieldsForRead(Title, null, Position, Tags, Emoji);
         habit.UpdateChecklist(ChecklistItems ?? []);
         habit.UpdatedAtUtc = UpdatedAtUtc;
         return habit;

@@ -3,6 +3,8 @@ using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Habits.Commands;
 using Orbit.Application.Common;
 using Orbit.Application.Tests.Common;
 using Orbit.Domain.Common;
@@ -15,6 +17,42 @@ namespace Orbit.Application.Tests.Commands.Chat;
 
 public sealed partial class ChatWriteHoldHandlerTests
 {
+    [Theory]
+    [InlineData("{\"has_emoji\":false}")]
+    [InlineData("{\"tag\":\"Health\"}")]
+    public async Task Handle_BulkLogFilter_PreviewAndApprovalPreserveSelection(string filter)
+    {
+        var selected = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Read", FrequencyUnit.Day, 1, Today)).Value;
+        selected.AddTag(Tag.Create(_userId, "Health", "#123456").Value);
+        var excluded = Habit.Create(new HabitCreateParams(HabitSchedule.Recurring, _userId, "Walk", FrequencyUnit.Day, 1, Today, Emoji: "📚")).Value;
+        var habits = new[] { selected, excluded };
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => habits.Where(call.Arg<Expression<Func<Habit, bool>>>().Compile()).ToList());
+        _mediator.Send(Arg.Any<CheckChatCommandQuery>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call => Result.Success(new BulkLogResult(call.Arg<BulkLogHabitsCommand>().Items
+                .Select((item, index) => new BulkLogItemResult(index, BulkItemStatus.Success, item.HabitId, Guid.NewGuid())).ToArray())));
+        ScriptToolCall("{\"filter\":" + filter + "}", "bulk_log_habits");
+
+        var held = await CreateHandler().Handle(new ProcessUserChatCommand(_userId, "Log the matching habits",
+            ClientContext: new AgentClientContext(SupportsPendingOperationChanges: true)), default);
+
+        held.IsSuccess.Should().BeTrue();
+        var pending = held.Value.PendingOperations.Should().ContainSingle().Which;
+        pending.Items!.Select(item => item.EntityId).Should().Equal(selected.Id);
+        var execution = _pendingOperationStore.GetExecution(_userId, pending.Id)!;
+        execution.Arguments.GetProperty("revised_items").EnumerateArray()
+            .Select(item => item.GetProperty("habit_id").GetGuid()).Should().Equal(selected.Id);
+        var confirmation = _pendingOperationStore.Confirm(_userId, pending.Id)!;
+        var result = await _executor.ExecuteAsync(new AgentExecuteOperationRequest(_userId, execution.OperationId,
+            execution.Arguments, execution.Surface, AgentAuthMethod.Jwt, ConfirmationToken: confirmation.ConfirmationToken));
+
+        result.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        await _mediator.Received(1).Send(Arg.Is<BulkLogHabitsCommand>(command => command.UserId == _userId
+            && command.Items.Count == 1 && command.Items[0].HabitId == selected.Id), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData("add an icon to every habit without one", "{\"all\":true}", false)]
     [InlineData("coloca um ícone em todo hábito que não tem", "{\"all\":true}", false)]

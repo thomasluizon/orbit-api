@@ -94,6 +94,8 @@ public sealed partial class ChatWriteHoldHandlerTests : IDisposable
             new BulkCreateHabitsTool(_mediator),
             new CreateSubHabitTool(_mediator),
             new LogHabitTool(_mediator, _habitRepo, _userDateService),
+            new BulkLogHabitsTool(_mediator, _habitRepo, _userDateService,
+                new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork)),
             new SkipHabitTool(_mediator, _habitRepo),
             new BulkSkipHabitsTool(_mediator, _habitRepo, _userDateService,
                 new BulkHabitReplayPlanner(Substitute.For<IIdempotencyContext>(), Substitute.For<IIdempotencyStore>(), _unitOfWork)),
