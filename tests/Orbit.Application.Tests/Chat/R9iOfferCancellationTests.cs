@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("en", "selected")]
     [InlineData("pt-BR", "selected")]
     [InlineData("en", "caller")]
-    public async Task R9iOfferSelection_DeadlinePreservesTheReadAndCallerCancellationStillPropagates(string locale, string mode)
+    public async Task R9iReadOffers_SkipSelectorAndCallerCancellationStillPropagates(string locale, string mode)
     {
         SetupUserAndPayGate();
         EnableComposition();
@@ -28,48 +28,38 @@ public partial class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(tool);
         UseProductionReadExecutor(tool);
         using var caller = new CancellationTokenSource();
-        CancellationToken selectorToken = default;
         var selections = 0;
         _aiIntentService.SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
-            .Returns(async call =>
+            .Returns(call =>
             {
                 var request = call.Arg<AiToolRequest>();
-                if (request.Purpose != "offer_selection")
-                    return Result.Success(ToolResponse(tool.Name, "goals", """{"include_completed":true,"orbit_read_complete":true}"""));
-                selections++;
-                selectorToken = call.Arg<CancellationToken>();
-                selectorToken.CanBeCanceled.Should().BeTrue();
-                selectorToken.IsCancellationRequested.Should().BeFalse();
-                caller.IsCancellationRequested.Should().BeFalse();
-                request.ToolDeclarations.Should().BeEmpty();
-                if (mode is "timeout" or "caller")
+                if (request.Purpose == "offer_selection")
                 {
-                    if (mode == "caller") caller.Cancel();
-                    await Task.Delay(Timeout.InfiniteTimeSpan, selectorToken);
+                    selections++;
+                    throw new OperationCanceledException("The obsolete selector would be unavailable.");
                 }
-                if (mode == "failure") return Result.Failure<AiResponse>(ErrorMessages.AiUnavailable);
-                using var facts = JsonDocument.Parse(request.DynamicContext!);
-                var candidate = facts.RootElement.GetProperty("Candidates").EnumerateArray()
-                    .Single(item => item.GetProperty("Family").GetString() == "inspect");
-                return Result.Success(new AiResponse
+                if (mode == "caller") caller.Cancel();
+                call.Arg<CancellationToken>().ThrowIfCancellationRequested();
+                return Result.Success(ToolResponse(tool.Name, "goals", JsonSerializer.Serialize(new
                 {
-                    TextMessage = JsonSerializer.Serialize(new { candidateId = candidate.GetProperty("Id").GetString() })
-                });
+                    include_completed = true,
+                    orbit_read_complete = true,
+                    orbit_offer_intent = mode == "selected" ? "inspect" : "none"
+                })));
             });
 
         var turn = () => handler.Handle(new(UserId, "Show my goals and progress.", ClientContext: OfferClient(locale)), caller.Token);
         if (mode == "caller")
         {
             await turn.Should().ThrowAsync<OperationCanceledException>();
-            selections.Should().Be(1);
+            selections.Should().Be(0);
             return;
         }
         var result = await turn();
 
-        selections.Should().Be(1, "the test must reach the optional selector rather than a concrete offer shortcut");
+        selections.Should().Be(0, "read offers use the main model declaration and never wait for a selector");
         result.IsSuccess.Should().BeTrue(result.Error);
         caller.IsCancellationRequested.Should().BeFalse();
-        selectorToken.IsCancellationRequested.Should().Be(mode == "timeout");
         var block = result.Value.Parts.Should().ContainSingle().Which.Should().BeOfType<ChatBlockPart>().Which;
         block.Kind.Should().Be("goalList");
         var card = block.Block.Should().BeOfType<GoalListCard>().Subject;

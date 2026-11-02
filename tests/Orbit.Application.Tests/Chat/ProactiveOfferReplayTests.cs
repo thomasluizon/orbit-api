@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat;
@@ -16,6 +17,50 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public partial class ProcessUserChatCommandHandlerTests
 {
     private readonly IConversationOfferStore _offers = Substitute.For<IConversationOfferStore>();
+
+    [Theory]
+    [InlineData("en", "aim", false)]
+    [InlineData("pt-BR", "aim", false)]
+    [InlineData("en", "none", true)]
+    [InlineData("pt-BR", "none", true)]
+    [InlineData("en", "unknown", false)]
+    public async Task ProactiveReadReplay_DeclaredAimUsesTheReadRoundWithoutASelector(string locale, string intent, bool equivalent)
+    {
+        SetupUserAndPayGate();
+        EnableComposition();
+        if (equivalent)
+        {
+            var goal = Goal.Create(UserId, "Run five kilometers", targetValue: 5, unit: "km").Value;
+            _goalRepo.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>()).Returns([goal]);
+            _goalRepo.FindAsync(Arg.Any<Expression<Func<Goal, bool>>>(),
+                Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>>(), Arg.Any<CancellationToken>()).Returns([goal]);
+        }
+        var tool = new QueryGoalsTool(_goalRepo, _userDateService, _goalProgressReadSyncer);
+        var handler = CreateHandler(tool);
+        UseProductionReadExecutor(tool);
+        var recorded = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,
+            "Fixtures", "ProactiveOffers", "r9i-goals.json")))!.AsObject();
+        recorded["orbit_offer_intent"] = intent;
+        SetupOfferSelection(tool.Name, "aim", "timeout", readArguments: recorded.ToJsonString());
+
+        var result = await handler.Handle(new(UserId, "Show the requested records.", ClientContext: OfferClient(locale)), default);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var card = result.Value.Parts!.OfType<ChatBlockPart>().Single().Block.Should().BeOfType<GoalListCard>().Subject;
+        if (intent == "aim")
+        {
+            card.Read!.NextAction.Should().NotBeNull();
+            card.Read.NextAction!.OfferKey.Should().Be("aim:account");
+        }
+        else card.Read!.NextAction?.OfferKey.Should().NotBe("aim:account");
+        card.Read!.Scope.TryGetProperty("orbit_offer_intent", out _).Should().BeFalse();
+        var executed = (AgentExecuteOperationRequest)_operationExecutor.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == "ExecuteAsync").GetArguments()[0]!;
+        executed.Arguments.TryGetProperty("orbit_offer_intent", out _).Should().BeFalse();
+        result.Value.PendingOperations.Should().BeNullOrEmpty();
+        await _aiIntentService.Received(1).SendWithToolsAsync(Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>>(), Arg.Any<CancellationToken>());
+        await _mediator.DidNotReceive().Send(Arg.Any<Orbit.Application.Goals.Commands.CreateGoalCommand>(), Arg.Any<CancellationToken>());
+    }
 
     [Theory]
     [InlineData("en", true, true)]
@@ -211,8 +256,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "preparePreview", "goalLink", "query_goals", "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.")]
     [InlineData("en", "continueChat", "aim", "query_habits", "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.")]
     [InlineData("pt-BR", "continueChat", "aim", "query_habits", "Check existing goals first and avoid an equivalent goal. Prepare a goal proposal for the expressed aim in this conversation.")]
-    [InlineData("en", "continueChat", "smallStep", "query_habits", "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview.")]
-    [InlineData("pt-BR", "continueChat", "smallStep", "query_habits", "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview.")]
+    [InlineData("en", "continueChat", "smallStep", "query_habits", "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview. Name the concrete activity or owned habit supplied by the offer or account and one physical action with a named object. When an empty day supplies no activity, choose one immediately doable physical action with a named object. Asking the person to choose a task is not a starting action. Do not combine several actions.")]
+    [InlineData("pt-BR", "continueChat", "smallStep", "query_habits", "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview. Name the concrete activity or owned habit supplied by the offer or account and one physical action with a named object. When an empty day supplies no activity, choose one immediately doable physical action with a named object. Asking the person to choose a task is not a starting action. Do not combine several actions.")]
     public async Task ProactiveReadReplay_SelectedScopeUsesTypedActionAndTarget(string locale, string kind,
         string family, string queryFamily, string scope)
     {
@@ -263,7 +308,7 @@ public partial class ProcessUserChatCommandHandlerTests
             .Returns(call => habits.Where(call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()).ToArray());
     }
 
-    private void SetupOfferSelection(string tool, string family, string mode = "valid", string? secondTool = null)
+    private void SetupOfferSelection(string tool, string family, string mode = "valid", string? secondTool = null, string? readArguments = null)
     {
         _offers.IssuedAsync(UserId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<AstraOfferFact>());
 
@@ -272,9 +317,9 @@ public partial class ProcessUserChatCommandHandlerTests
             {
                 var request = call.Arg<AiToolRequest>();
                 if (request.SystemPrompt != ProactiveOfferPlanner.SelectionInstruction)
-                    return Result.Success(ToolResponse(tool, "read", """{"date":"today","orbit_read_complete":true}""") with
+                    return Result.Success(ToolResponse(tool, "read", readArguments ?? """{"date":"today","orbit_read_complete":true}""") with
                     {
-                        ToolCalls = secondTool is null ? [new(tool, "read", ParseArguments("""{"date":"today","orbit_read_complete":true}"""))]
+                        ToolCalls = secondTool is null ? [new(tool, "read", ParseArguments(readArguments ?? """{"date":"today","orbit_read_complete":true}"""))]
                             : [new(tool, "read", ParseArguments("""{"date":"today","orbit_read_complete":true}""")),
                                new(secondTool, "second", ParseArguments("""{"orbit_read_complete":true}"""))]
                     });

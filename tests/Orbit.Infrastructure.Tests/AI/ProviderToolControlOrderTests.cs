@@ -29,7 +29,7 @@ public sealed partial class ProviderToolControlOrderTests(ITestOutputHelper outp
     private static readonly HashSet<string> Controls = new(StringComparer.Ordinal)
     {
         "orbit_read_complete", "orbit_write_complete", "orbit_dismissed_offer_keys",
-        "suggested_fields", "orbit_offer_metadata"
+        "suggested_fields", "orbit_offer_metadata", "orbit_offer_intent"
     };
 
     [Theory]

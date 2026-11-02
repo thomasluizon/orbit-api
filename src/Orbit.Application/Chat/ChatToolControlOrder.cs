@@ -23,6 +23,7 @@ public static class ChatToolControlOrder
         ProactiveOfferDismissal.Argument => 2,
         ProactiveProposal.Argument => 3,
         ProactiveProposal.Metadata => 4,
-        _ => 5
+        ProactiveReadOffer.Argument => 5,
+        _ => 6
     };
 }

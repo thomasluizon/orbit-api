@@ -39,6 +39,80 @@ public sealed class ProactiveProposalTests
     }
 
     [Fact]
+    public async Task CompletedDatedReminderCanBeRemovedWithoutReturningOnRefresh()
+    {
+        var call = new AiToolCall("create_habit", "create", Parse("""{"title":"Submit form","frequency_unit":"OneTime","due_date":"2026-11-03","due_time":"14:00","suggested_fields":["emoji"],"emoji":"📝"}"""));
+        var completed = ProactiveProposal.CompleteCreateReminder(call, client);
+        var preview = (await previewer.PreviewAsync(user, call.Name, completed.Args, clientContext: client)).Value!;
+        var row = preview.Items!.Single().Fields.Single(field => field.Field == "reminder_times");
+        var node = JsonNode.Parse(preview.ExecutionArguments!.Value.GetRawText())!.AsObject();
+
+        ProactiveProposal.Remove(node, row.Removal!.Fields).Should().BeTrue();
+        var refreshed = await previewer.PreviewAsync(user, call.Name, JsonSerializer.SerializeToElement(node), clientContext: client);
+
+        refreshed.IsSuccess.Should().BeTrue(refreshed.Error);
+        refreshed.Value!.Items!.Single().Fields.Should().NotContain(field => field.Field == "reminder_times");
+        node["due_time"]!.ToString().Should().Be("14:00");
+        node["emoji"]!.ToString().Should().Be("📝");
+    }
+
+    [Theory]
+    [InlineData("\"reminder_enabled\":false")]
+    [InlineData("\"reminder_times\":[10]")]
+    [InlineData("\"scheduled_reminders\":[{\"when\":\"same_day\",\"time\":\"08:00\"}]")]
+    [InlineData("\"relative_reminders\":[{\"minutes_before\":10}]")]
+    [InlineData("\"repeat_reminder\":{\"interval_minutes\":120}")]
+    [InlineData("\"habit_id\":\"owned\"")]
+    public void DatedReminderCompletionPreservesExistingConfiguration(string configuration)
+    {
+        var args = Parse("{\"title\":\"Task\",\"frequency_unit\":\"OneTime\",\"due_date\":\"2026-11-03\",\"due_time\":\"14:00\"," + configuration + "}");
+        var call = new AiToolCall("create_habit", "create", args);
+        JsonElement.DeepEquals(ProactiveProposal.CompleteCreateReminder(call, client).Args, args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("unsupported")]
+    [InlineData("dismissed")]
+    [InlineData("update")]
+    [InlineData("recurring")]
+    [InlineData("general")]
+    [InlineData("undated")]
+    [InlineData("untimed")]
+    public void DatedReminderCompletionRequiresAnEligibleNewTimedTask(string mode)
+    {
+        var args = JsonNode.Parse("""{"title":"Task","frequency_unit":"OneTime","due_date":"2026-11-03","due_time":"14:00"}""")!.AsObject();
+        var targetClient = mode switch
+        {
+            "unsupported" => client with { SupportsProactiveOffers = false },
+            "dismissed" => client with { DismissedOfferKeys = ["dismissed"] },
+            _ => client
+        };
+        if (mode == "recurring") args["frequency_unit"] = "Day";
+        if (mode == "general") { args["frequency_unit"] = null; args["is_general"] = true; }
+        if (mode == "undated") args.Remove("due_date");
+        if (mode == "untimed") args.Remove("due_time");
+        var call = new AiToolCall(mode == "update" ? "update_habit" : "create_habit", "create", JsonSerializer.SerializeToElement(args));
+
+        JsonElement.DeepEquals(ProactiveProposal.CompleteCreateReminder(call, targetClient).Args, call.Args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DatedReminderCompletionHandlesBulkAndNestedDrafts(bool nested)
+    {
+        var item = JsonNode.Parse("""{"title":"Task","frequency_unit":"OneTime","due_date":"2026-11-03","due_time":"14:00"}""")!;
+        if (nested) item = new JsonObject { ["title"] = "Routine", ["sub_habits"] = new JsonArray(item) };
+        var call = new AiToolCall("bulk_create_habits", "bulk", JsonSerializer.SerializeToElement(new JsonObject { ["habits"] = new JsonArray(item) }));
+        var result = ProactiveProposal.CompleteCreateReminder(call, client).Args.GetProperty("habits")[0];
+        if (nested) result = result.GetProperty("sub_habits")[0];
+        result.GetProperty("reminder_enabled").GetBoolean().Should().BeTrue();
+        result.GetProperty("reminder_times")[0].GetInt32().Should().Be(0);
+        result.GetProperty("suggested_fields").EnumerateArray().Select(field => field.GetString())
+            .Should().BeEquivalentTo("reminder_enabled", "reminder_times");
+    }
+
+    [Fact]
     public async Task RemovalRestoresTheRequestedDraftAndRecordsTheSemanticDismissal()
     {
         var args = Parse("""{"title":"Water","is_general":true,"suggested_fields":{"repeat_reminder":{"interval_minutes":120,"active_start":"08:00","active_end":"20:00"},"reminder_enabled":true,"emoji":"💧"}}""");

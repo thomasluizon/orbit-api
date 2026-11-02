@@ -57,7 +57,7 @@ public partial class ProcessUserChatCommandHandlerTests
         var requests = _aiIntentService.ReceivedCalls().Where(call => call.GetMethodInfo().Name == "SendWithToolsAsync")
             .Select(call => (AiToolRequest)call.GetArguments()[0]!).ToArray();
         requests[0].DynamicContext.Should().Contain(key).And.Contain("previously_issued_offers");
-        requests.Count(request => request.SystemPrompt == ProactiveOfferPlanner.SelectionInstruction).Should().Be(readAgain ? 1 : 0);
+        requests.Count(request => request.SystemPrompt == ProactiveOfferPlanner.SelectionInstruction).Should().Be(0);
         _operationExecutor.ReceivedCalls().Select(call => call.GetArguments()[0]).OfType<AgentExecuteOperationRequest>()
             .Select(request => request.Arguments.TryGetProperty("orbit_dismissed_offer_keys", out _)).Should().OnlyContain(value => !value);
     }

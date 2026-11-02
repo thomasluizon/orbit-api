@@ -2,6 +2,7 @@ using static Orbit.Application.Chat.ProactiveOfferActionKinds;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Queries;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -80,7 +81,7 @@ public partial class ProcessUserChatCommandHandler
         (PreparePreview, "reminder") => "Read the typed habit's current reminder configuration and propose a reminder without changing any other setting.",
         (PreparePreview, "goalLink") => "Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links.",
         (PreparePreview, "goalTarget") => "Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field.",
-        (ContinueChat, "smallStep") => "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview.",
+        (ContinueChat, "smallStep") => "Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview. " + SuggestBreakdownTool.ConcreteActionInstruction,
         (ContinueChat, "notion") => "Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits.",
         (PreparePreview, "notification") => "Prepare a preview to mark the typed unread alert as read.",
         (ContinueChat, "reuse") when selected.Source?.QueryFamily == "list_tags" => "Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags.",
@@ -117,23 +118,20 @@ public partial class ProcessUserChatCommandHandler
                 ReadBlockTelemetry.Describe(block.Block).Read?.QueryId == read.Read.QueryId)).ToArray();
         if (reads.Length == 0) return (cards, false);
         var conversation = request.ClientContext!.ConversationId!.Value;
-        var issued = await offerStore!.IssuedAsync(request.UserId, conversation, ct);
         var facts = await OfferFactsAsync(request.UserId, reads, context, ct);
-        var dismissed = await offerStore.DismissedAsync(request.UserId, conversation, ct);
+        var dismissed = await offerStore!.DismissedAsync(request.UserId, conversation, ct);
         var candidates = ProactiveOfferPlanner.Build(reads, facts, context.Language)
             .Where(candidate => !dismissed.Contains(candidate.Action.OfferKey)).Take(100).ToArray();
-        var concrete = PreferredTypedOffer(candidates);
-        var selected = concrete is not null ? new OfferSelection(concrete.Id, null, null)
-            : await SelectOfferAsync(request, candidates, issued, context, ct);
-        if (selected is null) return (cards, false);
-        var rejected = selected.DismissedOfferKeys?.Where(key => issued.Any(offer => offer.Action.OfferKey == key))
-            .Distinct(StringComparer.Ordinal).ToArray() ?? [];
-        if (rejected.Length > 0) await offerStore.DismissAsync(request.UserId, conversation, rejected, ct);
-        var candidate = candidates.SingleOrDefault(candidate => candidate.Id == selected.CandidateId);
-        candidate = PreferFamilyOffer(candidate, candidates, selected, rejected);
-        if (candidate is null || rejected.Contains(candidate.Action.OfferKey, StringComparer.Ordinal)
-            || candidate.Family == "aim" && selected.Interpretation != "aim"
-            || candidate.Family == "calendar" && selected.Interpretation != "dated_event") return (cards, false);
+        var candidate = PreferredTypedOffer(candidates)
+            ?? candidates.Where(candidate => candidate.Family switch
+                {
+                    "aim" => results.ReadOfferIntents.Values.Contains("aim"),
+                    "calendar" => results.ReadOfferIntents.Values.Contains("dated_event"),
+                    "inspect" => results.ReadOfferIntents.Values.Contains("inspect"),
+                    _ => false
+                }).OrderBy(candidate => candidate.Family == "inspect" ? 1 : 0)
+                .ThenBy(candidate => candidate.SourceKind == "goalList" ? 0 : 1).FirstOrDefault();
+        if (candidate is null) return (cards, false);
         if ((await offerStore.DismissedAsync(request.UserId, conversation, ct)).Contains(candidate.Action.OfferKey))
             return (cards, false);
         if (await execution.UserDateService.GetUserTodayAsync(request.UserId, ct) != candidate.LocalDate) return (cards, false);
@@ -147,17 +145,13 @@ public partial class ProcessUserChatCommandHandler
         return (cards with { Parts = updated, AiMessage = null, ServerComposedText = true }, true);
     }
 
-    private static AstraOfferFact? PreferFamilyOffer(AstraOfferFact? candidate, AstraOfferFact[] candidates,
-        OfferSelection selected, string[] rejected)
+    private static void RecordReadOfferIntents(AiResponse response, ProcessUserChatCommand request, ToolExecutionAccumulator results)
     {
-        if (candidate?.Family == "inspect")
-            candidate = candidates.Where(fact => fact.Family != "inspect"
-                && !rejected.Contains(fact.Action.OfferKey, StringComparer.Ordinal)
-                && (fact.Family != "aim" || selected.Interpretation == "aim")
-                && (fact.Family != "calendar" || selected.Interpretation == "dated_event"))
-                .OrderBy(fact => fact.Family switch { "reminder" => 0, "restart" => 1, "skip" => 2, _ => 3 })
-                .FirstOrDefault() ?? candidate;
-        return candidate;
+        if (!ProactiveProposal.Enabled(request.ClientContext) || response.IsTruncated || !TerminalReadDirective.IsComplete(response)) return;
+        results.ReadOfferIntents.Clear();
+        foreach (var call in response.ToolCalls ?? [])
+            if (ProactiveReadOffer.Read(call.Args) is { } intent && results.QueryReads.TryGetValue(call.Id, out var read))
+                results.ReadOfferIntents[read.Read.QueryId] = intent;
     }
 
     private static AstraOfferFact? PreferredTypedOffer(IEnumerable<AstraOfferFact> candidates) => candidates

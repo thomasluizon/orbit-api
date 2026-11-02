@@ -20,6 +20,7 @@ public class QueryGoalsTool(
     public string Description =>
         "Read goals, progress, deadlines and linked habits before answering goal questions; indexes do not ground replies. "
         + "For goals or progress, set include_completed=true unless only active goals or a specific status is requested. "
+        + "For clients declaring orbit_offer_intent, an aim beside a goal-list request needs only the requested goal read and that intent; do not add a habit lookup, breakdown or write. Set orbit_read_complete=true when that read answers the request. "
         + "Progress is current value against target. For goal progress, call only query_goals with orbit_read_complete=true; no habit analytics or calendar read is needed.";
 
     public object GetParameterSchema() => new

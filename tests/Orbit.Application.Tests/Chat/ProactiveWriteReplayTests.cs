@@ -113,6 +113,10 @@ public partial class ProcessUserChatCommandHandlerTests
             }
             schema.GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().Be(supports, name);
             if (!supports) continue;
+            if (name is "create_habit" or "bulk_create_habits")
+                foreach (var field in new[] { "reminder_enabled", "reminder_times", "parent_habit_id", "goal_ids", "suggested_fields" })
+                    schema.GetProperty("properties").GetProperty(field).GetProperty("description").GetString()
+                        .Should().Contain("suggested_fields", field);
             schema.GetProperty("properties").GetProperty("suggested_fields").GetProperty("type").GetString().Should().Be("array");
             if (schema.GetProperty("properties").TryGetProperty("sub_habits", out var children))
                 children.GetProperty("items").GetProperty("properties").TryGetProperty("suggested_fields", out _).Should().BeTrue(name);
@@ -133,6 +137,8 @@ public partial class ProcessUserChatCommandHandlerTests
     [InlineData("pt-BR", "calendar-disabled")]
     [InlineData("en", "nested")]
     [InlineData("pt-BR", "nested")]
+    [InlineData("en", "dated")]
+    [InlineData("pt-BR", "dated")]
     public async Task ProactiveWriteReplay_RealExecutorStagesSuggestedFieldsInTheOnlyApprovalPreview(string locale, string mode)
     {
         var calendar = mode.StartsWith("calendar", StringComparison.Ordinal);
@@ -156,7 +162,7 @@ public partial class ProcessUserChatCommandHandlerTests
             using var args = JsonDocument.Parse(context.OperationArgumentsJson!);
             if (mode == "nested")
                 args.RootElement.GetProperty("sub_habits")[0].GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(120);
-            else if (!calendar)
+            else if (!calendar && mode != "dated")
                 args.RootElement.GetProperty("repeat_reminder").GetProperty("interval_minutes").GetInt32().Should().Be(120);
             var capability = catalog.GetCapability(context.CapabilityId)!;
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability,
@@ -193,8 +199,15 @@ public partial class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new(UserId, "Prepare the requested preview.", ClientContext: OfferClient(locale)), default);
         result.IsSuccess.Should().BeTrue(result.Error);
         var preview = result.Value.PendingOperations.Should().ContainSingle().Which;
-        preview.Items!.Single().Fields.Should().Contain(field => field.Field == (mode == "nested" ? "sub_habits/0/repeat_reminder" : calendar ? "emoji" : "repeat_reminder")
+        preview.Items!.Single().Fields.Should().Contain(field => field.Field == (mode == "nested" ? "sub_habits/0/repeat_reminder" : mode == "dated" ? "reminder_times" : calendar ? "emoji" : "repeat_reminder")
             && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
+        if (mode == "dated")
+        {
+            var fields = preview.Items!.Single().Fields;
+            fields.Single(field => field.Field == "reminder_times").Removal!.Fields
+                .Should().BeEquivalentTo("reminder_enabled", "reminder_times");
+            fields.Single(field => field.Field == "due_time").Provenance.Should().Be("requested");
+        }
         if (mode == "nested") preview.Items!.Single().Fields.Should().Contain(field => field.Field == "sub_habits"
             && field.Provenance == "suggested" && field.Removal != null && field.IsEditable);
         if (mode == "calendar")
@@ -213,6 +226,8 @@ public partial class ProcessUserChatCommandHandlerTests
 
     private static string ProactiveWriteDraft(string locale, string mode)
     {
+        if (mode == "dated")
+            return File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ProactiveOffers", $"r9i-dated-task-{locale}.json"));
         return mode == "nested" ? JsonSerializer.Serialize(new
         {
             title = locale == "en" ? "Routine" : "Rotina",
@@ -223,7 +238,7 @@ public partial class ProcessUserChatCommandHandlerTests
                 suggested_fields = new[] { "repeat_reminder", "reminder_enabled" } } },
             suggested_fields = new[] { "sub_habits" },
             orbit_write_complete = true
-        }) : mode.StartsWith("calendar", StringComparison.Ordinal) ? JsonSerializer.Serialize(new
+        }) : mode.StartsWith("calendar", StringComparison.Ordinal) || mode == "dated" ? JsonSerializer.Serialize(new
         {
             title = locale == "en" ? "Appointment" : "Consulta",
             frequency_unit = "OneTime",

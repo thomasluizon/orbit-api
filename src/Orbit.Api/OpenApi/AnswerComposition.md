@@ -1558,20 +1558,31 @@ contents and does not regenerate removed nested proposals.
 After composing supported successful read blocks, concrete typed candidates are
 selected without an additional model call. Priority is reminder, restart, skip,
 log and then other concrete families, including a small step for an empty day.
-Aim and calendar candidates require interpretation and may use one additional
-tool-free model call. The same configured chat model, effort, usage recording and
-budget apply. Its cancellation deadline is three seconds. Input is
-the request, typed eligible candidates, complete active-goal facts and previously
-issued offer keys. Output selects one candidate or none and may report typed
-natural-language dismissals. The selector cannot call a tool or write prose.
-Unknown IDs, malformed output, failures and timeouts retain the readable answer
-when no concrete candidate exists. Concrete priority is applied before a selector
-can reach its deadline, so a timeout cannot remove an eligible concrete action.
-When the selector picks `inspect`, an eligible concrete family action outranks it.
-Repeated reminder gaps take priority, followed by restart and skip, then the other
-eligible family actions. Aim and calendar candidates enter this choice only with
-the corresponding typed interpretation; a generic inspect choice alone cannot
-establish either intent. A selection of none remains none, including exclusions.
+For offer clients, supported read tools additionally declare `orbit_offer_intent`:
+`aim`, `dated_event`, `inspect` or `none`. The main model interprets an expressed
+aim against the complete active-goal snapshot. Successful read results carry that
+declaration into composition; only eligible candidates from successful displayed
+reads may use it. Declarations from prerequisite rounds are ignored.
+Aim actions prefer the goal-list block when several reads declare the same intent.
+Unknown or absent intent never implies an aim or Calendar offer. Account labels
+and the person's words are never parsed to select tools, reroute calls or replace
+an answer. Dismissals are interpreted by the main model's existing typed control.
+Read offers make no selector call, including when an equivalent goal exists.
+
+Preview next actions retain their tool-free selector with a three-second deadline
+and the configured model, effort, metering and budget. Unknown candidates, malformed
+output, failures and timeouts preserve the preview. A selector cannot execute tools.
+
+On an initial `create_habit` or `bulk_create_habits` call, a new `OneTime` draft
+with a valid date and time and no reminder configuration gets a reminder at its due
+time. Both `reminder_enabled=true` and `reminder_times=[0]` are suggested and form
+one removable group. This completion reads structured arguments only. It preserves
+explicit false, configured reminders and reused habits. It does not run for edits,
+preview revisions, unsupported clients or a conversation with dismissed offers.
+Refreshing a preview after removal cannot regenerate the suggestion. Parent and
+goal-link choices remain model decisions against the bounded owned account index;
+the offer schema describes these decisions at their argument fields.
+
 There is no live-model measurement in this API round.
 Truncated turns never select or issue an offer and retain their cut-off notice.
 When a supported typed block carries its empty state, no extra model prose repeats
@@ -1733,7 +1744,7 @@ Existing requested and stored fields remain intact outside the selected scope.
 | preparePreview / reminder | Read the typed habit's current reminder configuration and propose a reminder without changing any other setting. | Leia a configuração atual de lembretes do hábito tipado e proponha um lembrete sem alterar nenhuma outra configuração. |
 | preparePreview / goalLink | Read current habits and the typed goal's existing links first. Propose a suitable habit link while preserving all existing links. | Leia primeiro os hábitos atuais e os vínculos existentes da meta tipada. Proponha um vínculo adequado com um hábito, preservando todos os vínculos existentes. |
 | preparePreview / goalTarget | Read the typed goal's current target and prepare an editable target adjustment without changing any other goal field. | Leia o valor atual da meta tipada e prepare um ajuste editável desse valor sem alterar nenhum outro campo da meta. |
-| continueChat / smallStep | Help the person choose one small step for their local today. | Ajude a pessoa a escolher um passo pequeno para hoje na data local dela. |
+| continueChat / smallStep | Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview. Then apply the concrete-action guidance below. | Chame suggest_breakdown com one_small_step=true e o idioma da pessoa. Retorne exatamente uma ação concreta para começar hoje na data local dela, sem leitura prévia nem prévia de escrita. Depois aplique a orientação de ação concreta abaixo. |
 | continueChat / notion | Read the stored Notion task identified by the typed target. Preserve its stated date and propose recurrence only if it fits. | Leia a tarefa salva do Notion identificada pelo alvo tipado. Preserve a data informada e proponha recorrência somente se fizer sentido. |
 | preparePreview / notification | Prepare a preview to mark the typed unread alert as read. | Prepare uma prévia para marcar o aviso tipado ainda não lido como lido. |
 | continueChat / reuse / list_tags | Read the full stored tag identified by the typed target and the current habits. Propose a suitable use in one editable preview, preserving existing tags. | Leia a etiqueta salva completa identificada pelo alvo tipado e os hábitos atuais. Proponha um uso adequado em uma prévia editável, preservando as etiquetas existentes. |
@@ -1777,3 +1788,25 @@ on the server and ignore client history when rows exist. Preview outcomes retain
 the pending operation id and current arguments after approval, edits or rejection.
 See [ServerConversations.md](ServerConversations.md) for pagination, private
 images, deletion, retention, export and rollout requirements.
+
+## Offer guidance copy register
+
+The following English additions are model-facing for every account language.
+Portuguese equivalents are for copy approval. The selected small-step scope appends
+the concrete-action instruction verbatim. Field-description additions preserve
+the existing description prefix. No visible action label or prompt changes.
+
+| Location | en | pt-BR |
+| --- | --- | --- |
+| Offer `reminder_enabled` | For a new dated OneTime task with due_time and no reminder preference, set true and include reminder_enabled and reminder_times in suggested_fields. Preserve explicit false and all requested or stored reminders. | Para uma nova tarefa OneTime com data, due_time e sem preferência de lembrete, defina true e inclua reminder_enabled e reminder_times em suggested_fields. Preserve false explícito e todos os lembretes solicitados ou salvos. |
+| Offer `reminder_times` | Minutes before due_time; 0 means at that time. For an unrequested timed-task reminder, set [0], set reminder_enabled=true and list both names in suggested_fields. Prescribed fixed clock times use scheduled_reminders instead. | Minutos antes de due_time; 0 significa naquele horário. Para sugerir um lembrete de tarefa com horário, defina [0], defina reminder_enabled=true e liste ambos os nomes em suggested_fields. Horários fixos prescritos usam scheduled_reminders. |
+| Offer `parent_habit_id` | When unrequested, choose a fitting owned routine from offer_account_facts.Habits, set its ID here and list parent_habit_id in suggested_fields. Do not leave it null when a clear fit exists. Ambiguous parents require a preview choice. Keep the bulk container parent unset for item-level suggestions. | Quando não solicitado, escolha uma rotina adequada da própria conta em offer_account_facts.Habits, defina seu ID aqui e liste parent_habit_id em suggested_fields. Não deixe null quando houver uma correspondência clara. Hábitos pais ambíguos exigem uma escolha na prévia. Deixe o pai do contêiner de lote sem valor para sugestões por item. |
+| Offer `goal_ids` | Use matching owned IDs from offer_account_facts.ActiveGoals. When unrequested, set the matching IDs here and list goal_ids in suggested_fields. Preserve stored links; query only missing facts, never create an equivalent goal. | Use os IDs correspondentes da própria conta em offer_account_facts.ActiveGoals. Quando não solicitados, defina os IDs correspondentes aqui e liste goal_ids em suggested_fields. Preserve vínculos salvos; consulte apenas os dados que faltarem e nunca crie uma meta equivalente. |
+| `suggested_fields` | Names of configured unrequested fields in suggested_fields. Set each ordinary field first; omit null or empty options. Include both reminder_enabled and reminder_times for an unrequested timed-task reminder, parent_habit_id for a fitting owned parent, and goal_ids for matching active goals. Use [] for none. | Nomes dos campos configurados sem solicitação em suggested_fields. Defina primeiro cada campo comum; omita opções null ou vazias. Inclua reminder_enabled e reminder_times ao sugerir um lembrete de tarefa com horário, parent_habit_id para um hábito pai adequado da própria conta e goal_ids para metas ativas correspondentes. Use [] quando não houver sugestões. |
+| `orbit_offer_intent`, schema and system | On a read call, set orbit_offer_intent to aim only when the person expresses an aim and the complete active-goal facts contain no equivalent goal; set dated_event only for an actual dated event, inspect for useful record navigation, otherwise none. This declares an optional block action, never permission to write. An expressed aim beside a read needs no habit lookup or planning call. Complete the requested reads in the same round with orbit_read_complete=true. The server composes the action from successful typed results without a separate selector call. | Em uma chamada de leitura, defina orbit_offer_intent como aim somente quando a pessoa expressar um objetivo e os dados completos das metas ativas não contiverem uma meta equivalente; defina dated_event somente para um evento com data, inspect para uma navegação útil pelos registros e none nos demais casos. Isso declara uma ação opcional no bloco, nunca permissão para escrever. Um objetivo expresso junto de uma leitura não exige busca de hábitos nem chamada de planejamento. Conclua as leituras solicitadas na mesma rodada com orbit_read_complete=true. O servidor compõe a ação a partir dos resultados tipados bem-sucedidos, sem uma chamada separada de seleção. |
+| Concrete-action instruction, tool description and selected scope | Name the concrete activity or owned habit supplied by the offer or account and one physical action with a named object. When an empty day supplies no activity, choose one immediately doable physical action with a named object. Asking the person to choose a task is not a starting action. Do not combine several actions. | Nomeie a atividade concreta ou o hábito da própria conta fornecido pela oferta ou pela conta e uma ação física com um objeto nomeado. Quando um dia vazio não fornecer uma atividade, escolha uma ação física que possa ser feita imediatamente com um objeto nomeado. Pedir que a pessoa escolha uma tarefa não é uma ação para começar. Não combine várias ações. |
+| Breakdown `title` | The concrete activity or owned habit supplied by the offer or account. For an empty day with no activity, name the activity you chose. | A atividade concreta ou o hábito da própria conta fornecido pela oferta ou pela conta. Para um dia vazio sem atividade, nomeie a atividade que você escolheu. |
+| Breakdown `suggested_sub_habits` | With one_small_step=true, exactly one physical action with a named object for the supplied activity; never a request to choose a task. | Com one_small_step=true, exatamente uma ação física com um objeto nomeado para a atividade fornecida; nunca um pedido para escolher uma tarefa. |
+| Selected small-step scope prefix | Call suggest_breakdown with one_small_step=true and language matching the person. Return exactly one concrete starting action for local today, with no prerequisite read and no write preview. | Chame suggest_breakdown com one_small_step=true e o idioma da pessoa. Retorne exatamente uma ação concreta para começar hoje na data local dela, sem leitura prévia nem prévia de escrita. |
+| Goal-query description addition | For clients declaring orbit_offer_intent, an aim beside a goal-list request needs only the requested goal read and that intent; do not add a habit lookup, breakdown or write. Set orbit_read_complete=true when that read answers the request. | Para clientes que declaram orbit_offer_intent, um objetivo junto de um pedido de lista de metas precisa apenas da leitura de metas solicitada e dessa intenção; não acrescente busca de hábitos, divisão em etapas nem escrita. Defina orbit_read_complete=true quando essa leitura responder ao pedido. |
+| Habit-query description addition | Once a selection read returns the needed candidates, call ask with them next. Do not repeat the same selection scope just to change optional filters; read again only for missing or partial candidates. | Quando uma leitura para seleção retornar os candidatos necessários, chame ask com eles em seguida. Não repita o mesmo escopo de seleção apenas para mudar filtros opcionais; leia novamente somente se faltarem candidatos ou se estiverem incompletos. |

@@ -6,7 +6,7 @@ using Orbit.Application.Chat.Tools;
 
 namespace Orbit.Application.Chat;
 
-public static class ProactiveProposal
+public static partial class ProactiveProposal
 {
     public const string Argument = "suggested_fields";
     internal const string Metadata = "orbit_offer_metadata";
@@ -64,6 +64,10 @@ public static class ProactiveProposal
         if (properties.ContainsKey("habits") || properties.ContainsKey(ToolArgumentNames.Updates)) return;
         var eligible = properties.Where(property => Fields.Contains(property.Key)).ToArray();
         if (eligible.Length == 0) return;
+        if (!inlineValues)
+            foreach (var property in eligible)
+                if (property.Value is JsonObject field && FieldInstruction(property.Key) is { } instruction)
+                    field["description"] = string.Join(" ", field["description"]?.ToString(), instruction).Trim();
         properties[Argument] = inlineValues ? new JsonObject
         {
             ["type"] = "object",
@@ -73,7 +77,7 @@ public static class ProactiveProposal
         } : new JsonObject
         {
             ["type"] = "array",
-            ["description"] = "Names of unrequested configured fields, following the offer instructions in the system prompt.",
+            ["description"] = "Names of configured unrequested fields in suggested_fields. Set each ordinary field first; omit null or empty options. Include both reminder_enabled and reminder_times for an unrequested timed-task reminder, parent_habit_id for a fitting owned parent, and goal_ids for matching active goals. Use [] for none.",
             ["maxItems"] = eligible.Length,
             ["items"] = new JsonObject
             {
@@ -212,6 +216,7 @@ public static class ProactiveProposal
         if (node is JsonObject obj)
         {
             obj.Remove(ProactiveOfferDismissal.Argument);
+            obj.Remove(ProactiveReadOffer.Argument);
             obj.Remove(Metadata);
             obj.Remove(HabitPreviewDates.DefaultDate);
             if (suggestions) obj.Remove(Argument);

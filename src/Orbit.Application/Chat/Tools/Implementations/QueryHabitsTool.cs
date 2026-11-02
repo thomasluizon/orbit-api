@@ -27,6 +27,7 @@ public class QueryHabitsTool(
         + "For a requested skip, call skip_habit or bulk_skip_habits after resolving the target, even when isSkippedOnDate is true; this read does not perform that action. "
         + "Use an explicit habit ID supplied by the person directly in the matching write tool; no selection lookup or ask is needed. "
         + "For choosing records or resolving an unclear write target, set for_selection=true and orbit_read_complete=false, then call ask. "
+        + "Once a selection read returns the needed candidates, call ask with them next. Do not repeat the same selection scope just to change optional filters; read again only for missing or partial candidates. "
         + "For a restart proposal, set for_selection=false and orbit_read_complete=false, then prepare the complete bulk_reschedule_habits preview yourself; this account read needs no selection question. "
         + "A selection lookup never finishes the answer or authorizes a write, even with one candidate. Multiple matches require the person's choice.";
 
